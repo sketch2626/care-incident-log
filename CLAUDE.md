@@ -41,7 +41,7 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
 - NC Medicaid provides refurbished laptops for a $65 refurbishing fee, waived if the resident can't pay. Andy has one. Other states: check.
 
 ## Next steps
-1. **Quiet test suite** (one worker): `tests/` plus a `run_tests.py -q` that prints only the summary and failures, always on scratch data (`TRACKER_DATA`). It covers the server API, the reports and `guess_incident()`. Every later worker commits only when it passes.
+1. ~~Quiet test suite~~ **Done 2026-10-24** (371bba0, ea5c4c2, 1c0182d): 59 tests, about 2 s. 5 BUG skips in `tests/test_guess.py` that `guess_incident()` gets wrong. It marks "bled", "couldn't breathe" and "can’t breathe" (curly apostrophe) as minor. It reads "twenty five minutes" as 5 and "half an hour" as 60. Fix them in a small worker, then remove the skips.
 2. **Mary prototype, with Andy as user #1** (`docs/companion-plan.md`). Build her instructions and test conversations, her full-screen face, the talk loop (on-device speech-to-text → Gemini → voice), the "Hey Mary" wake word, and memory on the laptop. Test speed first (reply within ~2 s on a cheap laptop), then voice.
 3. **Lid to Mary.** Windows PIN, then Mary opens full screen on her own and stays open; a locked-down kiosk needs Windows 11 Pro. Also a one-click setup tool for helpers, and a laptop spec with a price.
 4. **Before the pilot:** review, test and merge `wip/report-to-state`; it becomes Mary's speak-up skill. Then add facility-first emails ("Facility first" in `docs/backend-plan.md`).
@@ -54,5 +54,5 @@ Run the `token-saving` skill at the start of every task (`~/.claude/skills/token
 - **The conversation with Andy is the hub (Opus).** It plans with him and asks with one-click buttons. It starts ONE worker session at a time (`start_session`: user_asked, fresh, local, `use_worktree` false) and relays the worker's 3-line report. It doesn't write app code (only tiny fixes) and never runs helpers itself.
 - **Worker sessions** (inherit Opus) read targeted lines and hand code to the helpers in `.claude/agents/`: `coder` (Sonnet, 40-call budget) or `quick-coder` (Haiku, 20), one at a time. Then they review the diff, test and commit. Name the model whenever you mention one.
 - No browser, computer use or screenshots anywhere; use the `care-incident-log` MCP. Scratch data only (`TRACKER_DATA`, in-process server), never the real log.
-- There's no test suite yet. Next step 1 adds one, so later workers commit only when it passes.
+- **Tests:** `python run_tests.py -q` prints one summary line plus any failures and BUG skips, and exits 1 on failure. Commit only when it passes. `tests/helpers.py` points `APPDATA`/`TRACKER_DATA` at a temp folder before importing `server`, and stops if a path would leave it. Every test file imports `from tests import helpers` first. It runs one in-process server on a free port (`helpers.api(...)`, `reset_db()`, `make_andyflow_db(...)`, `incident(...)`).
 - When the hub gets long, update Status/Next steps here, and Andy starts a fresh hub with "Continue with the next work."

@@ -41,14 +41,18 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
 - NC Medicaid provides refurbished laptops for a $65 refurbishing fee, waived if the resident can't pay. Andy has one. Other states: check.
 
 ## Next steps
-1. **Mary prototype, with Andy as user #1** (`docs/companion-plan.md`). Build her instructions and test conversations, her full-screen face, the talk loop (on-device speech-to-text → Gemini → voice), the "Hey Mary" wake word, and memory on the laptop. Test speed first (reply within ~2 s on a cheap laptop), then voice.
-2. **Lid to Mary.** Windows PIN, then Mary opens full screen on her own and stays open; a locked-down kiosk needs Windows 11 Pro. Also a one-click setup tool for helpers, and a laptop spec with a price.
-3. **Before the pilot:** review, test and merge `wip/report-to-state`; it becomes Mary's speak-up skill. Then add facility-first emails ("Facility first" in `docs/backend-plan.md`).
-4. Rebuild the installer. `build.py` must download the voice model when `models/` is missing, because `models/` is gitignored.
-5. Finish the pilot/funding plan doc. The 5-resident pilot checklist is in `docs/pilot-checklist.md` (revise it for the companion); the pilot needs backend phases 1-2 only.
-6. Build the backend phase by phase per `docs/backend-plan.md`. Phase 1 (encrypt the local log, app lock) needs no server and can come early. No real resident data reaches a server piece until its security review passes.
+1. **Quiet test suite** (one worker): `tests/` plus a `run_tests.py -q` that prints only the summary and failures, always on scratch data (`TRACKER_DATA`). It covers the server API, the reports and `guess_incident()`. Every later worker commits only when it passes.
+2. **Mary prototype, with Andy as user #1** (`docs/companion-plan.md`). Build her instructions and test conversations, her full-screen face, the talk loop (on-device speech-to-text → Gemini → voice), the "Hey Mary" wake word, and memory on the laptop. Test speed first (reply within ~2 s on a cheap laptop), then voice.
+3. **Lid to Mary.** Windows PIN, then Mary opens full screen on her own and stays open; a locked-down kiosk needs Windows 11 Pro. Also a one-click setup tool for helpers, and a laptop spec with a price.
+4. **Before the pilot:** review, test and merge `wip/report-to-state`; it becomes Mary's speak-up skill. Then add facility-first emails ("Facility first" in `docs/backend-plan.md`).
+5. Rebuild the installer. `build.py` must download the voice model when `models/` is missing, because `models/` is gitignored.
+6. Finish the pilot/funding plan doc. The 5-resident pilot checklist is in `docs/pilot-checklist.md` (revise it for the companion); the pilot needs backend phases 1-2 only.
+7. Build the backend phase by phase per `docs/backend-plan.md`. Phase 1 (encrypt the local log, app lock) needs no server and can come early. No real resident data reaches a server piece until its security review passes.
 
-## Working rules (the maintainer's usage budget is tight)
-- One helper at a time, Sonnet or Haiku, and name the model. No Opus side sessions.
-- Every brief forbids browser, computer use and screenshots. Test with scratch data only (`TRACKER_DATA`, in-process server), never the real log.
-- Start a fresh conversation at each milestone.
+## Roles and working rules (the maintainer's usage budget is tight)
+Run the `token-saving` skill at the start of every task (`~/.claude/skills/token-saving`). It's Andy's hub-and-worker setup, copied from Andy Flow's "Next work" session.
+- **The conversation with Andy is the hub (Opus).** It plans with him and asks with one-click buttons. It starts ONE worker session at a time (`start_session`: user_asked, fresh, local, `use_worktree` false) and relays the worker's 3-line report. It doesn't write app code (only tiny fixes) and never runs helpers itself.
+- **Worker sessions** (inherit Opus) read targeted lines and hand code to the helpers in `.claude/agents/`: `coder` (Sonnet, 40-call budget) or `quick-coder` (Haiku, 20), one at a time. Then they review the diff, test and commit. Name the model whenever you mention one.
+- No browser, computer use or screenshots anywhere; use the `care-incident-log` MCP. Scratch data only (`TRACKER_DATA`, in-process server), never the real log.
+- There's no test suite yet. Next step 1 adds one, so later workers commit only when it passes.
+- When the hub gets long, update Status/Next steps here, and Andy starts a fresh hub with "Continue with the next work."

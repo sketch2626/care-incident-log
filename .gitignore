@@ -1,0 +1,14 @@
+# Residents' records and personal settings: never commit
+data/
+*.db
+.mcp.json
+.claude/
+
+# Large or generated (the voice model is downloaded at build time)
+models/
+dist/
+packaging/build/
+packaging/dist/
+packaging/.venv/
+__pycache__/
+*.pyc

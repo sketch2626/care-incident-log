@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Care Notes - C: Tiles with summary</title>
+<style>
+:root{
+  --bg:#f7f3ea; --card:#fffefa; --ink:#1f1b16; --ink2:#453d34; --line:#62574a;
+  --brand:#0f5560; --c:#898781;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:22px/1.5 "Segoe UI",system-ui,sans-serif}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 56px}
+h1{font-size:40px;line-height:1.2;margin:0 0 8px}
+h1:focus{outline:none}
+h2{font-size:30px;line-height:1.25;margin:0 0 12px}
+p{margin:0 0 12px}
+.lead{font-size:24px;color:var(--ink2)}
+:focus-visible{outline:6px solid #111;outline-offset:4px}
+
+.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px 16px;padding-bottom:14px;margin-bottom:22px;border-bottom:3px solid #d6cab6}
+.app{font-size:26px;font-weight:700}
+.who{font-size:24px;color:var(--ink2)}
+
+.bubble{flex:none;display:grid;place-items:center;width:84px;height:84px;border-radius:50%;border:6px solid var(--c);background:#fff;font-size:46px;line-height:1}
+
+/* HOME: summary + "just tell me", then tiles with counts */
+.toprow{display:grid;grid-template-columns:1.15fr 1fr;gap:20px;margin:22px 0 8px}
+.summary{padding:22px 26px;background:var(--card);border:3px solid var(--line);border-left:18px solid var(--brand);border-radius:22px}
+.sumline{margin:0 0 12px;font-size:31px;font-weight:600;line-height:1.3}
+.sumline b{font-weight:800}
+.sumsub{margin:0;font-size:22px;color:var(--ink2)}
+.hero{display:flex;align-items:center;gap:22px;width:100%;min-height:150px;padding:20px 24px;background:var(--ink);color:#fff;border:0;border-radius:24px;text-align:left;box-shadow:0 7px 0 rgba(0,0,0,.28)}
+.hero:active{transform:translateY(4px);box-shadow:0 3px 0 rgba(0,0,0,.28)}
+.heroic{flex:none;display:grid;place-items:center;width:96px;height:96px;border-radius:50%;background:#fff;color:var(--ink)}
+.heroic svg{width:58px;height:58px}
+.herot{font-size:34px;font-weight:700;line-height:1.15}
+.herosub{font-size:23px}
+.or{margin:26px 0 0;font-size:30px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:16px 0 26px}
+.tile{display:flex;flex-direction:column;gap:12px;min-height:210px;padding:18px;background:var(--card);border:3px solid var(--line);border-top:14px solid var(--c);border-radius:22px;text-align:left}
+.tile:active{transform:scale(.98)}
+.trow{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.num{font-size:48px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.tlabel{font-size:26px;font-weight:700;line-height:1.2}
+.tcount{margin-top:auto;font-size:21px;font-weight:600;color:var(--ink2);line-height:1.3}
+
+.more{display:flex;flex-wrap:wrap;align-items:center;gap:2px 22px;margin-top:30px}
+.linkbtn{min-height:64px;padding:8px 10px;background:none;border:0;color:var(--brand);font-size:23px;font-weight:600;text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:6px}
+.help{margin-top:22px;padding:16px 20px;background:var(--card);border:3px solid var(--line);border-radius:18px;font-size:22px}
+
+/* ADD SCREEN */
+.back{min-height:64px;padding:8px 26px;margin-bottom:18px;background:#fff;border:3px solid var(--ink);border-radius:16px;font-size:24px;font-weight:700}
+.typehead{display:flex;align-items:center;gap:18px;margin-bottom:10px}
+.typehead h1{margin:0;font-size:36px}
+.ctx{margin:0 0 20px;padding:10px 16px;background:var(--card);border:3px solid var(--line);border-left:14px solid var(--c);border-radius:14px;font-size:22px;font-weight:600}
+.cols{display:grid;grid-template-columns:1fr;gap:24px;align-items:start;margin-bottom:24px}
+.card{background:var(--card);border:3px solid var(--line);border-top:14px solid var(--c);border-radius:24px;padding:22px}
+.micwrap{display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0 22px}
+.mic{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:230px;height:230px;padding:0;background:#fff;border:12px solid var(--c);border-radius:50%;color:var(--ink)}
+.mic svg{width:76px;height:76px}
+.mic::before,.mic::after{content:"";position:absolute;inset:-12px;border-radius:50%;border:6px solid var(--c);opacity:0;pointer-events:none}
+.mic.listening{background:var(--ink);color:#fff}
+.mic.listening::before{animation:ring 1.8s ease-out infinite}
+.mic.listening::after{animation:ring 1.8s ease-out .9s infinite}
+@keyframes ring{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.55);opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .mic.listening::before{animation:none;opacity:.9;transform:scale(1.12)}
+  .mic.listening::after{animation:none;opacity:.5;transform:scale(1.26)}
+}
+.mlabel{font-size:28px;font-weight:700;line-height:1.15;text-align:center;padding:0 14px}
+.status{min-height:34px;margin:0;font-size:22px;font-weight:600;text-align:center}
+label.fl{display:block;margin:6px 0 8px;font-size:24px;font-weight:700}
+textarea{display:block;width:100%;min-height:190px;padding:16px;background:#fff;border:4px solid var(--ink);border-radius:16px;font-size:26px;line-height:1.4;resize:vertical}
+textarea::placeholder{color:#4f4439;opacity:1}
+.tinybtn{min-height:64px;margin-top:10px;padding:8px 20px;background:transparent;border:3px solid var(--line);border-radius:16px;font-size:21px;font-weight:600}
+.note{font-size:22px;color:var(--ink2)}
+fieldset{min-width:0;margin:0 0 28px;padding:0;border:0}
+legend{padding:0;margin-bottom:12px;font-size:28px;font-weight:700;line-height:1.25}
+.curtype{display:flex;align-items:center;gap:14px;margin-bottom:6px;padding:12px 14px;background:#fff;border:3px solid var(--line);border-left:14px solid var(--c);border-radius:16px}
+.curtype .bubble{width:64px;height:64px;border-width:4px;font-size:34px}
+.cttext{font-size:25px;font-weight:700;line-height:1.25}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+.opts.three{grid-template-columns:1fr}
+.opts.groups{grid-template-columns:1fr;margin-top:14px}
+.opt{position:relative;display:block}
+.opt.wide{grid-column:1/-1}
+.opt input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.box{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:76px;padding:10px 14px;background:#fff;border:3px solid var(--line);border-radius:16px;text-align:center;font-size:25px;font-weight:600;line-height:1.2}
+.box.row{align-items:flex-start;text-align:left}
+.box .hint{display:block;margin-top:4px;font-size:20px;font-weight:400;color:var(--ink2)}
+.opt input:checked+.box{background:var(--ink);border-color:var(--ink);color:#fff;box-shadow:0 0 0 5px var(--c)}
+.opt input:checked+.box .hint{color:#fff}
+.opt input:checked+.box .t::before{content:"\2713\00a0"}
+.opt input:focus-visible+.box{outline:6px solid #111;outline-offset:9px}
+.daybox{margin-top:14px}
+input[type=date]{width:100%;max-width:440px;min-height:72px;padding:10px 14px;background:#fff;border:4px solid var(--ink);border-radius:16px;font-size:26px}
+.save{display:block;width:100%;min-height:124px;background:var(--brand);color:#fff;border:0;border-radius:28px;font-size:46px;font-weight:700;letter-spacing:.5px;box-shadow:0 7px 0 rgba(0,0,0,.28)}
+.save:active{transform:translateY(4px);box-shadow:0 3px 0 rgba(0,0,0,.28)}
+
+/* SAVED + RECORD PREVIEW */
+.center{text-align:center}
+.bigcheck{width:150px;height:150px;margin:10px auto 14px}
+.record{max-width:760px;margin:20px auto 26px;padding:20px 24px;background:#fff;border:3px solid var(--ink);border-left:18px solid var(--c);border-radius:18px;text-align:left}
+.reclabel{margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink2)}
+.record dt{font-size:21px;font-weight:700;color:var(--ink2)}
+.record dd{margin:0 0 12px;font-size:25px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.record .recno{font-size:34px;font-weight:700;letter-spacing:1px;font-variant-numeric:tabular-nums}
+.primary{display:block;width:100%;max-width:760px;min-height:96px;margin:0 auto 14px;background:var(--brand);color:#fff;border:0;border-radius:22px;font-size:34px;font-weight:700}
+
+/* LIST */
+.entries{list-style:none;margin:20px 0;padding:0;max-width:860px}
+.entries li{margin-bottom:16px;padding:16px 20px;background:var(--card);border:3px solid var(--line);border-left:16px solid var(--c);border-radius:18px}
+.entries b{display:block;font-size:26px;line-height:1.25}
+.entries span{display:block;font-size:22px;color:var(--ink2)}
+
+@media (min-width:1000px){
+  .cols{grid-template-columns:1fr 1fr}
+}
+@media (max-width:900px){
+  .toprow{grid-template-columns:1fr}
+  .grid{grid-template-columns:repeat(2,1fr);gap:14px}
+}
+@media (max-width:560px){
+  .wrap{padding:16px 16px 48px}
+  h1{font-size:32px}
+  .typehead h1{font-size:30px}
+  .lead{font-size:22px}
+  .bubble{width:64px;height:64px;border-width:5px;font-size:34px}
+  .summary{padding:18px 18px 18px 16px;border-left-width:14px}
+  .sumline{font-size:27px}
+  .hero{gap:16px;padding:18px;min-height:140px}
+  .heroic{width:76px;height:76px}
+  .heroic svg{width:46px;height:46px}
+  .herot{font-size:29px}
+  .herosub{font-size:21px}
+  .or{font-size:28px}
+  .tile{padding:14px;min-height:190px}
+  .num{font-size:42px}
+  .tlabel{font-size:23px}
+  .tcount{font-size:20px}
+  .card{padding:16px}
+  .mic{width:204px;height:204px}
+  .mic svg{width:62px;height:62px}
+  .mlabel{font-size:25px}
+  .save{font-size:40px;min-height:112px}
+  .box{font-size:24px}
+  .record{padding:16px}
+  .record .recno{font-size:28px}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<!-- HOME -->
+<section id="home" class="screen">
+  <div class="top"><span class="app">My Care Notes</span><span class="who">Hello, Margaret</span></div>
+  <h1 tabindex="-1">What would you like to write down?</h1>
+
+  <div class="toprow">
+    <section class="summary" aria-labelledby="sumh">
+      <h2 id="sumh" style="position:absolute;left:-9999px">This month</h2>
+      <p class="sumline">This month you wrote down <b id="sumTotal"></b>. No one came <b id="sumNone"></b>.</p>
+      <p class="sumsub">Most often: <b id="sumTop"></b>. Your last note was <span id="sumLast">yesterday</span>.</p>
+    </section>
+    <button type="button" class="hero" id="auto">
+      <span class="heroic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg></span>
+      <span><span class="herot">Just tell me what happened</span><br><span class="herosub">Talk, and I'll find the right group for you.</span></span>
+    </button>
+  </div>
+
+  <h2 class="or">Or tap the one that fits best:</h2>
+  <div class="grid" id="grid"></div>
+
+  <nav class="more" aria-label="More things you can do">
+    <button type="button" class="linkbtn" data-go="list">&#128210; What I've written down</button>
+    <button type="button" class="linkbtn" data-stub="report">&#128196; Make a report</button>
+    <button type="button" class="linkbtn" data-stub="info">&#128100; My info</button>
+  </nav>
+  <p class="help"><b>Need help right now?</b> Press your call light or tell a staff member. This page is for writing things down.</p>
+</section>
+
+<!-- ADD -->
+<section id="add" class="screen" hidden>
+  <button type="button" class="back" data-go="home">&larr; Back</button>
+  <div class="typehead"><span class="bubble" id="addicon" aria-hidden="true"></span><h1 id="addtitle" tabindex="-1"></h1></div>
+  <p class="ctx" id="ctx"></p>
+
+  <form id="form" novalidate>
+    <div class="cols">
+      <section class="card" aria-labelledby="s1">
+        <h2 id="s1">1. Tell us what happened</h2>
+        <div class="micwrap">
+          <button type="button" class="mic" id="mic" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg>
+            <span class="mlabel" id="miclabel">Tap and talk</span>
+          </button>
+          <p class="status" id="status" role="status" aria-live="polite"></p>
+        </div>
+        <label class="fl" for="words">Your words (you can also type here)</label>
+        <textarea id="words" placeholder="Your words will show up here. You can fix them by typing."></textarea>
+        <button type="button" class="tinybtn" id="clear">Clear my words</button>
+      </section>
+
+      <section class="card" aria-labelledby="s2">
+        <h2 id="s2">2. Check the group and answer a few questions</h2>
+        <p class="note">You can skip any question.</p>
+
+        <fieldset>
+          <legend>Is this the right group?</legend>
+          <div class="curtype"><span class="bubble" id="ctIcon" aria-hidden="true"></span><span class="cttext" id="ctText"></span></div>
+          <button type="button" class="tinybtn" id="chg" aria-expanded="false" aria-controls="groupopts">Change group</button>
+          <div class="opts groups" id="groupopts" hidden></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>When did it happen?</legend>
+          <div class="opts">
+            <label class="opt"><input type="radio" name="when" value="Just now" id="when-now" checked><span class="box"><span class="t">Just now</span></span></label>
+            <label class="opt"><input type="radio" name="when" value="Earlier today"><span class="box"><span class="t">Earlier today</span></span></label>
+            <label class="opt"><input type="radio" name="when" value="Yesterday"><span class="box"><span class="t">Yesterday</span></span></label>
+            <label class="opt"><input type="radio" name="when" value="Pick a day" id="when-day"><span class="box"><span class="t">Pick a day</span></span></label>
+          </div>
+          <div class="daybox" id="daybox" hidden><label class="fl" for="day">Which day?</label><input type="date" id="day"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>How long did you wait?</legend>
+          <div class="opts">
+            <label class="opt"><input type="radio" name="wait" value="15 minutes"><span class="box"><span class="t">15 min</span></span></label>
+            <label class="opt"><input type="radio" name="wait" value="30 minutes"><span class="box"><span class="t">30 min</span></span></label>
+            <label class="opt"><input type="radio" name="wait" value="1 hour"><span class="box"><span class="t">1 hour</span></span></label>
+            <label class="opt"><input type="radio" name="wait" value="2 hours or more"><span class="box"><span class="t">2+ hours</span></span></label>
+            <label class="opt wide"><input type="radio" name="wait" value="No one ever came"><span class="box"><span class="t">No one ever came</span></span></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>How bad was it?</legend>
+          <div class="opts three">
+            <label class="opt"><input type="radio" name="sev" value="Minor"><span class="box"><span class="t">Minor</span><span class="hint">It bothered me, but I'm okay.</span></span></label>
+            <label class="opt"><input type="radio" name="sev" value="Serious"><span class="box"><span class="t">Serious</span><span class="hint">It hurt me or really upset me.</span></span></label>
+            <label class="opt"><input type="radio" name="sev" value="Dangerous"><span class="box"><span class="t">Dangerous</span><span class="hint">I could have been badly hurt.</span></span></label>
+          </div>
+        </fieldset>
+      </section>
+    </div>
+
+    <button type="submit" class="save">Save</button>
+  </form>
+</section>
+
+<!-- SAVED -->
+<section id="saved" class="screen center" hidden>
+  <svg class="bigcheck" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#0f5560"/><path d="M28 52l16 16 30-34" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1 tabindex="-1">Saved. Thank you for writing this down.</h1>
+  <p class="lead" id="savedlead">Nothing else to do. Take your time.</p>
+  <div class="record" id="record">
+    <p class="reclabel">This is how your note will look in the official record:</p>
+    <dl>
+      <dt>Record number</dt><dd class="recno" id="rNo"></dd>
+      <dt>Type</dt><dd id="rType"></dd>
+      <dt>Date and time</dt><dd id="rWhen"></dd>
+      <dt>Summary</dt><dd id="rSum"></dd>
+      <dt>In my own words</dt><dd id="rWords"></dd>
+    </dl>
+  </div>
+  <button type="button" class="primary" data-go="home">Back to the start</button>
+  <button type="button" class="linkbtn" data-go="list">&#128210; See what I've written down</button>
+</section>
+
+<!-- WHAT I'VE WRITTEN DOWN -->
+<section id="list" class="screen" hidden>
+  <button type="button" class="back" data-go="home">&larr; Back</button>
+  <h1 tabindex="-1">What I've written down</h1>
+  <p class="lead">Newest first.</p>
+  <ul class="entries" id="entries">
+    <li style="--c:#2a78d6"><b>No one answered my call light</b><span>INC-2026-0013 &middot; Yesterday &middot; waited 1 hour &middot; Serious</span><span>&ldquo;I pressed my call light after lunch and nobody came.&rdquo;</span></li>
+    <li style="--c:#eb6834"><b>My meal was late or missed</b><span>INC-2026-0012 &middot; 3 days ago &middot; waited 30 minutes &middot; Minor</span><span>&ldquo;Dinner came cold.&rdquo;</span></li>
+    <li style="--c:#1baf7a"><b>I didn't get my bath or shower</b><span>INC-2026-0011 &middot; Last week &middot; No one ever came &middot; Serious</span><span>&ldquo;It was my shower day and no one helped me.&rdquo;</span></li>
+  </ul>
+</section>
+
+<!-- STUB (report / my info) -->
+<section id="stub" class="screen" hidden>
+  <button type="button" class="back" data-go="home">&larr; Back</button>
+  <h1 id="stubtitle" tabindex="-1"></h1>
+  <p class="lead" id="stubtext"></p>
+  <p class="note">This part is not in the mockup yet.</p>
+</section>
+
+</main>
+<script>
+(function(){
+var TYPES=[
+ {k:"call_light",c:"#2a78d6",i:"\u{1F514}",t:"No one answered my call light",f:"Call light not answered",m:"the call light was not answered in a timely manner",n:3,s:"I pressed my call light and waited a long time. Nobody came to help me."},
+ {k:"meal",c:"#eb6834",i:"\u{1F37D}️",t:"My meal was late or missed",f:"Meal late or missed",m:"a meal was late or not delivered",n:2,s:"My dinner came very late and it was cold."},
+ {k:"bathing",c:"#1baf7a",i:"\u{1F6C1}",t:"I didn't get my bath or shower",f:"Bath or shower not provided",m:"a scheduled bath or shower was not provided",n:2,s:"It was my shower day today and nobody helped me."},
+ {k:"toileting",c:"#eda100",i:"\u{1F6BD}",t:"I wasn't changed or helped to the toilet",f:"Toileting or changing assistance",m:"help with changing or toileting was not provided in a timely manner",n:1,s:"I asked for help to the toilet and had to wait. It was very uncomfortable."},
+ {k:"medication",c:"#e87ba4",i:"\u{1F48A}",t:"Problem with my medicine",f:"Medication problem",m:"there was a problem with the resident's medication",n:1,s:"My morning pills came two hours late."},
+ {k:"repositioning",c:"#008300",i:"\u{1F6CF}️",t:"I wasn't turned or moved",f:"Repositioning not provided",m:"the resident was not turned or repositioned as needed",n:1,s:"I stayed in the same position most of the night and my back hurts."},
+ {k:"staff",c:"#6250d6",i:"\u{1F5E3}️",t:"Staff were rude or rough",f:"Staff conduct",m:"staff behaved in a rude or rough manner during care",n:1,s:"One of the aides spoke to me in a sharp voice and was rough with my arm."},
+ {k:"safety",c:"#e34948",i:"\u{1FA79}",t:"I fell or got hurt",f:"Fall or injury",m:"the resident fell or was injured",n:1,s:"I slipped getting out of my chair and hurt my wrist."},
+ {k:"other",c:"#898781",i:"\u{1F4AC}",t:"Something else",f:"Other",m:"an incident occurred that the resident wishes to report",n:0,s:"Something happened that I want to write down."}
+];
+var BYKEY={}; TYPES.forEach(function(t){BYKEY[t.k]=t});
+var KEYS=[["call_light",/call light|call button|pressed my/i],["meal",/meal|dinner|lunch|breakfast|supper|food|\beat\b/i],["bathing",/shower|bath/i],["toileting",/toilet|changed|diaper|bathroom/i],["medication",/pill|medicine|medication|tablet/i],["repositioning",/turned|moved|position|sore back/i],["staff",/rude|rough|yelled|shouted|sharp|mean to/i],["safety",/\bfell\b|\bfall\b|slipped|hurt|injur|bleed/i]];
+var AUTO_SAY="My dinner never came tonight. I waited and waited and nobody brought me anything to eat.";
+var $=function(id){return document.getElementById(id)};
+var SCREENS=["home","add","saved","list","stub"];
+var STUBS={report:["Make a report","Pick a month and we put your notes on one page. You can print it or give it to someone you trust."],info:["My info","Your name, your room number, and who you are happy to share your notes with."]};
+var cur=null,auto=false,picked=false,timer=null,words=[],wi=0,seq=14,noone=4;
+
+function times(n){return n+(n===1?" time":" times")}
+function cnt(n){return n===0?"Not yet this month":times(n)+" this month"}
+function total(){return TYPES.reduce(function(a,t){return a+t.n},0)}
+function classify(text){
+  for(var i=0;i<KEYS.length;i++){if(KEYS[i][1].test(text))return BYKEY[KEYS[i][0]]}
+  return BYKEY.other;
+}
+function show(id){
+  SCREENS.forEach(function(s){$(s).hidden=(s!==id)});
+  window.scrollTo(0,0);
+  var h=$(id).querySelector("h1"); if(h){h.focus({preventScroll:true})}
+}
+function refresh(){
+  var top=TYPES.reduce(function(a,t){return t.n>a.n?t:a});
+  TYPES.forEach(function(t){
+    $("num-"+t.k).textContent=t.n;
+    $("cnt-"+t.k).textContent=(t.n===1?"time":"times")+" this month";
+    $("tile-"+t.k).setAttribute("aria-label",t.t+". "+cnt(t.n)+".");
+  });
+  var tt=total();
+  $("sumTotal").textContent=tt+(tt===1?" problem":" problems");
+  $("sumNone").textContent=times(noone);
+  $("sumTop").textContent=top.t+" ("+times(top.n)+")";
+}
+TYPES.forEach(function(t){
+  var b=document.createElement("button");
+  b.type="button"; b.className="tile"; b.id="tile-"+t.k; b.style.setProperty("--c",t.c);
+  b.innerHTML='<span class="trow"><span class="bubble" aria-hidden="true">'+t.i+'</span><span class="num" id="num-'+t.k+'" aria-hidden="true"></span></span><span class="tlabel">'+t.t+'</span><span class="tcount" id="cnt-'+t.k+'" aria-hidden="true"></span>';
+  b.addEventListener("click",function(){openAdd(t)});
+  $("grid").appendChild(b);
+  var l=document.createElement("label"); l.className="opt"; l.style.setProperty("--c",t.c);
+  l.innerHTML='<input type="radio" name="type" value="'+t.k+'" id="type-'+t.k+'"><span class="box row"><span class="t"><span aria-hidden="true">'+t.i+'</span> '+t.t+'</span></span>';
+  $("groupopts").appendChild(l);
+});
+refresh();
+
+function setType(t){
+  cur=t;
+  $("add").style.setProperty("--c",t?t.c:"#898781");
+  $("addicon").textContent=$("ctIcon").textContent=t?t.i:"\u{1F3A4}";
+  $("ctText").textContent=t?t.t:"Not picked yet. Talk first and I'll pick one, or choose it yourself.";
+  $("ctx").textContent=t?(t.n===0?"You have not written this group down yet this month.":"You have written this group down "+times(t.n)+" this month."):"Talk first. I will find the group and tell you how often you have written it down.";
+  if(t){$("type-"+t.k).checked=true}
+  setChg();
+}
+function setChg(){
+  var open=!$("groupopts").hidden;
+  $("chg").textContent=open?"Close the list":(cur?"Change group":"Choose a group");
+  $("chg").setAttribute("aria-expanded",open);
+}
+function openAdd(t){
+  auto=false; picked=true; stopTalk(); $("status").textContent="";
+  $("form").reset(); $("daybox").hidden=true; $("groupopts").hidden=true;
+  setType(t);
+  $("addtitle").textContent=t.t;
+  show("add");
+}
+function openAuto(){
+  auto=true; picked=false; stopTalk(); $("status").textContent="";
+  $("form").reset(); $("daybox").hidden=true; $("groupopts").hidden=true;
+  setType(null);
+  $("addtitle").textContent="Just tell me what happened";
+  show("add");
+}
+$("auto").addEventListener("click",openAuto);
+$("chg").addEventListener("click",function(){$("groupopts").hidden=!$("groupopts").hidden;setChg()});
+document.querySelectorAll('input[name="type"]').forEach(function(r){
+  r.addEventListener("change",function(){picked=true;setType(BYKEY[r.value])});
+});
+
+function startTalk(){
+  var m=$("mic"),ta=$("words");
+  m.classList.add("listening"); m.setAttribute("aria-pressed","true");
+  $("miclabel").textContent="Listening… tap to stop";
+  $("status").textContent="I'm listening. Keep talking.";
+  words=(auto?AUTO_SAY:cur.s).split(" "); wi=0;
+  if(ta.value && !/\s$/.test(ta.value)) ta.value+=" ";
+  timer=setInterval(function(){
+    if(wi>=words.length){stopTalk(true); return}
+    ta.value+=(wi?" ":"")+words[wi++]; ta.scrollTop=ta.scrollHeight;
+  },300);
+}
+function stopTalk(sort){
+  var was=!!timer; clearInterval(timer); timer=null;
+  var m=$("mic"); m.classList.remove("listening"); m.setAttribute("aria-pressed","false");
+  $("miclabel").textContent="Tap and talk";
+  var msg="";
+  if(was){
+    msg="Got it. You can fix any words by typing.";
+    if(sort && auto && !picked && $("words").value.trim()){
+      var t=classify($("words").value); setType(t);
+      msg="I think this is: "+t.t+". Is that right? You can change it below.";
+    }
+  }
+  $("status").textContent=msg;
+}
+$("mic").addEventListener("click",function(){timer?stopTalk(true):startTalk()});
+$("clear").addEventListener("click",function(){stopTalk();$("words").value="";$("words").focus()});
+document.querySelectorAll('input[name="when"]').forEach(function(r){
+  r.addEventListener("change",function(){$("daybox").hidden=!$("when-day").checked});
+});
+function val(n){var r=document.querySelector('input[name="'+n+'"]:checked');return r?r.value:null}
+
+function formal(t,text,wait,sev){
+  var m=t.m;
+  if(t.k==="meal"){
+    var nm=/dinner|supper|tonight|evening/i.test(text)?"the evening meal":/lunch|noon/i.test(text)?"the midday meal":/breakfast/i.test(text)?"the morning meal":"a meal";
+    m=nm+(wait==="No one ever came"||/never|didn't get|missed|not brought/i.test(text)?" was not delivered":" was delivered late");
+  }
+  var s="Resident reports that "+m;
+  if(wait==="No one ever came") s+="; no staff member responded";
+  else if(wait) s+="; resident waited "+wait;
+  if(sev) s+="; severity reported as "+sev.toLowerCase();
+  return s+".";
+}
+function longDate(d){return d.toLocaleDateString(undefined,{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
+function whenText(w){
+  var d=new Date();
+  if(w==="Just now") return longDate(d)+", "+d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
+  if(w==="Earlier today") return longDate(d)+", earlier today (time not exact)";
+  if(w==="Yesterday"){d.setDate(d.getDate()-1);return longDate(d)+" (time not exact)"}
+  var v=$("day").value;
+  return v?longDate(new Date(v+"T12:00:00"))+" (time not exact)":"Day to be confirmed";
+}
+function setText(id,v){$(id).textContent=v}
+
+$("form").addEventListener("submit",function(e){
+  e.preventDefault(); stopTalk();
+  var text=$("words").value.trim();
+  if(!cur){setType(classify(text))}
+  var when=val("when"),wait=val("wait"),sev=val("sev"),wt=whenText(when);
+  cur.n++; if(wait==="No one ever came")noone++;
+  refresh(); setText("sumLast","just now");
+  var no="INC-"+new Date().getFullYear()+"-"+String(seq++).padStart(4,"0");
+  $("record").style.setProperty("--c",cur.c);
+  setText("rNo",no); setText("rType",cur.f); setText("rWhen",wt);
+  setText("rSum",formal(cur,text,wait,sev));
+  setText("rWords",text?"“"+text+"”":"(No words written)");
+  setText("savedlead","That makes "+times(cur.n)+" this month for this group.");
+  var li=document.createElement("li"); li.style.setProperty("--c",cur.c);
+  var b=document.createElement("b"); b.textContent=cur.t;
+  var s1=document.createElement("span"); s1.textContent=no+" · "+(when==="Pick a day"?wt.replace(/ \(time not exact\)/,""):when)+" · "+(wait?"waited "+wait:"wait not said")+" · "+(sev||"how bad not said");
+  var s2=document.createElement("span"); s2.textContent=text?"“"+text+"”":"";
+  li.appendChild(b); li.appendChild(s1); li.appendChild(s2);
+  $("entries").insertBefore(li,$("entries").firstChild);
+  show("saved");
+});
+document.addEventListener("click",function(e){
+  var g=e.target.closest("[data-go]"),s=e.target.closest("[data-stub]");
+  if(g){stopTalk();show(g.dataset.go)}
+  else if(s){var x=STUBS[s.dataset.stub];setText("stubtitle",x[0]);setText("stubtext",x[1]);show("stub")}
+});
+})();
+</script>
+</body>
+</html>

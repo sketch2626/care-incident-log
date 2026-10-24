@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Care Incident Log</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap">
+<div id="banner" class="banner" role="alert" hidden></div>
+
+<!-- HOME -->
+<section id="home" class="screen" aria-label="Home">
+  <div class="top"><span class="app">My Care Notes</span><span class="who" id="who"></span></div>
+  <h1 tabindex="-1">What would you like to write down?</h1>
+
+  <div class="toprow">
+    <section class="summary" aria-labelledby="sumh">
+      <h2 id="sumh" class="sr">This month</h2>
+      <p class="sumline" id="sumline"></p>
+      <p class="sumsub" id="sumsub"></p>
+    </section>
+    <button type="button" class="hero" id="auto">
+      <span class="heroic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg></span>
+      <span><span class="herot">Just tell me what happened</span><br><span class="herosub">Talk, and I'll find the right group for you.</span></span>
+    </button>
+  </div>
+
+  <h2 class="or">Or tap the one that fits best:</h2>
+  <div class="grid" id="grid"></div>
+
+  <nav class="more" aria-label="More things you can do">
+    <a class="linkbtn" href="#list"><span aria-hidden="true">&#128210;</span>&nbsp;What I've written down</a>
+    <a class="linkbtn" href="#report"><span aria-hidden="true">&#128196;</span>&nbsp;Make a report</a>
+    <a class="linkbtn" href="#info"><span aria-hidden="true">&#128100;</span>&nbsp;My info</a>
+  </nav>
+
+  <!-- Only shown when Andy's own dictation app (Andy Flow) is installed -->
+  <div class="flowrow" id="flowrow" hidden>
+    <button type="button" class="tinybtn" id="pullBtn">Update from Andy Flow</button>
+    <a class="linkbtn" href="#inbox" id="inboxLink">From Andy Flow</a>
+  </div>
+
+  <p class="help"><b>Need help right now?</b> Press your call light or tell a staff member. This page is for writing things down.</p>
+</section>
+
+<!-- ADD / EDIT -->
+<section id="add" class="screen" aria-label="Write something down" hidden>
+  <a class="back" href="#home">&larr; Back</a>
+  <div class="typehead"><span class="bubble" id="addicon" aria-hidden="true"></span><h1 id="addtitle" tabindex="-1"></h1></div>
+  <p class="ctx" id="ctx"></p>
+
+  <form id="form" novalidate>
+    <div class="cols">
+      <section class="card" aria-labelledby="s1">
+        <h2 id="s1">1. Tell us what happened</h2>
+        <div class="micwrap" id="micwrap" hidden>
+          <button type="button" class="mic" id="mic">
+            <svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg>
+            <svg class="i-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" hidden><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+            <span class="mlabel" id="miclabel">Tap and talk</span>
+          </button>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+        <p class="note gentle" id="micNote" hidden></p>
+        <p class="note gentle" id="assistNote" hidden></p>
+        <label class="fl" for="words">Your words (you can also type here)</label>
+        <textarea id="words" placeholder="Your words will show up here. You can fix them by typing."></textarea>
+        <button type="button" class="tinybtn" id="clear">Clear my words</button>
+      </section>
+
+      <section class="card" aria-labelledby="s2">
+        <h2 id="s2">2. Check the group and answer a few questions</h2>
+        <p class="note">Answer what you can. The more you tell, the stronger your record.</p>
+
+        <fieldset>
+          <legend>Is this the right group?</legend>
+          <div class="curtype"><span class="bubble" id="ctIcon" aria-hidden="true"></span><span class="cttext" id="ctText"></span></div>
+          <button type="button" class="tinybtn" id="chg" aria-expanded="false" aria-controls="groupopts">Change group</button>
+          <div class="opts groups" id="groupopts" hidden></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>When did it happen?</legend>
+          <div class="opts">
+            <label class="opt"><input type="radio" name="when" value="now" checked><span class="box"><span class="t">Just now</span></span></label>
+            <label class="opt"><input type="radio" name="when" value="earlier"><span class="box"><span class="t">Earlier today</span></span></label>
+            <label class="opt"><input type="radio" name="when" value="yesterday"><span class="box"><span class="t">Yesterday</span></span></label>
+            <label class="opt"><input type="radio" name="when" value="pick"><span class="box"><span class="t">Pick a day</span></span></label>
+          </div>
+          <div class="daybox" id="daybox" hidden>
+            <div id="dayWrap" hidden><label class="fl" for="day">Which day?</label><input type="date" id="day"></div>
+            <div id="timeWrap"><label class="fl" for="time">About what time? (Your best guess is fine.)</label><input type="time" id="time"></div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>How long did you wait?</legend>
+          <div class="opts">
+            <label class="opt"><input type="radio" name="wait" value="15"><span class="box"><span class="t">15 min</span></span></label>
+            <label class="opt"><input type="radio" name="wait" value="30"><span class="box"><span class="t">30 min</span></span></label>
+            <label class="opt"><input type="radio" name="wait" value="60"><span class="box"><span class="t">1 hour</span></span></label>
+            <label class="opt"><input type="radio" name="wait" value="120"><span class="box"><span class="t">2+ hours</span></span></label>
+            <label class="opt" id="waitCustomOpt" hidden><input type="radio" name="wait" value="custom"><span class="box"><span class="t" id="waitCustomText"></span></span></label>
+            <label class="opt wide"><input type="radio" name="wait" value="never"><span class="box"><span class="t">No one ever came</span></span></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>How bad was it?</legend>
+          <div class="opts three">
+            <label class="opt"><input type="radio" name="sev" value="minor"><span class="box"><span class="t">Minor</span><span class="hint">It bothered me, but I'm okay.</span></span></label>
+            <label class="opt"><input type="radio" name="sev" value="serious"><span class="box"><span class="t">Serious</span><span class="hint">It hurt me or really upset me.</span></span></label>
+            <label class="opt"><input type="radio" name="sev" value="dangerous"><span class="box"><span class="t">Dangerous</span><span class="hint">I could have been badly hurt.</span></span></label>
+          </div>
+        </fieldset>
+
+        <details class="moredet" id="moreDetails" open>
+          <summary>Names and who you told: this is your proof</summary>
+          <div class="detailsbody">
+            <p class="why">These answers make your report much harder to ignore. Inspectors look for <strong>names</strong>, <strong>who you told</strong> and <strong>who else saw it</strong>. If you don't know a name, say what they looked like or which shift it was.</p>
+            <p class="note" id="detailStatus" role="status" aria-live="polite"></p>
+            <label class="fl" for="staff_involved">Which staff member was involved?</label>
+            <div class="talkrow"><input class="txt" type="text" id="staff_involved" autocomplete="off" placeholder="A name, or what they looked like and which shift"><button type="button" class="talkbtn" data-talk="staff_involved" aria-label="Talk: which staff member was involved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg><span class="lbl">Talk</span></button></div>
+            <label class="fl" for="reported_to">Who did you tell?</label>
+            <div class="talkrow"><input class="txt" type="text" id="reported_to" autocomplete="off" placeholder="For example: the charge nurse, Maria"><button type="button" class="talkbtn" data-talk="reported_to" aria-label="Talk: who did you tell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg><span class="lbl">Talk</span></button></div>
+            <label class="fl" for="outcome">What happened after?</label>
+            <div class="talkrow"><input class="txt" type="text" id="outcome" autocomplete="off" placeholder="For example: they brought a sandwich at 8 PM"><button type="button" class="talkbtn" data-talk="outcome" aria-label="Talk: what happened after"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg><span class="lbl">Talk</span></button></div>
+            <label class="fl" for="witnesses">Did anyone else see it? Who?</label>
+            <div class="talkrow"><input class="txt" type="text" id="witnesses" autocomplete="off" placeholder="For example: my roommate, my daughter"><button type="button" class="talkbtn" data-talk="witnesses" aria-label="Talk: did anyone else see it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg><span class="lbl">Talk</span></button></div>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <p class="formerr" id="formError" role="alert" hidden></p>
+    <button type="submit" class="save" id="saveBtn">Save</button>
+  </form>
+</section>
+
+<!-- SAVED -->
+<section id="saved" class="screen center" aria-label="Saved" hidden>
+  <svg class="bigcheck" viewBox="0 0 100 100" role="img" aria-label="Saved"><circle cx="50" cy="50" r="46" fill="#0f5560"/><path d="M28 52l16 16 30-34" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1 tabindex="-1">Saved. Thank you for writing this down.</h1>
+  <p class="lead" id="savedlead"></p>
+  <div class="record" id="record">
+    <p class="reclabel">This is how your note will look in the official record:</p>
+    <dl>
+      <dt>Record number</dt><dd class="recno" id="rNo"></dd>
+      <dt>Type</dt><dd id="rType"></dd>
+      <dt>Date and time</dt><dd id="rWhen"></dd>
+      <dt>Summary</dt><dd id="rSum"></dd>
+      <dt>In my own words</dt><dd id="rWords"></dd>
+    </dl>
+  </div>
+  <a class="primary" href="#home">Done</a>
+  <a class="linkbtn" href="#list"><span aria-hidden="true">&#128210;</span>&nbsp;See what I've written down</a>
+</section>
+
+<!-- WHAT I'VE WRITTEN DOWN -->
+<section id="list" class="screen" aria-label="What I've written down" hidden>
+  <a class="back" href="#home">&larr; Back</a>
+  <h1 tabindex="-1">What I've written down</h1>
+  <p class="lead">Newest first.</p>
+  <p class="lead" id="listEmpty" hidden>You haven't written anything down yet. When something happens, go back and tap the big button.</p>
+  <ul class="entries" id="entries"></ul>
+</section>
+
+<!-- FROM ANDY FLOW (only when available) -->
+<section id="inbox" class="screen" aria-label="From Andy Flow" hidden>
+  <a class="back" href="#home">&larr; Back</a>
+  <h1 tabindex="-1">From Andy Flow</h1>
+  <p class="lead">Things you dictated that start with the word "Incident".</p>
+  <p class="lead" id="inboxEmpty" hidden>Nothing new right now.</p>
+  <ul class="entries" id="inboxList"></ul>
+</section>
+
+<!-- MAKE A REPORT -->
+<section id="report" class="screen" aria-label="Make a report" hidden>
+  <a class="back" href="#home">&larr; Back</a>
+  <h1 tabindex="-1">Make a report</h1>
+  <p class="lead">Pick the days you want to include.</p>
+  <div class="daterow">
+    <div><label class="fl" for="repFrom">From</label><input type="date" id="repFrom"></div>
+    <div><label class="fl" for="repTo">To</label><input type="date" id="repTo"></div>
+  </div>
+  <p class="note" id="repCount" role="status" aria-live="polite"></p>
+  <p class="formerr" id="repErr" role="alert" hidden></p>
+  <button type="button" class="bigbtn" id="printBtn">Open printable report</button>
+  <a class="bigbtn alt" id="xlsxBtn" href="/api/export.xlsx">Download spreadsheet</a>
+  <p class="note">You can send this to the state survey agency or the ombudsman.</p>
+</section>
+
+<!-- MY INFO -->
+<section id="info" class="screen" aria-label="My info" hidden>
+  <a class="back" href="#home">&larr; Back</a>
+  <h1 tabindex="-1">My info</h1>
+  <p class="lead">This goes at the top of your reports. It stays on this computer.</p>
+  <form id="infoForm" class="card infocard" novalidate>
+    <label class="fl" for="i-resident_name">Your name</label>
+    <input class="txt" type="text" id="i-resident_name" autocomplete="off">
+    <label class="fl" for="i-room">Your room number</label>
+    <input class="txt" type="text" id="i-room" autocomplete="off">
+    <label class="fl" for="i-facility">Name of the care home</label>
+    <input class="txt" type="text" id="i-facility" autocomplete="off">
+    <label class="fl" for="i-facility_address">Address of the care home</label>
+    <input class="txt" type="text" id="i-facility_address" autocomplete="off">
+    <label class="fl" for="i-state">State</label>
+    <input class="txt" type="text" id="i-state" autocomplete="off">
+
+    <h2 class="smarth">Smart helper (optional)</h2>
+    <p class="warn"><b>When this is on, what you say is sent to Google to tidy it up. Leave it off to keep everything on this computer.</b></p>
+    <div class="opts three">
+      <label class="opt"><input type="checkbox" id="i-gemini_enabled"><span class="box row"><span class="t">Use the smart helper</span><span class="hint" id="gemState">It is off.</span></span></label>
+    </div>
+    <label class="fl gap" for="i-gemini_key">Smart helper key</label>
+    <input class="txt" type="password" id="i-gemini_key" autocomplete="new-password" spellcheck="false">
+    <p class="note" id="keyState"></p>
+    <label class="fl" for="i-gemini_model">Smart helper model (you can leave this empty)</label>
+    <input class="txt" type="text" id="i-gemini_model" autocomplete="off" spellcheck="false">
+
+    <p class="formerr" id="infoError" role="alert" hidden></p>
+    <button type="submit" class="primary left" id="infoSave">Save</button>
+  </form>
+</section>
+
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

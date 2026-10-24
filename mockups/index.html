@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Care Notes - Front page mockups</title>
+<style>
+:root{--bg:#fbf6ee;--card:#fffdf9;--ink:#221a12;--ink2:#4a3f33;--line:#6b5b4a;--brand:#1b5e43}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:22px/1.5 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:28px 20px 56px}
+h1{font-size:38px;line-height:1.2;margin:0 0 10px}
+p{margin:0 0 14px}
+.lead{font-size:24px;color:var(--ink2)}
+ul{list-style:none;margin:26px 0 0;padding:0}
+li{margin-bottom:18px}
+a{display:block;min-height:96px;padding:18px 22px;background:var(--card);border:3px solid var(--line);border-left:16px solid var(--brand);border-radius:20px;color:var(--ink);text-decoration:none}
+a:focus-visible{outline:6px solid #111;outline-offset:4px}
+.name{display:block;margin-bottom:4px;font-size:30px;font-weight:700;color:var(--brand);text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:6px}
+.desc{display:block;font-size:22px}
+.note{font-size:21px;color:var(--ink2)}
+@media (max-width:560px){.wrap{padding:18px 16px 44px}h1{font-size:32px}.name{font-size:27px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>My Care Notes: three front page ideas</h1>
+  <p class="lead">Each one opens as a small working mockup. Pick a group or tap &ldquo;Just tell me what happened&rdquo;, then Save.</p>
+  <ul>
+    <li><a href="a-tiles.html"><span class="name">A. Big tiles</span><span class="desc">A warm 3 by 3 grid of big square tiles, each with a large picture and a short count.</span></a></li>
+    <li><a href="b-big-buttons.html"><span class="name">B. One big list</span><span class="desc">One column of full-width, extra-tall buttons: the simplest layout, best for very low vision and screen readers.</span></a></li>
+    <li><a href="c-tiles-with-summary.html"><span class="name">C. Tiles with a summary</span><span class="desc">A plain-language summary of the month sits on top of the tiles, for people who want the bigger picture.</span></a></li>
+  </ul>
+  <p class="note">All three use made-up sample data.</p>
+</main>
+</body>
+</html>

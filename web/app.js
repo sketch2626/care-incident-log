@@ -1,0 +1,812 @@
+// Care Incident Log - front end. Talks to server.py over /api/*.
+'use strict';
+
+/* ---------- Categories (keys and labels match server.py) ---------- */
+
+// tile = what the resident sees on the big buttons; label = the formal name used in the record.
+const CATS = [
+  { key: 'call_light', color: '#2a78d6', emoji: '\u{1F514}', tile: 'No one answered my call light', label: 'Call light not answered' },
+  { key: 'meal', color: '#eb6834', emoji: '\u{1F37D}️', tile: 'My meal was late or missed', label: 'Meal missed or late' },
+  { key: 'bathing', color: '#1baf7a', emoji: '\u{1F6C1}', tile: "I didn't get my bath or shower", label: 'Bath or shower missed' },
+  { key: 'toileting', color: '#eda100', emoji: '\u{1F6BD}', tile: "I wasn't changed or helped to the toilet", label: 'Toileting / brief change' },
+  { key: 'medication', color: '#e87ba4', emoji: '\u{1F48A}', tile: 'Problem with my medicine', label: 'Medication problem' },
+  { key: 'repositioning', color: '#008300', emoji: '\u{1F6CF}️', tile: "I wasn't turned or moved", label: 'Not turned or repositioned' },
+  { key: 'staff', color: '#6250d6', emoji: '\u{1F5E3}️', tile: 'Staff were rude or rough', label: 'Staff conduct' },
+  { key: 'safety', color: '#e34948', emoji: '\u{1FA79}', tile: 'I fell or got hurt', label: 'Fall, injury or safety' },
+  { key: 'other', color: '#898781', emoji: '\u{1F4AC}', tile: 'Something else', label: 'Something else' },
+];
+const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
+const SEV_LABEL = { minor: 'Minor', serious: 'Serious', dangerous: 'Dangerous' };
+const WAIT_PRESETS = [15, 30, 60, 120];
+
+/* ---------- Helpers ---------- */
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const daysAgo = n => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - n); return d; };
+const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const minutesOf = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const fmtDate = (s, long) => parseDate(s).toLocaleDateString(undefined, long ? { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+const longDate = s => parseDate(s).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+const fmtTime = t => { const [h, m] = t.split(':').map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); };
+const fmtStamp = s => `${fmtDate(s.slice(0, 10))}, ${fmtTime(s.slice(11, 16))}`;
+const fmtWait = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} hr${m >= 120 ? 's' : ''}${m % 60 ? ` ${m % 60} min` : ''}`;
+const times = n => `${n} ${n === 1 ? 'time' : 'times'}`;
+const plainWait = m => {
+  if (m < 60) return `${m} ${m === 1 ? 'minute' : 'minutes'}`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return `${h} ${h === 1 ? 'hour' : 'hours'}${r ? ` ${r} ${r === 1 ? 'minute' : 'minutes'}` : ''}`;
+};
+const daysBetween = s => Math.round((daysAgo(0) - parseDate(s.slice(0, 10))) / 86400000);
+
+function friendlyDay(s) {
+  const n = daysBetween(s);
+  if (n === 0) return 'Today';
+  if (n === 1) return 'Yesterday';
+  if (n > 1 && n < 7) return `${n} days ago`;
+  return fmtDate(s, true);
+}
+
+// Every request carries the headers the server expects on writes.
+async function api(path, opts = {}) {
+  const method = opts.method || 'GET';
+  const init = { method, headers: { 'Content-Type': 'application/json', 'X-Tracker': '1' } };
+  if (method !== 'GET') init.body = opts.body || '{}';
+  let res;
+  try { res = await fetch(path, init); } catch { throw new Error('Could not reach the tracker. Is it still running?'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+  return data;
+}
+const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+}
+
+/* ---------- Data ---------- */
+
+let state = { incidents: [], settings: {}, inbox: { available: false, items: [] } };
+let lastLoad = 0;
+
+async function load() {
+  const [incidents, settings, inbox] = await Promise.all([
+    api('/api/incidents'),
+    api('/api/settings'),
+    api('/api/inbox').catch(() => ({ available: false, items: [] })),
+  ]);
+  state = { incidents, settings, inbox: { available: !!inbox.available, items: inbox.items || [] } };
+  lastLoad = Date.now();
+  setBanner('');
+}
+
+function setBanner(msg) {
+  const b = $('#banner');
+  b.hidden = !msg;
+  b.textContent = '';
+  if (!msg) return;
+  const p = document.createElement('span');
+  p.textContent = msg + ' ';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'tinybtn';
+  btn.textContent = 'Try again';
+  btn.addEventListener('click', async () => {
+    try { await load(); renderCurrent(); } catch (err) { setBanner(err.message); }
+  });
+  b.append(p, btn);
+}
+
+const recNo = i => `INC-${(i.logged_at || isoDate(new Date())).slice(0, 4)}-${String(i.id).padStart(4, '0')}`;
+const monthPrefix = () => isoDate(new Date()).slice(0, 7);
+const thisMonth = () => state.incidents.filter(i => (i.occurred_date || '').startsWith(monthPrefix()));
+function monthCounts() {
+  const counts = {};
+  thisMonth().forEach(i => { counts[i.category] = (counts[i.category] || 0) + 1; });
+  return counts;
+}
+
+function fallbackSummary(i) {
+  if (i.summary) return i.summary; // server builds the same sentence the state report uses
+  const c = CAT[i.category] || CAT.other;
+  const parts = [`Resident reports: ${c.label}.`];
+  if (i.never_came) parts.push('No staff member came.');
+  else if (i.wait_minutes) parts.push(`Waited ${plainWait(i.wait_minutes)}.`);
+  return parts.join(' ');
+}
+
+/* ---------- Routing ---------- */
+
+const SCREENS = ['home', 'add', 'saved', 'list', 'inbox', 'report', 'info'];
+let cur = { screen: 'home' };
+let pendingInbox = null;
+let lastSaved = null;
+
+function showScreen(id) {
+  SCREENS.forEach(s => { $(`#${s}`).hidden = s !== id; });
+  window.scrollTo(0, 0);
+  const h = $('h1', $(`#${id}`));
+  if (h) h.focus({ preventScroll: true });
+}
+
+function go(name, replace) {
+  if (replace) location.replace(`#${name}`); else location.hash = `#${name}`;
+}
+
+function route() {
+  const [name, arg = ''] = location.hash.replace(/^#/, '').split('/');
+  if (cur.screen === 'add') teardownMic();
+  switch (name) {
+    case 'add': {
+      const opts = arg === 'inbox' && pendingInbox ? { inboxItem: pendingInbox } : CAT[arg] ? { cat: arg } : {};
+      cur = { screen: 'add' };
+      initAdd(opts);
+      showScreen('add');
+      return;
+    }
+    case 'edit': {
+      const inc = state.incidents.find(i => i.id === Number(arg));
+      if (!inc) return go('list', true);
+      cur = { screen: 'add' };
+      initAdd({ incident: inc });
+      showScreen('add');
+      return;
+    }
+    case 'saved':
+      cur = { screen: 'saved', id: Number(arg) };
+      if (!renderSaved(cur.id)) return go('home', true);
+      return showScreen('saved');
+    case 'list':
+      cur = { screen: 'list' };
+      renderList();
+      return showScreen('list');
+    case 'inbox':
+      if (!state.inbox.available) return go('home', true);
+      cur = { screen: 'inbox' };
+      renderInbox();
+      return showScreen('inbox');
+    case 'report':
+      cur = { screen: 'report' };
+      renderReport(true);
+      return showScreen('report');
+    case 'info':
+      cur = { screen: 'info' };
+      fillInfo();
+      return showScreen('info');
+    default:
+      cur = { screen: 'home' };
+      if (name && name !== 'home') history.replaceState(null, '', '#home');
+      renderHome();
+      return showScreen('home');
+  }
+}
+
+// Re-draw whichever screen shows saved data (never the ones with unsaved input).
+function renderCurrent() {
+  switch (cur.screen) {
+    case 'home': return renderHome();
+    case 'list': return renderList();
+    case 'saved': return renderSaved(cur.id);
+    case 'report': return renderReport(false);
+    case 'inbox':
+      if (!state.inbox.available) return go('home', true);
+      return renderInbox();
+  }
+}
+
+/* ---------- Home ---------- */
+
+function buildTiles() {
+  $('#grid').innerHTML = CATS.map(c => `
+    <button type="button" class="tile" id="tile-${c.key}" data-cat="${c.key}" style="--c:${c.color}">
+      <span class="trow"><span class="bubble" aria-hidden="true">${c.emoji}</span><span class="num" id="num-${c.key}" aria-hidden="true"></span></span>
+      <span class="tlabel">${esc(c.tile)}</span>
+      <span class="tcount" id="cnt-${c.key}" aria-hidden="true"></span>
+    </button>`).join('');
+  $('#groupopts').innerHTML = CATS.map(c => `
+    <label class="opt" style="--c:${c.color}"><input type="radio" name="type" value="${c.key}" id="type-${c.key}"><span class="box row"><span class="t"><span aria-hidden="true">${c.emoji}</span> ${esc(c.tile)}</span></span></label>`).join('');
+}
+
+function lastNoteWords() {
+  const stamps = state.incidents.map(i => i.logged_at).filter(Boolean).sort();
+  if (!stamps.length) return '';
+  const s = stamps[stamps.length - 1], n = daysBetween(s);
+  if (n <= 0) return 'today';
+  if (n === 1) return 'yesterday';
+  if (n < 14) return `${n} days ago`;
+  if (n < 60) return `${Math.floor(n / 7)} weeks ago`;
+  return `on ${fmtDate(s.slice(0, 10), true)}`;
+}
+
+function renderHome() {
+  const first = (state.settings.resident_name || '').trim().split(/\s+/)[0];
+  $('#who').textContent = first ? `Hello, ${first}` : '';
+
+  const month = thisMonth(), counts = monthCounts();
+  CATS.forEach(c => {
+    const n = counts[c.key] || 0;
+    $(`#num-${c.key}`).textContent = n;
+    $(`#cnt-${c.key}`).textContent = `${n === 1 ? 'time' : 'times'} this month`;
+    $(`#tile-${c.key}`).setAttribute('aria-label', `${c.tile}. ${n === 0 ? 'Not yet this month' : `${times(n)} this month`}.`);
+  });
+
+  const total = month.length, never = month.filter(i => i.never_came).length, last = lastNoteWords();
+  if (total) {
+    const top = CATS.filter(c => counts[c.key]).sort((a, b) => counts[b.key] - counts[a.key])[0];
+    $('#sumline').innerHTML = `This month you wrote down <b>${total} ${total === 1 ? 'problem' : 'problems'}</b>. ` +
+      (never ? `No one came <b>${times(never)}</b>.` : 'There were no times when no one came.');
+    $('#sumsub').innerHTML = `Most often: <b>${esc(top.tile)} (${times(counts[top.key])})</b>.` + (last ? ` Your last note was ${last}.` : '');
+  } else {
+    $('#sumline').textContent = "You haven't written anything down this month yet.";
+    $('#sumsub').textContent = last ? `Your last note was ${last}.` : 'When something goes wrong, tap the big button and tell me about it.';
+  }
+
+  // Andy Flow is Andy's own dictation app: residents without it never see any of this.
+  const flow = state.inbox.available, waiting = state.inbox.items.length;
+  $('#flowrow').hidden = !flow;
+  $('#inboxLink').textContent = waiting ? `From Andy Flow (${waiting} waiting)` : 'From Andy Flow';
+}
+
+$('#grid').addEventListener('click', e => {
+  const t = e.target.closest('[data-cat]');
+  if (t) go(`add/${t.dataset.cat}`);
+});
+$('#auto').addEventListener('click', () => go('add'));
+
+let pulling = false;
+$('#pullBtn').addEventListener('click', async () => {
+  if (pulling) return;
+  pulling = true;
+  const btn = $('#pullBtn');
+  btn.disabled = true;
+  try {
+    const r = await post('/api/inbox/import');
+    toast(r.added ? `Added ${r.added} from Andy Flow.` : 'Nothing new in Andy Flow.');
+    await load();
+    renderCurrent();
+  } catch (err) { toast(err.message); } finally { pulling = false; btn.disabled = false; }
+});
+
+/* ---------- Add / edit ---------- */
+
+let add = {};
+const radioVal = name => { const r = $(`input[name="${name}"]:checked`); return r ? r.value : ''; };
+const setRadio = (name, value) => { $$(`input[name="${name}"]`).forEach(r => { r.checked = r.value === value; }); };
+const EXTRA_FIELDS = ['staff_involved', 'reported_to', 'outcome', 'witnesses'];
+
+function initAdd({ cat = null, incident = null, inboxItem = null } = {}) {
+  const g = inboxItem ? inboxItem.guess || {} : null;
+  add = { editing: incident, inbox: inboxItem, cat: null, formal: '', formalFor: '', whenTouched: false, busy: false, customWait: 0 };
+  $('#form').reset();
+  $('#groupopts').hidden = true;
+  $('#moreDetails').open = true; // names and who they told are the proof, so keep it in view
+  $('#detailStatus').textContent = '';
+  $('#formError').hidden = true;
+  $('#micNote').hidden = true;
+  $('#assistNote').hidden = true;
+  $('#waitCustomOpt').hidden = true;
+  $('#day').max = isoDate(new Date());
+  $('#saveBtn').disabled = false;
+  $('#saveBtn').textContent = 'Save';
+
+  if (incident) {
+    $('#words').value = incident.description || '';
+    add.formal = incident.formal_summary || '';
+    add.formalFor = (incident.description || '').trim();
+    setRadio('sev', incident.severity);
+    setWait(incident.wait_minutes, incident.never_came);
+    EXTRA_FIELDS.forEach(k => { $(`#${k}`).value = incident[k] || ''; });
+    $('#moreDetails').open = true;
+    applyWhen(incident.occurred_date, incident.occurred_time || '', false);
+    $('#addtitle').textContent = 'Change what I wrote down';
+  } else if (g) {
+    $('#words').value = g.description || inboxItem.text || '';
+    $('#addtitle').textContent = 'Add from Andy Flow';
+    applyGuess(g, $('#words').value, { fromInbox: true });
+  } else {
+    $('#addtitle').textContent = cat ? CAT[cat].tile : 'Just tell me what happened';
+  }
+  setType(incident ? incident.category : g && CAT[g.category] ? g.category : cat);
+  updateWhenUI();
+  setMic('checking');
+  checkMic();
+}
+
+function setType(key) {
+  add.cat = CAT[key] ? key : null;
+  const c = add.cat ? CAT[add.cat] : null;
+  $('#add').style.setProperty('--c', c ? c.color : '#898781');
+  $('#addicon').textContent = $('#ctIcon').textContent = c ? c.emoji : '\u{1F3A4}';
+  $('#ctText').textContent = c ? c.tile : "Not picked yet. Talk first and I'll pick one, or choose it yourself.";
+  const n = c ? monthCounts()[add.cat] || 0 : 0;
+  $('#ctx').textContent = c
+    ? (n === 0 ? 'You have not written this group down yet this month.' : `You have written this group down ${times(n)} this month.`)
+    : 'Talk first. I will find the group and tell you how often you have written it down.';
+  $$('input[name="type"]').forEach(r => { r.checked = !!c && r.value === add.cat; });
+  updateChg();
+}
+
+function updateChg() {
+  const open = !$('#groupopts').hidden;
+  $('#chg').textContent = open ? 'Close the list' : add.cat ? 'Change group' : 'Choose a group';
+  $('#chg').setAttribute('aria-expanded', String(open));
+}
+$('#chg').addEventListener('click', () => { $('#groupopts').hidden = !$('#groupopts').hidden; updateChg(); });
+$('#groupopts').addEventListener('change', e => { if (e.target.name === 'type') setType(e.target.value); });
+
+function updateWhenUI() {
+  const k = radioVal('when');
+  $('#daybox').hidden = k === 'now';
+  $('#dayWrap').hidden = k !== 'pick';
+}
+$('#form').addEventListener('change', e => {
+  if (e.target.name === 'when') { add.whenTouched = true; updateWhenUI(); }
+});
+
+// Choose the "When" answer that matches a saved date and time.
+function applyWhen(date, time, allowNow) {
+  if (!date) return;
+  const today = isoDate(new Date());
+  $('#time').value = time || '';
+  if (date === today) {
+    if (allowNow && time && Math.abs(minutesOf(time) - minutesOf(nowHM())) <= 3) { setRadio('when', 'now'); $('#time').value = ''; }
+    else setRadio('when', 'earlier');
+  } else if (date === isoDate(daysAgo(1))) {
+    setRadio('when', 'yesterday');
+  } else {
+    setRadio('when', 'pick');
+    $('#day').value = date;
+  }
+  updateWhenUI();
+}
+
+function collectWhen() {
+  const k = radioVal('when') || 'now', today = isoDate(new Date());
+  if (k === 'now') return { date: today, time: nowHM() };
+  const time = $('#time').value || '';
+  if (k === 'earlier') return { date: today, time };
+  if (k === 'yesterday') return { date: isoDate(daysAgo(1)), time };
+  const day = $('#day').value;
+  if (!day) throw Object.assign(new Error('Please choose which day it happened.'), { focus: '#day' });
+  if (day > today) throw Object.assign(new Error('That day has not happened yet. Please pick today or an earlier day.'), { focus: '#day' });
+  return { date: day, time };
+}
+
+function setWait(minutes, never) {
+  const m = Number(minutes) || 0;
+  if (never) return setRadio('wait', 'never');
+  if (WAIT_PRESETS.includes(m)) return setRadio('wait', String(m));
+  if (m > 0) {
+    add.customWait = m;
+    $('#waitCustomText').textContent = fmtWait(m);
+    $('#waitCustomOpt').hidden = false;
+    return setRadio('wait', 'custom');
+  }
+  setRadio('wait', '');
+}
+
+function collectWait() {
+  const v = radioVal('wait');
+  if (v === 'never') return { never: true, wait: '' };
+  if (v === 'custom') return { never: false, wait: add.customWait };
+  return { never: false, wait: v ? Number(v) : '' };
+}
+
+// Fill in answers from a guess (voice, tidy or Andy Flow) without overwriting what the resident already chose.
+function applyGuess(g, fullText, { fromInbox = false, hadText = false } = {}) {
+  if (!g) return false;
+  let filled = false;
+  if (!add.cat && CAT[g.category]) { add.cat = g.category; }
+  if (!radioVal('wait') && (g.never_came || Number(g.wait_minutes) > 0)) { setWait(g.wait_minutes, g.never_came); filled = true; }
+  if (!radioVal('sev') && SEV_LABEL[g.severity]) { setRadio('sev', g.severity); filled = true; }
+  if (fromInbox) {
+    applyWhen(g.occurred_date, g.occurred_time || '', false);
+  } else if (!add.whenTouched && g.occurred_time) {
+    applyWhen(g.occurred_date || isoDate(new Date()), g.occurred_time, true);
+  }
+  EXTRA_FIELDS.forEach(k => {
+    const el = $(`#${k}`);
+    if (g[k] && !el.value.trim()) { el.value = g[k]; filled = true; if (k !== 'witnesses') $('#moreDetails').open = true; }
+  });
+  if (g.formal_summary && !hadText) { add.formal = g.formal_summary; add.formalFor = fullText.trim(); }
+  const note = $('#assistNote');
+  note.hidden = !g.assist_error;
+  note.textContent = g.assist_error || '';
+  return filled;
+}
+
+$('#clear').addEventListener('click', () => { $('#words').value = ''; $('#words').focus(); });
+// Pressing Enter in a one-line box should not save the note by accident.
+$('#form').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
+
+/* ---------- Microphone ---------- */
+
+const mic = { state: 'checking', token: 0, timer: null };
+const MIC_LABEL = { idle: 'Tap and talk', loading: 'Getting ready…', listening: 'Stop', working: 'Please wait…' };
+
+function setMic(state, msg = '') {
+  mic.state = state;
+  const b = $('#mic');
+  $('#micwrap').hidden = state === 'checking' || state === 'unavailable';
+  b.classList.toggle('listening', state === 'listening');
+  b.disabled = state === 'loading' || state === 'working';
+  $('#miclabel').textContent = MIC_LABEL[state] || '';
+  $('.i-mic', b).toggleAttribute('hidden', state === 'listening');
+  $('.i-stop', b).toggleAttribute('hidden', state !== 'listening');
+  $('#status').textContent = msg;
+  syncTalkButtons();
+}
+
+async function checkMic(t = ++mic.token) {
+  clearTimeout(mic.timer);
+  let r;
+  try { r = await api('/api/listen'); } catch (err) { r = { available: false, reason: err.message }; }
+  if (t !== mic.token) return;
+  if (r.loading) {
+    setMic('loading', 'The microphone is getting ready. You can start typing if you like.');
+    mic.timer = setTimeout(() => checkMic(t), 1500);
+    return;
+  }
+  if (!r.available) {
+    setMic('unavailable');
+    const n = $('#micNote');
+    n.textContent = r.reason || "Talking isn't set up on this computer yet. You can type instead.";
+    n.hidden = false;
+    return;
+  }
+  setMic('idle');
+}
+
+function teardownMic() {
+  mic.token++;
+  clearTimeout(mic.timer);
+  if (mic.state === 'listening' || field.id) api('/api/listen/stop?raw=1', { method: 'POST' }).catch(() => {});
+  field.id = null;
+  field.busy = false;
+  mic.state = 'checking';
+}
+
+$('#mic').addEventListener('click', () => {
+  if (mic.state === 'idle') startTalk();
+  else if (mic.state === 'listening') stopTalk();
+});
+
+async function startTalk() {
+  const t = mic.token;
+  setMic('working', 'Starting…');
+  try {
+    await post('/api/listen/start');
+  } catch (err) {
+    if (t === mic.token) setMic('idle', err.message);
+    return;
+  }
+  if (t !== mic.token) { api('/api/listen/stop', { method: 'POST' }).catch(() => {}); return; }
+  setMic('listening', "I'm listening. Keep talking.");
+}
+
+async function stopTalk() {
+  const t = mic.token;
+  setMic('working', 'Writing down what you said…');
+  let r;
+  try { r = await post('/api/listen/stop'); } catch (err) {
+    if (t === mic.token) setMic('idle', err.message);
+    return;
+  }
+  if (t !== mic.token) return;
+  const text = String(r.text || '').trim();
+  if (!text) return setMic('idle', "I didn't hear anything. Tap and try again, or type below.");
+  const ta = $('#words'), hadText = !!ta.value.trim(), hadCat = !!add.cat;
+  ta.value = hadText ? `${ta.value.replace(/\s+$/, '')} ${text}` : text;
+  ta.scrollTop = ta.scrollHeight;
+  const filled = applyGuess(r.guess, ta.value, { hadText });
+  if (!hadCat && add.cat) setType(add.cat);
+  let msg = !hadCat && add.cat ? `I think this is: ${CAT[add.cat].tile}. Is that right? You can change it below.` : 'Got it. You can fix any words by typing.';
+  if (filled) msg += ' I filled in some answers below. Please check them.';
+  setMic('idle', msg);
+}
+
+/* ---------- Talk into a detail box (staff name, who you told, ...) ---------- */
+
+// The computer has one recorder, so only one microphone listens at a time.
+const field = { id: null, busy: false };
+
+function syncTalkButtons() {
+  const free = mic.state === 'idle' && !field.busy && !field.id;
+  $$('[data-talk]').forEach(b => {
+    const mine = field.id === b.dataset.talk;
+    b.hidden = mic.state === 'checking' || mic.state === 'unavailable';
+    b.disabled = field.busy || !(mine || free);
+    b.classList.toggle('listening', mine && !field.busy);
+    $('.lbl', b).textContent = mine ? (field.busy ? 'Wait…' : 'Stop') : 'Talk';
+  });
+  if (field.id || field.busy) $('#mic').disabled = true;
+  else $('#mic').disabled = mic.state === 'loading' || mic.state === 'working';
+}
+
+async function talkInto(id) {
+  const note = $('#detailStatus');
+  if (field.id === id) { // second tap: stop and write it in the box
+    field.busy = true;
+    syncTalkButtons();
+    note.textContent = 'Writing down what you said…';
+    let text = '';
+    try { text = String((await post('/api/listen/stop?raw=1')).text || '').trim(); } catch (err) { note.textContent = err.message; }
+    field.id = null;
+    field.busy = false;
+    syncTalkButtons();
+    if (text) {
+      const box = $(`#${id}`);
+      box.value = box.value.trim() ? `${box.value.trim()} ${text}` : text;
+      note.textContent = 'Got it. You can fix any words by typing.';
+    } else if (note.textContent === 'Writing down what you said…') {
+      note.textContent = "I didn't hear anything. Tap Talk and try again.";
+    }
+    return;
+  }
+  if (field.id || field.busy || mic.state !== 'idle') return;
+  field.busy = true;
+  syncTalkButtons();
+  try {
+    await post('/api/listen/start');
+    field.id = id;
+    note.textContent = "I'm listening. Tap Stop when you're done.";
+  } catch (err) { note.textContent = err.message; }
+  field.busy = false;
+  syncTalkButtons();
+}
+
+$$('[data-talk]').forEach(b => b.addEventListener('click', () => talkInto(b.dataset.talk)));
+
+/* ---------- Save ---------- */
+
+function formFail(message, focusSel) {
+  const e = $('#formError');
+  e.textContent = message;
+  e.hidden = false;
+  if (focusSel) $(focusSel).focus(); else e.scrollIntoView({ block: 'center' });
+}
+
+$('#form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (add.busy) return;
+  $('#formError').hidden = true;
+  if (mic.state === 'listening') await stopTalk(); // Save while still listening: finish the recording first
+  const text = $('#words').value.trim();
+  if (!text) return formFail('Please tell me or type what happened first.', '#words');
+  let when;
+  try { when = collectWhen(); } catch (err) { return formFail(err.message, err.focus); }
+  add.busy = true;
+  const btn = $('#saveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    let cat = add.cat, formal = add.formalFor === text ? add.formal : '', guessed = {};
+    if (!cat || !formal) {
+      try {
+        guessed = await post('/api/tidy', { text });
+        if (!cat && CAT[guessed.category]) { cat = guessed.category; setType(cat); }
+        if (!formal && guessed.formal_summary) formal = guessed.formal_summary;
+      } catch (err) { if (!cat) throw err; }
+    }
+    if (!cat) throw new Error('Please choose which group this belongs to.');
+    // Anything the resident picked wins; otherwise keep what was heard in their words.
+    const w = collectWait();
+    const pickedWait = w.never || w.wait !== '';
+    const payload = {
+      occurred_date: when.date, occurred_time: when.time, category: cat, description: text,
+      severity: radioVal('sev') || guessed.severity || '',
+      wait_minutes: pickedWait ? w.wait : (guessed.wait_minutes ?? ''),
+      never_came: pickedWait ? w.never : !!guessed.never_came,
+      formal_summary: formal,
+    };
+    EXTRA_FIELDS.forEach(k => { payload[k] = $(`#${k}`).value.trim(); });
+    const editing = add.editing;
+    if (add.inbox) {
+      const it = add.inbox;
+      Object.assign(payload, { source: `andyflow-${it.kind}`, source_id: String(it.source_id), inbox_kind: it.kind, inbox_id: it.source_id });
+    }
+    const r = await api(editing ? `/api/incidents/${editing.id}` : '/api/incidents', { method: editing ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+    const id = editing ? editing.id : r.id;
+    lastSaved = { id, rec: { ...payload, id, logged_at: editing ? editing.logged_at : new Date().toISOString() } };
+    pendingInbox = null;
+    try { await load(); } catch { /* the saved screen can still show what was just written */ }
+    add.busy = false;
+    go(`saved/${id}`);
+  } catch (err) {
+    add.busy = false;
+    btn.disabled = false;
+    btn.textContent = 'Save';
+    formFail(err.message);
+  }
+});
+
+/* ---------- Saved ---------- */
+
+function renderSaved(id) {
+  let inc = state.incidents.find(i => i.id === id);
+  if (!inc && lastSaved && lastSaved.id === id) inc = lastSaved.rec;
+  if (!inc) return false;
+  const c = CAT[inc.category] || CAT.other;
+  $('#saved').style.setProperty('--c', c.color);
+  const n = (monthCounts()[inc.category] || 0);
+  const isThisMonth = (inc.occurred_date || '').startsWith(monthPrefix());
+  $('#savedlead').textContent = isThisMonth && n ? `That makes ${times(n)} this month for this group.` : 'Nothing else to do. Take your time.';
+  $('#rNo').textContent = recNo(inc);
+  $('#rType').textContent = c.label;
+  $('#rWhen').textContent = longDate(inc.occurred_date) + (inc.occurred_time ? `, ${fmtTime(inc.occurred_time)}` : ' (time not noted)');
+  $('#rSum').textContent = inc.formal_summary || fallbackSummary(inc);
+  $('#rWords').textContent = inc.description ? `“${inc.description}”` : '(No words written)';
+  return true;
+}
+
+/* ---------- What I've written down ---------- */
+
+function entryHTML(i) {
+  const c = CAT[i.category] || CAT.other, no = recNo(i);
+  const meta = [no, `${friendlyDay(i.occurred_date)}${i.occurred_time ? `, ${fmtTime(i.occurred_time)}` : ''}`,
+    i.never_came ? 'No one ever came' : i.wait_minutes ? `waited ${plainWait(i.wait_minutes)}` : '',
+    SEV_LABEL[i.severity] || ''].filter(Boolean).join(' · ');
+  return `<li class="entry" style="--c:${c.color}">
+    <b>${esc(c.tile)}</b>
+    <span>${esc(meta)}</span>
+    ${i.description ? `<span class="quote">“${esc(i.description)}”</span>` : ''}
+    <div class="entryacts">
+      <button type="button" class="tinybtn" data-edit="${i.id}" aria-label="Edit note ${esc(no)}">Edit</button>
+      <button type="button" class="tinybtn danger" data-del="${i.id}" aria-label="Remove note ${esc(no)}">Remove</button>
+    </div></li>`;
+}
+
+function renderList() {
+  $('#entries').innerHTML = state.incidents.map(entryHTML).join('');
+  $('#listEmpty').hidden = state.incidents.length > 0;
+}
+
+$('#entries').addEventListener('click', async e => {
+  const b = e.target.closest('[data-edit],[data-del]');
+  if (!b) return;
+  if (b.dataset.edit) return go(`edit/${b.dataset.edit}`);
+  if (!confirm('Remove this note? It will disappear from your list.')) return;
+  b.disabled = true;
+  try {
+    await api(`/api/incidents/${b.dataset.del}`, { method: 'DELETE' });
+    toast('Removed.');
+    await load();
+    renderList();
+  } catch (err) { b.disabled = false; toast(err.message); }
+});
+
+/* ---------- From Andy Flow ---------- */
+
+function renderInbox() {
+  const items = state.inbox.items;
+  $('#inboxEmpty').hidden = items.length > 0;
+  $('#inboxList').innerHTML = items.map((it, k) => {
+    const g = it.guess || {}, c = CAT[g.category] || CAT.other, at = it.at ? fmtStamp(it.at) : '';
+    return `<li class="entry" style="--c:${c.color}">
+      <b>${esc(c.tile)}</b>
+      <span>${it.kind === 'note' ? 'Note' : 'Dictation'}${at ? ` · ${esc(at)}` : ''}</span>
+      <span class="quote">“${esc(it.text)}”</span>
+      <div class="entryacts">
+        <button type="button" class="tinybtn" data-add="${k}" aria-label="Add this ${it.kind === 'note' ? 'note' : 'dictation'} to what I've written down">Add</button>
+        <button type="button" class="tinybtn" data-dismiss="${k}" aria-label="Not an incident: leave this ${it.kind === 'note' ? 'note' : 'dictation'} out">Not an incident</button>
+      </div></li>`;
+  }).join('');
+}
+
+$('#inboxList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-add],[data-dismiss]');
+  if (!b) return;
+  if (b.dataset.add !== undefined) {
+    pendingInbox = state.inbox.items[Number(b.dataset.add)] || null;
+    return go('add/inbox');
+  }
+  const it = state.inbox.items[Number(b.dataset.dismiss)];
+  if (!it) return;
+  b.disabled = true;
+  try {
+    await post('/api/inbox/dismiss', { kind: it.kind, source_id: it.source_id });
+    await load();
+    renderCurrent();
+  } catch (err) { b.disabled = false; toast(err.message); }
+});
+
+/* ---------- Make a report ---------- */
+
+let reportTouched = false;
+
+function renderReport(entering) {
+  const from = $('#repFrom'), to = $('#repTo');
+  if (entering) reportTouched = false;
+  if (!reportTouched || !from.value || !to.value) {
+    const dates = state.incidents.map(i => i.occurred_date).filter(Boolean).sort();
+    from.value = dates[0] || isoDate(daysAgo(30));
+    to.value = isoDate(new Date());
+  }
+  updateReportLinks();
+}
+
+function updateReportLinks() {
+  const from = $('#repFrom').value, to = $('#repTo').value;
+  const ok = !!from && !!to && from <= to;
+  const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const x = $('#xlsxBtn');
+  x.href = ok ? `/api/export.xlsx?${q}` : '#report';
+  x.setAttribute('aria-disabled', String(!ok));
+  $('#printBtn').setAttribute('aria-disabled', String(!ok));
+  const err = $('#repErr');
+  err.hidden = ok || !from || !to;
+  err.textContent = ok ? '' : 'The first day needs to come before the last day.';
+  const n = ok ? state.incidents.filter(i => i.occurred_date >= from && i.occurred_date <= to).length : 0;
+  $('#repCount').textContent = ok ? (n === 0 ? 'There is nothing written down on these days.' : `${n} ${n === 1 ? 'note' : 'notes'} on these days.`) : '';
+}
+
+['#repFrom', '#repTo'].forEach(s => $(s).addEventListener('change', () => { reportTouched = true; updateReportLinks(); }));
+$('#printBtn').addEventListener('click', e => {
+  if (e.currentTarget.getAttribute('aria-disabled') === 'true') return;
+  const url = `/report?from=${encodeURIComponent($('#repFrom').value)}&to=${encodeURIComponent($('#repTo').value)}`;
+  if (!window.open(url, '_blank')) location.href = url;
+});
+$('#xlsxBtn').addEventListener('click', e => {
+  if (e.currentTarget.getAttribute('aria-disabled') === 'true') e.preventDefault();
+});
+
+/* ---------- My info ---------- */
+
+const INFO_FIELDS = ['resident_name', 'room', 'facility', 'facility_address', 'state', 'gemini_model'];
+
+function fillInfo() {
+  const s = state.settings;
+  INFO_FIELDS.forEach(k => { $(`#i-${k}`).value = s[k] || ''; });
+  $('#i-gemini_enabled').checked = s.gemini_enabled === '1';
+  $('#i-gemini_key').value = '';
+  $('#keyState').textContent = s.gemini_key_set ? 'A key is saved. Leave this empty to keep it.' : 'No key is saved yet.';
+  $('#infoError').hidden = true;
+  updateGemState();
+}
+
+function updateGemState() { $('#gemState').textContent = $('#i-gemini_enabled').checked ? 'It is on.' : 'It is off.'; }
+$('#i-gemini_enabled').addEventListener('change', updateGemState);
+$('#infoForm').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
+
+$('#infoForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('#infoSave');
+  $('#infoError').hidden = true;
+  btn.disabled = true;
+  const payload = Object.fromEntries(INFO_FIELDS.map(k => [k, $(`#i-${k}`).value.trim()]));
+  payload.gemini_enabled = $('#i-gemini_enabled').checked ? '1' : '0';
+  const key = $('#i-gemini_key').value.trim();
+  if (key) payload.gemini_key = key; // blank means "keep the saved key"
+  try {
+    state.settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
+    fillInfo();
+    toast('Saved.');
+  } catch (err) {
+    $('#infoError').textContent = err.message;
+    $('#infoError').hidden = false;
+  } finally { btn.disabled = false; }
+});
+
+/* ---------- Start up ---------- */
+
+// Refresh when the window comes back into view, but never while something is half-typed.
+window.addEventListener('focus', async () => {
+  if (cur.screen === 'add' || cur.screen === 'info' || add.busy || Date.now() - lastLoad < 2000) return;
+  try { await load(); renderCurrent(); } catch (err) { setBanner(err.message); }
+});
+window.addEventListener('hashchange', route);
+
+buildTiles();
+(async () => {
+  try { await load(); } catch (err) { setBanner(err.message); }
+  route();
+})();

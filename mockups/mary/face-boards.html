@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mary's face: pick A, B or C</title>
+<style>
+:root{--bg:#f7f3ea;--card:#fffefa;--ink:#1f1b16;--ink2:#453d34;--line:#62574a;--brand:#0f5560;--bad:#7a1212}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:22px/1.5 "Segoe UI",system-ui,sans-serif}
+main{max-width:1240px;margin:0 auto;padding:28px 24px 64px}
+h1{font-size:40px;line-height:1.2;margin:0 0 14px}
+.lead{font-size:24px;line-height:1.4;color:var(--ink2);margin:0 0 40px;max-width:44em}
+.dir{margin:0 0 56px}
+.dir-head{display:flex;align-items:center;gap:22px;margin:0 0 24px}
+.letter{width:96px;height:96px;flex:none;border-radius:50%;background:var(--brand);color:#fff;font-size:72px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center}
+.dir-head h2{font-size:36px;line-height:1.2;margin:0}
+.dir-head p{font-size:24px;line-height:1.4;margin:6px 0 0;color:var(--ink2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
+.card{position:relative;background:var(--card);border:3px solid var(--line);border-radius:22px;padding:16px 12px 18px;text-align:center}
+.facebox{width:100%;max-width:240px;margin:0 auto}
+.facebox svg{display:block;width:100%;height:auto;overflow:hidden}
+.label{font-size:26px;font-weight:700;line-height:1.25;margin:10px 0 0}
+
+/* parts */
+.face{transform-box:view-box;transform-origin:100px 215px;transform:rotate(var(--rot,0deg));animation:breathe 6s ease-in-out infinite}
+.card[data-face="b"] .face{transform-origin:100px 110px}
+.lids,.pupils,.mouth-open,.brow-l,.brow-r,.halo{transform-box:fill-box;transform-origin:center}
+.lids{transform-origin:50% 0;transform:scaleY(0)}
+.mouth-open{transform-origin:50% 0}
+.mouth-open,.mouth-flat,.rings,.dots,.alert-ring{display:none}
+.rings path{opacity:.6}
+.dots>*{opacity:.7}
+.lid-c{fill:var(--card);stroke:none}
+.card[data-face="b"] .brows{opacity:0}
+.card[data-face="c"]{--gx:3px;--gy:-2px}
+.halo{animation:halo 6s ease-in-out infinite}
+
+/* 1 resting, 2 listening, 3 thinking, 4 talking */
+.st-idle .lids,.st-listen .lids,.st-talk .lids{animation:blink 7s ease-in-out infinite}
+.st-listen .face{--rot:-3deg}
+.st-listen .brows{transform:translateY(-3px)}
+.st-listen .rings{display:block}
+.st-listen .rings path{animation:soundarc 3s ease-in-out infinite}
+.st-listen .rings path:nth-child(2){animation-delay:.4s}
+.st-listen .rings path:nth-child(3){animation-delay:.8s}
+.st-think .face{--rot:4deg}
+.st-think .pupils{transform:translate(var(--gx,5px),var(--gy,-4px));animation:glance 4s ease-in-out infinite}
+.st-think .dots{display:block}
+.st-think .dots>*{animation:dotfade 3s ease-in-out infinite}
+.st-think .dots>:nth-child(2){animation-delay:.5s}
+.st-think .dots>:nth-child(3){animation-delay:1s}
+.st-talk .mouth-smile,.st-worry .mouth-smile{display:none}
+.st-talk .mouth-open{display:block;animation:talk 1.2s ease-in-out infinite}
+
+/* 5 worried / emergency: calm but clear */
+.card.st-worry{border:6px solid var(--bad);padding:13px 9px 15px}
+.card.st-worry::after{content:"";position:absolute;inset:-15px;border:4px solid var(--bad);border-radius:31px;opacity:.12;pointer-events:none;animation:badglow 4s ease-in-out infinite}
+.st-worry .label{color:var(--bad)}
+.st-worry .mouth-flat{display:block}
+.st-worry .alert-ring{display:block}
+.st-worry .brow-l{transform:rotate(-12deg)}
+.st-worry .brow-r{transform:rotate(12deg)}
+.st-worry .halo{animation:none;opacity:.7}
+.card[data-face="b"].st-worry .brows{opacity:1}
+
+@keyframes breathe{0%,100%{transform:rotate(var(--rot,0deg)) scale(1)}50%{transform:rotate(var(--rot,0deg)) scale(1.02)}}
+@keyframes halo{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.05);opacity:1}}
+@keyframes blink{0%,92%,100%{transform:scaleY(0)}96%{transform:scaleY(1)}}
+@keyframes soundarc{0%,100%{opacity:.3}50%{opacity:.8}}
+@keyframes glance{0%,100%{transform:translate(calc(var(--gx,5px)*.2),calc(var(--gy,-4px)*.2))}25%,70%{transform:translate(var(--gx,5px),var(--gy,-4px))}}
+@keyframes dotfade{0%,12%{opacity:.2}38%,72%{opacity:1}100%{opacity:.2}}
+@keyframes talk{0%{transform:scaleY(.35)}18%{transform:scaleY(1)}34%{transform:scaleY(.5)}52%{transform:scaleY(.9)}68%{transform:scaleY(.4)}84%{transform:scaleY(.75)}100%{transform:scaleY(.35)}}
+@keyframes badglow{0%,100%{opacity:.12}50%{opacity:.45}}
+.frames h2{font-size:36px;margin:0 0 8px}
+.frames .lead{margin:0 0 28px}
+.shot-title{font-size:30px;font-weight:700;margin:0 0 12px}
+.screen{display:grid;grid-template-columns:1.3fr 1fr;grid-template-rows:1fr auto;gap:20px;min-height:640px;padding:24px;margin:0 0 48px;background:var(--bg);border:16px solid #2a2622;border-radius:28px}
+.bigface{grid-row:1;grid-column:1;display:flex;align-items:center;justify-content:center}
+.bigface .facebox{max-width:420px}
+.side{grid-row:1;grid-column:2;display:flex;flex-direction:column;justify-content:space-between;gap:20px}
+.caption{grid-row:2;grid-column:1/3;background:var(--ink);color:#fff;font-size:36px;font-weight:600;line-height:1.3;padding:20px 28px;border-radius:20px}
+.ask{background:var(--card);border:3px solid var(--line);border-left:18px solid var(--brand);border-radius:22px;padding:20px 22px}
+.ask p{font-size:30px;font-weight:700;margin:0 0 14px}
+.btn{display:block;width:100%;min-height:72px;font:inherit;font-size:26px;font-weight:700;border-radius:18px;border:3px solid var(--ink);background:#fff;color:var(--ink);margin:0 0 12px;cursor:pointer}
+.btn.yes{background:var(--brand);border-color:var(--brand);color:#fff}
+.talk{display:flex;align-items:center;justify-content:center;gap:18px;width:100%;min-height:104px;font:inherit;font-size:36px;font-weight:700;background:var(--ink);color:#fff;border:0;border-radius:24px;box-shadow:0 7px 0 rgba(0,0,0,.28);cursor:pointer}
+.talk svg{width:52px;height:52px}
+.screen.urgent .caption{background:var(--bad)}
+.urgent-banner{background:#fff;border:3px solid var(--bad);border-left-width:16px;border-radius:16px;padding:16px 20px;font-size:30px;font-weight:700;color:var(--bad)}
+@media (max-width:900px){.screen{grid-template-columns:1fr;grid-template-rows:auto}.bigface,.side,.caption{grid-column:1;grid-row:auto}}
+@media (prefers-reduced-motion: reduce){ *,*::after{animation:none!important} }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<radialGradient id="glowGrad" gradientUnits="userSpaceOnUse" cx="100" cy="110" r="62"><stop offset="0" stop-color="#fff6e0"/><stop offset="1" stop-color="#f2b766"/></radialGradient>
+<radialGradient id="haloGrad" cx=".5" cy=".5" r=".5"><stop offset=".5" stop-color="#f2b766" stop-opacity=".5"/><stop offset="1" stop-color="#f2b766" stop-opacity="0"/></radialGradient>
+</defs></svg>
+
+<main>
+<h1>Mary's face: pick A, B or C</h1>
+<p class="lead">Say A, B or C. Every face shows the same five moods. They move slowly on purpose.</p>
+
+<section class="dir" aria-labelledby="ha">
+<div class="dir-head"><div class="letter" aria-hidden="true">A</div><div><h2 id="ha">A. Friendly drawing</h2><p>A kind, simple drawing of a woman, like a friendly neighbour.</p></div></div>
+<div class="grid">
+<div class="card st-idle" data-face="a" role="img" aria-label="Face A, resting"><div class="facebox"></div><p class="label">1 Resting</p></div>
+<div class="card st-listen" data-face="a" role="img" aria-label="Face A, listening"><div class="facebox"></div><p class="label">2 Listening</p></div>
+<div class="card st-think" data-face="a" role="img" aria-label="Face A, thinking"><div class="facebox"></div><p class="label">3 Thinking</p></div>
+<div class="card st-talk" data-face="a" role="img" aria-label="Face A, talking"><div class="facebox"></div><p class="label">4 Talking</p></div>
+<div class="card st-worry" data-face="a" role="img" aria-label="Face A, worried or emergency"><div class="facebox"></div><p class="label">5 Worried / emergency</p></div>
+</div>
+</section>
+
+<section class="dir" aria-labelledby="hb">
+<div class="dir-head"><div class="letter" aria-hidden="true">B</div><div><h2 id="hb">B. Warm glow</h2><p>A soft, glowing light with a calm face. No person, just warmth.</p></div></div>
+<div class="grid">
+<div class="card st-idle" data-face="b" role="img" aria-label="Face B, resting"><div class="facebox"></div><p class="label">1 Resting</p></div>
+<div class="card st-listen" data-face="b" role="img" aria-label="Face B, listening"><div class="facebox"></div><p class="label">2 Listening</p></div>
+<div class="card st-think" data-face="b" role="img" aria-label="Face B, thinking"><div class="facebox"></div><p class="label">3 Thinking</p></div>
+<div class="card st-talk" data-face="b" role="img" aria-label="Face B, talking"><div class="facebox"></div><p class="label">4 Talking</p></div>
+<div class="card st-worry" data-face="b" role="img" aria-label="Face B, worried or emergency"><div class="facebox"></div><p class="label">5 Worried / emergency</p></div>
+</div>
+</section>
+
+<section class="dir" aria-labelledby="hc">
+<div class="dir-head"><div class="letter" aria-hidden="true">C</div><div><h2 id="hc">C. Pen portrait</h2><p>A gentle pen sketch of a woman, like a drawing in a letter.</p></div></div>
+<div class="grid">
+<div class="card st-idle" data-face="c" role="img" aria-label="Face C, resting"><div class="facebox"></div><p class="label">1 Resting</p></div>
+<div class="card st-listen" data-face="c" role="img" aria-label="Face C, listening"><div class="facebox"></div><p class="label">2 Listening</p></div>
+<div class="card st-think" data-face="c" role="img" aria-label="Face C, thinking"><div class="facebox"></div><p class="label">3 Thinking</p></div>
+<div class="card st-talk" data-face="c" role="img" aria-label="Face C, talking"><div class="facebox"></div><p class="label">4 Talking</p></div>
+<div class="card st-worry" data-face="c" role="img" aria-label="Face C, worried or emergency"><div class="facebox"></div><p class="label">5 Worried / emergency</p></div>
+</div>
+</section>
+
+<section class="frames" aria-labelledby="hf">
+<h2 id="hf">Full screen, with face A</h2>
+<p class="lead">What a resident sees on the laptop. The second screen is for an emergency.</p>
+<p class="shot-title">Everyday screen</p>
+<div class="screen">
+  <div class="bigface st-talk" data-face="a" role="img" aria-label="Mary, face A, talking"><div class="facebox"></div></div>
+  <div class="side">
+    <div class="ask"><p>Want me to write that down?</p><button class="btn yes" type="button">Yes, write it down</button><button class="btn" type="button">No thanks</button></div>
+    <button class="talk" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg> Talk to Mary</button>
+  </div>
+  <div class="caption">Dinner came late again? I'm sorry, that sounds hard.</div>
+</div>
+<p class="shot-title">Emergency screen</p>
+<div class="screen urgent">
+  <div class="bigface st-worry" data-face="a" role="img" aria-label="Mary, face A, worried"><div class="facebox"></div></div>
+  <div class="side">
+    <div class="urgent-banner">This could be serious. Get help now.</div>
+    <div><button class="btn yes" type="button">I pressed my call light</button><button class="btn" type="button">I'm OK now</button></div>
+    <button class="talk" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg> Talk to Mary</button>
+  </div>
+  <div class="caption">Please press your call light or tell a staff member right now. If it's serious, call 911.</div>
+</div>
+</section>
+</main>
+
+<template id="face-a">
+<svg viewBox="0 0 200 220" aria-hidden="true" focusable="false">
+<g class="rings" fill="none" stroke="#0f5560" stroke-width="4" stroke-linecap="round">
+<g><path d="M166 98Q174 110 166 122"/><path d="M176 90Q188 110 176 130"/><path d="M186 82Q202 110 186 138"/></g>
+<g transform="translate(200 0) scale(-1 1)"><path d="M166 98Q174 110 166 122"/><path d="M176 90Q188 110 176 130"/><path d="M186 82Q202 110 186 138"/></g>
+</g>
+<g class="dots" fill="#0f5560"><circle cx="82" cy="16" r="5.5"/><circle cx="100" cy="16" r="5.5"/><circle cx="118" cy="16" r="5.5"/></g>
+<g class="face">
+<rect x="88" y="145" width="24" height="30" fill="#deb596"/>
+<path d="M88 168L100 196L112 168Z" fill="#deb596"/>
+<path d="M16 250V214Q22 182 74 172L88 168L100 196L112 168L126 172Q178 182 184 214V250Z" fill="#0f5560"/>
+<path d="M88 168L100 196L112 168" fill="none" stroke="#0a3d45" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M47 120C42 58 74 36 100 36C126 36 158 58 153 120C152 142 146 154 134 158Q100 150 66 158C54 154 48 142 47 120Z" fill="#d7d0c7" stroke="#8f877d" stroke-width="2.5" stroke-linejoin="round"/>
+<ellipse cx="100" cy="108" rx="44" ry="54" fill="#e9c4a6"/>
+<g fill="#e7a08c" fill-opacity=".45"><ellipse cx="66" cy="130" rx="9" ry="6"/><ellipse cx="134" cy="130" rx="9" ry="6"/></g>
+<g class="pupils"><ellipse cx="78" cy="106" rx="5.5" ry="6" fill="#1f1b16"/><circle cx="80" cy="103.8" r="1.6" fill="#fff"/><ellipse cx="122" cy="106" rx="5.5" ry="6" fill="#1f1b16"/><circle cx="124" cy="103.8" r="1.6" fill="#fff"/></g>
+<g class="lids" fill="#e9c4a6"><ellipse cx="78" cy="106" rx="10" ry="9.5"/><ellipse cx="122" cy="106" rx="10" ry="9.5"/></g>
+<g fill="none" stroke="#453d34" stroke-width="2.5" stroke-linecap="round"><circle cx="78" cy="106" r="15"/><circle cx="122" cy="106" r="15"/><path d="M93 103Q100 98 107 103"/><path d="M63 103L55 99"/><path d="M137 103L145 99"/></g>
+<g class="brows" fill="none" stroke="#6b5f53" stroke-width="3.5" stroke-linecap="round"><path class="brow-l" d="M67 88Q78 82 90 87"/><path class="brow-r" d="M110 87Q122 82 133 88"/></g>
+<path d="M101 114Q97 126 103 128" fill="none" stroke="#b98b6b" stroke-width="2.2" stroke-linecap="round"/>
+<path class="mouth-smile" d="M85 138Q100 152 115 138" fill="none" stroke="#8a3b2e" stroke-width="3.5" stroke-linecap="round"/>
+<path class="mouth-open" d="M87 138Q100 143 113 138Q111 158 100 158Q89 158 87 138Z" fill="#8a3b2e" stroke="#8a3b2e" stroke-width="2" stroke-linejoin="round"/>
+<path class="mouth-flat" d="M89 145Q100 141 111 145" fill="none" stroke="#8a3b2e" stroke-width="3.5" stroke-linecap="round"/>
+<path d="M58 96C56 56 80 42 100 42C120 42 144 56 142 96C140 80 130 72 118 68C108 64 92 64 82 68C70 72 60 80 58 96Z" fill="#d7d0c7" stroke="#8f877d" stroke-width="2.5" stroke-linejoin="round"/>
+</g>
+</svg>
+</template>
+
+<template id="face-b">
+<svg viewBox="0 0 200 220" aria-hidden="true" focusable="false">
+<circle class="halo" cx="100" cy="110" r="96" fill="url(#haloGrad)"/>
+<g class="rings" fill="none" stroke="#0f5560" stroke-width="5" stroke-linecap="round">
+<g><path d="M166 98Q174 110 166 122"/><path d="M176 90Q188 110 176 130"/><path d="M186 82Q202 110 186 138"/></g>
+<g transform="translate(200 0) scale(-1 1)"><path d="M166 98Q174 110 166 122"/><path d="M176 90Q188 110 176 130"/><path d="M186 82Q202 110 186 138"/></g>
+</g>
+<g class="dots" fill="#0f5560"><circle cx="82" cy="22" r="6"/><circle cx="100" cy="22" r="6"/><circle cx="118" cy="22" r="6"/></g>
+<circle class="alert-ring" cx="100" cy="110" r="69" fill="none" stroke="#7a1212" stroke-width="5"/>
+<g class="face">
+<circle cx="100" cy="110" r="62" fill="url(#glowGrad)"/>
+<g class="pupils"><ellipse cx="80" cy="104" rx="6" ry="8.5" fill="#2b1a10"/><circle cx="82" cy="100.5" r="1.8" fill="#fff6e0"/><ellipse cx="120" cy="104" rx="6" ry="8.5" fill="#2b1a10"/><circle cx="122" cy="100.5" r="1.8" fill="#fff6e0"/></g>
+<g class="lids" fill="url(#glowGrad)"><ellipse cx="80" cy="104" rx="9" ry="11.5"/><ellipse cx="120" cy="104" rx="9" ry="11.5"/></g>
+<g class="brows" fill="none" stroke="#2b1a10" stroke-width="4.5" stroke-linecap="round"><path class="brow-l" d="M66 82Q80 76 94 82"/><path class="brow-r" d="M106 82Q120 76 134 82"/></g>
+<path class="mouth-smile" d="M85 134Q100 148 115 134" fill="none" stroke="#2b1a10" stroke-width="4.5" stroke-linecap="round"/>
+<path class="mouth-open" d="M87 132Q100 137 113 132Q111 154 100 154Q89 154 87 132Z" fill="#2b1a10" stroke="#2b1a10" stroke-width="2" stroke-linejoin="round"/>
+<path class="mouth-flat" d="M88 141Q100 137 112 141" fill="none" stroke="#2b1a10" stroke-width="4.5" stroke-linecap="round"/>
+</g>
+</svg>
+</template>
+
+<template id="face-c">
+<svg viewBox="0 0 200 220" aria-hidden="true" focusable="false">
+<g class="rings" fill="none" stroke="#1f1b16" stroke-width="4" stroke-linecap="round">
+<g><path d="M166 98Q174 110 166 122"/><path d="M176 90Q188 110 176 130"/><path d="M186 82Q202 110 186 138"/></g>
+<g transform="translate(200 0) scale(-1 1)"><path d="M166 98Q174 110 166 122"/><path d="M176 90Q188 110 176 130"/><path d="M186 82Q202 110 186 138"/></g>
+</g>
+<g class="dots" fill="none" stroke="#1f1b16" stroke-width="9" stroke-linecap="round"><path d="M64 18h.01"/><path d="M80 18h.01"/><path d="M96 18h.01"/></g>
+<g class="face" fill="none" stroke="#1f1b16" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+<path d="M60 94C54 56 80 36 110 38C136 40 148 66 140 94"/>
+<path d="M72 86C80 62 104 52 126 58"/>
+<path d="M86 80C94 68 108 62 122 66"/>
+<path d="M60 94C46 112 48 144 62 162"/>
+<path d="M140 94C154 112 152 144 138 162"/>
+<path d="M110 38C104 18 134 8 144 24C152 38 136 46 120 42"/>
+<path d="M122 26C132 20 140 28 134 34"/>
+<path d="M62 94C60 124 70 152 100 162C130 152 140 124 138 94"/>
+<path d="M88 158V178"/><path d="M112 158V178"/>
+<path d="M16 220C20 192 48 178 72 174"/><path d="M184 220C180 192 152 178 128 174"/>
+<path d="M70 174C84 188 116 188 130 174" stroke="#0f5560" stroke-width="5"/>
+<path d="M104 186C112 198 108 210 114 220" stroke="#0f5560" stroke-width="5"/>
+<g class="pupils" stroke-width="7"><path d="M80 109h.01"/><path d="M120 109h.01"/></g>
+<g class="lids"><ellipse class="lid-c" cx="80" cy="109" rx="6.5" ry="6"/><ellipse class="lid-c" cx="120" cy="109" rx="6.5" ry="6"/></g>
+<path d="M70 104Q80 96 90 104"/><path d="M110 104Q120 96 130 104"/>
+<g class="brows" stroke-width="3.5"><path class="brow-l" d="M68 90Q80 84 92 89"/><path class="brow-r" d="M108 89Q120 84 132 90"/></g>
+<path d="M101 110C98 120 96 124 103 125" stroke-width="3"/>
+<path class="mouth-smile" d="M86 138Q100 150 114 138"/>
+<path class="mouth-open" d="M88 138Q100 142 112 138Q110 156 100 156Q90 156 88 138Z"/>
+<path class="mouth-flat" d="M88 145Q100 141 112 145"/>
+</g>
+</svg>
+</template>
+
+<script>
+document.querySelectorAll('[data-face]').forEach(function(c){
+  var t=document.getElementById('face-'+c.getAttribute('data-face'));
+  var box=c.querySelector('.facebox');
+  if(t&&box){box.appendChild(t.content.cloneNode(true));}
+});
+</script>
+</body>
+</html>

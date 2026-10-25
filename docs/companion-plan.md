@@ -92,7 +92,7 @@ It's the same honest product for everyone, and we never deny what she does. We e
 
 ## Next steps
 1. ~~Write her first instructions and the test conversations.~~ **Done 2026-10-25** (ed6ec4e, 5ecb2d2): `mary/instructions.md` (v1), 13 cases in `tests/mary_conversations.json`, `mary.py` (streamed Gemini reply, memory in `<data>\mary\memory.json`, offline emergency line first, offer-to-write via `guess_incident()`, never logs), speed test `tools/mary_speed.py`.
-   - Speed on Andy's laptop (AMD Ryzen, 8 threads): speech model loads in about 1 s. Speech-to-text has a median of 1.1 s and a p90 of 5.5 s, with 99% of words right. The slow turns come from beam search with the vocabulary prompt in `speech.py`. Greedy decoding (`beam_size=1`), or no prompt, made every turn about 1 s with the same text. Fix that next.
+   - Speed on Andy's laptop (AMD Ryzen, 8 threads): speech model loads in about 1 s. Speech-to-text has a median of 1.1 s and a p90 of 5.5 s, with 99% of words right. The slow turns come from beam search with the vocabulary prompt in `speech.py`. **Fixed 2026-10-25:** `speech.py` now uses greedy decoding (`beam_size=1`) and keeps the prompt. Over three runs, the median is 0.95-1.64 s and the p90 is 1.85-2.71 s, with words still 99% right. The spread is likely other load on the laptop.
    - Gemini time to first words isn't measured yet, because no key is saved. Run `python tools/mary_speed.py` with `GEMINI_API_KEY` set. The same run checks her live behavior against the cases.
    - Not yet: memory encryption (backend phase 1), and bundling `mary/` in the installer.
 2. Prototype the face, the talk loop and the wake word in the desktop app, with Andy as the first user.

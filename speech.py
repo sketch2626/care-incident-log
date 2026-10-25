@@ -341,7 +341,7 @@ def _transcribe(source) -> str:
         segments, _info = model.transcribe(
             source,
             language="en",
-            beam_size=5,
+            beam_size=1,  # greedy: beam search with the prompt sometimes ran 5x longer, same text
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 500},
             initial_prompt=INITIAL_PROMPT,

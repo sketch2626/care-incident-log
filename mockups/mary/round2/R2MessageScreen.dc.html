@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mary round 2: Message screen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.scr{position:relative;overflow:hidden;box-sizing:border-box;font:22px/1.5 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.edge{position:absolute;inset:0;pointer-events:none;will-change:opacity;animation:edge 6s ease-in-out infinite}
+.edge.fast{animation-duration:3s}
+.edge.slow{animation-duration:8s}
+.edge.steady{animation:steady 4s ease-in-out infinite}
+.facesvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.face{transform-box:view-box;transform-origin:320px 200px;animation:float 6s ease-in-out infinite}
+.face.slow{animation-duration:8s}
+.face.lean{animation:lean 6s ease-in-out infinite}
+.face.tilt{animation:tilt 7s ease-in-out infinite}
+.face.bounce{animation:bounce 1.8s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.blink{animation:blink 7s ease-in-out infinite}
+.glance{animation:glance 4s ease-in-out infinite}
+.cheek{opacity:0}
+.blush .cheek{opacity:.85;animation:blush 6s ease-in-out infinite alternate}
+.mouth-talk{transform-box:fill-box;transform-origin:50% 0;animation:talk 1.4s ease-in-out infinite}
+.dot{opacity:.8;animation:dot 3s ease-in-out infinite}
+.dot:nth-of-type(2){animation-delay:.5s}
+.dot:nth-of-type(3){animation-delay:1s}
+.zz{opacity:.8;animation:zz 6s ease-in-out infinite}
+.zz:nth-of-type(2){animation-delay:2s}
+.zz:nth-of-type(3){animation-delay:4s}
+@keyframes edge{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes steady{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes lean{0%,100%{transform:rotate(-2deg) translateY(0)}50%{transform:rotate(-2deg) translateY(-4px)}}
+@keyframes tilt{0%,100%{transform:rotate(3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-3px)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes glance{0%,100%{transform:translate(0,0)}30%,75%{transform:translate(7px,-7px)}}
+@keyframes blush{from{opacity:.35}to{opacity:.95}}
+@keyframes talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
+@keyframes dot{0%,15%{opacity:.25}40%,75%{opacity:1}100%{opacity:.25}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:.9}100%{opacity:0;transform:translate(14px,-30px)}}
+.lift{animation:lift 3s ease-in-out infinite}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 4s ease-in-out infinite alternate}
+.twinkle{transform-box:fill-box;transform-origin:center;animation:twinkle 3s ease-in-out infinite}
+.twinkle:nth-of-type(2){animation-delay:1.5s}
+.twinkle:nth-of-type(3){animation-delay:.8s}
+.soft-blush .cheek{opacity:.45}
+.m{opacity:0;animation:seq 16s ease-in-out infinite both}
+.m0{opacity:1}
+.m1{animation-delay:4s}
+.m2{animation-delay:8s}
+.m3{animation-delay:12s}
+@keyframes lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes pop{from{transform:scale(1)}to{transform:scale(1.07)}}
+@keyframes twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@keyframes seq{0%{opacity:0}4%{opacity:1}25%{opacity:1}29%{opacity:0}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+.dock{position:absolute;left:24px;right:24px;bottom:24px;display:flex;flex-direction:column;gap:16px}
+.row{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.talk{display:flex;align-items:center;justify-content:center;gap:18px;width:340px;min-height:104px;font:inherit;font-size:36px;font-weight:700;background:#1f1b16;color:#fff;border:0;border-radius:24px;box-shadow:0 7px 0 rgba(0,0,0,.28);cursor:pointer}
+.talk svg{width:52px;height:52px}
+.caption{background:rgba(31,27,22,.9);color:#fff;font-size:36px;font-weight:600;line-height:1.3;padding:18px 28px;border-radius:20px}
+.urgent .caption{background:#7a1212}
+.lbl{font-size:24px;line-height:1.2;color:#453d34}
+.hd{font-size:22px;line-height:1.3;color:#453d34}
+.photo{box-sizing:border-box;flex:none;width:120px;height:120px;border-radius:50%;border:3px dashed #62574a;background:#f3ead9;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#62574a}
+.photo svg{width:64px;height:64px;display:block}
+.photo span{font-size:20px;line-height:1.1}
+.who{position:absolute;left:24px;top:24px;width:400px;box-sizing:border-box;display:flex;align-items:center;gap:16px;background:rgba(255,254,250,.94);border:3px solid #62574a;border-radius:22px;padding:14px 16px 14px 14px}
+.whotext{min-width:0}
+.name{font-size:40px;font-weight:700;line-height:1.1}
+.inset{position:absolute;right:24px;top:24px;width:400px;box-sizing:border-box;background:rgba(255,254,250,.94);border:3px solid #62574a;border-radius:22px;padding:16px 22px}
+.sent{display:flex;align-items:center;gap:14px;margin:8px 0}
+.sent svg{width:56px;height:56px;flex:none;display:block}
+.sent b{font-size:30px;line-height:1.2}
+.inset p{margin:0;font-size:22px;line-height:1.3;color:#453d34}
+.pills{justify-content:center;align-items:center;gap:20px}
+.pill{width:280px;min-height:96px;display:flex;align-items:center;justify-content:center;gap:12px;font:inherit;font-size:30px;font-weight:600;border-radius:48px;border:2px solid #62574a;background:rgba(255,254,250,.94);color:#1f1b16;cursor:pointer}
+.pill svg{width:40px;height:40px;flex:none}
+.pill.send{background:#0f5560;border-color:#0f5560;color:#fff}
+</style>
+</helmet>
+<div class="scr" style="width: 1280px; height: 800px; background: radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(245,170,110,0) 60%, rgba(245,170,110,0.9) 100%)"></div>
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary, reading the message back">
+<defs>
+<radialGradient id="fh"><stop offset="0" stop-color="#d98c45" stop-opacity="0.42"></stop><stop offset="1" stop-color="#d98c45" stop-opacity="0"></stop></radialGradient>
+<radialGradient id="bl"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g transform="translate(0 -60)">
+<g class="face">
+  <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M218 122 C222 100 258 92 276 106"></path><path d="M422 122 C418 100 382 92 364 106"></path></g>
+  <g><ellipse class="cheek" cx="196" cy="214" rx="48" ry="28" fill="url(#bl)"></ellipse><ellipse class="cheek" cx="444" cy="214" rx="48" ry="28" fill="url(#bl)"></ellipse></g>
+  <g class="eye blink"><ellipse cx="248" cy="165" rx="21" ry="28" fill="#3a2b22"></ellipse><circle cx="255" cy="155" r="6" fill="#ffffff"></circle><circle cx="241" cy="174" r="3" fill="#ffffff" opacity="0.85"></circle></g>
+  <g class="eye blink"><ellipse cx="392" cy="165" rx="21" ry="28" fill="#3a2b22"></ellipse><circle cx="399" cy="155" r="6" fill="#ffffff"></circle><circle cx="385" cy="174" r="3" fill="#ffffff" opacity="0.85"></circle></g>
+  <g class="mouth-talk"><path d="M288 244 Q320 252 352 244 Q348 284 320 284 Q292 284 288 244 Z" fill="#8a3b2e"></path><ellipse cx="320" cy="276" rx="17" ry="7" fill="#e8897a"></ellipse></g>
+</g>
+</g>
+</svg>
+<div class="who"><div class="photo"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#62574a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"></path></svg><span>Photo</span></div><div class="whotext"><div class="lbl">Message to</div><div class="name">[Daughter's name]</div></div></div>
+<div class="inset"><div class="hd">After you say Send it:</div><div class="sent"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#0f5560" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M7.5 12.5l3 3 6-7"></path></svg><b>Sent to [Daughter's name]</b></div><p>Mary: Your message is on its way.</p></div>
+<div class="dock"><div class="row pills"><button class="pill send" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2L15 22L11 13L2 9L22 2Z"></path></svg> Send it</button><button class="pill" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg> Change it</button><button class="pill" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"></path></svg> Don't send</button></div><div class="caption">Here's your message: "Hi [Daughter's name], it's me. Dinner came late again tonight. Could you call me tomorrow? Love you." Shall I send it?</div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

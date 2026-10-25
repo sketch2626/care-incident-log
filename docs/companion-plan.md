@@ -81,6 +81,18 @@ It's the same honest product for everyone, and we never deny what she does. We e
 
   We must never promise that residents won't go to the state.
 
+## Family messages and calls (Andy, 2026-10-25)
+Residents say "Mary, message my daughter and tell her this" or "Mary, put a call through to my son", and it all happens from Mary's screen.
+- **Contacts:** a short list of family and friends, set up by a helper or family member and kept on the laptop. Each has a name, a relation (daughter, son…), a photo, and a phone or email.
+- **Messages:** Mary writes the message and reads it back in a big caption, then sends it only after a clear "Send it". The screen confirms with "Sent to …". Messages go only to people on the list.
+- **Calls:** "Calling …", then a simple in-call screen with big "Hang up" and "Louder" buttons. Later, incoming calls from family too.
+- **To research before building** (costs and accessibility):
+  - Texting: an SMS service (a small per-message cost, plus a number), email, or Windows Phone Link with the resident's own phone (check whether it has any API).
+  - Calling: a calling service from the laptop's mic and speaker, or a video-call link family can open.
+  - Who pays per-message and per-minute costs.
+- **Safety:** an emergency still means the call light, staff or 911 first. Mary can also message a chosen family member during an emergency if the resident asks.
+- **Mock-ups:** the message and call screens are on the face canvas (round 2/3 boards, `mockups/mary/round2/`).
+
 ## Future (with funding)
 - Government or foundation money to train or fine-tune an AI for this cause, for example an open-weight model fine-tuned on conversations residents consented to share.
 
@@ -96,6 +108,7 @@ It's the same honest product for everyone, and we never deny what she does. We e
    - Gemini time to first words isn't measured yet, because no key is saved. Run `python tools/mary_speed.py` with `GEMINI_API_KEY` set. The same run checks her live behavior against the cases.
    - Not yet: memory encryption (backend phase 1), and bundling `mary/` in the installer.
 2. Prototype the face, the talk loop and the wake word in the desktop app, with Andy as the first user.
-3. Set up lid-to-Mary, the helper setup tool and a laptop spec.
-4. Before the pilot: review and merge the parked speak-up code (branch `wip/report-to-state`). It becomes her speak-up skill.
-5. Revise the pilot checklist and the backend plan for the companion.
+3. Family messages and calls (section above): research the options and costs, then build from the approved mock-ups.
+4. Set up lid-to-Mary, the helper setup tool and a laptop spec.
+5. Before the pilot: review and merge the parked speak-up code (branch `wip/report-to-state`). It becomes her speak-up skill.
+6. Revise the pilot checklist and the backend plan for the companion.

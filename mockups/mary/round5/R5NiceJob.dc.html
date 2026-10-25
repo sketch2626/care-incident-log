@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mary round 5: Nice job</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.scr{position:relative;overflow:hidden;box-sizing:border-box;font:22px/1.5 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.edge{position:absolute;inset:0;pointer-events:none;will-change:opacity;animation:edge 6s ease-in-out infinite}
+.edge.fast{animation-duration:3s}
+.edge.slow{animation-duration:8s}
+.edge.steady{animation:steady 4s ease-in-out infinite}
+.facesvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.face{transform-box:view-box;transform-origin:320px 200px;animation:float 6s ease-in-out infinite}
+.face.slow{animation-duration:8s}
+.face.lean{animation:lean 6s ease-in-out infinite}
+.face.tilt{animation:tilt 7s ease-in-out infinite}
+.face.bounce{animation:bounce 1.8s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.blink{animation:blink 7s ease-in-out infinite}
+.glance{animation:glance 4s ease-in-out infinite}
+.cheek{opacity:0}
+.blush .cheek{opacity:.85;animation:blush 6s ease-in-out infinite alternate}
+.mouth-talk{transform-box:fill-box;transform-origin:50% 0;animation:talk 1.4s ease-in-out infinite}
+.dot{opacity:.8;animation:dot 3s ease-in-out infinite}
+.dot:nth-of-type(2){animation-delay:.5s}
+.dot:nth-of-type(3){animation-delay:1s}
+.zz{opacity:.8;animation:zz 6s ease-in-out infinite}
+.zz:nth-of-type(2){animation-delay:2s}
+.zz:nth-of-type(3){animation-delay:4s}
+@keyframes edge{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes steady{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes lean{0%,100%{transform:rotate(-2deg) translateY(0)}50%{transform:rotate(-2deg) translateY(-4px)}}
+@keyframes tilt{0%,100%{transform:rotate(3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-3px)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes glance{0%,100%{transform:translate(0,0)}30%,75%{transform:translate(7px,-7px)}}
+@keyframes blush{from{opacity:.35}to{opacity:.95}}
+@keyframes talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
+@keyframes dot{0%,15%{opacity:.25}40%,75%{opacity:1}100%{opacity:.25}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:.9}100%{opacity:0;transform:translate(14px,-30px)}}
+.lift{animation:lift 3s ease-in-out infinite}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 4s ease-in-out infinite alternate}
+.twinkle{transform-box:fill-box;transform-origin:center;animation:twinkle 3s ease-in-out infinite}
+.twinkle:nth-of-type(2){animation-delay:1.5s}
+.twinkle:nth-of-type(3){animation-delay:.8s}
+.soft-blush .cheek{opacity:.45}
+.m{opacity:0;animation:seq 16s ease-in-out infinite both}
+.m0{opacity:1}
+.m1{animation-delay:4s}
+.m2{animation-delay:8s}
+.m3{animation-delay:12s}
+@keyframes lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes pop{from{transform:scale(1)}to{transform:scale(1.07)}}
+@keyframes twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@keyframes seq{0%{opacity:0}4%{opacity:1}25%{opacity:1}29%{opacity:0}100%{opacity:0}}
+.sway{transform-box:view-box;transform-origin:320px 330px;animation:sway 9s ease-in-out infinite}
+.hop{transform-box:view-box;transform-origin:320px 330px;animation:hop 8s ease-in-out infinite}
+.ss{animation:ss 6s ease-in-out infinite}
+.peek{transform-box:fill-box;transform-origin:center;animation:peek 12s ease-in-out infinite}
+.spark{transform-box:fill-box;transform-origin:center;animation:twinkle 3.5s ease-in-out infinite}
+.cute-blush .cheek{opacity:.8}
+.tag{position:absolute;left:24px;top:24px;display:flex;flex-direction:column;gap:2px;padding:10px 24px;background:rgba(255,254,250,.92);border:3px solid #1f1b16;border-radius:24px}
+.tag b{font-size:44px;line-height:1.1}
+.tag span{font-size:22px;color:#453d34}
+@keyframes sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
+@keyframes hop{0%,100%{transform:translateY(0)}3%{transform:translateY(-10px)}6%{transform:translateY(0) scale(1.02,.98)}9%{transform:translateY(0) scale(1,1)}}
+@keyframes ss{0%,88%,100%{transform:scale(1,1)}91%{transform:scale(1.14,.1)}94%{transform:scale(.95,1.07)}97%{transform:scale(1.02,.98)}}
+@keyframes peek{0%,55%{transform:translate(-7px,3px)}62%,88%{transform:translate(0,0) scale(1.03)}95%,100%{transform:translate(-7px,3px)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+.dock{position:absolute;left:24px;right:24px;bottom:24px;display:flex;flex-direction:column;gap:16px}
+.row{display:flex;justify-content:flex-end;align-items:flex-end;gap:16px}
+.talk{display:flex;align-items:center;justify-content:center;gap:18px;width:340px;min-height:104px;font:inherit;font-size:36px;font-weight:700;background:#1f1b16;color:#fff;border:0;border-radius:24px;box-shadow:0 7px 0 rgba(0,0,0,.28);cursor:pointer}
+.talk svg{width:52px;height:52px}
+.caption{background:rgba(31,27,22,.9);color:#fff;font-size:36px;font-weight:600;line-height:1.3;padding:18px 28px;border-radius:20px}
+.urgent .caption{background:#7a1212}
+.mini{position:absolute;overflow:hidden;border-radius:24px;border:3px solid rgba(98,87,74,.55);box-shadow:0 6px 18px rgba(31,27,22,.18)}
+.mini .facesvg{position:absolute;inset:0;width:100%;height:100%}
+.hintglow{animation:hint 3s ease-in-out infinite}
+@keyframes hint{0%,100%{opacity:.3}50%{opacity:.85}}
+.cell{width:64px;height:64px;display:flex;align-items:center;justify-content:center;font:inherit;font-size:44px;font-weight:700;color:#1f1b16;background:transparent;border:0;border-radius:12px;cursor:pointer;position:relative;z-index:1;padding:0}
+.drift{opacity:0;transform-box:fill-box;transform-origin:center;animation:drift 7s ease-in-out infinite}
+@keyframes drift{0%{opacity:0;transform:translateY(0)}30%{opacity:.9}100%{opacity:0;transform:translateY(-40px)}}
+</style>
+</helmet>
+<div class="scr" style="width: 1280px; height: 800px; background: radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge slow" style="background: radial-gradient(ellipse closest-side, rgba(246,200,80,0) 60%, rgba(246,200,80,0.9) 100%)"></div>
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary, happy and smiling, with soft gold stars drifting up">
+<defs>
+<radialGradient id="fhN"><stop offset="0" stop-color="#d98c45" stop-opacity="0.42"></stop><stop offset="1" stop-color="#d98c45" stop-opacity="0"></stop></radialGradient>
+<radialGradient id="blN"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g aria-hidden="true" fill="#f0b429">
+<path class="drift" style="animation-duration:7s;animation-delay:0s" d="M44 44 Q46.4 53.6 56 56 Q46.4 58.4 44 68 Q41.6 58.4 32 56 Q41.6 53.6 44 44 Z"></path>
+<path class="drift" style="animation-duration:8s;animation-delay:1.2s" d="M592 62 Q594 70 602 72 Q594 74 592 82 Q590 74 582 72 Q590 70 592 62 Z"></path>
+<path class="drift" style="animation-duration:6s;animation-delay:2.4s" d="M100 142 Q101.6 148.4 108 150 Q101.6 151.6 100 158 Q98.4 151.6 92 150 Q98.4 148.4 100 142 Z"></path>
+<path class="drift" style="animation-duration:9s;animation-delay:3.6s" d="M560 161 Q561.8 168.2 569 170 Q561.8 171.8 560 179 Q558.2 171.8 551 170 Q558.2 168.2 560 161 Z"></path>
+<path class="drift" style="animation-duration:7s;animation-delay:4.8s" d="M28 225 Q30.2 233.8 39 236 Q30.2 238.2 28 247 Q25.8 238.2 17 236 Q25.8 233.8 28 225 Z"></path>
+<path class="drift" style="animation-duration:8s;animation-delay:0.6s" d="M616 213 Q618.6 223.4 629 226 Q618.6 228.6 616 239 Q613.4 228.6 603 226 Q613.4 223.4 616 213 Z"></path>
+<path class="drift" style="animation-duration:6.5s;animation-delay:3s" d="M170 23 Q171.8 30.2 179 32 Q171.8 33.8 170 41 Q168.2 33.8 161 32 Q168.2 30.2 170 23 Z"></path>
+<path class="drift" style="animation-duration:9s;animation-delay:5.4s" d="M468 22 Q470.8 33.2 482 36 Q470.8 38.8 468 50 Q465.2 38.8 454 36 Q465.2 33.2 468 22 Z"></path>
+</g>
+<g transform="translate(0 -30)">
+<g class="sway"><g class="hop"><g class="face cute-blush">
+  <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 134 C232 112 266 104 284 118"></path><path d="M412 134 C408 112 374 104 356 118"></path></g>
+  <g><ellipse class="cheek" cx="246" cy="234" rx="36" ry="15" fill="url(#blN)"></ellipse><ellipse class="cheek" cx="394" cy="234" rx="36" ry="15" fill="url(#blN)"></ellipse></g>
+  <g fill="none" stroke="#3a2b22" stroke-width="8" stroke-linecap="round">
+  <g class="eye"><path d="M232 188 C236 164 276 164 280 188"></path></g>
+  <g class="eye"><path d="M360 188 C364 164 404 164 408 188"></path></g>
+  </g>
+  <path d="M290 256 Q320 290 350 256" fill="none" stroke="#8a3b2e" stroke-width="8" stroke-linecap="round"></path>
+  <g fill="#f0b429">
+  <path class="twinkle" d="M204 136 Q207 147 218 150 Q207 153 204 164 Q201 153 190 150 Q201 147 204 136 Z"></path>
+  <path class="twinkle" d="M438 136 Q440.5 145.5 450 148 Q440.5 150.5 438 160 Q435.5 150.5 426 148 Q435.5 145.5 438 136 Z"></path>
+  <path class="twinkle" d="M176 199 Q178 206 185 208 Q178 210 176 217 Q174 210 167 208 Q174 206 176 199 Z"></path>
+  <path class="twinkle" style="animation-delay:2.2s" d="M470 191 Q472 198 479 200 Q472 202 470 209 Q468 202 461 200 Q468 198 470 191 Z"></path>
+  </g>
+</g></g></g>
+</g>
+</svg>
+<div class="dock"><div class="row"><button class="talk" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg> Talk to Mary</button></div><div class="caption">You found all six words! That was lovely. Want to play again, or just chat?</div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

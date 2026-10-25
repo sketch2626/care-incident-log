@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Round 4: Choose your companion</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.scr{position:relative;overflow:hidden;box-sizing:border-box;font:22px/1.5 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.edge{position:absolute;inset:0;pointer-events:none;will-change:opacity;animation:edge 6s ease-in-out infinite}
+.edge.fast{animation-duration:3s}
+.edge.slow{animation-duration:8s}
+.edge.steady{animation:steady 4s ease-in-out infinite}
+.facesvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.face{transform-box:view-box;transform-origin:320px 200px;animation:float 6s ease-in-out infinite}
+.face.slow{animation-duration:8s}
+.face.lean{animation:lean 6s ease-in-out infinite}
+.face.tilt{animation:tilt 7s ease-in-out infinite}
+.face.bounce{animation:bounce 1.8s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.blink{animation:blink 7s ease-in-out infinite}
+.glance{animation:glance 4s ease-in-out infinite}
+.cheek{opacity:0}
+.blush .cheek{opacity:.85;animation:blush 6s ease-in-out infinite alternate}
+.mouth-talk{transform-box:fill-box;transform-origin:50% 0;animation:talk 1.4s ease-in-out infinite}
+.dot{opacity:.8;animation:dot 3s ease-in-out infinite}
+.dot:nth-of-type(2){animation-delay:.5s}
+.dot:nth-of-type(3){animation-delay:1s}
+.zz{opacity:.8;animation:zz 6s ease-in-out infinite}
+.zz:nth-of-type(2){animation-delay:2s}
+.zz:nth-of-type(3){animation-delay:4s}
+@keyframes edge{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes steady{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes lean{0%,100%{transform:rotate(-2deg) translateY(0)}50%{transform:rotate(-2deg) translateY(-4px)}}
+@keyframes tilt{0%,100%{transform:rotate(3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-3px)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes glance{0%,100%{transform:translate(0,0)}30%,75%{transform:translate(7px,-7px)}}
+@keyframes blush{from{opacity:.35}to{opacity:.95}}
+@keyframes talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
+@keyframes dot{0%,15%{opacity:.25}40%,75%{opacity:1}100%{opacity:.25}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:.9}100%{opacity:0;transform:translate(14px,-30px)}}
+.lift{animation:lift 3s ease-in-out infinite}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 4s ease-in-out infinite alternate}
+.twinkle{transform-box:fill-box;transform-origin:center;animation:twinkle 3s ease-in-out infinite}
+.twinkle:nth-of-type(2){animation-delay:1.5s}
+.twinkle:nth-of-type(3){animation-delay:.8s}
+.soft-blush .cheek{opacity:.45}
+.m{opacity:0;animation:seq 16s ease-in-out infinite both}
+.m0{opacity:1}
+.m1{animation-delay:4s}
+.m2{animation-delay:8s}
+.m3{animation-delay:12s}
+@keyframes lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes pop{from{transform:scale(1)}to{transform:scale(1.07)}}
+@keyframes twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@keyframes seq{0%{opacity:0}4%{opacity:1}25%{opacity:1}29%{opacity:0}100%{opacity:0}}
+.sway{transform-box:view-box;transform-origin:320px 330px;animation:sway 9s ease-in-out infinite}
+.hop{transform-box:view-box;transform-origin:320px 330px;animation:hop 8s ease-in-out infinite}
+.ss{animation:ss 6s ease-in-out infinite}
+.peek{transform-box:fill-box;transform-origin:center;animation:peek 12s ease-in-out infinite}
+.spark{transform-box:fill-box;transform-origin:center;animation:twinkle 3.5s ease-in-out infinite}
+.cute-blush .cheek{opacity:.8}
+.tag{position:absolute;left:24px;top:24px;display:flex;flex-direction:column;gap:2px;padding:10px 24px;background:rgba(255,254,250,.92);border:3px solid #1f1b16;border-radius:24px}
+.tag b{font-size:44px;line-height:1.1}
+.tag span{font-size:22px;color:#453d34}
+@keyframes sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
+@keyframes hop{0%,100%{transform:translateY(0)}3%{transform:translateY(-10px)}6%{transform:translateY(0) scale(1.02,.98)}9%{transform:translateY(0) scale(1,1)}}
+@keyframes ss{0%,88%,100%{transform:scale(1,1)}91%{transform:scale(1.14,.1)}94%{transform:scale(.95,1.07)}97%{transform:scale(1.02,.98)}}
+@keyframes peek{0%,55%{transform:translate(-7px,3px)}62%,88%{transform:translate(0,0) scale(1.03)}95%,100%{transform:translate(-7px,3px)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+.dock{position:absolute;left:24px;right:24px;bottom:24px;display:flex;flex-direction:column;gap:16px}
+.row{display:flex;justify-content:flex-end;align-items:flex-end;gap:16px}
+.talk{display:flex;align-items:center;justify-content:center;gap:18px;width:340px;min-height:104px;font:inherit;font-size:36px;font-weight:700;background:#1f1b16;color:#fff;border:0;border-radius:24px;box-shadow:0 7px 0 rgba(0,0,0,.28);cursor:pointer}
+.talk svg{width:52px;height:52px}
+.caption{background:rgba(31,27,22,.9);color:#fff;font-size:36px;font-weight:600;line-height:1.3;padding:18px 28px;border-radius:20px}
+.urgent .caption{background:#7a1212}
+</style>
+</helmet>
+<div class="scr" style="width: 1280px; height: 800px; background: radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(245,170,110,0) 60%, rgba(245,170,110,0.9) 100%)"></div>
+<button type="button" class="pick" aria-label="Choose Mary" style="position: absolute; top: 40px; left: 60px; width: 560px; height: 500px; box-sizing: border-box; background: rgba(255,254,250,.92); border: 3px solid #62574a; border-radius: 32px; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font: inherit; color: #1f1b16">
+<div style="position: relative; overflow: hidden; flex: none; width: 520px; height: 325px; border-radius: 20px; background: radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(245,170,110,0) 60%, rgba(245,170,110,0.9) 100%)"></div>
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary's face">
+<defs>
+<radialGradient id="fhM"><stop offset="0" stop-color="#d98c45" stop-opacity="0.42"></stop><stop offset="1" stop-color="#d98c45" stop-opacity="0"></stop></radialGradient>
+<radialGradient id="blM"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g class="sway"><g class="face cute-blush">
+  <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 140 C232 118 266 110 284 124"></path><path d="M412 140 C408 118 374 110 356 124"></path></g>
+  <g><ellipse class="cheek" cx="246" cy="234" rx="36" ry="15" fill="url(#blM)"></ellipse><ellipse class="cheek" cx="394" cy="234" rx="36" ry="15" fill="url(#blM)"></ellipse></g>
+  <g class="peek">
+  <g class="eye ss"><ellipse cx="256" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="264" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M248 187 Q249 192 254 193 Q249 194 248 199 Q247 194 242 193 Q247 192 248 187 Z" fill="#ffffff"></path></g>
+  <g class="eye ss"><ellipse cx="384" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="392" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M376 187 Q377 192 382 193 Q377 194 376 199 Q375 194 370 193 Q375 192 376 187 Z" fill="#ffffff"></path></g>
+  </g>
+  <path d="M296 266 Q320 284 344 266" fill="none" stroke="#8a3b2e" stroke-width="7" stroke-linecap="round"></path>
+</g></g>
+</svg>
+</div>
+<span style="font-size: 48px; font-weight: 700; line-height: 1.2">Mary</span>
+</button>
+<button type="button" class="pick" aria-label="Choose [His name]" style="position: absolute; top: 40px; right: 60px; width: 560px; height: 500px; box-sizing: border-box; background: rgba(255,254,250,.92); border: 3px solid #62574a; border-radius: 32px; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font: inherit; color: #1f1b16">
+<div style="position: relative; overflow: hidden; flex: none; width: 520px; height: 325px; border-radius: 20px; background: radial-gradient(ellipse at 50% 42%, #fdf8ee 0%, #f6e8cc 50%, #e9cf9f 100%)">
+<div class="edge" style="box-shadow: inset 0 0 60px 22px rgba(214,140,50,0.85)"></div>
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="[His name]'s face">
+<defs>
+<radialGradient id="fhH"><stop offset="0" stop-color="#d98c45" stop-opacity="0.42"></stop><stop offset="1" stop-color="#d98c45" stop-opacity="0"></stop></radialGradient>
+<radialGradient id="blH"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g class="sway"><g class="face cute-blush">
+  <g fill="none" stroke="#5a3d28" stroke-width="6.5" stroke-linecap="round"><path d="M226 138 C238 128 266 126 284 132"></path><path d="M414 138 C402 128 374 126 356 132"></path></g>
+  <g><ellipse class="cheek" cx="246" cy="236" rx="36" ry="14" fill="url(#blH)"></ellipse><ellipse class="cheek" cx="394" cy="236" rx="36" ry="14" fill="url(#blH)"></ellipse></g>
+  <g class="peek">
+  <g class="eye ss"><rect x="234" y="156" width="44" height="52" rx="17" fill="#3a2b22"></rect><circle cx="264" cy="170" r="7" fill="#ffffff"></circle><path class="spark" d="M248 188 Q249 193 254 194 Q249 195 248 200 Q247 195 242 194 Q247 193 248 188 Z" fill="#ffffff"></path></g>
+  <g class="eye ss"><rect x="362" y="156" width="44" height="52" rx="17" fill="#3a2b22"></rect><circle cx="392" cy="170" r="7" fill="#ffffff"></circle><path class="spark" d="M376 188 Q377 193 382 194 Q377 195 376 200 Q375 195 370 194 Q375 193 376 188 Z" fill="#ffffff"></path></g>
+  </g>
+  <path d="M286 264 Q320 282 354 264" fill="none" stroke="#8a3b2e" stroke-width="7" stroke-linecap="round"></path>
+</g></g>
+</svg>
+</div>
+<span style="font-size: 48px; font-weight: 700; line-height: 1.2">[His name]</span>
+</button>
+<div class="dock"><div class="caption">Would you like to talk with me, or with [His name]?</div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

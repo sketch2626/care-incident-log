@@ -1,11 +1,11 @@
 # Care Incident Log (Operation Save Grandma)
 
-Private incident tracker for nursing-home residents. Built by a nursing-home resident (works hands-free by voice) to log care failures; goal is a downloadable standalone app for every resident's laptop, plus reports for ombudsman / state inspectors.
+Private incident tracker for nursing-home residents. Built by a nursing-home resident (works mostly by voice) to log care failures; goal is a downloadable standalone app for every resident's laptop, plus reports for ombudsman / state inspectors.
 
 ## Why this matters
 This is Andy's mission, not a demo.
 - **Who:** Andy is a 43-year-old resident of a North Carolina nursing home. He lives with poor care every day and watches his neighbors get the same.
-- **How:** he builds this hands-free by voice, with AI and no computer-science degree. A tool like this never existed because nobody had the will or the money. AI now makes it possible for pennies, built by the person it affects. That's the story to tell: this is what AI is for.
+- **How:** he builds this mostly by voice, with AI and no computer-science degree. A tool like this never existed because nobody had the will or the money. AI now makes it possible for pennies, built by the person it affects. That's the story to tell: this is what AI is for.
 - **Goal:** real change in how residents are treated. Build everything as if the state will read it, because it will.
 - **Direction (2026-10-24): companion first.** A friendly animated AI companion named Mary (Gemini) that residents talk to as a friend, with speak-up help built in. A pure reporting tool scares residents and makes facilities fight it. Plan: `docs/companion-plan.md`.
 

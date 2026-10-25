@@ -93,6 +93,13 @@ Residents say "Mary, message my daughter and tell her this" or "Mary, put a call
 - **Safety:** an emergency still means the call light, staff or 911 first. Mary can also message a chosen family member during an emergency if the resident asks.
 - **Mock-ups:** the message and call screens are on the face canvas (round 2/3 boards, `mockups/mary/round2/`).
 
+## Games with Mary (Andy, 2026-10-25)
+Mary can suggest a game ("Hey, do you want to play a game, or do a word search?"). When the resident says yes, she scoots aside, shrinking toward a corner but still alive and talking, and the game fills the main screen.
+- **She helps them play:** she gives hints when asked, makes moves by voice ("put the red seven on the black eight"), cheers them on, and never takes over.
+- **Starting games** (not locked in): word search first, since many older people love them. Also tic-tac-toe, solitaire, and later checkers, crosswords, trivia and memory games.
+- **Built for ages 65-95:** huge letters and cards, high contrast, tap or voice, no timers or pressure, and gentle wins.
+- **Mock-ups first:** a game-mode board showing Mary scooted aside next to a word search, then tic-tac-toe and solitaire.
+
 ## Future (with funding)
 - Government or foundation money to train or fine-tune an AI for this cause, for example an open-weight model fine-tuned on conversations residents consented to share.
 
@@ -109,6 +116,7 @@ Residents say "Mary, message my daughter and tell her this" or "Mary, put a call
    - Not yet: memory encryption (backend phase 1), and bundling `mary/` in the installer.
 2. Prototype the face, the talk loop and the wake word in the desktop app, with Andy as the first user.
 3. Family messages and calls (section above): research the options and costs, then build from the approved mock-ups.
-4. Set up lid-to-Mary, the helper setup tool and a laptop spec.
-5. Before the pilot: review and merge the parked speak-up code (branch `wip/report-to-state`). It becomes her speak-up skill.
-6. Revise the pilot checklist and the backend plan for the companion.
+4. Games with Mary (section above): mock-ups, then build, starting with word search.
+5. Set up lid-to-Mary, the helper setup tool and a laptop spec.
+6. Before the pilot: review and merge the parked speak-up code (branch `wip/report-to-state`). It becomes her speak-up skill.
+7. Revise the pilot checklist and the backend plan for the companion.

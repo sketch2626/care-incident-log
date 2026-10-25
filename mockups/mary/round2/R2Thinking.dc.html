@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mary round 2: Thinking</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.scr{position:relative;overflow:hidden;box-sizing:border-box;font:22px/1.5 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.edge{position:absolute;inset:0;pointer-events:none;will-change:opacity;animation:edge 6s ease-in-out infinite}
+.edge.fast{animation-duration:3s}
+.edge.slow{animation-duration:8s}
+.edge.steady{animation:steady 4s ease-in-out infinite}
+.facesvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.face{transform-box:view-box;transform-origin:320px 200px;animation:float 6s ease-in-out infinite}
+.face.slow{animation-duration:8s}
+.face.lean{animation:lean 6s ease-in-out infinite}
+.face.tilt{animation:tilt 7s ease-in-out infinite}
+.face.bounce{animation:bounce 1.8s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.blink{animation:blink 7s ease-in-out infinite}
+.glance{animation:glance 4s ease-in-out infinite}
+.cheek{opacity:0}
+.blush .cheek{opacity:.85;animation:blush 6s ease-in-out infinite alternate}
+.mouth-talk{transform-box:fill-box;transform-origin:50% 0;animation:talk 1.4s ease-in-out infinite}
+.dot{opacity:.8;animation:dot 3s ease-in-out infinite}
+.dot:nth-of-type(2){animation-delay:.5s}
+.dot:nth-of-type(3){animation-delay:1s}
+.zz{opacity:.8;animation:zz 6s ease-in-out infinite}
+.zz:nth-of-type(2){animation-delay:2s}
+.zz:nth-of-type(3){animation-delay:4s}
+@keyframes edge{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes steady{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes lean{0%,100%{transform:rotate(-2deg) translateY(0)}50%{transform:rotate(-2deg) translateY(-4px)}}
+@keyframes tilt{0%,100%{transform:rotate(3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-3px)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes glance{0%,100%{transform:translate(0,0)}30%,75%{transform:translate(7px,-7px)}}
+@keyframes blush{from{opacity:.35}to{opacity:.95}}
+@keyframes talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
+@keyframes dot{0%,15%{opacity:.25}40%,75%{opacity:1}100%{opacity:.25}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:.9}100%{opacity:0;transform:translate(14px,-30px)}}
+.lift{animation:lift 3s ease-in-out infinite}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 4s ease-in-out infinite alternate}
+.twinkle{transform-box:fill-box;transform-origin:center;animation:twinkle 3s ease-in-out infinite}
+.twinkle:nth-of-type(2){animation-delay:1.5s}
+.twinkle:nth-of-type(3){animation-delay:.8s}
+.soft-blush .cheek{opacity:.45}
+.m{opacity:0;animation:seq 16s ease-in-out infinite both}
+.m0{opacity:1}
+.m1{animation-delay:4s}
+.m2{animation-delay:8s}
+.m3{animation-delay:12s}
+@keyframes lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes pop{from{transform:scale(1)}to{transform:scale(1.07)}}
+@keyframes twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@keyframes seq{0%{opacity:0}4%{opacity:1}25%{opacity:1}29%{opacity:0}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style>
+</helmet>
+<div class="scr" style="width: 640px; height: 400px; background: radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(176,156,222,0) 60%, rgba(176,156,222,0.9) 100%)"></div>
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary, thinking">
+<defs>
+<radialGradient id="fh"><stop offset="0" stop-color="#d98c45" stop-opacity="0.42"></stop><stop offset="1" stop-color="#d98c45" stop-opacity="0"></stop></radialGradient>
+<radialGradient id="bl"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g class="face">
+  <g><ellipse cx="248" cy="112" rx="66" ry="26" fill="url(#fh)"></ellipse><g class="lift"><ellipse cx="392" cy="100" rx="66" ry="26" fill="url(#fh)"></ellipse></g></g>
+  <g><ellipse class="cheek" cx="196" cy="214" rx="48" ry="28" fill="url(#bl)"></ellipse><ellipse class="cheek" cx="444" cy="214" rx="48" ry="28" fill="url(#bl)"></ellipse></g>
+  <g class="glance">
+    <g class="eye"><ellipse cx="248" cy="165" rx="21" ry="28" fill="#3a2b22"></ellipse><circle cx="255" cy="155" r="6" fill="#ffffff"></circle><circle cx="241" cy="174" r="3" fill="#ffffff" opacity="0.85"></circle></g>
+    <g class="eye"><ellipse cx="392" cy="165" rx="21" ry="28" fill="#3a2b22"></ellipse><circle cx="399" cy="155" r="6" fill="#ffffff"></circle><circle cx="385" cy="174" r="3" fill="#ffffff" opacity="0.85"></circle></g>
+  </g>
+  <path d="M302 258 Q318 252 338 260" fill="none" stroke="#3a2b22" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path>
+  <g fill="#8b76c6"><circle class="dot" cx="468" cy="92" r="8"></circle><circle class="dot" cx="494" cy="72" r="9"></circle><circle class="dot" cx="522" cy="54" r="10"></circle></g>
+</g>
+</svg>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":640,"height":400}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

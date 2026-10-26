@@ -94,7 +94,7 @@ Residents say "Mary, message my daughter and tell her this" or "Mary, put a call
 - **Mock-ups:** the message and call screens are on the face canvas (round 2/3 boards, `mockups/mary/round2/`).
 
 ## Games with Mary (Andy, 2026-10-25)
-Mary can suggest a game ("Hey, do you want to play a game, or do a word search?"). When the resident says yes, she scoots aside, shrinking toward a corner but still alive and talking, and the game fills the main screen.
+Mary can suggest a game ("Hey, do you want to play a game, or do a word search?"). When the resident says yes, her face turns in 3D: the right side recedes into the screen, so she's angled toward the game on the right while still big and alive. She glances back and forth between the game and the person. Andy chose this over shrinking her into a corner.
 - **She helps them play:** she gives hints when asked, makes moves by voice ("put the red seven on the black eight"), cheers them on, and never takes over.
 - **Starting games** (not locked in): word search first, since many older people love them. Also tic-tac-toe, solitaire, and later checkers, crosswords, trivia and memory games.
 - **Built for ages 65-95:** huge letters and cards, high contrast, tap or voice, no timers or pressure, and gentle wins.

@@ -93,6 +93,9 @@ Residents say "Mary, message my daughter and tell her this" or "Mary, put a call
 - **Safety:** an emergency still means the call light, staff or 911 first. Mary can also message a chosen family member during an emergency if the resident asks.
 - **Mock-ups:** the message and call screens are on the face canvas (round 2/3 boards, `mockups/mary/round2/`).
 
+## Screen and power (Andy, 2026-10-25)
+When the laptop is plugged in, Mary's screen stays on indefinitely. She never dims or goes to sleep; at rest she's in her resting mood, still breathing and blinking. On battery, gentle sleepy mode and normal Windows dimming are fine.
+
 ## Games with Mary (Andy, 2026-10-25)
 Mary can suggest a game ("Hey, do you want to play a game, or do a word search?"). When the resident says yes, her face turns in 3D: the right side recedes into the screen, so she's angled toward the game on the right while still big and alive. She glances back and forth between the game and the person. Andy chose this over shrinking her into a corner.
 - **She helps them play:** she gives hints when asked, makes moves by voice ("put the red seven on the black eight"), cheers them on, and never takes over.

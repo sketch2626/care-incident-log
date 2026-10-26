@@ -27,6 +27,11 @@ OFFER_QUESTION = "Would you like me to write that down?"
 NO_KEY = "No Gemini key."
 NO_GEMINI = "Mary couldn't reach Gemini."
 
+# Her face (web/mary/face.js has the same list, in the same order). Gemini starts each reply with [mood: X].
+MOODS = ("resting", "listening", "thinking", "talking", "happy", "laughing",
+         "concerned", "sorry", "surprised", "sleepy", "alert")
+COMPANIONS = {"mary": "Mary", "him": "Sam"}
+
 MAX_FACTS = 40
 MAX_RECENT = 12
 MAX_TURN_CHARS = 500
@@ -67,6 +72,20 @@ _ASKS = re.compile(r"write (that|it|this) down|note (that|it|this)|jot", _I)
 _NAME = re.compile(r"\b(?:my name is|call me)\s+([A-Z][a-z]+)", _I)
 _NOT_NAMES = {"back", "when", "if", "later", "please", "crazy", "maybe", "sometime", "tomorrow", "tonight", "today", "again", "not", "a", "an", "the"}
 _TAG = re.compile(r"\[(remember|name):\s*([^\]]+)\]")
+_MOOD_TAG = re.compile(r"\[\s*mood\s*:\s*([^\[\]]*?)\s*\]", _I)
+# A "[" so far that may still turn into a mood tag, so the stream waits for more before deciding.
+_MOOD_OPEN = re.compile(r"\[\s*(?:m(?:o(?:o(?:d\s*(?::[^\[\]]{0,30})?)?)?)?)?$", _I)
+_NAME_FILLER = re.compile(
+    r"\b(?:(?:hi|hello|hey|good\s+(?:morning|afternoon|evening))(?:\s+(?:mary|sam))?"
+    r"|um+|uh+|er+|hmm+|well|oh|yes|yeah|okay|ok|just|please|thanks|thank\s+you"
+    r"|(?:my\s+)?name(?:\s+is|'s)"
+    r"|(?:(?:you\s+)?can\s+|they\s+|people\s+|everyone\s+|everybody\s+)?calls?\s+me"
+    r"|(?:it|that|this)(?:\s+is|'s)"
+    r"|i(?:\s+am|'m))\b", _I)
+# Words that are not a name: a first word like this means "nothing sensible"; later it ends the name.
+_NAME_STOP = {"and", "but", "so", "because", "i", "my", "we", "the", "a", "an", "from", "in", "at", "here", "is",
+              "was", "who", "what", "no", "nope", "nothing", "none", "nah", "sorry", "pardon", "huh", "why",
+              "how", "where", "when", "don't", "dont", "can't", "cant", "not", "you", "me", "do", "does"}
 
 
 def load_instructions():
@@ -164,6 +183,88 @@ def lapse_offer(text):
     return None
 
 
+def _name_case(word):
+    """'dorothy' -> 'Dorothy', "o'brien" -> "O'Brien", 'mary-ann' -> 'Mary-Ann'."""
+    def cap(part):
+        return part[:1].upper() + part[1:].lower()
+    out = []
+    for piece in word.split("-"):
+        bits = piece.split("'")
+        out.append("'".join(cap(b) for b in bits) if len(bits) > 1 and len(bits[0]) == 1 else cap(piece))
+    return "-".join(out)
+
+
+def name_from(text):
+    """The name in the resident's answer to 'What would you like me to call you?', or '' if there isn't one."""
+    text = _NAME_FILLER.sub(" ", _plain(str(text or "")))
+    text = re.sub(r"[^\w'\-]+|[\d_]+", " ", text)
+    words = []
+    for w in text.split():
+        w = re.sub(r"([-'])[-']+", r"\1", w).strip("'-")
+        if not w:
+            continue
+        if w.lower() in _NAME_STOP:
+            break
+        words.append(w)
+    name = " ".join(_name_case(w) for w in words[:3])
+    return name if len(name) <= 40 else ""
+
+
+class _ReplyStream:
+    """Sorts Gemini's streamed text into words to speak, mood tags, and held-back tags.
+
+    A [mood: x] tag is handled the moment its "]" arrives and the words after it flow on at once.
+    Any other "[" starts a hold: everything from there to the end is kept, so a [remember:] or
+    [name:] line is never spoken half-way. speak(piece, after_tag) and mood(value) are callbacks.
+    """
+
+    def __init__(self, speak, mood):
+        self.speak, self.mood = speak, mood
+        self.buf = self.held = ""
+        self.after_tag = False
+
+    def _say(self, piece):
+        if not piece:
+            return
+        self.speak(piece, self.after_tag)
+        if piece.strip():
+            self.after_tag = False
+
+    def feed(self, chunk):
+        if self.held:
+            self.held += chunk
+            return
+        self.buf += chunk
+        while self.buf:
+            cut = self.buf.find("[")
+            if cut < 0:
+                self._say(self.buf)
+                self.buf = ""
+                return
+            if cut:
+                self._say(self.buf[:cut])
+                self.buf = self.buf[cut:]
+            m = _MOOD_TAG.match(self.buf)
+            if m:
+                self.mood(m.group(1))
+                self.buf = self.buf[m.end():]
+                self.after_tag = True
+                continue
+            if _MOOD_OPEN.match(self.buf):
+                return  # might still become a mood tag; wait for more
+            self.held, self.buf = self.buf, ""
+            return
+
+    def finish(self):
+        """The held-back text with every tag removed, and nothing from a half-finished tag."""
+        held = _MOOD_TAG.sub(lambda m: self.mood(m.group(1)) or "", _TAG.sub("", self.held))
+        self.buf = self.held = ""
+        cut = held.rfind("[")
+        if cut >= 0 and "]" not in held[cut:]:
+            held = held[:cut]
+        return held
+
+
 def _gemini_stream(body, api_key, model=""):
     """Yields the text pieces of Gemini's streamed answer. Raises on any network or API problem."""
     url = assist.ENDPOINT.replace(":generateContent", ":streamGenerateContent").format(model=model or assist.DEFAULT_MODEL) + "?alt=sse"
@@ -184,8 +285,12 @@ def _gemini_stream(body, api_key, model=""):
                     yield part["text"]
 
 
-def _body(text, memory, kind):
+def _body(text, memory, kind, companion="mary"):
     system = load_instructions()
+    if companion == "him":
+        name = COMPANIONS["him"]
+        first, newline, rest = system.partition("\n")
+        system = (first + " You are a man, a kind and friendly gentleman." + newline + rest).replace("Mary", name)
     lines = ([f"Name: {memory.name}"] if memory.name else []) + [f"- {f}" for f in memory.facts]
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
@@ -201,15 +306,22 @@ def _body(text, memory, kind):
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": 256}}
 
 
-def reply(text, memory, api_key="", model="", on_text=None):
+def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None):
     """Mary's answer to what the resident said.
 
-    Returns {text, emergency, offer, remembered, error, first_words_s, total_s}. on_text gets each
-    spoken piece as it is ready. Nothing is written to the incident log.
+    Returns {text, mood, emergency, gemini_alert, offer, remembered, error, first_words_s, total_s}.
+    on_text gets each spoken piece as it is ready. on_mood gets her mood as soon as it is known,
+    once (a reply that is only a mood tag, no words, is corrected to "sorry" with a second call).
+    Mood tags are never spoken or remembered. An offline emergency always means "alert";
+    gemini_alert is True when only Gemini said alert. Nothing is written to the incident log.
     """
     start = time.monotonic()
     spoken = ""
     first_words_s = None
+    mood = None
+    gemini_mood_seen = gemini_alert = streamed = False
+    if companion not in COMPANIONS:
+        companion = "mary"
 
     def emit(piece, sep=False):
         nonlocal spoken, first_words_s
@@ -223,8 +335,36 @@ def reply(text, memory, api_key="", model="", on_text=None):
         if on_text:
             on_text(piece)
 
+    def set_mood(value):
+        nonlocal mood
+        if value != mood:
+            mood = value
+            if on_mood:
+                on_mood(value)
+
+    def take_mood(value):
+        """A mood tag from Gemini. Only the first counts, and never against an offline emergency."""
+        nonlocal gemini_mood_seen, gemini_alert
+        if gemini_mood_seen or kind:
+            return
+        gemini_mood_seen = True
+        value = re.sub(r"[^a-z]", "", value.lower())
+        if value not in MOODS or value in ("listening", "resting"):
+            value = "talking"
+        gemini_alert = value == "alert"
+        set_mood(value)
+
+    def speak(piece, after_tag=False):
+        nonlocal streamed
+        if after_tag and (not spoken or spoken[-1].isspace()):
+            piece = piece.lstrip()  # the gap a removed tag leaves
+        if piece:
+            emit(piece, sep=not streamed)
+            streamed = True
+
     kind = is_emergency(text)
     if kind:
+        set_mood("alert")
         emit(EMERGENCY_TEXT[kind])
     offer = None
     if is_decline(text):
@@ -240,21 +380,12 @@ def reply(text, memory, api_key="", model="", on_text=None):
     error = ""
     remembered = []
     if api_key:
-        raw = held = ""
-        streamed = False
+        raw = ""
+        stream = _ReplyStream(speak, take_mood)
         try:
-            for chunk in _gemini_stream(_body(text, memory, kind), api_key, model):
+            for chunk in _gemini_stream(_body(text, memory, kind, companion), api_key, model):
                 raw += chunk
-                if held:
-                    held += chunk
-                    continue
-                cut = chunk.find("[")
-                safe = chunk if cut < 0 else chunk[:cut]
-                if cut >= 0:
-                    held = chunk[cut:]
-                if safe:
-                    emit(safe, sep=not streamed)
-                    streamed = True
+                stream.feed(chunk)
         except Exception:
             error = NO_GEMINI
         for tag, value in _TAG.findall(raw):
@@ -263,20 +394,20 @@ def reply(text, memory, api_key="", model="", on_text=None):
                     remembered.append(" ".join(value.split()))
             elif value.strip():
                 memory.name = value.strip()[:40]
-        held = _TAG.sub("", held)
-        cut = held.rfind("[")
-        if cut >= 0 and "]" not in held[cut:]:
-            held = held[:cut]
-        if held.strip():
-            emit(held, sep=not streamed)
-            streamed = True
+        tail = stream.finish()
+        if tail.strip():
+            speak(tail)
         if not streamed and not error:
             error = NO_GEMINI
 
     if not spoken.strip() and not kind:
+        gemini_alert = False  # a bare "alert" tag with no words is not something to act on
+        set_mood("sorry")
         emit(OFFLINE_TEXT)
         if not api_key:
             error = NO_KEY
+    elif mood is None:
+        set_mood("talking")
     if offer and not _ASKS.search(spoken):
         emit(offer["question"], sep=True)
 
@@ -288,5 +419,6 @@ def reply(text, memory, api_key="", model="", on_text=None):
         memory.save()
     except OSError:
         pass
-    return {"text": final, "emergency": kind, "offer": offer, "remembered": remembered, "error": error,
+    return {"text": final, "mood": mood, "emergency": kind, "gemini_alert": gemini_alert, "offer": offer,
+            "remembered": remembered, "error": error,
             "first_words_s": first_words_s, "total_s": time.monotonic() - start}

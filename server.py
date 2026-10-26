@@ -9,18 +9,22 @@ use another folder) and backed up daily to its backups\\ folder. Nothing leaves 
 import csv
 import io
 import json
+import math
 import os
 import re
 import shutil
 import sqlite3
 import sys
+import threading
 import webbrowser
+from contextlib import closing
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import assist
+import mary
 
 # In the packaged app, web/ is unpacked next to the program (sys._MEIPASS).
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -52,7 +56,10 @@ TEXT_FIELDS = ["occurred_date", "occurred_time", "category", "description", "sev
                "staff_involved", "reported_to", "outcome", "witnesses", "source", "source_id",
                "formal_summary"]
 SETTING_KEYS = {"resident_name", "room", "facility", "facility_address", "state",
-                "gemini_enabled", "gemini_key", "gemini_model"}
+                "gemini_enabled", "gemini_key", "gemini_model",
+                "companion", "voice_rate", "voice_volume"}
+# Mary's voice settings: (lowest, highest, default). Saved values are clamped into range.
+VOICE_LIMITS = {"voice_rate": (0.6, 1.4, 0.92), "voice_volume": (0.2, 1.0, 1.0)}
 NO_SPEECH = "Talking isn't set up on this computer yet. You can type instead."
 
 # A dictation or note is offered to the inbox when it starts with "Incident" (or "New incident").
@@ -185,6 +192,63 @@ def public_settings(conn):
     s = get_settings(conn)
     s["gemini_key_set"] = bool(s.pop("gemini_key", ""))
     return s
+
+
+def clean_voice_setting(key, value):
+    """A voice setting clamped into its range, as text; None if it isn't a usable number."""
+    low, high, _ = VOICE_LIMITS[key]
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return str(round(min(high, max(low, number)), 2))
+
+
+# Mary. One talk at a time, so two requests never interleave her memory.
+_mary_lock = threading.Lock()
+HELLO_NO_NAME = "I'm sorry, I didn't quite catch your name. Could you say it once more?"
+TALK_NO_TEXT = "I didn't catch anything. Could you say that again?"
+
+
+def mary_memory():
+    return mary.Memory(DATA / "mary" / "memory.json")
+
+
+def mary_settings():
+    """What Mary needs from the saved settings. Her key is used whenever one is saved; the
+    'smart helper' switch only controls the incident helper."""
+    with closing(connect()) as conn:
+        s = get_settings(conn)
+    companion = s.get("companion", "")
+    out = {"companion": companion if companion in mary.COMPANIONS else "",
+           "key": s.get("gemini_key", "").strip(), "model": s.get("gemini_model", "").strip()}
+    for k, (_, _, default) in VOICE_LIMITS.items():
+        got = clean_voice_setting(k, s.get(k))
+        out[k] = float(got) if got is not None else default
+    return out
+
+
+def mary_status():
+    s = mary_settings()
+    name = mary_memory().name
+    return {"companion": s["companion"], "first_run": not s["companion"],
+            "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name,
+            "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"]}
+
+
+def mary_talk(text, on_text=None, on_mood=None):
+    """Mary's answer to text, for the page. Never contains the key."""
+    s = mary_settings()
+    with _mary_lock:
+        r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
+                       companion=s["companion"] or "mary", on_mood=on_mood)
+    return {"text": r["text"], "mood": r["mood"],
+            "emergency": bool(r["emergency"] or r["gemini_alert"]),
+            "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
+            "offer": r["offer"], "error": r["error"], "needs_key": not s["key"],
+            "first_words_s": r["first_words_s"], "total_s": r["total_s"]}
 
 
 _speech = None
@@ -366,11 +430,64 @@ class Handler(SimpleHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(n) or b"{}")
 
+    def _mary(self, method, path, q):
+        """Mary's routes. Returns None for a path that isn't one of hers."""
+        if method == "GET" and path == "/api/mary/status":
+            return self._send(mary_status())
+        if method == "POST" and path in ("/api/mary/talk", "/api/mary/hello"):
+            body = self._body()
+            text = str(body.get("text") or "").strip() if isinstance(body, dict) else ""
+            if path == "/api/mary/hello":
+                name = mary.name_from(text)
+                if not name:
+                    return self._send({"name": "", "text": HELLO_NO_NAME})
+                with _mary_lock:
+                    memory = mary_memory()
+                    memory.name = name
+                    memory.save()
+                return self._send({"name": name,
+                                   "text": f"It's lovely to meet you, {name}! I'm here whenever you'd like to talk."})
+            if not text:
+                raise ValueError(TALK_NO_TEXT)
+            if q("stream") == "1":
+                return self._mary_stream(text)
+            return self._send(mary_talk(text))
+        return None
+
+    def _mary_stream(self, text):
+        """Mary's answer as it happens: one JSON line per event (mood, text pieces, then done).
+        The connection closing ends the stream (HTTP/1.0); end_headers adds Cache-Control: no-store."""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson")
+        self.end_headers()
+        gone = False
+
+        def line(event):
+            nonlocal gone
+            if gone:
+                return
+            try:
+                self.wfile.write(json.dumps(event).encode("utf-8") + b"\n")
+                self.wfile.flush()
+            except (OSError, ValueError):
+                gone = True  # the page went away; Mary still finishes, so the talk is remembered
+
+        try:
+            done = mary_talk(text, on_text=lambda piece: line({"text": piece}),
+                             on_mood=lambda mood: line({"mood": mood}))
+        except Exception:
+            line({"error": "Something went wrong. Please try again."})
+            return True
+        line({"done": True, **done})
+        return True
+
     def _route(self, method):
         parsed = urlparse(self.path)
         path, query = parsed.path.rstrip("/"), parse_qs(parsed.query)
         q = lambda k: (query.get(k) or [""])[0]
         m = re.fullmatch(r"/api/incidents/(\d+)", path)
+        if path.startswith("/api/mary/"):
+            return self._mary(method, path, q)
         with connect() as conn:
             if method == "GET" and path == "/api/incidents":
                 import reports  # lazy, like the export routes
@@ -449,6 +566,14 @@ class Handler(SimpleHTTPRequestHandler):
                 for k, v in self._body().items():
                     if k == "gemini_key" and not str(v).strip():
                         continue  # a blank key box means "keep the saved key"
+                    if k == "companion":
+                        v = str(v).strip().lower()
+                        if v and v not in mary.COMPANIONS:
+                            continue  # only Mary, him, or blank
+                    if k in VOICE_LIMITS:
+                        v = clean_voice_setting(k, v)
+                        if v is None:
+                            continue
                     if k in SETTING_KEYS:
                         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                                      (k, str(v).strip()))

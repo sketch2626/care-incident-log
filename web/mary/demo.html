@@ -36,7 +36,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"S
   var face = MaryFace.create(document.getElementById('face'), { companion: 'mary' });
   var bar = document.getElementById('bar');
   var showBtn = document.getElementById('show');
-  var moodBtns = {}, actBtns = {}, flowBtn, flowT = 0, flowStep = 0;
+  var moodBtns = {}, actBtns = {}, flowBtn, swBtn, flowT = 0, flowStep = 0;
 
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function button(row, text, onClick) {
@@ -53,6 +53,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"S
     var s = face.getState();
     MaryFace.MOODS.forEach(function (m) { moodBtns[m].setAttribute('aria-pressed', String(s.mood === m && s.activity !== 'listening' && s.activity !== 'thinking')); });
     MaryFace.ACTIVITIES.forEach(function (a) { actBtns[a].setAttribute('aria-pressed', String(s.activity === a)); });
+    swBtn.setAttribute('aria-pressed', String(s.companion === 'him'));
     flowBtn.setAttribute('aria-pressed', String(!!flowT));
     flowBtn.textContent = flowT ? 'Stop flow' : 'Mood flow';
   }
@@ -94,6 +95,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"S
     if (flowT) { stopFlow(); sync(); return; }
     flowStep = 0;
     runFlow();
+  });
+  // dark = him; his name is read from face.js, where it is written once
+  swBtn = button(document.getElementById('acts'), 'Switch: ' + MaryFace.COMPANIONS.mary.name + ' / ' + MaryFace.COMPANIONS.him.name, function () {
+    face.setCompanion(face.getState().companion === 'him' ? 'mary' : 'him');
+    sync();
   });
   button(document.getElementById('acts'), 'Hide buttons', function () { bar.hidden = true; showBtn.hidden = false; });
   showBtn.addEventListener('click', function () { bar.hidden = false; showBtn.hidden = true; });

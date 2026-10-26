@@ -8,17 +8,22 @@
      const face = MaryFace.create(containerEl, {companion: 'mary'});
      face.setMood(m)       one of MaryFace.MOODS (unknown -> 'talking')
      face.setActivity(a)   'resting' | 'listening' | 'thinking' | 'talking'
-     face.setCompanion(c)  'mary' | 'him' (until his data exists, 'him' shows Mary)
+     face.setCompanion(c)  'mary' | 'him' (a clean cut: new face, new background, new glow)
      face.bounce()         one happy hop
      face.destroy()
 
    Which face shows: activity 'listening' or 'thinking' shows that face, otherwise the mood's face.
    Activity 'talking' (or the mood 'talking') swaps the resting mouth for an open, moving mouth.
 
-   ADDING A COMPANION (his face): add an entry to COMPANIONS in the same shape as COMPANIONS.mary:
+   COMPANIONS: each entry has the same shape (COMPANIONS.him is the second example, drawn from
+   mockups/mary/round4/R4His*.dc.html; Andy named him Sam):
 
-     COMPANIONS.him = { name: 'Him', moods: { resting: {...}, ...all 11 MOODS } };
+     COMPANIONS.x = { name, look: {...}, moods: { resting: {...}, ...all 11 MOODS } };
 
+   look     bg, dusk    CSS backgrounds (left out = Mary's warm cream and dusk)
+            glowStyle   'round' (Mary: a radial glow) | 'square' (him: an inset box-shadow glow, sized in % of the screen)
+            alpha       strength of the square glow (.85)
+            cheekY, cheekRy   where the blush sits (Mary 234/15, him 236/14)
    Each mood is a plain object (see M() for the defaults):
      label    spoken in the aria-label ("Mary, happy")
      glow     [r, g, b] of the edge glow         pulse  'edge' 6s | 'fast' 3s | 'slow' 8s | 'steady'
@@ -126,6 +131,51 @@
   const ZZ = '<g fill="#5d5f9e" font-family="Segoe UI, sans-serif" font-weight="700">' +
     '<text class="mf-zz" x="452" y="135" font-size="30">z</text><text class="mf-zz" x="478" y="109" font-size="36">z</text><text class="mf-zz" x="508" y="81" font-size="42">z</text></g>';
 
+  /* ---------- his pieces (round 4, R4His*.dc.html): already in final coordinates, so no G.* mappers ---------- */
+  const H_BROW = '#5a3d28';
+  const flip = mapper((x, y) => [640 - x, y]);   // a path on his left side -> the same path on his right side
+  const hLine = (d, w) => `<path d="${d}" fill="none" stroke="${MOUTH}" stroke-width="${w || 7}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // straighter brows, 6.5 wide. Give the left brow; the right one is its mirror unless a right one is passed.
+  function hBrows(l, lift, rt) {
+    const a = `<path d="${l}"/>`, b = `<path d="${rt || flip(l)}"/>`;
+    const open = `<g fill="none" stroke="${H_BROW}" stroke-width="6.5" stroke-linecap="round">`;
+    if (lift === 'both') return `<g class="mf-lift">${open}${a}${b}</g></g>`;
+    if (lift === 'right') return `${open}${a}<g class="mf-lift">${b}</g></g>`;
+    return `${open}${a}${b}</g>`;
+  }
+  // rounded-square eye, w x h, centred on cx,182. hl = how far the catchlight sits above (and the sparkle below) the centre.
+  function hEye(cx, w, h, rx, hl, hr) {
+    const dx = Math.round(8 + (w - 44) / 8);
+    return `<rect x="${r(cx - w / 2)}" y="${r(182 - h / 2)}" width="${w}" height="${h}" rx="${rx}" fill="${INK}"/>` +
+      shine(cx + dx, 182 - hl, hr, cx - 8, 182 + hl, 1);
+  }
+  const hEyes = (w, h, rx, hl, hr) => eyePair(hEye(256, w, h, rx, hl, hr), hEye(384, w, h, rx, hl, hr));
+  const hArcs = (l, w) => eyePair(arc(l, w), arc(flip(l), w));
+
+  // sorry's slanted eyes (the board's own paths and catchlights)
+  const H_SORRY_L = 'M234 178 C234 170 270 164 278 168 L278 200 C278 206 272 210 256 210 C240 210 234 206 234 200 Z';
+  const hSorryEyes = () => eyePair(
+    `<path d="${H_SORRY_L}" fill="${INK}"/>` + shine(264, 177, 8, 248, 194, 1),
+    `<path d="${flip(H_SORRY_L)}" fill="${INK}"/>` + shine(390, 179, 8, 376, 194, 1));
+
+  // his wide grin (the everyday board's mouth) and the big laugh
+  const H_GRIN = say('M280 262 Q320 270 360 262 Q354 288 320 288 Q286 288 280 262 Z', 320, 283, 16, 4.5);
+  const H_LAUGH = `<path d="M270 250 L370 250 Q364 300 320 300 Q276 300 270 250 Z" fill="${MOUTH}"/>` +
+    `<path d="M298 288 Q320 274 342 288 Q332 298 320 298 Q308 298 298 288 Z" fill="${TONGUE}"/>`;
+  // surprised: a soft round-cornered O, like his eyes (it opens a little wider than it rests while he talks)
+  const H_O = `<rect x="305" y="262" width="30" height="32" rx="14" fill="${MOUTH}"/>`;
+
+  const H_TWINKLES = '<g fill="#f0b429">' + [
+    'M198 128 Q200 138 210 140 Q200 142 198 152 Q196 142 186 140 Q196 138 198 128 Z',
+    'M442 128 Q444 138 454 140 Q444 142 442 152 Q440 142 430 140 Q440 138 442 128 Z'
+  ].map(d => `<path class="mf-twinkle" d="${d}"/>`).join('') + '</g>';
+  const H_LAUGH_LINES = `<g fill="none" stroke="${H_BROW}" stroke-width="4" stroke-linecap="round" opacity="0.6">` +
+    '<path d="M222 176 L212 170"/><path d="M220 190 L208 192"/><path d="M418 176 L428 170"/><path d="M420 190 L432 192"/></g>';
+  // thought dots, moon and zz: Mary's, in his slightly deeper blues and purples
+  const H_DOTS = DOTS.replace('#8b76c6', '#7a66b8');
+  const H_SKY = SKY.replace(/#8e8fc7/g, '#7f81bd');
+  const H_ZZ = ZZ.replace('#5d5f9e', '#52558f');
+
   // fills in the defaults for a mood
   const M = o => Object.assign({
     pulse: 'edge', motion: 'float', dusk: false, blush: 0.8,
@@ -136,6 +186,7 @@
   const COMPANIONS = {
     mary: {
       name: 'Mary',
+      look: { glowStyle: 'round' },   // her cream background, dusk, blush and round glow are the CSS defaults
       moods: {
         resting: M({
           label: 'resting', glow: [242, 183, 102],
@@ -213,8 +264,95 @@
           talk: say('M303 268 Q320 262 337 268 Q335 289 320 289 Q305 289 303 268 Z', 320, 282.5, 10, 4)
         })
       }
+    },
+
+    /* Him: square glow, straighter brows, rounded-square eyes, wide grin. Same Cute 3 cuteness as Mary.
+       Boards: resting, everyday (= talking), happy, laughing, concerned, sorry, alert. Listening, thinking, surprised
+       and sleepy have no board of his own; they are Mary's ideas for those moods drawn in his style. */
+    him: {
+      name: 'Sam',   // Andy named him Sam (2026-10-25). Written here and nowhere else in the face.
+      look: {
+        glowStyle: 'square', alpha: 0.85,
+        bg: 'radial-gradient(ellipse at 50% 42%,#fdf8ee 0%,#f6e8cc 50%,#e9cf9f 100%)',
+        dusk: 'radial-gradient(ellipse at 50% 42%,#efe2c8 0%,#d4c3a6 55%,#9b95b9 100%)',
+        cheekY: 236, cheekRy: 14
+      },
+      moods: {
+        resting: M({
+          label: 'resting', glow: [214, 140, 50], pulse: 'slow',
+          brows: hBrows('M226 144 C238 136 266 134 284 140'),
+          eyes: hArcs('M236 186 C242 196 270 196 276 186', 7),
+          mouth: hLine('M288 262 Q320 276 352 262'), talk: H_GRIN
+        }),
+        listening: M({
+          label: 'listening', glow: [100, 176, 212], pulse: 'fast', motion: 'lean', blink: true, look: 'peek',
+          brows: hBrows('M226 124 C238 114 266 112 284 118', 'both'),
+          eyes: hEyes(46, 56, 18, 13, 7.5),
+          mouth: hLine('M300 265 Q320 274 340 265'), talk: H_GRIN
+        }),
+        thinking: M({
+          label: 'thinking', glow: [152, 130, 212], blush: 0.6, blink: true, look: 'think',
+          brows: hBrows('M226 138 C238 128 266 126 284 132', 'right', 'M414 124 C402 114 374 112 356 118'),
+          eyes: hEyes(44, 52, 17, 12, 7),
+          mouth: hLine('M298 268 Q318 261 344 269'), talk: H_GRIN, extras: H_DOTS
+        }),
+        talking: M({
+          label: 'talking', glow: [214, 140, 50], blink: true, look: 'peek',
+          brows: hBrows('M226 138 C238 128 266 126 284 132'),
+          eyes: hEyes(44, 52, 17, 12, 7),
+          mouth: H_GRIN, talk: H_GRIN
+        }),
+        happy: M({
+          label: 'happy', glow: [226, 170, 40], look: 'peek',
+          brows: hBrows('M226 130 C238 120 266 118 284 124'),
+          eyes: hArcs('M236 190 C240 170 272 170 276 190', 8),
+          mouth: hLine('M274 254 Q320 292 366 254', 8),
+          talk: say('M274 256 Q320 266 366 256 Q358 292 320 292 Q282 292 274 256 Z', 320, 287, 18, 5),
+          extras: H_TWINKLES
+        }),
+        laughing: M({
+          label: 'laughing', glow: [230, 150, 50], pulse: 'fast', motion: 'bounce', look: 'peek',
+          brows: hBrows('M224 124 C236 112 268 110 286 118'),
+          eyes: hArcs('M234 188 C238 162 274 162 278 188', 9),
+          mouth: H_LAUGH, talk: H_LAUGH, extras: H_LAUGH_LINES
+        }),
+        concerned: M({
+          label: 'concerned', glow: [214, 120, 70], blink: true, look: 'peek',
+          brows: hBrows('M226 132 C240 130 266 132 284 140'),
+          eyes: hEyes(44, 46, 17, 12, 7),
+          mouth: hLine('M296 268 Q308 262 320 268 Q332 274 344 268'),
+          talk: say('M296 268 Q308 262 320 268 Q332 274 344 268 Q340 290 320 290 Q300 290 296 268 Z', 320, 284, 10, 3.5)
+        }),
+        sorry: M({
+          label: 'sorry for you', glow: [160, 140, 200], pulse: 'slow', motion: 'tilt', blush: 0.45, blink: true, look: 'peek',
+          brows: hBrows('M224 144 C238 138 266 128 284 124'),
+          eyes: hSorryEyes(),
+          mouth: hLine('M298 272 Q320 260 342 272'),
+          talk: say('M298 272 Q320 260 342 272 Q338 292 320 292 Q302 292 298 272 Z', 320, 286, 10, 3.5)
+        }),
+        surprised: M({
+          label: 'surprised', glow: [76, 178, 156], blush: 0.6, blink: true, look: 'peek', pop: true,
+          brows: hBrows('M226 116 C238 106 266 102 284 108', 'both'),
+          eyes: hEyes(52, 62, 21, 15, 8.5),
+          mouth: H_O, talk: H_O + `<ellipse cx="320" cy="287" rx="9" ry="4" fill="${TONGUE}"/>`
+        }),
+        sleepy: M({
+          label: 'sleepy', glow: [88, 92, 160], pulse: 'slow', motion: 'slow', dusk: true, blush: 0.6,
+          brows: hBrows('M226 152 C238 142 266 138 284 144'),
+          eyes: hArcs('M240 191 C245 198 267 198 272 191', 6),
+          mouth: hLine('M304 266 Q320 272 336 266', 6),
+          talk: say('M302 268 Q320 274 338 268 Q334 285 320 285 Q306 285 302 268 Z', 320, 280, 8, 3),
+          behind: H_SKY, extras: H_ZZ
+        }),
+        alert: M({
+          label: 'worried', glow: [220, 95, 105], pulse: 'steady', blush: 0, blink: true, look: 'peek',
+          brows: hBrows('M226 138 C240 128 266 124 284 126'),
+          eyes: hEyes(44, 52, 17, 12, 7),
+          mouth: hLine('M298 268 Q320 262 342 268'),
+          talk: say('M298 268 Q320 262 342 268 Q338 290 320 290 Q302 290 298 268 Z', 320, 284, 10, 3.5)
+        })
+      }
     }
-    // him: { name: '...', moods: { ...the same 11 moods... } }   (a later task)
   };
 
   /* ---------- one-shot movements (Web Animations, so no class juggling) ---------- */
@@ -244,13 +382,15 @@
   ];
 
   /* ---------- markup of one face ---------- */
-  function faceHTML(def, id, label) {
+  function faceHTML(def, id, label, look) {
+    look = look || {};
+    const cy = look.cheekY || 234, cry = look.cheekRy || 15;
     let cheeks = '';
     if (def.blush) {
       const pulse = def.blush === 'pulse';
       cheeks = `<g class="mf-cheeks${pulse ? ' mf-blush' : ''}"${pulse ? '' : ` style="opacity:${def.blush}"`}>` +
-        `<ellipse cx="246" cy="234" rx="36" ry="15" fill="url(#${id}-bl)"/>` +
-        `<ellipse cx="394" cy="234" rx="36" ry="15" fill="url(#${id}-bl)"/></g>`;
+        `<ellipse cx="246" cy="${cy}" rx="36" ry="${cry}" fill="url(#${id}-bl)"/>` +
+        `<ellipse cx="394" cy="${cy}" rx="36" ry="${cry}" fill="url(#${id}-bl)"/></g>`;
     }
     let eyes = def.eyes;
     if (def.pop) eyes = `<g class="mf-pop">${eyes}</g>`;
@@ -287,7 +427,7 @@
     const glowT = [0, 0];
     let reduced = !!(mql && mql.matches);
     let gone = false;
-    let blinkT = 0, glanceT = 0, hopT = 0;
+    let blinkT = 0, glanceT = 0, hopT = 0, snapT = 0;
 
     const fadeMs = () => (reduced ? 200 : 780);
 
@@ -314,7 +454,7 @@
         const el = document.createElement('div');
         el.className = 'mf-mood';
         el.setAttribute('data-mood', key);
-        el.innerHTML = faceHTML(def, id + '-' + key, data.name + ', ' + def.label);
+        el.innerHTML = faceHTML(def, id + '-' + key, data.name + ', ' + def.label, data.look);
         hop.appendChild(el);
         faces[key] = {
           el: el, def: def, hideT: 0,
@@ -323,6 +463,35 @@
           look: def.look === 'peek' ? el.querySelector('.mf-look') : null
         };
       });
+    }
+
+    // the companion's background and glow shape. Mary sets nothing (the CSS defaults are hers), so switching back leaves nothing behind.
+    function applyLook() {
+      const lk = data.look || {}, st = root.style;
+      root.classList.toggle('mf-square', lk.glowStyle === 'square');
+      [['--mf-bg', lk.bg], ['--mf-dusk', lk.dusk], ['--mf-ga', lk.alpha]].forEach(p => {
+        if (p[1]) st.setProperty(p[0], String(p[1])); else st.removeProperty(p[0]);
+      });
+    }
+    // both glows off, their colours and pulses cleared, so the next setGlow starts fresh
+    function resetGlow() {
+      for (let i = 0; i < 2; i++) {
+        clearTimeout(glowT[i]);
+        glowT[i] = 0;
+        glows[i].classList.remove('mf-vis');
+        glows[i].firstChild.className = 'mf-glow-in';
+        glows[i].firstChild.style.removeProperty('--c');
+      }
+      glowNow = -1;
+      glowSig = '';
+    }
+    // makes a change with no fades (a different companion is a clean cut, not a crossfade between two looks)
+    function cut(fn) {
+      clearTimeout(snapT);
+      root.classList.add('mf-snap');
+      fn();
+      void root.offsetWidth;
+      snapT = setTimeout(() => root.classList.remove('mf-snap'), 80);
     }
 
     function setGlow(rgb, pulse) {
@@ -424,13 +593,12 @@
     }
     function setCompanion(c) {
       if (gone) return;
-      companion = c === 'him' ? 'him' : 'mary';
+      companion = c === 'him' && COMPANIONS.him ? 'him' : 'mary';
       root.setAttribute('data-companion', companion);
-      const d = COMPANIONS[companion] || COMPANIONS.mary;   // until his data exists he shows Mary
+      const d = COMPANIONS[companion];
       if (d === data) return;
       data = d;
-      build();
-      render();
+      cut(() => { resetGlow(); applyLook(); build(); render(); });
     }
 
     function onVisible() {
@@ -449,6 +617,7 @@
       if (gone) return;
       gone = true;
       stopSched();
+      clearTimeout(snapT);
       Object.keys(faces).forEach(k => clearTimeout(faces[k].hideT));
       glowT.forEach(t => clearTimeout(t));
       document.removeEventListener('visibilitychange', onVisible);
@@ -462,6 +631,7 @@
     companion = opts.companion === 'him' ? 'him' : 'mary';
     root.setAttribute('data-companion', companion);
     data = COMPANIONS[companion] || COMPANIONS.mary;
+    applyLook();
     build();
     render();
     startSched();

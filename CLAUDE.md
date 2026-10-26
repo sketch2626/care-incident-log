@@ -52,7 +52,21 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
     - A greeting by time of day.
     - Idle: asleep at 5 min and dimmed at 15 min (`IDLE` config). Any tap, key or talk wakes her.
     - Screen Wake Lock unless `/api/power` says on battery. That route isn't built yet, so for now the screen stays on.
-  - **Next:** T5, the entry points: `power.py` + `GET /api/power`; `desktop.py` keep-awake (`SetThreadExecutionState`) + `--mary` full screen; the home link; `Start Mary.bat`. Then the docs.
+  - Minimal entry points (wrap-up, 2026-10-26):
+    - `Start Mary.bat` starts `server.py --no-browser` and opens `/mary.html` in the default browser.
+    - The home screen's first "More" link is "Talk to Mary".
+    - Nothing is uncommitted. Everything is syntax-checked and API-tested only: **nobody has seen it run in a window yet.**
+  - **Next for a fresh worker, in order:**
+    1. **T5 (Sonnet `coder`), the full entry points:**
+       - `power.py`: `plugged_in()` via `GetSystemPowerStatus`, `keep_display_on(p)` = `p is not False`, and a `KeepAwake` thread that calls `SetThreadExecutionState(ES_CONTINUOUS|ES_DISPLAY_REQUIRED|ES_SYSTEM_REQUIRED)` and releases it on stop.
+       - `GET /api/power` → `{plugged_in}`. The page already polls it, and a 404 counts as plugged in.
+       - `desktop.py --mary`: opens `/mary.html` full screen, titled "Mary". It has a `js_api.close_window()` (the page menu shows Close when that exists), sets `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--autoplay-policy=no-user-gesture-required`, and runs KeepAwake start/stop.
+       - Point `Start Mary.bat` at `pythonw desktop.py --mary`.
+       - The home link says "Talk to Sam" when `companion` is "him".
+       - My info gets the note "Mary uses this key too. A free key comes from Google AI Studio."
+       - Tests in `tests/test_power.py`.
+    2. **Andy tries Mary as user #1.** Fix what he finds: voice choice, timings and layout at his screen size. Then measure Gemini speed with his key (`tools/mary_speed.py`).
+    3. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 
 ## Next steps
 1. ~~Quiet test suite~~ **Done 2026-10-24** (371bba0, ea5c4c2, 1c0182d): 59 tests, about 2 s. 5 BUG skips in `tests/test_guess.py` that `guess_incident()` gets wrong. It marks "bled", "couldn't breathe" and "can’t breathe" (curly apostrophe) as minor. It reads "twenty five minutes" as 5 and "half an hour" as 60. Fix them in a small worker, then remove the skips.

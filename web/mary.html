@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mary</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/mary/face.css">
+<link rel="stylesheet" href="/mary/mary.css">
+</head>
+<body>
+<main id="scr" class="scr" data-screen="everyday" data-phase="idle">
+
+  <!-- Her face fills the whole window. face.js draws into this box. -->
+  <div id="face"></div>
+
+  <button id="moreBtn" class="more" type="button" aria-haspopup="dialog">More</button>
+
+  <div class="dock">
+    <div class="row">
+
+      <!-- Emergency screen: shown by [data-screen="emergency"] -->
+      <div id="ask" class="ask" role="group" aria-label="Get help now">
+        <p class="alert">Get help now</p>
+        <div class="btns col">
+          <button id="lightBtn" class="btn yes" type="button">I pressed my call light</button>
+          <button id="okBtn" class="btn" type="button">I'm OK now</button>
+        </div>
+      </div>
+
+      <!-- No-key screen: shown by [data-screen="nokey"] -->
+      <div id="nokeyBox" class="nokeybox">
+        <button id="infoBtn" class="btn yes big" type="button">Open My info</button>
+      </div>
+
+      <button id="talkBtn" class="talk" type="button" data-state="idle" data-ic="mic">
+        <span class="ring" id="ring" aria-hidden="true"></span>
+        <svg class="ic ic-mic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+        <svg class="ic ic-done" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        <svg class="ic ic-type" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"></rect><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"></path></svg>
+        <svg class="ic ic-wait" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="2.3"></circle><circle cx="12" cy="12" r="2.3"></circle><circle cx="19" cy="12" r="2.3"></circle></svg>
+        <span id="talkLbl">Talk to Mary</span>
+      </button>
+    </div>
+
+    <div id="chip" class="chip" role="status" hidden>Saved in My notes &#10003;</div>
+    <div id="caption" class="caption" aria-live="polite" hidden></div>
+  </div>
+
+  <!-- More menu -->
+  <div id="menu" class="overlay menu" hidden>
+    <div class="panel" role="dialog" aria-label="More">
+      <div class="grid2">
+        <button class="btn" type="button" data-act="slower">Slower</button>
+        <button class="btn" type="button" data-act="faster">Faster</button>
+      </div>
+      <div class="grid2">
+        <button class="btn" type="button" data-act="quieter">Quieter</button>
+        <button class="btn" type="button" data-act="louder">Louder</button>
+      </div>
+      <button id="switchBtn" class="btn" type="button" data-act="switch">Switch to Sam</button>
+      <button id="typeMenuBtn" class="btn" type="button" data-act="type">Type to Mary</button>
+      <button class="btn" type="button" data-act="notes">My notes</button>
+      <button id="closeBtn" class="btn" type="button" data-act="close" hidden>Close</button>
+      <button class="btn yes" type="button" data-act="done">Done</button>
+    </div>
+  </div>
+
+  <!-- Typing -->
+  <div id="typing" class="overlay" hidden>
+    <form id="typeForm" class="panel typing" autocomplete="off">
+      <label id="typeLabel" for="typeText">Type what you would like to say to Mary</label>
+      <textarea id="typeText" rows="3" spellcheck="true"></textarea>
+      <div class="btns">
+        <button class="btn yes" type="submit">Send</button>
+        <button id="typeCancel" class="btn" type="button">Cancel</button>
+      </div>
+    </form>
+  </div>
+</main>
+
+<noscript><p style="font:28px/1.4 'Segoe UI',system-ui,sans-serif;padding:24px">Mary needs JavaScript to be turned on.</p></noscript>
+
+<script src="/mary/face.js"></script>
+<script src="/mary/app.js"></script>
+</body>
+</html>

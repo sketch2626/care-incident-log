@@ -503,6 +503,12 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._send({"available": False, "loading": False, "reason": NO_SPEECH})
                 engine.warm_up()
                 return self._send(engine.is_ready())
+            if method == "GET" and path == "/api/listen/level":
+                engine = speech_engine()
+                if not engine:
+                    return self._send({"recording": False, "level": 0, "heard_voice": False,
+                                       "quiet_s": 0, "elapsed_s": 0})
+                return self._send(engine.level())
             if method == "POST" and path == "/api/listen/start":
                 engine = speech_engine()
                 if not engine:

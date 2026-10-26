@@ -9,6 +9,7 @@ Public interface (all functions are thread-safe):
     warm_up()             -> None   start loading the model in the background
     start()               -> None   begin recording from the default microphone
     stop()                -> str    stop recording and return the transcript
+    level()               -> dict   live loudness / voice-activity reading while recording
     transcribe_file(path) -> str    transcribe an existing audio file
 
 Error messages raised to callers are written in plain language so they can be
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import math
 import os
 import threading
 import time
@@ -37,6 +39,25 @@ MAX_RECORD_SECONDS = 5 * 60  # recording stops itself after 5 minutes
 MIN_AUDIO_SECONDS = 0.3      # anything shorter is treated as "nothing said"
 SILENT_PEAK = 0.001          # a recording quieter than this is treated as silence
 RELOAD_RETRY_SECONDS = 30    # warm_up() will not retry a failed load more often than this
+
+# Live voice-activity meter (runs per audio chunk, so the page can stop listening by itself).
+# RMS values are on the -1..1 float scale; a laptop mic at normal distance gives speech
+# around 0.01-0.05 and a quiet room around 0.0005-0.003.
+VOICE_MIN_RMS = 0.003        # never call anything quieter than this "voice" (faint speech still passes)
+VOICE_RATIO = 3.0            # voice = louder than 3x the background (about +9.5 dB)
+FLOOR_START_CAP = 0.015      # first chunk may be a click or the first word: cap the starting floor
+FLOOR_FALL_S = 0.1           # background estimate drops quickly when it gets quieter
+FLOOR_RISE_S = 1.5           # ...and follows a rising background (TV, fan) within a couple of seconds
+FLOOR_RISE_VOICED_S = 10.0   # ...but creeps up slowly under voice-like sound, so speech is not absorbed
+LEVEL_FULL_RMS = 0.05        # loudness (above the background) that fills the page's meter
+LEVEL_ATTACK_S = 0.05        # meter rises quickly...
+LEVEL_RELEASE_S = 0.25       # ...and falls smoothly
+HEARD_VOICE_S = 0.35         # this much voiced audio in total counts as "heard someone speak"
+
+
+def _clock() -> float:
+    """Monotonic seconds (module-level so tests can swap in a fake clock)."""
+    return time.monotonic()
 
 INITIAL_PROMPT = (
     "call light, CNA, aide, nurse, brief, shower, bed bath, medication, meds, "
@@ -252,12 +273,22 @@ class _Recording:
         self.chunks: list = []
         self.frames = 0
         self.stream = None
+        self._reset_meter()
+
+    def _reset_meter(self) -> None:
+        """Live voice-activity state, written by the audio thread and read by reading()."""
+        self.started_t = _clock()
+        self.level = 0.0           # smoothed loudness 0..1 for the page's listening animation
+        self.noise_floor = None    # RMS of the quiet background (set from the first chunk)
+        self.voice_s = 0.0         # total seconds of audio clearly louder than the background
+        self.last_voice_t = None   # clock time of the last voiced chunk
 
     def open(self, rate: int) -> None:
         self.rate = rate
         self.limit = rate * MAX_RECORD_SECONDS
         self.chunks = []
         self.frames = 0
+        self._reset_meter()
         stream = self._sd.InputStream(
             samplerate=rate, channels=1, dtype="float32", callback=self._callback
         )
@@ -274,8 +305,50 @@ class _Recording:
     def _callback(self, indata, frames, time_info, status):
         if self.frames >= self.limit:
             raise self._sd.CallbackStop  # 5-minute cap reached; stop() still returns the text
-        self.chunks.append(indata[:, 0].copy())
+        chunk = indata[:, 0].copy()
+        self.chunks.append(chunk)
         self.frames += frames
+        self._meter(chunk)
+
+    def _meter(self, chunk) -> None:
+        """Update level / noise floor / voice time from one chunk. Cheap, lock-free, never raises
+        (an exception in the audio callback would kill the stream)."""
+        try:
+            n = len(chunk)
+            if n == 0:
+                return
+            now = _clock()
+            dt = n / self.rate
+            rms = math.sqrt(max(float(np.dot(chunk, chunk)) / n, 0.0))
+            floor = self.noise_floor
+            if floor is None:
+                floor = min(rms, FLOOR_START_CAP)
+            voiced = rms > max(floor * VOICE_RATIO, VOICE_MIN_RMS)
+            if voiced:
+                self.voice_s += dt
+                self.last_voice_t = now
+            # loudness for the page's animation: above the background, compressed so soft speech shows
+            raw = min(1.0, math.sqrt(max(rms - floor, 0.0) / LEVEL_FULL_RMS))
+            tau = LEVEL_ATTACK_S if raw > self.level else LEVEL_RELEASE_S
+            self.level = min(1.0, max(0.0, self.level + (raw - self.level) * (1.0 - math.exp(-dt / tau))))
+            # background estimate: falls fast, rises slowly (slower still under voice-like sound)
+            tau = FLOOR_FALL_S if rms < floor else (FLOOR_RISE_VOICED_S if voiced else FLOOR_RISE_S)
+            self.noise_floor = floor + (rms - floor) * (1.0 - math.exp(-dt / tau))
+        except Exception:
+            pass
+
+    def reading(self, now: float | None = None) -> dict:
+        """The live reading the page polls (see level())."""
+        if now is None:
+            now = _clock()
+        since = self.last_voice_t if self.last_voice_t is not None else self.started_t
+        return {
+            "recording": True,
+            "level": round(min(1.0, max(0.0, float(self.level))), 3),
+            "heard_voice": self.voice_s >= HEARD_VOICE_S,
+            "quiet_s": round(max(0.0, now - since), 2),
+            "elapsed_s": round(max(0.0, now - self.started_t), 2),
+        }
 
     def abort(self) -> None:
         stream, self.stream = self.stream, None
@@ -434,6 +507,22 @@ def stop() -> str:
     if peak < 0.3:  # quiet laptop microphones: lift the level so speech detection works
         audio = np.clip(audio * min(0.5 / peak, 20.0), -1.0, 1.0).astype(np.float32)
     return _transcribe(audio)
+
+
+def level() -> dict:
+    """Live reading while recording, cheap enough to poll every ~150 ms. Never raises.
+
+    {"recording", "level" (0..1), "heard_voice", "quiet_s" (seconds since the last
+    voiced chunk, or since the start if none yet), "elapsed_s"}. All zeros/False
+    when nothing is recording.
+    """
+    idle = {"recording": False, "level": 0.0, "heard_voice": False, "quiet_s": 0.0, "elapsed_s": 0.0}
+    try:
+        with _rec_lock:
+            rec = _rec
+        return rec.reading() if rec is not None else idle
+    except Exception:
+        return idle
 
 
 def transcribe_file(path) -> str:

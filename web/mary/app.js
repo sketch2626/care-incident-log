@@ -648,6 +648,7 @@
   }
 
   function onTalkTap() {
+    App.onActivity();
     if (S.phase === 'thinking') { return; }
     if (S.phase === 'listening') { if (S.stopNow) { S.stopNow(); } return; }
     if (S.typingOnly) { openTyping(); return; }
@@ -800,6 +801,7 @@
   async function talkTo(text) {
     text = String(text == null ? '' : text).trim();
     if (!text) { return; }
+    App.onActivity();
     var turn = newTurn();
     closeMenu();
     closeTyping(false);
@@ -1088,6 +1090,7 @@
     refreshStatus: refreshStatus,
     enterMain: enterMain,
     startFirstRun: startFirstRun,
+    onActivity: noop,                        // firstrun.js replaces it: a talk started, wake her if she is sleepy
     companionName: companionName,
     api: api,
     getFace: function () { return face; }

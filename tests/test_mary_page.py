@@ -31,6 +31,20 @@ class MaryPageTests(unittest.TestCase):
         css, _ = self.get("/mary/mary.css")
         self.assertIn(".talk", css)
 
+    def test_firstrun_script_loads_after_app_script(self):
+        js, _ = self.get("/mary/firstrun.js")
+        self.assertIn("MaryApp", js)
+        self.assertIn("/api/mary/hello", js)
+        html, _ = self.get("/mary.html")
+        self.assertIn("/mary/firstrun.js", html)
+        self.assertGreater(html.index("/mary/firstrun.js"), html.index("/mary/app.js"))
+
+    def test_firstrun_idle_timings_are_in_one_config(self):
+        js, _ = self.get("/mary/firstrun.js")
+        self.assertRegex(js, r"var IDLE = \{\s*sleepMin:\s*5,\s*dimMin:\s*15\s*\}")
+        self.assertIn("/api/power", js)
+        self.assertIn("wakeLock", js)
+
     def test_face_files_still_load(self):
         self.get("/mary/face.js")
         self.get("/mary/face.css")

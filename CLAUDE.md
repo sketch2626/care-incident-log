@@ -46,7 +46,13 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
   - A "yes" to Mary's offer saves the incident (8e3e346).
   - Mary uses only the saved key (`gemini_key`) and model (`gemini_model`), not the smart-helper switch.
   - Mary screen `/mary.html` (`web/mary/app.js`, `mary.css`): talk loop, emergency, no-key, menu, typing (6eb1b50). Its API is `window.MaryApp`. `startFirstRun()` is a stub for now.
-  - **Next:** T4b, first run (Choose, First hello), greeting and idle sleepy. Then T5, entry points (home tile, `desktop.py --mary`, `Start Mary.bat`). Then the docs.
+  - First run `web/mary/firstrun.js`, which covers:
+    - Choose Mary/Sam, by tap or voice.
+    - First hello, where she asks the resident's name.
+    - A greeting by time of day.
+    - Idle: asleep at 5 min and dimmed at 15 min (`IDLE` config). Any tap, key or talk wakes her.
+    - Screen Wake Lock unless `/api/power` says on battery. That route isn't built yet, so for now the screen stays on.
+  - **Next:** T5, the entry points: `power.py` + `GET /api/power`; `desktop.py` keep-awake (`SetThreadExecutionState`) + `--mary` full screen; the home link; `Start Mary.bat`. Then the docs.
 
 ## Next steps
 1. ~~Quiet test suite~~ **Done 2026-10-24** (371bba0, ea5c4c2, 1c0182d): 59 tests, about 2 s. 5 BUG skips in `tests/test_guess.py` that `guess_incident()` gets wrong. It marks "bled", "couldn't breathe" and "can’t breathe" (curly apostrophe) as minor. It reads "twenty five minutes" as 5 and "half an hour" as 60. Fix them in a small worker, then remove the skips.

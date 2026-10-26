@@ -94,7 +94,12 @@ Residents say "Mary, message my daughter and tell her this" or "Mary, put a call
 - **Mock-ups:** the message and call screens are on the face canvas (round 2/3 boards, `mockups/mary/round2/`).
 
 ## Screen and power (Andy, 2026-10-25)
-When the laptop is plugged in, Mary's screen stays on indefinitely. She never dims or goes to sleep; at rest she's in her resting mood, still breathing and blinking. On battery, gentle sleepy mode and normal Windows dimming are fine.
+When the laptop is plugged in, the screen never turns off or goes black.
+- After a while with no talk, Mary gently goes to sleep: her sleepy expression, with slow breathing.
+- Later, her background softly dims.
+- A voice or a tap wakes her.
+
+On battery, she has her sleepy mode, plus the normal Windows screen timeout to save power.
 
 ## Games with Mary (Andy, 2026-10-25)
 Mary can suggest a game ("Hey, do you want to play a game, or do a word search?"). When the resident says yes, her face turns in 3D: the right side recedes into the screen, so she's angled toward the game on the right while still big and alive. She glances back and forth between the game and the person. Andy chose this over shrinking her into a corner.

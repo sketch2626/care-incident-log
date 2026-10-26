@@ -100,6 +100,21 @@ Mary can suggest a game ("Hey, do you want to play a game, or do a word search?"
 - **Built for ages 65-95:** huge letters and cards, high contrast, tap or voice, no timers or pressure, and gentle wins.
 - **Mock-ups first:** a game-mode board showing Mary scooted aside next to a word search, then tic-tac-toe and solitaire.
 
+## Mary and the computer (Andy, 2026-10-25)
+The laptop must not be a one-trick pony: many residents in their 80s used computers for years. Mary is the home base, and she helps with the whole computer. "If a computer can do it, we can make it happen." Three levels:
+1. **Mary's own skills, in her screen.** She turns aside in 3D, as in game mode, and the content fills the right side.
+   - **Pictures:** "Show me a picture of a bird." Photos come from free libraries with no key (Wikimedia Commons, or Openverse with its mature-content filter on), with a safety filter on every search and credit lines where needed. She talks about each photo and takes "next one" or "bigger". Family photos too: "Show me my grandkids", from the family messages feature.
+   - **Also:** games, music ("play Frank Sinatra"), weather, the news read aloud, reminders, and family messages and calls.
+   - Note: Bing's image API is retired, and Google's is closed to new users.
+2. **Mary opens things for you:** "Open YouTube and play The Andy Griffith Show", "open my email", "open Facebook". The app or site opens normally, and Mary shrinks to a floating button that's always on top ("Mary, come back"). Start from the floating mic button parked on `wip/report-to-state`.
+3. **Mary operates the computer for you.** She clicks, types and reads the screen with a computer-use AI model. **Only after the pilot**, and only if residents ask for it. Level 2's pilot data decides. Build levels 1-2 so level 3 can be added later without rework.
+   - Firm rules: she never types passwords or card numbers, and she always reads back before she sends or buys anything.
+   - She also warns about scams ("That pop-up looks like a scam; don't call that number").
+
+**Two setup modes**, picked by the helper:
+- "Mary only": she's the whole screen, for dementia or residents new to computers. A true lockdown needs Windows 11 Pro; on Home it's a soft lock.
+- "Mary plus the computer": Mary opens with the lid and is home base, with the full laptop available.
+
 ## Future (with funding)
 - Government or foundation money to train or fine-tune an AI for this cause, for example an open-weight model fine-tuned on conversations residents consented to share.
 
@@ -117,6 +132,7 @@ Mary can suggest a game ("Hey, do you want to play a game, or do a word search?"
 2. Prototype the face, the talk loop and the wake word in the desktop app, with Andy as the first user.
 3. Family messages and calls (section above): research the options and costs, then build from the approved mock-ups.
 4. Games with Mary (section above): mock-ups, then build, starting with word search.
-5. Set up lid-to-Mary, the helper setup tool and a laptop spec.
-6. Before the pilot: review and merge the parked speak-up code (branch `wip/report-to-state`). It becomes her speak-up skill.
-7. Revise the pilot checklist and the backend plan for the companion.
+5. Mary and the computer (section above): level 1 skills (pictures first), then level 2 (opening apps and sites, the floating Mary button) before the pilot. Level 3 comes after the pilot, only if residents ask.
+6. Set up lid-to-Mary with the two setup modes, the helper setup tool and a laptop spec.
+7. Before the pilot: review and merge the parked speak-up code (branch `wip/report-to-state`). It becomes her speak-up skill.
+8. Revise the pilot checklist and the backend plan for the companion.

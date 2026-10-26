@@ -49,6 +49,12 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
    - **Where the boards are:** on a Design canvas, which is private to Andy's first account. Committed copies are in `mockups/mary/round2/`, the source of truth for a fresh hub.
    - Andy approves a face before any build. Round 2 was liked ("so far, so good"). Round 3 fixes: no unibrow, thinner rounded brows instead of "smudges", and rounder eye corners.
    - **Round 4** (3be92ae, `mockups/mary/round4/`): the cuteness pass (Cute 1-3), his male version (residents choose Mary or him; his name is open), "Choose your companion" and "First hello". Andy: "so far so good… this will be what we use". He'll tweak after pilot feedback. Base variant: see the latest Status.
+   - **Mary and the computer (Andy, 2026-10-25):**
+     - Level 1, her own skills: pictures ("show me a bird"), music, weather, news, reminders.
+     - Level 2: she opens apps and sites, with a floating Mary button.
+     - Level 3: she operates the computer, only after the pilot and only if residents ask.
+     - Two setup modes: "Mary only" and "Mary plus the computer".
+     - See "Mary and the computer" in `docs/companion-plan.md`.
    - **New feature (Andy, 2026-10-25): games with Mary.** She suggests a game, scoots aside, and helps the resident play. Word search comes first, then tic-tac-toe and solitaire. See "Games with Mary" in `docs/companion-plan.md`.
    - **New feature (Andy, 2026-10-25): family messages and calls.** "Mary, message my daughter…" or "Mary, put a call through to my son…", all from her screen. Plan and research list: "Family messages and calls" in `docs/companion-plan.md`. Mock-ups: `R2MessageScreen`, `R2CallScreen`.
    - Still to build: her full-screen face, the talk loop (on-device speech-to-text → Gemini → voice), the "Hey Mary" wake word, and memory on the laptop. Test speed first (reply within ~2 s on a cheap laptop), then voice.

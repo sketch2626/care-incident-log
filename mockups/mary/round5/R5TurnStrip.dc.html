@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Round 5: how Mary turns</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.scr{position:relative;overflow:hidden;box-sizing:border-box;font:22px/1.5 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.edge{position:absolute;inset:0;pointer-events:none;will-change:opacity;animation:edge 6s ease-in-out infinite}
+.edge.fast{animation-duration:3s}
+.edge.slow{animation-duration:8s}
+.edge.steady{animation:steady 4s ease-in-out infinite}
+.facesvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.face{transform-box:view-box;transform-origin:320px 200px;animation:float 6s ease-in-out infinite}
+.face.slow{animation-duration:8s}
+.face.lean{animation:lean 6s ease-in-out infinite}
+.face.tilt{animation:tilt 7s ease-in-out infinite}
+.face.bounce{animation:bounce 1.8s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.blink{animation:blink 7s ease-in-out infinite}
+.glance{animation:glance 4s ease-in-out infinite}
+.cheek{opacity:0}
+.blush .cheek{opacity:.85;animation:blush 6s ease-in-out infinite alternate}
+.mouth-talk{transform-box:fill-box;transform-origin:50% 0;animation:talk 1.4s ease-in-out infinite}
+.dot{opacity:.8;animation:dot 3s ease-in-out infinite}
+.dot:nth-of-type(2){animation-delay:.5s}
+.dot:nth-of-type(3){animation-delay:1s}
+.zz{opacity:.8;animation:zz 6s ease-in-out infinite}
+.zz:nth-of-type(2){animation-delay:2s}
+.zz:nth-of-type(3){animation-delay:4s}
+@keyframes edge{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes steady{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes lean{0%,100%{transform:rotate(-2deg) translateY(0)}50%{transform:rotate(-2deg) translateY(-4px)}}
+@keyframes tilt{0%,100%{transform:rotate(3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-3px)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes glance{0%,100%{transform:translate(0,0)}30%,75%{transform:translate(7px,-7px)}}
+@keyframes blush{from{opacity:.35}to{opacity:.95}}
+@keyframes talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
+@keyframes dot{0%,15%{opacity:.25}40%,75%{opacity:1}100%{opacity:.25}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:.9}100%{opacity:0;transform:translate(14px,-30px)}}
+.lift{animation:lift 3s ease-in-out infinite}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop 4s ease-in-out infinite alternate}
+.twinkle{transform-box:fill-box;transform-origin:center;animation:twinkle 3s ease-in-out infinite}
+.twinkle:nth-of-type(2){animation-delay:1.5s}
+.twinkle:nth-of-type(3){animation-delay:.8s}
+.soft-blush .cheek{opacity:.45}
+.m{opacity:0;animation:seq 16s ease-in-out infinite both}
+.m0{opacity:1}
+.m1{animation-delay:4s}
+.m2{animation-delay:8s}
+.m3{animation-delay:12s}
+@keyframes lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes pop{from{transform:scale(1)}to{transform:scale(1.07)}}
+@keyframes twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@keyframes seq{0%{opacity:0}4%{opacity:1}25%{opacity:1}29%{opacity:0}100%{opacity:0}}
+.sway{transform-box:view-box;transform-origin:320px 330px;animation:sway 9s ease-in-out infinite}
+.hop{transform-box:view-box;transform-origin:320px 330px;animation:hop 8s ease-in-out infinite}
+.ss{animation:ss 6s ease-in-out infinite}
+.peek{transform-box:fill-box;transform-origin:center;animation:peek 12s ease-in-out infinite}
+.spark{transform-box:fill-box;transform-origin:center;animation:twinkle 3.5s ease-in-out infinite}
+.cute-blush .cheek{opacity:.8}
+.tag{position:absolute;left:24px;top:24px;display:flex;flex-direction:column;gap:2px;padding:10px 24px;background:rgba(255,254,250,.92);border:3px solid #1f1b16;border-radius:24px}
+.tag b{font-size:44px;line-height:1.1}
+.tag span{font-size:22px;color:#453d34}
+@keyframes sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
+@keyframes hop{0%,100%{transform:translateY(0)}3%{transform:translateY(-10px)}6%{transform:translateY(0) scale(1.02,.98)}9%{transform:translateY(0) scale(1,1)}}
+@keyframes ss{0%,88%,100%{transform:scale(1,1)}91%{transform:scale(1.14,.1)}94%{transform:scale(.95,1.07)}97%{transform:scale(1.02,.98)}}
+@keyframes peek{0%,55%{transform:translate(-7px,3px)}62%,88%{transform:translate(0,0) scale(1.03)}95%,100%{transform:translate(-7px,3px)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+.dock{position:absolute;left:24px;right:24px;bottom:24px;display:flex;flex-direction:column;gap:16px}
+.row{display:flex;justify-content:flex-end;align-items:flex-end;gap:16px}
+.talk{display:flex;align-items:center;justify-content:center;gap:18px;width:340px;min-height:104px;font:inherit;font-size:36px;font-weight:700;background:#1f1b16;color:#fff;border:0;border-radius:24px;box-shadow:0 7px 0 rgba(0,0,0,.28);cursor:pointer}
+.talk svg{width:52px;height:52px}
+.caption{background:rgba(31,27,22,.9);color:#fff;font-size:36px;font-weight:600;line-height:1.3;padding:18px 28px;border-radius:20px}
+.urgent .caption{background:#7a1212}
+.mini{position:absolute;overflow:hidden;border-radius:24px;border:3px solid rgba(98,87,74,.55);box-shadow:0 6px 18px rgba(31,27,22,.18)}
+.mini .facesvg{position:absolute;inset:0;width:100%;height:100%}
+.hintglow{animation:hint 3s ease-in-out infinite}
+@keyframes hint{0%,100%{opacity:.3}50%{opacity:.85}}
+.cell{width:64px;height:64px;display:flex;align-items:center;justify-content:center;font:inherit;font-size:44px;font-weight:700;color:#1f1b16;background:transparent;border:0;border-radius:12px;cursor:pointer;position:relative;z-index:1;padding:0}
+.stage{position:absolute;left:0;top:0;width:544px;height:800px;perspective:1600px;perspective-origin:272px 380px;pointer-events:none;z-index:0}
+.turner{position:absolute;left:-240px;top:60px;width:1024px;height:640px;transform-origin:50% 50%;transform:rotateY(28deg);animation:look 10s ease-in-out infinite;will-change:transform}
+.turner .facesvg{position:absolute;inset:0;width:100%;height:100%}
+.gaze{animation:gaze 10s ease-in-out infinite}
+.game{position:absolute;z-index:2}
+@keyframes look{0%,52%{transform:rotateY(28deg)}60%,84%{transform:rotateY(10deg)}92%,100%{transform:rotateY(28deg)}}
+@keyframes gaze{0%,52%{transform:translate(9px,2px)}60%,84%{transform:translate(-3px,0)}92%,100%{transform:translate(9px,2px)}}
+</style>
+</helmet>
+<div class="scr" style="background: #f7f3ea; padding: 24px; box-sizing: border-box; width: 1280px; height: 400px">
+<h2 style="margin:0;font-size:36px;font-weight:700;line-height:44px">How Mary turns toward the game</h2>
+<div style="display:flex;gap:22px;margin-top:16px">
+
+<div style="width:290px">
+<div style="position:relative;width:290px;height:181px;box-sizing:border-box;border:3px solid rgba(98,87,74,.55);border-radius:16px;overflow:hidden;perspective:900px;background:radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(245,170,110,0) 60%, rgba(245,170,110,0.9) 100%)"></div>
+<div style="position:absolute;inset:0;transform-origin:50% 50%">
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary facing you">
+<defs>
+<radialGradient id="blS1"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g transform="translate(0 -30)">
+<g class="sway"><g class="hop"><g class="face cute-blush">
+  <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 140 C232 118 266 110 284 124"></path><path d="M412 140 C408 118 374 110 356 124"></path></g>
+  <g><ellipse class="cheek" cx="246" cy="234" rx="36" ry="15" fill="url(#blS1)"></ellipse><ellipse class="cheek" cx="394" cy="234" rx="36" ry="15" fill="url(#blS1)"></ellipse></g>
+  <g style="transform: translate(0px, 0px)">
+  <g class="eye ss"><ellipse cx="256" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="264" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M248 187 Q249 192 254 193 Q249 194 248 199 Q247 194 242 193 Q247 192 248 187 Z" fill="#ffffff"></path></g>
+  <g class="eye ss"><ellipse cx="384" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="392" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M376 187 Q377 192 382 193 Q377 194 376 199 Q375 194 370 193 Q375 192 376 187 Z" fill="#ffffff"></path></g>
+  </g>
+  <g class="mouth-talk"><path d="M298 262 Q320 268 342 262 Q339 290 320 290 Q301 290 298 262 Z" fill="#8a3b2e"></path><ellipse cx="320" cy="284" rx="12" ry="5" fill="#e8897a"></ellipse></g>
+</g></g></g>
+</g>
+</svg>
+</div>
+</div>
+<div style="margin-top:8px;font-size:28px;font-weight:700;line-height:36px">1 Facing you</div>
+</div>
+
+<div style="width:290px">
+<div style="position:relative;width:290px;height:181px;box-sizing:border-box;border:3px solid rgba(98,87,74,.55);border-radius:16px;overflow:hidden;perspective:900px;background:radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(245,170,110,0) 60%, rgba(245,170,110,0.9) 100%)"></div>
+<div style="position:absolute;inset:0;transform-origin:50% 50%;transform: translateX(-24px) rotateY(14deg)">
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary turning toward the game">
+<defs>
+<radialGradient id="blS2"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g transform="translate(0 -30)">
+<g class="sway"><g class="hop"><g class="face cute-blush">
+  <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 140 C232 118 266 110 284 124"></path><path d="M412 140 C408 118 374 110 356 124"></path></g>
+  <g><ellipse class="cheek" cx="246" cy="234" rx="36" ry="15" fill="url(#blS2)"></ellipse><ellipse class="cheek" cx="394" cy="234" rx="36" ry="15" fill="url(#blS2)"></ellipse></g>
+  <g style="transform: translate(5px, 1px)">
+  <g class="eye ss"><ellipse cx="256" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="264" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M248 187 Q249 192 254 193 Q249 194 248 199 Q247 194 242 193 Q247 192 248 187 Z" fill="#ffffff"></path></g>
+  <g class="eye ss"><ellipse cx="384" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="392" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M376 187 Q377 192 382 193 Q377 194 376 199 Q375 194 370 193 Q375 192 376 187 Z" fill="#ffffff"></path></g>
+  </g>
+  <g class="mouth-talk"><path d="M298 262 Q320 268 342 262 Q339 290 320 290 Q301 290 298 262 Z" fill="#8a3b2e"></path><ellipse cx="320" cy="284" rx="12" ry="5" fill="#e8897a"></ellipse></g>
+</g></g></g>
+</g>
+</svg>
+</div>
+</div>
+<div style="margin-top:8px;font-size:28px;font-weight:700;line-height:36px">2 Turning</div>
+</div>
+
+<div style="width:290px">
+<div style="position:relative;width:290px;height:181px;box-sizing:border-box;border:3px solid rgba(98,87,74,.55);border-radius:16px;overflow:hidden;perspective:900px;background:radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(245,170,110,0) 60%, rgba(245,170,110,0.9) 100%)"></div>
+<div style="position:absolute;inset:0;transform-origin:50% 50%;transform: translateX(-48px) rotateY(28deg)">
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary looking at the game">
+<defs>
+<radialGradient id="blS3"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g transform="translate(0 -30)">
+<g class="sway"><g class="hop"><g class="face cute-blush">
+  <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 140 C232 118 266 110 284 124"></path><path d="M412 140 C408 118 374 110 356 124"></path></g>
+  <g><ellipse class="cheek" cx="246" cy="234" rx="36" ry="15" fill="url(#blS3)"></ellipse><ellipse class="cheek" cx="394" cy="234" rx="36" ry="15" fill="url(#blS3)"></ellipse></g>
+  <g style="transform: translate(9px, 2px)">
+  <g class="eye ss"><ellipse cx="256" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="264" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M248 187 Q249 192 254 193 Q249 194 248 199 Q247 194 242 193 Q247 192 248 187 Z" fill="#ffffff"></path></g>
+  <g class="eye ss"><ellipse cx="384" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="392" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M376 187 Q377 192 382 193 Q377 194 376 199 Q375 194 370 193 Q375 192 376 187 Z" fill="#ffffff"></path></g>
+  </g>
+  <g class="mouth-talk"><path d="M298 262 Q320 268 342 262 Q339 290 320 290 Q301 290 298 262 Z" fill="#8a3b2e"></path><ellipse cx="320" cy="284" rx="12" ry="5" fill="#e8897a"></ellipse></g>
+</g></g></g>
+</g>
+</svg>
+</div>
+<div aria-hidden="true" style="position:absolute;right:12px;top:46px;width:90px;height:90px;box-sizing:border-box;background:#ffffff;border:3px solid #62574a;border-radius:12px;display:grid;grid-template-columns:repeat(3, 1fr);font-size:20px;font-weight:700;line-height:28px;text-align:center;color:#1f1b16"><span>S</span><span>U</span><span>N</span><span>R</span><span>O</span><span>S</span><span>E</span><span>L</span><span>I</span></div>
+</div>
+<div style="margin-top:8px;font-size:28px;font-weight:700;line-height:36px">3 Looking at the game</div>
+</div>
+
+<div style="width:290px">
+<div style="position:relative;width:290px;height:181px;box-sizing:border-box;border:3px solid rgba(98,87,74,.55);border-radius:16px;overflow:hidden;perspective:900px;background:radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="edge" style="background: radial-gradient(ellipse closest-side, rgba(245,170,110,0) 60%, rgba(245,170,110,0.9) 100%)"></div>
+<div style="position:absolute;inset:0;transform-origin:50% 50%;transform: translateX(-48px) rotateY(12deg)">
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary glancing back at you">
+<defs>
+<radialGradient id="blS4"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
+<g transform="translate(0 -30)">
+<g class="sway"><g class="hop"><g class="face cute-blush">
+  <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 140 C232 118 266 110 284 124"></path><path d="M412 140 C408 118 374 110 356 124"></path></g>
+  <g><ellipse class="cheek" cx="246" cy="234" rx="36" ry="15" fill="url(#blS4)"></ellipse><ellipse class="cheek" cx="394" cy="234" rx="36" ry="15" fill="url(#blS4)"></ellipse></g>
+  <g style="transform: translate(-3px, 0px)">
+  <g class="eye ss"><ellipse cx="256" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="264" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M248 187 Q249 192 254 193 Q249 194 248 199 Q247 194 242 193 Q247 192 248 187 Z" fill="#ffffff"></path></g>
+  <g class="eye ss"><ellipse cx="384" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="392" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M376 187 Q377 192 382 193 Q377 194 376 199 Q375 194 370 193 Q375 192 376 187 Z" fill="#ffffff"></path></g>
+  </g>
+  <g class="mouth-talk"><path d="M298 262 Q320 268 342 262 Q339 290 320 290 Q301 290 298 262 Z" fill="#8a3b2e"></path><ellipse cx="320" cy="284" rx="12" ry="5" fill="#e8897a"></ellipse></g>
+</g></g></g>
+</g>
+</svg>
+</div>
+<div aria-hidden="true" style="position:absolute;right:12px;top:46px;width:90px;height:90px;box-sizing:border-box;background:#ffffff;border:3px solid #62574a;border-radius:12px;display:grid;grid-template-columns:repeat(3, 1fr);font-size:20px;font-weight:700;line-height:28px;text-align:center;color:#1f1b16"><span>S</span><span>U</span><span>N</span><span>R</span><span>O</span><span>S</span><span>E</span><span>L</span><span>I</span></div>
+</div>
+<div style="margin-top:8px;font-size:28px;font-weight:700;line-height:36px">4 Glancing back at you</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":400}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

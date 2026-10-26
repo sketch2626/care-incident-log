@@ -87,16 +87,23 @@ body{margin:0}
 .cell{width:64px;height:64px;display:flex;align-items:center;justify-content:center;font:inherit;font-size:44px;font-weight:700;color:#1f1b16;background:transparent;border:0;border-radius:12px;cursor:pointer;position:relative;z-index:1;padding:0}
 .drift{opacity:0;transform-box:fill-box;transform-origin:center;animation:drift 7s ease-in-out infinite}
 @keyframes drift{0%{opacity:0;transform:translateY(0)}30%{opacity:.9}100%{opacity:0;transform:translateY(-40px)}}
+.stage{position:absolute;left:0;top:0;width:544px;height:800px;perspective:1600px;perspective-origin:272px 380px;pointer-events:none;z-index:0}
+.turner{position:absolute;left:-240px;top:60px;width:1024px;height:640px;transform-origin:50% 50%;transform:rotateY(28deg);animation:look 10s ease-in-out infinite;will-change:transform}
+.turner .facesvg{position:absolute;inset:0;width:100%;height:100%}
+.gaze{animation:gaze 10s ease-in-out infinite}
+.game{position:absolute;z-index:2}
+.turnmini{position:absolute;inset:0;transform-origin:50% 50%;animation:turnmini 8s ease-in-out infinite}
+.turnback{position:absolute;inset:0;transform-origin:50% 50%;animation:turnback 10s ease-in-out infinite;will-change:transform}
+@keyframes look{0%,52%{transform:rotateY(28deg)}60%,84%{transform:rotateY(10deg)}92%,100%{transform:rotateY(28deg)}}
+@keyframes gaze{0%,52%{transform:translate(9px,2px)}60%,84%{transform:translate(-3px,0)}92%,100%{transform:translate(9px,2px)}}
+@keyframes turnmini{0%,15%{transform:translateX(0) rotateY(0deg)}45%,85%{transform:translateX(-80px) rotateY(28deg)}100%{transform:translateX(0) rotateY(0deg)}}
+@keyframes turnback{0%,12%{transform:translateX(-360px) scale(.85) rotateY(28deg)}35%,90%{transform:translateX(0) scale(1) rotateY(0deg)}100%{transform:translateX(-360px) scale(.85) rotateY(28deg)}}
 </style>
 </helmet>
-<div class="scr" style="width: 1280px; height: 800px; background: radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
+<div class="scr" style="width: 1280px; height: 800px; perspective: 1600px; background: radial-gradient(ellipse at 50% 42%, #fffaf0 0%, #fff0d2 50%, #fadcaa 100%)">
 <div class="edge slow" style="background: radial-gradient(ellipse closest-side, rgba(246,200,80,0) 60%, rgba(246,200,80,0.9) 100%)"></div>
-<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary, happy and smiling, with soft gold stars drifting up">
-<defs>
-<radialGradient id="fhN"><stop offset="0" stop-color="#d98c45" stop-opacity="0.42"></stop><stop offset="1" stop-color="#d98c45" stop-opacity="0"></stop></radialGradient>
-<radialGradient id="blN"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
-</defs>
-<g aria-hidden="true" fill="#f0b429">
+<svg class="facesvg" viewBox="0 0 640 400" aria-hidden="true">
+<g fill="#f0b429">
 <path class="drift" style="animation-duration:7s;animation-delay:0s" d="M44 44 Q46.4 53.6 56 56 Q46.4 58.4 44 68 Q41.6 58.4 32 56 Q41.6 53.6 44 44 Z"></path>
 <path class="drift" style="animation-duration:8s;animation-delay:1.2s" d="M592 62 Q594 70 602 72 Q594 74 592 82 Q590 74 582 72 Q590 70 592 62 Z"></path>
 <path class="drift" style="animation-duration:6s;animation-delay:2.4s" d="M100 142 Q101.6 148.4 108 150 Q101.6 151.6 100 158 Q98.4 151.6 92 150 Q98.4 148.4 100 142 Z"></path>
@@ -106,6 +113,13 @@ body{margin:0}
 <path class="drift" style="animation-duration:6.5s;animation-delay:3s" d="M170 23 Q171.8 30.2 179 32 Q171.8 33.8 170 41 Q168.2 33.8 161 32 Q168.2 30.2 170 23 Z"></path>
 <path class="drift" style="animation-duration:9s;animation-delay:5.4s" d="M468 22 Q470.8 33.2 482 36 Q470.8 38.8 468 50 Q465.2 38.8 454 36 Q465.2 33.2 468 22 Z"></path>
 </g>
+</svg>
+<div class="turnback">
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary, happy and smiling">
+<defs>
+<radialGradient id="fhN"><stop offset="0" stop-color="#d98c45" stop-opacity="0.42"></stop><stop offset="1" stop-color="#d98c45" stop-opacity="0"></stop></radialGradient>
+<radialGradient id="blN"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient>
+</defs>
 <g transform="translate(0 -30)">
 <g class="sway"><g class="hop"><g class="face cute-blush">
   <g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 134 C232 112 266 104 284 118"></path><path d="M412 134 C408 112 374 104 356 118"></path></g>
@@ -124,6 +138,7 @@ body{margin:0}
 </g></g></g>
 </g>
 </svg>
+</div>
 <div class="dock"><div class="row"><button class="talk" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg> Talk to Mary</button></div><div class="caption">You found all six words! That was lovely. Want to play again, or just chat?</div></div>
 </div>
 </x-dc>

@@ -12,3 +12,6 @@ packaging/dist/
 packaging/.venv/
 __pycache__/
 *.pyc
+
+# Private plans (protection, partners): never commit
+private/

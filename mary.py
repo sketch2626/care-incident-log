@@ -24,6 +24,8 @@ EMERGENCY_TEXT = {
 }
 OFFLINE_TEXT = "I'm sorry, I'm having trouble thinking right now, but I'm still right here with you."
 OFFER_QUESTION = "Would you like me to write that down?"
+SAVED_TEXT = "All right, I've written that down for you, with today's date and time. Is there anything else on your mind?"
+SAVE_FAILED_TEXT = "I'm sorry, I couldn't save that just now. Could we try again in a moment?"
 NO_KEY = "No Gemini key."
 NO_GEMINI = "Mary couldn't reach Gemini."
 
@@ -171,6 +173,54 @@ def is_decline(text):
     return bool(_DECLINE.search(_plain(text)))
 
 
+# "Yes" to "Would you like me to write that down?". When unsure this says no: writing to the log is never a guess.
+_YES_PHRASE = re.compile(
+    r"\b(?:yes|yeah|yea|yah|yep|yup|sure|okay|ok|all right|alright|absolutely|of course|definitely|certainly|please"
+    r"|uh huh|mm hmm|mhm|mmhm|um hum|go ahead|do it|do that|write (?:that|it|this) down|put (?:that|it|this) down"
+    r"|that(?:'d| would| will)? (?:be|sounds) (?:good|great|nice|fine|lovely|helpful)"
+    r"|i(?:'d| would) (?:like|love) that|i would)\b", _I)
+_YES_FILLER = re.compile(
+    r"\b(?:oh|well|um+|uh+|hmm+|mm+|ah|so|then|now|too|and|do|thanks|thank you|very much|so much"
+    r"|mary|sam|dear|honey|darling|friend|that|it|really|just)\b", _I)
+_YES_LEAD = re.compile(
+    r"^(?:(?:oh|well|um+|uh+|hmm+|mary|sam|thanks|thank you)\b[\s,.!]*)*"
+    r"(?:yes|yeah|yea|yah|yep|yup|sure|okay|ok|all right|alright|absolutely|of course|definitely|certainly"
+    r"|go ahead|please do|write (?:that|it|this) down|put (?:that|it|this) down)\b", _I)
+# Anywhere in a reply: taking it back or putting it off.
+_YES_HARD = re.compile(
+    r"\b(?:maybe\s+(?:later|not|tomorrow|next)|hold on|never ?mind|forget (?:it|that)|changed my mind|second thought"
+    r"|not (?:now|yet|today|tonight|right now|sure))\b", _I)
+# Only in the first few words, or after a "but": the rest of a long yes may be the resident's own story.
+_YES_WITHDRAW = re.compile(
+    r"\b(?:later|wait|no|nope|nah|maybe|perhaps|don'?t|do not|dont|won'?t|stop|cancel|guess|suppose|not really)\b", _I)
+_YES_DONT_ACT = re.compile(r"\b(?:don'?t|do not|dont)\s+(?:use|tell|share|send|say|name|mention|give)\b", _I)
+
+
+def is_yes(text):
+    """True for a clear yes: a short reply made only of yes-words ("yes please", "sure", "go ahead",
+    "uh-huh", "that would be nice"), or any reply that starts with one ("Yes, and the food was cold too").
+    Never for no / not now / maybe later / don't, a question, or a request to leave something out."""
+    low = _plain(text).lower().strip()
+    if not low or is_decline(low) or _YES_HARD.search(low):
+        return False
+    norm = " ".join(re.sub(r"[^a-z' ]+", " ", low).split())
+    if not norm:
+        return False
+    if len(norm.split()) <= 8:
+        found = []
+        rest = _YES_PHRASE.sub(lambda m: found.append(m.group()) or " ", norm)
+        rest = _YES_FILLER.sub(" ", rest)
+        if found and not re.sub(r"[^a-z]", "", rest):
+            return True
+    if not _YES_LEAD.match(low) or "?" in low or _YES_DONT_ACT.search(low):
+        return False
+    head = " ".join(re.split(r"[.!?]", low)[0].replace(",", " ").split()[:4])
+    if _YES_WITHDRAW.search(head):
+        return False
+    after = re.search(r"\b(?:but|except|however|although|though)\b(.*)", low)
+    return not (after and _YES_WITHDRAW.search(after.group(1)))
+
+
 def lapse_offer(text):
     """None, or {"incident": guess, "question": ...} when the resident describes a care lapse."""
     import server  # lazy: server will import mary
@@ -306,14 +356,18 @@ def _body(text, memory, kind, companion="mary"):
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": 256}}
 
 
-def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None):
+def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None):
     """Mary's answer to what the resident said.
 
-    Returns {text, mood, emergency, gemini_alert, offer, remembered, error, first_words_s, total_s}.
+    Returns {text, mood, emergency, gemini_alert, offer, logged, remembered, error, first_words_s, total_s}.
     on_text gets each spoken piece as it is ready. on_mood gets her mood as soon as it is known,
     once (a reply that is only a mood tag, no words, is corrected to "sorry" with a second call).
     Mood tags are never spoken or remembered. An offline emergency always means "alert";
-    gemini_alert is True when only Gemini said alert. Nothing is written to the incident log.
+    gemini_alert is True when only Gemini said alert.
+    A pending offer lives exactly one turn. When the resident's next words are a clear yes (is_yes) and
+    write is given, write(incident) saves it (returns the new id, raises on failure) and Mary says
+    SAVED_TEXT without calling Gemini; logged is {id, category}. If saving fails she says SAVE_FAILED_TEXT
+    and the offer stays pending for one more try. Otherwise logged is None. Without write nothing is saved.
     """
     start = time.monotonic()
     spoken = ""
@@ -362,12 +416,23 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             emit(piece, sep=not streamed)
             streamed = True
 
+    prior = memory.pending_offer  # an offer lives exactly one turn
+    memory.pending_offer = None
+    if not (isinstance(prior, dict) and isinstance(prior.get("incident"), dict)):
+        prior = None
     kind = is_emergency(text)
+    said_yes = bool(prior) and is_yes(text)
     if kind:
         set_mood("alert")
         emit(EMERGENCY_TEXT[kind])
+        if said_yes:
+            memory.pending_offer = prior  # the emergency comes first; the offer waits one more turn
+    confirmed = said_yes and not kind and write is not None
+    logged = None
     offer = None
-    if is_decline(text):
+    if confirmed or (kind and said_yes):
+        pass
+    elif is_decline(text):
         memory.pending_offer = None
     else:
         offer = None if kind == "self_harm" else lapse_offer(text)
@@ -379,7 +444,18 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
 
     error = ""
     remembered = []
-    if api_key:
+    if confirmed:
+        try:
+            new_id = write(prior["incident"])
+        except Exception:
+            memory.pending_offer = prior  # so the next "yes" can try again
+            set_mood("sorry")
+            emit(SAVE_FAILED_TEXT)
+        else:
+            logged = {"id": new_id, "category": prior["incident"].get("category")}
+            set_mood("talking")
+            emit(SAVED_TEXT)
+    elif api_key:
         raw = ""
         stream = _ReplyStream(speak, take_mood)
         try:
@@ -420,5 +496,5 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     except OSError:
         pass
     return {"text": final, "mood": mood, "emergency": kind, "gemini_alert": gemini_alert, "offer": offer,
-            "remembered": remembered, "error": error,
+            "logged": logged, "remembered": remembered, "error": error,
             "first_words_s": first_words_s, "total_s": time.monotonic() - start}

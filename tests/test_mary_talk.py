@@ -427,6 +427,58 @@ class TestRoutes(TalkCase):
             t.join(10)
         self.assertEqual(events, ["in", "out", "in", "out"])
 
+    # yes to "Would you like me to write that down?"
+
+    SAID = "The nurse never came when I pressed my call light for 45 minutes."
+
+    def test_yes_to_the_offer_logs_the_incident(self):
+        status, body, _ = self.talk(self.SAID, chunks=["I'm so sorry."])
+        self.assertEqual(status, 200)
+        self.assertEqual(body["text"], "I'm so sorry. " + mary.OFFER_QUESTION)
+        self.assertTrue(body["offer"])
+        self.assertIsNone(body["logged"])
+        self.assertEqual(helpers.db_rows("SELECT * FROM incidents"), [])  # asking does not save
+        status, body, _ = self.talk("Yes please", chunks=["Gemini must not be asked."])
+        self.assertEqual(status, 200)
+        self.assertEqual(body["text"], mary.SAVED_TEXT)
+        self.assertEqual(body["mood"], "talking")
+        rows = helpers.db_rows("SELECT * FROM incidents")
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row["source"], row["description"]), ("mary", self.SAID))
+        self.assertEqual(body["logged"], {"id": row["id"], "category": row["category"]})
+        self.assertEqual(row["category"], "call_light")
+        self.assertEqual(row["wait_minutes"], 45)
+        self.assertEqual(row["never_came"], 1)
+        self.assertEqual(row["occurred_date"], row["logged_at"][:10])
+        self.assertEqual(len(self.fake.bodies), 1)  # only the first turn went to Gemini
+        status, rows_api, _ = helpers.api("GET", "/api/incidents")
+        self.assertEqual([r["id"] for r in rows_api], [row["id"]])
+        status, body, _ = self.talk("Yes", chunks=["Hello."])  # used up: nothing more is written
+        self.assertIsNone(body["logged"])
+        self.assertEqual(len(helpers.db_rows("SELECT * FROM incidents")), 1)
+
+    def test_no_to_the_offer_logs_nothing(self):
+        self.talk(self.SAID, chunks=["I'm so sorry."])
+        status, body, _ = self.talk("No thanks", chunks=["That's all right."])
+        self.assertIsNone(body["logged"])
+        self.talk("Yes", chunks=["Hello."])
+        self.assertEqual(helpers.db_rows("SELECT * FROM incidents"), [])
+
+    def test_stream_yes_to_the_offer_logs_the_incident(self):
+        self.stream(self.SAID, chunks=["I'm so sorry."])
+        status, raw, _ = self.stream("Yes please", chunks=["Gemini must not be asked."])
+        self.assertEqual(status, 200)
+        lines = self.lines(raw)
+        done = lines[-1]
+        rows = helpers.db_rows("SELECT * FROM incidents")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["source"], "mary")
+        self.assertEqual(done["logged"], {"id": rows[0]["id"], "category": "call_light"})
+        self.assertEqual((done["text"], done["mood"]), (mary.SAVED_TEXT, "talking"))
+        self.assertIn({"mood": "talking"}, lines)
+        self.assertEqual("".join(x["text"] for x in lines if "text" in x and "done" not in x), mary.SAVED_TEXT)
+
     # streaming
 
     def test_stream_lines(self):

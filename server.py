@@ -238,16 +238,24 @@ def mary_status():
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"]}
 
 
+def mary_write_incident(incident):
+    """The resident said yes to 'Would you like me to write that down?': log her guess. Returns the new id."""
+    with closing(connect()) as conn:
+        new_id = insert_incident(conn, clean_incident({**incident, "source": "mary"}))
+        conn.commit()
+    return new_id
+
+
 def mary_talk(text, on_text=None, on_mood=None):
     """Mary's answer to text, for the page. Never contains the key."""
     s = mary_settings()
     with _mary_lock:
         r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
-                       companion=s["companion"] or "mary", on_mood=on_mood)
+                       companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident)
     return {"text": r["text"], "mood": r["mood"],
             "emergency": bool(r["emergency"] or r["gemini_alert"]),
             "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
-            "offer": r["offer"], "error": r["error"], "needs_key": not s["key"],
+            "offer": r["offer"], "logged": r["logged"], "error": r["error"], "needs_key": not s["key"],
             "first_words_s": r["first_words_s"], "total_s": r["total_s"]}
 
 

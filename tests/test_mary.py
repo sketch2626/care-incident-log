@@ -251,6 +251,138 @@ class TestOffer(MaryTestCase):
         self.assertEqual(rows, [])
 
 
+class TestYesSavesIt(MaryTestCase):
+    """The resident says yes to 'Would you like me to write that down?'. write is a fake that records."""
+    LAPSE = TestOffer.LAPSE
+
+    def setUp(self):
+        super().setUp()
+        self.written = []
+        self.fail_next = False
+        self.memory = mary.Memory(self.path)
+
+    def write(self, incident):
+        if self.fail_next:
+            self.fail_next = False
+            raise OSError("database is locked")
+        self.written.append(incident)
+        return 100 + len(self.written)
+
+    def turn(self, text, chunks=("I hear you.",), write=True):
+        self.fake.chunks = list(chunks)
+        return mary.reply(text, self.memory, KEY, write=self.write if write is True else write)
+
+    def offered(self):
+        r = self.turn(self.LAPSE, ["I'm so sorry."])
+        self.assertTrue(r["offer"])
+        return r["offer"]
+
+    def test_yes_please_writes_the_guess_once(self):
+        offer = self.offered()
+        asked = len(self.fake.bodies)
+        r = self.turn("Yes please", ["should never be said"])
+        self.assertEqual(self.written, [offer["incident"]])
+        self.assertEqual(self.written[0]["description"], self.LAPSE)
+        self.assertEqual(r["text"], mary.SAVED_TEXT)
+        self.assertEqual(r["mood"], "talking")
+        self.assertEqual(r["logged"], {"id": 101, "category": "call_light"})
+        self.assertIsNone(r["offer"])
+        self.assertIsNone(self.memory.pending_offer)
+        self.assertEqual(len(self.fake.bodies), asked)  # Gemini was not asked
+        self.assertEqual(self.memory.recent[-1]["text"], mary.SAVED_TEXT)
+        r = self.turn("Yes please")  # the offer is used up
+        self.assertEqual(len(self.written), 1)
+        self.assertIsNone(r["logged"])
+
+    def test_every_result_has_logged(self):
+        self.assertIsNone(self.turn("Good morning")["logged"])
+        self.assertIsNone(self.turn(self.LAPSE)["logged"])
+
+    def test_yes_with_nothing_pending_is_a_normal_reply(self):
+        r = self.turn("Yes", ["Hello there."])
+        self.assertEqual(self.written, [])
+        self.assertEqual(r["text"], "Hello there.")
+        self.assertIsNone(r["logged"])
+        self.assertEqual(len(self.fake.bodies), 1)
+
+    def test_the_offer_lives_one_turn(self):
+        self.offered()
+        self.turn("It is a sunny day today.")
+        self.assertIsNone(self.memory.pending_offer)
+        r = self.turn("Yes")
+        self.assertEqual(self.written, [])
+        self.assertIsNone(r["logged"])
+        self.assertNotEqual(r["text"], mary.SAVED_TEXT)
+
+    def test_no_and_not_now_write_nothing(self):
+        for said in ("No thanks", "No", "Nah", "Don't write that down", "Please don't write that down",
+                     "maybe later", "Maybe", "Not now", "not right now", "I don’t want any trouble",
+                     "Yes, but not now", "Yes, but don't use my name", "Yes, maybe later"):
+            with self.subTest(said):
+                self.memory = mary.Memory(self.path)
+                self.offered()
+                r = self.turn(said)
+                self.assertEqual(self.written, [], said)
+                self.assertIsNone(r["logged"])
+                self.assertIsNone(self.memory.pending_offer)
+
+    def test_yes_words(self):
+        for said in ("yes", "Yeah.", "Yep!", "Yes, please.", "Sure", "Please", "Please do", "Okay", "OK", "All right",
+                     "Go ahead", "Do it", "Write it down", "Put that down", "That would be good", "That would be nice.",
+                     "I’d like that", "I'd like that", "I would", "Uh-huh", "Mm-hmm.", "Sure, I'd like that.",
+                     "Oh yes please, thank you Mary", "Yes, and the food was cold too",
+                     "Yes, and they never came back", "Yes. They never even apologized."):
+            with self.subTest(said):
+                self.assertTrue(mary.is_yes(said), said)
+
+    def test_not_yes_words(self):
+        for said in ("", "No", "No thanks", "No, thank you", "Nah", "Nope", "Maybe", "Maybe later", "Not now",
+                     "Don't write that down", "Never mind", "Please help me", "I would like some water",
+                     "I need a nurse", "That's not right", "I don't think so", "Okay, I guess",
+                     "Yes, what would you write?", "Yes, hold on", "Hello"):
+            with self.subTest(said):
+                self.assertFalse(mary.is_yes(said), said)
+
+    def test_a_yes_with_more_words_still_saves(self):
+        self.offered()
+        r = self.turn("Yes, and the food was cold too")
+        self.assertEqual(len(self.written), 1)
+        self.assertEqual(r["text"], mary.SAVED_TEXT)
+
+    def test_failed_save_says_sorry_and_the_next_yes_retries(self):
+        offer = self.offered()
+        self.fail_next = True
+        r = self.turn("Yes")
+        self.assertEqual(self.written, [])
+        self.assertEqual(r["text"], mary.SAVE_FAILED_TEXT)
+        self.assertEqual(r["mood"], "sorry")
+        self.assertIsNone(r["logged"])
+        self.assertEqual(self.memory.pending_offer, offer)
+        r = self.turn("Yes please")
+        self.assertEqual(self.written, [offer["incident"]])
+        self.assertEqual(r["text"], mary.SAVED_TEXT)
+        self.assertEqual(r["logged"]["id"], 101)
+
+    def test_emergency_comes_first_and_nothing_is_saved(self):
+        offer = self.offered()
+        r = self.turn("Yes, and I fell out of my bed", ["Press your call light."])
+        self.assertEqual(r["emergency"], "medical")
+        self.assertEqual(r["mood"], "alert")
+        self.assertEqual(self.written, [])
+        self.assertIsNone(r["logged"])
+        self.assertEqual(self.memory.pending_offer, offer)  # kept for one more turn
+        r = self.turn("Yes")
+        self.assertEqual(self.written, [offer["incident"]])
+        self.assertEqual(r["text"], mary.SAVED_TEXT)
+
+    def test_without_a_write_callable_it_is_a_normal_reply(self):
+        self.offered()
+        r = self.turn("Yes please", ["Of course."], write=None)
+        self.assertEqual(r["text"], "Of course.")
+        self.assertIsNone(r["logged"])
+        self.assertEqual(self.written, [])
+
+
 class TestConversations(MaryTestCase):
     def test_scripted_conversations(self):
         for case in CASES:

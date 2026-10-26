@@ -74,9 +74,9 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
    - **Face, in mock-ups:** round 1 (`mockups/mary/face-boards.html`, ade6015) was rejected. A was "scary", C was out, and B's warm glow came closest.
    - **Round 2 direction (Andy, 2026-10-25):** the screen IS her face, with no head outline and a warm light filling the screen. A soft edge glow changes color with her mood (soft pinkish red for an emergency, never scary).
    - **Her look:** fully cartoon with no realism, a mouth, no nose. Very expressive: eyes change shape, she blushes, and the forehead shades softly with no line eyebrows. 11 moods, plus everyday and emergency screens, with captions and buttons on top of her face near the bottom.
-   - **Where the boards are:** on a Design canvas, which is private to Andy's first account. Committed copies are in `mockups/mary/round2/`, the source of truth for a fresh hub.
+   - **Where the boards are:** on a Design canvas, which is private to Andy's first account. Committed copies are in `mockups/mary/round2/`, `round4/` and `round5/`, the source of truth for a fresh hub.
    - Andy approves a face before any build. Round 2 was liked ("so far, so good"). Round 3 fixes: no unibrow, thinner rounded brows instead of "smudges", and rounder eye corners.
-   - **Round 4** (3be92ae, `mockups/mary/round4/`): the cuteness pass (Cute 1-3), his male version (residents choose Mary or him; his name is open), "Choose your companion" and "First hello". Andy: "so far so good… this will be what we use". He'll tweak after pilot feedback. Base variant: see the latest Status.
+   - **Round 4** (3be92ae, `mockups/mary/round4/`): the cuteness pass (Cute 1-3), his male version, **Sam** (final name; residents choose Mary or Sam), "Choose your companion" and "First hello". Andy: "so far so good… this will be what we use". He'll tweak after pilot feedback. Base: **Cute 3** for both faces (Andy, 2026-10-25).
    - **Mary and the computer (Andy, 2026-10-25):**
      - Level 1, her own skills: pictures ("show me a bird"), music, weather, news, reminders.
      - Level 2: she opens apps and sites, with a floating Mary button.

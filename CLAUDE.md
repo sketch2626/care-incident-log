@@ -39,6 +39,13 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
   - The floating mic button in `desktop.py` + `web/float.html`, and the installer's "start with Windows" option.
   - `RETALIATION_REGS` in `reports.py` still needs filling from the verified citations above.
 - NC Medicaid provides refurbished laptops for a $65 refurbishing fee, waived if the resident can't pay. Andy has one. Other states: check.
+- **Mary build (worker "mary-app", 2026-10-25), in progress.** His name is **Sam** (final, Andy). Done:
+  - Face component `web/mary/face.js`/`face.css`, with a demo at `/mary/demo.html`: Mary in 11 moods (7785098), and Sam with his square glow (1a35f99).
+  - Talk routes: mood tags, `/api/mary/status|talk|talk?stream=1|hello`, and voice settings (685af39).
+  - Listening auto-stop: `GET /api/listen/level` (9635709).
+  - A "yes" to Mary's offer saves the incident (8e3e346).
+  - Mary uses only the saved key (`gemini_key`) and model (`gemini_model`), not the smart-helper switch.
+  - **Next:** T4a, the Mary screen (`web/mary.html`, `web/mary/app.js`, `web/mary/mary.css`: talk loop, emergency, no-key, menu). Then T4b, first run (Choose, First hello), greeting and idle sleepy. Then T5, entry points (home tile, `desktop.py --mary`, `Start Mary.bat`). Then the docs.
 
 ## Next steps
 1. ~~Quiet test suite~~ **Done 2026-10-24** (371bba0, ea5c4c2, 1c0182d): 59 tests, about 2 s. 5 BUG skips in `tests/test_guess.py` that `guess_incident()` gets wrong. It marks "bled", "couldn't breathe" and "can’t breathe" (curly apostrophe) as minor. It reads "twenty five minutes" as 5 and "half an hour" as 60. Fix them in a small worker, then remove the skips.

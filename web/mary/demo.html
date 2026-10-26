@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mary's face</title>
+<link rel="stylesheet" href="face.css">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"Segoe UI",system-ui,sans-serif;color:#1f1b16}
+#face{position:fixed;inset:0}
+#bar{position:fixed;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;
+  background:rgba(255,250,240,.9);border-top:3px solid #1f1b16}
+#bar[hidden]{display:none}
+.row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
+.lab{font-size:20px;font-weight:700;color:#453d34;padding:0 6px}
+.btn{min-height:64px;padding:0 14px;font:600 20px/1.2 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fff;
+  border:3px solid #1f1b16;border-radius:16px;cursor:pointer}
+.btn[aria-pressed="true"]{background:#1f1b16;color:#fff}
+.btn:focus-visible{outline:4px solid #3b6fd4;outline-offset:2px}
+#show{position:fixed;left:12px;bottom:12px;background:rgba(255,250,240,.92)}
+#show[hidden]{display:none}
+</style>
+</head>
+<body>
+<div id="face"></div>
+
+<div id="bar">
+  <div class="row" id="moods"><span class="lab">Mood</span></div>
+  <div class="row" id="acts"><span class="lab">She is</span></div>
+</div>
+<button class="btn" id="show" type="button" hidden>Show buttons</button>
+
+<script src="face.js"></script>
+<script>
+(function () {
+  var face = MaryFace.create(document.getElementById('face'), { companion: 'mary' });
+  var bar = document.getElementById('bar');
+  var showBtn = document.getElementById('show');
+  var moodBtns = {}, actBtns = {}, flowBtn, flowT = 0, flowStep = 0;
+
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function button(row, text, onClick) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn';
+    b.textContent = text;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', onClick);
+    row.appendChild(b);
+    return b;
+  }
+  function sync() {
+    var s = face.getState();
+    MaryFace.MOODS.forEach(function (m) { moodBtns[m].setAttribute('aria-pressed', String(s.mood === m && s.activity !== 'listening' && s.activity !== 'thinking')); });
+    MaryFace.ACTIVITIES.forEach(function (a) { actBtns[a].setAttribute('aria-pressed', String(s.activity === a)); });
+    flowBtn.setAttribute('aria-pressed', String(!!flowT));
+    flowBtn.textContent = flowT ? 'Stop flow' : 'Mood flow';
+  }
+
+  function setMood(m) {            // show a mood's own face
+    face.setMood(m);
+    face.setActivity(MaryFace.ACTIVITIES.indexOf(m) >= 0 ? m : 'resting');
+  }
+  function setAct(a) {             // what she is doing, like the real app will
+    var mood = face.getState().mood;
+    if (a === 'resting' && (mood === 'talking' || mood === 'listening' || mood === 'thinking')) face.setMood('resting');
+    if (a === 'talking' && mood === 'resting') face.setMood('talking');
+    face.setActivity(a);
+  }
+
+  /* Mood flow: resting, listening, thinking, talking (happy), resting, about 3 seconds each */
+  var FLOW = [
+    function () { face.setMood('resting'); face.setActivity('resting'); },
+    function () { face.setActivity('listening'); },
+    function () { face.setActivity('thinking'); },
+    function () { face.setMood('happy'); face.setActivity('talking'); },
+    function () { face.setActivity('resting'); face.setMood('resting'); }
+  ];
+  function stopFlow() { clearTimeout(flowT); flowT = 0; }
+  function runFlow() {
+    FLOW[flowStep]();
+    flowStep = (flowStep + 1) % FLOW.length;
+    flowT = setTimeout(runFlow, 3000);
+    sync();
+  }
+
+  MaryFace.MOODS.forEach(function (m) {
+    moodBtns[m] = button(document.getElementById('moods'), cap(m), function () { stopFlow(); setMood(m); sync(); });
+  });
+  MaryFace.ACTIVITIES.forEach(function (a) {
+    actBtns[a] = button(document.getElementById('acts'), cap(a), function () { stopFlow(); setAct(a); sync(); });
+  });
+  flowBtn = button(document.getElementById('acts'), 'Mood flow', function () {
+    if (flowT) { stopFlow(); sync(); return; }
+    flowStep = 0;
+    runFlow();
+  });
+  button(document.getElementById('acts'), 'Hide buttons', function () { bar.hidden = true; showBtn.hidden = false; });
+  showBtn.addEventListener('click', function () { bar.hidden = false; showBtn.hidden = true; });
+
+  sync();
+})();
+</script>
+</body>
+</html>

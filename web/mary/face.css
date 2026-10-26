@@ -1,0 +1,91 @@
+/* Mary's face. Everything is scoped under .mf-root and prefixed mf-, so two faces can share a page.
+   Only transform and opacity are ever animated. Values come from the approved boards:
+   mockups/mary/round4/R4Cute3.dc.html (base) and mockups/mary/round2/R2*.dc.html (moods). */
+
+.mf-root{position:relative;width:100%;height:100%;overflow:hidden;contain:paint;background:#fff0d2;
+  font-family:"Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+
+/* layer 1: background (warm, plus a dusk layer that fades in for sleepy) */
+.mf-bg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 42%,#fffaf0 0%,#fff0d2 50%,#fadcaa 100%)}
+.mf-dusk{background:radial-gradient(ellipse at 50% 42%,#f3e6cf 0%,#ddd0bd 55%,#a9a3c4 100%);opacity:0;transition:opacity 1.2s ease}
+.mf-dusk.mf-vis{opacity:1}
+
+/* layer 2: edge glow. Two swap places. The outer div crossfades, the inner one pulses. */
+.mf-glow{position:absolute;inset:0;pointer-events:none;opacity:0;visibility:hidden;
+  transition:opacity 1.2s ease,visibility 0s linear 1.2s}
+.mf-glow.mf-vis{opacity:1;visibility:visible;transition:opacity 1.2s ease,visibility 0s linear 0s}
+.mf-glow-in{position:absolute;inset:0;--c:242,183,102;
+  background:radial-gradient(ellipse closest-side,rgba(var(--c),0) 60%,rgba(var(--c),.9) 100%)}
+.mf-pulse-edge,.mf-pulse-fast,.mf-pulse-slow,.mf-pulse-steady{will-change:opacity}
+.mf-pulse-edge{animation:mf-edge 6s ease-in-out infinite}
+.mf-pulse-fast{animation:mf-edge 3s ease-in-out infinite}
+.mf-pulse-slow{animation:mf-edge 8s ease-in-out infinite}
+.mf-pulse-steady{animation:mf-steady 4s ease-in-out infinite}
+
+/* layer 3: the face. The stage is a 8:5 box fitted inside the screen, so the 640x400 drawing keeps its shape. */
+.mf-fit{position:absolute;inset:0;container-type:size}
+.mf-stage{position:absolute;inset:0;margin:auto;width:100%;height:100%}
+@supports (width:1cqw){.mf-stage{width:min(100cqw,160cqh);height:min(62.5cqw,100cqh)}}
+.mf-sway,.mf-hop,.mf-mood,.mf-motion{position:absolute;inset:0}
+.mf-sway{will-change:transform;transform-origin:50% 82.5%;animation:mf-sway 9s ease-in-out infinite}
+.mf-hop{transform-origin:50% 82.5%}
+.mf-mood{display:none;opacity:0;transition:opacity .7s ease}
+.mf-mood.mf-show{display:block}
+.mf-mood.mf-vis{opacity:1}
+.mf-motion{will-change:transform;transform-origin:50% 50%}
+.mf-float{animation:mf-float 6s ease-in-out infinite}
+.mf-slow{animation:mf-float 8s ease-in-out infinite}
+.mf-lean{animation:mf-lean 6s ease-in-out infinite}
+.mf-tilt{animation:mf-tilt 7s ease-in-out infinite}
+.mf-bounce{animation:mf-bounce 1.8s ease-in-out infinite}
+.mf-svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+
+/* small movements inside the drawing */
+.mf-eye,.mf-look{transform-box:fill-box;transform-origin:center}
+.mf-think{animation:mf-think 4s ease-in-out infinite}
+.mf-spark{transform-box:fill-box;transform-origin:center;animation:mf-twinkle 3.5s ease-in-out infinite}
+.mf-twinkle{transform-box:fill-box;transform-origin:center;animation:mf-twinkle 3s ease-in-out infinite}
+.mf-twinkle:nth-of-type(2){animation-delay:1.5s}
+.mf-twinkle:nth-of-type(3){animation-delay:.8s}
+.mf-pop{transform-box:fill-box;transform-origin:center;animation:mf-pop 4s ease-in-out infinite alternate}
+.mf-lift{animation:mf-lift 3s ease-in-out infinite}
+.mf-blush{opacity:.8;animation:mf-blush 6s ease-in-out infinite alternate}
+.mf-dot{opacity:.8;animation:mf-dot 3s ease-in-out infinite}
+.mf-dot:nth-of-type(2){animation-delay:.5s}
+.mf-dot:nth-of-type(3){animation-delay:1s}
+.mf-zz{opacity:.8;animation:mf-zz 6s ease-in-out infinite}
+.mf-zz:nth-of-type(2){animation-delay:2s}
+.mf-zz:nth-of-type(3){animation-delay:4s}
+
+/* mouths: the resting mouth fades out and the talking mouth fades in */
+.mf-mouth-rest{transition:opacity .25s ease}
+.mf-mouth-say{opacity:0;transition:opacity .25s ease}
+.mf-talking .mf-mouth-rest{opacity:0}
+.mf-talking .mf-mouth-say{opacity:1}
+.mf-mouth-talk{transform-box:fill-box;transform-origin:50% 0;animation:mf-talk 1.4s ease-in-out infinite paused}
+.mf-talking .mf-mouth-talk{animation-play-state:running}
+
+@keyframes mf-edge{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes mf-steady{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes mf-sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
+/* the face moves in percent of its own height: 4px of the 400px drawing = 1% */
+@keyframes mf-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-1%)}}
+@keyframes mf-lean{0%,100%{transform:rotate(-2deg) translateY(0)}50%{transform:rotate(-2deg) translateY(-1%)}}
+@keyframes mf-tilt{0%,100%{transform:rotate(3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-.75%)}}
+@keyframes mf-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-2%)}}
+@keyframes mf-think{0%,100%{transform:translate(0,0)}30%,75%{transform:translate(7px,-7px)}}
+@keyframes mf-blush{from{opacity:.35}to{opacity:.95}}
+@keyframes mf-talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
+@keyframes mf-dot{0%,15%{opacity:.25}40%,75%{opacity:1}100%{opacity:.25}}
+@keyframes mf-zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:.9}100%{opacity:0;transform:translate(14px,-30px)}}
+@keyframes mf-lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes mf-pop{from{transform:scale(1)}to{transform:scale(1.07)}}
+@keyframes mf-twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+
+/* reduced motion: nothing loops, and a change of mood is a quick fade */
+@media (prefers-reduced-motion:reduce){
+  .mf-root *{animation:none!important;will-change:auto!important}
+  .mf-mood,.mf-dusk,.mf-mouth-rest,.mf-mouth-say{transition-duration:.15s!important}
+  .mf-glow{transition:opacity .15s ease,visibility 0s linear .15s}
+  .mf-glow.mf-vis{transition:opacity .15s ease,visibility 0s linear 0s}
+}

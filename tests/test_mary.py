@@ -699,5 +699,14 @@ class TestConversations(MaryTestCase):
                         self.assertEqual(memory.name, expect["name"])
 
 
+
+class PackagingTests(unittest.TestCase):
+    def test_installer_bundles_marys_instructions(self):
+        # Without them every reply in the installed app is "I'm having trouble thinking right now".
+        build = (Path(__file__).resolve().parent.parent / "packaging" / "build.py").read_text(encoding="utf-8")
+        self.assertIn("'instructions.md'", build)
+        self.assertEqual(mary.INSTRUCTIONS.relative_to(mary.ROOT).as_posix(), "mary/instructions.md")
+
+
 if __name__ == "__main__":
     unittest.main()

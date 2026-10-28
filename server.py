@@ -514,7 +514,9 @@ class Handler(SimpleHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
             if not 0 <= n <= MAX_BODY:
                 raise ValueError
-            data = json.loads(self.rfile.read(n) or b"{}")
+            raw = self.rfile.read(n)
+            self._read = n
+            data = json.loads(raw or b"{}")
         except ValueError:  # includes bad JSON and bad UTF-8
             raise ValueError(BAD_REQUEST) from None
         if not isinstance(data, dict):
@@ -701,6 +703,24 @@ class Handler(SimpleHTTPRequestHandler):
         return None
 
     def _handle(self, method):
+        self._read = 0
+        try:
+            self._dispatch(method)
+        finally:
+            self._drain()
+
+    def _drain(self):
+        """Read any request body we answered without reading. On Windows, closing a socket with unread
+        data resets the connection, and the page can lose the reply (e.g. a 403, or listen/start's '{}')."""
+        try:
+            left = int(self.headers.get("Content-Length") or 0) - self._read
+            if 0 < left <= MAX_BODY:
+                self.connection.settimeout(5)
+                self.rfile.read(left)
+        except (OSError, ValueError):
+            pass
+
+    def _dispatch(self, method):
         mutating = method not in ("GET", "HEAD")
         if not self._allowed(mutating):
             return

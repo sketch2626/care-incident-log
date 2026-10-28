@@ -65,7 +65,7 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
     - **Not yet seen in a real window:** full screen, Close, autoplay voice and the keep-awake.
   - **Full review done 2026-10-28** (`docs/review-2026-10-28.md`; fix commits 1b6a8e1…47c78f5; 254 tests, no skips). Fixed: the hidden Close on first run (blocker), missed emergency phrases, bad-key message, offers that didn't save, server data integrity, installer bundling. Ranked open items are in the doc. If Mary gets stuck full screen, the hub stops the `pythonw desktop.py --mary` process; `desktop.log` in the data folder has window errors.
   - **Next for a fresh worker, in order:**
-    1. **Andy tries Mary as user #1.** Fix what he finds: voice choice, timings and layout at his screen size. Then measure Gemini speed with his key (`tools/mary_speed.py`).
+    1. **Andy tries Mary as user #1.** Fix what he finds: voice choice, timings and layout at his screen size. Then measure Gemini speed with his key (`tools/mary_speed.py`). **Found so far:** no paste in the app window, fixed 4b16ebc + c1cadca (see `docs/review-2026-10-28.md`, "Andy's first try").
     2. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 
 ## Next steps

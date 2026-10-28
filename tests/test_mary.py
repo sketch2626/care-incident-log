@@ -172,6 +172,47 @@ class TestEmergency(MaryTestCase):
             with self.subTest(said):
                 self.assertEqual(mary.is_emergency(said), "self_harm")
 
+    MEDICAL_SAID = (
+        "Help!", "help me", "please help me", "Please help me now", "Mary, help me!", "Help me, please.", "help help",
+        "Somebody help", "someone help me!", "Anybody help!", "Hey, anyone help me", "Mary, somebody please help",
+        "I need help now", "I need help right now", "I really need help right away",
+        "I think I'm having a heart attack", "heart attack", "I can't catch my breath", "I can't get my breath",
+        "I passed out", "I'm passing out", "I blacked out", "she fainted", "I'm fainting", "I feel faint",
+        "I felt faint", "I'm feeling faint", "I'm going to faint", "I'm gonna faint", "I feel a little faint",
+        "I'm having a seizure", "he's having a fit", "I took too many pills", "too many pills", "the nurse gave me too many pills and I feel dizzy", "I think it was an overdose",
+        "I hit my head", "I slipped out of my chair", "I slipped out of bed", "I slipped out of my wheelchair",
+        "my lips are blue", "her lips look blue", "his lips turned blue", "my lips went blue",
+        "my head is pounding", "head is pounding", "there's a pounding in my head", "I think it's dysreflexia",
+        "I'm on the floor", "I am lying on the floor", "I was on the floor", "I've been on the floor",
+        "I ended up on the floor", "I ended up stuck on the floor", "they found me on the floor",
+        "they left me on the floor", "I'm laying on the floor", "my roommate is on the floor",
+        "they took my blood and now it's bleeding")
+    SELF_HARM_SAID = (
+        "I wanna die", "I want to end it all", "end it all", "I wish I was dead", "I wish I were dead",
+        "I don't want to live anymore", "I do not want to live", "I don't want to be alive", "I'm suicidal",
+        "there's no reason to live", "no point living", "no point in living", "I want to commit suicide",
+        "I don't want to live like this")
+    NO_ALARM_SAID = (
+        "can you help me find my glasses", "help me remember my daughter's birthday", "the help here is slow",
+        "I need help with my tablet", "can someone help me with the TV", "Helpful people here",
+        "a faint smell of smoke", "I heard a faint noise", "my lunch tray was on the floor",
+        "my call light was on the floor", "they took my blood this morning", "my blood was drawn today",
+        "the aide passed out the meds", "they give me too many pills", "my husband died of a heart attack",
+        "I take pills for my seizures", "I don't want to live here", "I don't want to live alone")
+
+    def test_help_and_other_emergency_phrases(self):
+        for table, kind in ((self.MEDICAL_SAID, "medical"), (self.SELF_HARM_SAID, "self_harm")):
+            for said in table:
+                for variant in (said, said.replace("'", "’")):  # a curly apostrophe, as speech-to-text types it
+                    with self.subTest(variant):
+                        self.assertEqual(mary.is_emergency(variant), kind)
+
+    def test_ordinary_sentences_with_these_words_are_not_emergencies(self):
+        for said in self.NO_ALARM_SAID:
+            for variant in (said, said.replace("'", "’")):
+                with self.subTest(variant):
+                    self.assertIsNone(mary.is_emergency(variant))
+
     def test_self_harm_mentions_988_and_offers_nothing(self):
         r = self.say("Some nights I wish I just wouldn't wake up.")
         self.assertEqual(r["emergency"], "self_harm")
@@ -247,6 +288,50 @@ class TestOffer(MaryTestCase):
     def test_fell_asleep_alone_gets_no_offer(self):
         self.assertIsNone(mary.lapse_offer("I fell asleep in my chair"))
 
+    def test_more_ways_to_describe_a_problem_get_an_offer(self):
+        for said in ("a nurse hit me", "they keep stealing my things", "I haven't been given my pain medicine",
+                     "my catheter bag was full and nobody emptied it", "I wasn't turned all night and now I have a sore",
+                     "my call light is broken", "they took my phone", "I haven’t been given my pain medicine",
+                     "somebody stole my ring", "she threatened me", "my wheelchair is broken"):
+            with self.subTest(said):
+                self.assertIsNotNone(mary.lapse_offer(said))
+
+    def test_everyday_talk_gets_no_offer(self):
+        for said in ("I had a lovely visit with my daughter", "I never liked broccoli", "my heart is broken since my wife died",
+                     "I have a sore throat", "my daughter took my phone to charge it", "it hit me that I miss my wife",
+                     "the weather is cold today", "the food here is bland"):
+            with self.subTest(said):
+                self.assertIsNone(mary.lapse_offer(said))
+
+    def test_gemini_asking_on_her_own_makes_an_offer(self):
+        asks = ("That sounds awful. Would you like me to write that down?", "Shall I write that down for you?",
+                "Do you want me to write it down?", "Would you like me to note that?",
+                "Would you like me to jot that down?", "Want me to put that down for you?")
+        for i, spoken in enumerate(asks):
+            with self.subTest(spoken):
+                memory = mary.Memory(self.dir / f"m{i}.json")
+                r = self.say("the food here is bland", [spoken], memory=memory)
+                self.assertEqual(r["offer"]["incident"]["category"], "meal")
+                self.assertEqual(memory.pending_offer, r["offer"])
+                self.assertEqual(r["text"], spoken)  # her own question stands; no second one
+
+    def test_gemini_not_asking_makes_no_offer(self):
+        for spoken in ("Please note that I'm an AI. Do you want to hear a joke?", "I'll note that.",
+                       "Would you like me to write you a poem?", "That sounds hard."):
+            with self.subTest(spoken):
+                memory = mary.Memory(self.dir / "none.json")
+                r = self.say("the food here is bland", [spoken], memory=memory)
+                self.assertIsNone(r["offer"])
+                self.assertIsNone(memory.pending_offer)
+
+    def test_gemini_asking_after_a_decline_or_in_self_harm_makes_no_offer(self):
+        ask = ["Would you like me to write that down?"]
+        r = self.say("Please don't write that down, the food is bland", ask, memory=mary.Memory(self.dir / "a.json"))
+        self.assertIsNone(r["offer"])
+        r = self.say("I want to die", ask, memory=mary.Memory(self.dir / "b.json"))
+        self.assertEqual(r["emergency"], "self_harm")
+        self.assertIsNone(r["offer"])
+
     def test_nothing_reaches_the_incident_log(self):
         helpers.reset_db()
         self.say(self.LAPSE, ["I'm so sorry."])
@@ -299,6 +384,17 @@ class TestYesSavesIt(MaryTestCase):
         r = self.turn("Yes please")  # the offer is used up
         self.assertEqual(len(self.written), 1)
         self.assertIsNone(r["logged"])
+
+    def test_yes_to_gemini_own_offer_writes_exactly_once(self):
+        r = self.turn("the food here is bland", ["That sounds awful. Would you like me to write that down?"])
+        self.assertTrue(r["offer"])  # no lapse word, so only Gemini's own question made this offer
+        self.assertEqual(self.memory.pending_offer, r["offer"])
+        r = self.turn("Yes please", ["should never be said"])
+        self.assertEqual(len(self.written), 1)
+        self.assertEqual(self.written[0]["description"], "The food here is bland")
+        self.assertEqual(r["logged"], {"id": 101, "category": "meal"})
+        self.turn("Yes please")
+        self.assertEqual(len(self.written), 1)
 
     def test_every_result_has_logged(self):
         self.assertIsNone(self.turn("Good morning")["logged"])

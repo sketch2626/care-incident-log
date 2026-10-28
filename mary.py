@@ -45,13 +45,29 @@ MAX_TURN_CHARS = 500
 MAX_FACT_CHARS = 200
 
 _I = re.IGNORECASE
+# Phrases that hold an emergency word but mean something else. Cut out before the check, so a real
+# "bleeding" or "can't breathe" in the same sentence still counts.
+_BENIGN = re.compile("|".join([
+    r"\b(?:took|take|taking|taken|drew|draw|drawing|drawn)\s+(?:some\s+(?:of\s+my\s+)?|my\s+)blood\b",  # a blood test
+    r"\bblood\s+(?:was\s+|is\s+|got\s+|being\s+)?(?:drawn|taken)\b",
+    r"\b(?:died|dead|death)\s+(?:of|from)\s+(?:a\s+|his\s+|her\s+)?heart\s+attack\b",  # someone else, long ago
+    r"\bheart\s+attack\s+(?:survivors?|years?\s+ago|(?:in|back\s+in)\s+(?:19|20)\d\d)\b",
+    r"\bseizure\s+(?:meds?|medications?|medicine|disorder|history|pads?|precautions?)\b|\b(?:for|from)\s+(?:my|the|his|her)\s+seizures?\b",
+    r"\bpass(?:ed|es|ing)?\s+out\s+(?:the|some)\s+(?:meds|medications?|medicine|pills|trays?|snacks?|mail|food|cups?|papers?|menus?|forms?)\b",  # handing things out
+    # A standing complaint ("they give me too many pills"); "they gave me too many pills" may be an overdose, so it still alarms.
+    r"\b(?:give|gives|giving|have|has|take|takes|taking)\s+(?:me\s+)?too\s+many\s+(?:pills|tablets|meds)\b",
+]), _I)
 _MEDICAL = re.compile("|".join([
     r"\b(?:can't|cannot|can not|couldn't)\s+(?:\w+\s+)?breathe\b",
+    r"\b(?:can't|cannot|can not|couldn't)\s+(?:catch|get)\s+(?:my|a)\s+breath\b",
     r"\b(?:trouble|difficulty|hard)\s+(?:breathing|to\s+breathe)\b",
     r"\bshort\s+of\s+breath\b",
     r"\bchest\s+(?:pains?|pressure|tight\w*|hurts?)\b",
     r"\b(?:fell|fallen)\b(?!\s+asleep)",
-    r"\bon\s+the\s+floor\b",
+    # A person on the floor; a lunch tray or a call light on the floor is not an emergency.
+    r"\b(?:i'?m|i\s+am|i\s+was|i'?ve\s+been|i\s+have\s+been|i\s+ended\s+up)\s+(?:(?:lying|laying|stuck|sitting)\s+)?on\s+the\s+floor\b",
+    r"\b(?:found|left)\s+me\s+(?:\w+\s+)?on\s+the\s+floor\b|\b(?:lying|laying)\s+on\s+the\s+floor\b",
+    r"\b(?:he|she|someone|somebody|roommate|neighbor)(?:'s)?\s+(?:is\s+|was\s+)?(?:lying\s+|laying\s+|stuck\s+)?on\s+the\s+floor\b",
     r"\b(?:bleeding|bled)\b|\bblood\b(?!\s+(?:pressure|sugar|tests?|work|draw|thinners?|count))",
     # Present tense only: many residents mention a stroke years ago.
     r"\bhaving\s+a\s+stroke\b|\b(?:it's|it\s+is|this\s+is)\s+a\s+stroke\b|\bstroke\s+(?:right\s+)?now\b",
@@ -61,10 +77,28 @@ _MEDICAL = re.compile("|".join([
     r"\bsudden(?:ly)?\b[^.?!]*\b(?:can't|cannot|can\s+not|couldn't)\s+(?:move|feel|talk|speak|see)\b",
     r"\bside\s+of\s+my\s+(?:face|body)\s+(?:is\s+|feels\s+|went\s+|has\s+gone\s+)?(?:numb|weak|droop\w*)\b",
     r"\bchok(?:ing|ed|e)\b",
-    r"\bpounding\s+headache\b",
+    r"\bpounding\s+headache\b|\bhead(?:'s|\s+is|\s+feels)?\s+pounding\b|\bpounding\s+(?:in|inside)\s+(?:my\s+)?head\b|\bdysreflexia\b",
+    # A call for help counts only as the whole utterance ("Help!", "please help me now"); "can you help me find my glasses" does not.
+    r"^\W*(?:(?:mary|sam)\W+)?(?:please\W+)?(?:help\W*){1,3}(?:me\W*)?(?:(?:please|now|right\s+now|mary|sam)\W*)*$",
+    r"(?:^|[.!?;,]\s*|\b(?:oh|hey|please)\s+)(?:some|any)(?:body|one)[\s,]+(?:please\s+)?help\b",
+    r"\bi\s+(?:really\s+|desperately\s+)?need\s+help\s+(?:right\s+)?(?:now|away)\b",
+    r"\bheart\s+attack\b",
+    r"\b(?:pass(?:ed|ing)?|black(?:ed|ing)?)\s+out\b",
+    r"\bfaint(?:ed|ing)\b|\b(?:feel|felt|feeling|going\s+to|gonna|about\s+to)\s+(?:(?:very|so|really|a\s+bit|a\s+little|kind\s+of|kinda)\s+)?faint\b",
+    r"\bseizures?\b|\bhaving\s+a\s+fit\b",
+    r"\boverdos(?:e|ed|ing)\b|\btoo\s+many\s+(?:pills|tablets|meds)\b",
+    r"\b(?:hit|bumped|banged|knocked)\s+my\s+head\b",
+    r"\b(?:slipped|slid|sliding|slipping)\s+out\s+of\s+(?:my\s+|the\s+)?(?:wheel\s*chair|chair|bed)\b",
+    r"\blips\s+(?:(?:are|is|look|looks|turned|turning|went|going|getting|got|have\s+turned)\s+)?(?:blue|bluish|purple)\b|\bblue\s+lips\b",
 ]), _I)
 _SELF_HARM = re.compile("|".join([
-    r"\b(?:want|wish)(?:ed)?\s+to\s+die\b",
+    r"\b(?:want|wish)(?:ed)?\s+to\s+die\b|\bwanna\s+die\b",
+    r"\bend\s+it\s+all\b",
+    r"\bwish\s+(?:i|that\s+i)\s+(?:was|were)\s+dead\b",
+    # "I don't want to live here" is about the facility, not about dying.
+    r"\b(?:don'?t|do\s+not)\s+(?:even\s+)?want\s+to\s+(?:live|be\s+alive)\b(?!\s+(?:here|there|in|at|with|on|near|alone|by|another)\b)",
+    r"\bsuicidal\b|\bcommit(?:ting)?\s+suicide\b",
+    r"\bno\s+(?:reason|point)\s+(?:to\s+live|(?:in\s+)?living)\b",
     r"\bkill\s+myself\b",
     r"\bend\s+my\s+life\b",
     r"\bhurt\s+myself\b",
@@ -74,9 +108,32 @@ _SELF_HARM = re.compile("|".join([
 _DECLINE = re.compile(
     r"\b(?:don'?t|do\s+not)\s+(?:write|put|note|log|report)(?:\s+(?:that|it|this))?(?:\s+down)?\b"
     r"|\bdon'?t\s+tell\s+anyone\b|\bkeep\s+(?:it|that|this)\s+between\s+us\b", _I)
+# Clear signs of a care problem, even when the log has no category for it (guess_incident says "other"):
+# someone hurt or threatened them, took their things, care that was never done, broken equipment, a sore.
+_LAPSE_CLEAR = "|".join([
+    r"\b(?:nurse|aide|cna|staff|worker|orderly|someone|somebody|they|he|she|man|woman|lady|guy|roommate|resident|visitor)\s+(?:\w+\s+)?"
+    r"(?:hit|slapped|punched|kicked|pushed|shoved|grabbed|pinched|choked|hurt|threatened)\s+me\b",
+    r"\b(?:i\s+(?:was|got)|been|get)\s+(?:hit|slapped|punched|kicked|shoved|pushed|pinched|grabbed)\b",
+    r"\bthreaten(?:ed|s|ing)?\b",
+    r"\b(?:stole|stolen|steal(?:s|ing)?)\b",
+    r"\b(?:they|he|she|someone|somebody|staff|nurse|aide|cna|worker|roommate)\s+(?:\w+\s+){0,2}(?:took|take|takes|taking|taken)\s+(?:away\s+)?(?:my|our)\s+"
+    r"(?:phone|cell|tablet|laptop|tv|television|radio|remote|money|wallet|purse|ring|watch|jewelry|glasses|dentures|hearing\s+aids?"
+    r"|clothes|things|stuff|belongings|property|wheelchair|walker|cane|blanket|pillow|charger)\b",
+    r"\b(?:haven'?t|hasn'?t|wasn'?t|weren'?t|isn'?t|aren'?t)\s+(?:been\s+|being\s+)?"
+    r"(?:given|turned|changed|emptied|fed|washed|bathed|cleaned|repositioned|checked|moved)\b",
+    r"\b(?:nobody|no\s+one)\s+(?:ever\s+)?(?:\w+\s+)?(?:gave|emptied|changed|turned|fed|washed|bathed|cleaned|repositioned|checked|moved|helped)\b",
+    r"\b(?!hearts?\b)\w+(?:'s|\s+(?:is|are|was|were|still|got))\s+(?:\w+\s+)?broken\b",  # not "my heart is broken"
+    r"\b(?:bed|pressure)\s*sores?\b|\b(?:a|new|open)\s+sore\b(?!\s+(?:throat|back|neck|arm|leg|knee|shoulder|muscles?|spot))",
+])
+_LAPSE_CLEAR_RE = re.compile(_LAPSE_CLEAR, _I)
 _LAPSE_WORDS = re.compile(
-    r"\b(nobody|no one|never|didn'?t|did not|wasn'?t|late|cold|missed|skipped|wait(ed|ing)?|ignored|left me|forgot|rude|yell\w*)\b", _I)
-_ASKS = re.compile(r"write (that|it|this) down|note (that|it|this)|jot", _I)
+    r"\b(nobody|no one|never|didn'?t|did not|wasn'?t|late|cold|missed|skipped|wait(ed|ing)?|ignored|left me|forgot|rude|yell\w*)\b|"
+    + _LAPSE_CLEAR, _I)
+# Her own words offering to write it down: "write that down", or "would you like me to write that down" and the like.
+_ASKS = re.compile(
+    r"write (that|it|this) down|note (that|it|this)|jot"
+    r"|\b(?:(?:would|do)\s+you\s+(?:like|want)\s+me\s+to|(?:want|like)\s+me\s+to|shall\s+i|should\s+i|can\s+i|could\s+i|may\s+i|i\s+can|i\s+could)\s+"
+    r"(?:write|note|jot|put|record|log)\s+(?:that|it|this|these|those|what|all|down|a\s+note)\b", _I)
 # "call me" only counts at the start of a sentence or after "you can" and the like: "the aides call me honey" is not a name.
 _NAME = re.compile(
     r"(?:\bmy name is"
@@ -181,7 +238,7 @@ def _plain(text):
 
 def is_emergency(text):
     """'medical', 'self_harm' or None."""
-    text = _plain(text)
+    text = _BENIGN.sub(" ", _plain(text))
     if _SELF_HARM.search(text):
         return "self_harm"
     if _MEDICAL.search(text):
@@ -241,16 +298,30 @@ def is_yes(text):
     return not (after and _YES_WITHDRAW.search(after.group(1)))
 
 
-def lapse_offer(text):
-    """None, or {"incident": guess, "question": ..., "at": time} when the resident describes a care lapse."""
+def _guess(text):
     import server  # lazy: server will import mary
     text = _plain(text)
-    guess = server.guess_incident(re.sub(r"\bfell asleep\b", "slept", text, flags=_I), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    if (guess.get("wait_minutes") is not None or guess.get("never_came")
+    return server.guess_incident(re.sub(r"\bfell asleep\b", "slept", text, flags=_I), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+
+def _offer(guess):
+    return {"incident": guess, "question": OFFER_QUESTION, "at": time.time()}
+
+
+def lapse_offer(text):
+    """None, or {"incident": guess, "question": ..., "at": time} when the resident describes a care lapse."""
+    text = _plain(text)
+    guess = _guess(text)
+    if (guess.get("wait_minutes") is not None or guess.get("never_came") or _LAPSE_CLEAR_RE.search(text)
             or (guess.get("category") != "other"
                 and (guess.get("severity") != "minor" or _LAPSE_WORDS.search(text)))):
-        return {"incident": guess, "question": OFFER_QUESTION, "at": time.time()}
+        return _offer(guess)
     return None
+
+
+def _asks_to_write(spoken):
+    """True when one sentence of her answer is a question that offers to write it down."""
+    return any(s.rstrip().endswith("?") and _ASKS.search(s) for s in re.findall(r"[^.!?]+[.!?]*", spoken))
 
 
 def _offer_fresh(offer):
@@ -534,6 +605,9 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             error = NO_KEY
     elif mood is None:
         set_mood("talking")
+    if not (offer or said_yes or kind == "self_harm" or is_decline(text)) and _asks_to_write(spoken):
+        # Gemini offered on her own for something the word list missed: a "yes" must still save it.
+        offer = memory.pending_offer = _offer(_guess(text))
     if offer and not _ASKS.search(spoken):
         emit(offer["question"], sep=True)
 

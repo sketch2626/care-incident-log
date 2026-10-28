@@ -113,6 +113,12 @@ class GuessIncidentTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(server.guess_incident(text, AT)["severity"], "dangerous")
 
+    def test_being_hit_is_dangerous_staff_problem(self):
+        for text in ("Incident: a nurse hit me", "Incident: the aide slapped me when I asked for water"):
+            with self.subTest(text=text):
+                got = server.guess_incident(text, AT)
+                self.assertEqual((got["category"], got["severity"]), ("staff", "dangerous"))
+
     def test_blood_pressure_is_not_bleeding(self):
         got = server.guess_incident("Incident: they forgot to check my blood pressure", AT)
         self.assertNotEqual(got["severity"], "dangerous")

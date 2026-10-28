@@ -333,6 +333,9 @@ def mark_seen(conn, kind, source_id, status):
 
 
 # First match wins, so toileting ("bathroom") is checked before bathing ("bath").
+# Someone hurt them: a person must be the one doing it ("it hit me that I miss my wife" is not).
+HURT_ME = (r"\b(?:nurse|aide|cna|staff|worker|orderly|someone|somebody|they|he|she|man|woman|lady|guy|roommate|resident|visitor)"
+           r"\s+(?:\w+\s+)?(?:hit|slapped|punched|kicked|pushed|shoved|pinched|grabbed|hurt)\s+me\b")
 GUESS_CATEGORY = [(k, re.compile(p, re.I)) for k, p in [
     ("call_light", r"call ?light|buzzer|pressed (my|the) (button|light)"),
     ("meal", r"dinner|lunch|breakfast|meal|tray|food|hungry|kitchen|snack|sandwich"),
@@ -341,7 +344,7 @@ GUESS_CATEGORY = [(k, re.compile(p, re.I)) for k, p in [
     ("medication", r"\bmeds?\b|medication|pill|dose|insulin"),
     ("repositioning", r"turn(ed)? me|reposition|bed ?sore|pressure (sore|ulcer)"),
     ("safety", r"\bfell\b|\bfall\b|injur|bruise|unsafe"),
-    ("staff", r"rude|yell|attitude|disrespect|scream|cuss"),
+    ("staff", r"rude|yell|attitude|disrespect|scream|cuss|threaten|" + HURT_ME),
 ]]
 NEVER_CAME = re.compile(r"\b(never|nobody|no one|no-one)\s+(ever\s+)?(came|showed|answered|brought|asked)\b(?!\s+(for|until)\b)", re.I)
 _UNITS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9}
@@ -353,7 +356,7 @@ WORD_NUMS = {"a": 1, "an": 1, **_UNITS, "ten": 10, "eleven": 11, "twelve": 12, "
 _NUM_WORDS = "|".join(k.replace(" ", r"[\s-]+") for k in sorted(WORD_NUMS, key=len, reverse=True))
 WAIT = re.compile(r"\b(\d+|" + _NUM_WORDS + r")(\s+and\s+a\s+half)?\s*(hours?|hrs?|minutes?|mins?)(\s+and\s+a\s+half)?\b", re.I)
 HALF_HOUR = re.compile(r"\b(?:a\s+)?half\s+(?:an?\s+)?hour\b", re.I)
-DANGEROUS = re.compile(r"\bfell\b|\bfall\b|injur|bleed|\bbled\b|chok|fever|unsafe|"
+DANGEROUS = re.compile(r"\bfell\b|\bfall\b|injur|bleed|\bbled\b|chok|fever|unsafe|" + HURT_ME + r"|"
                        r"\b(?:can'?t|can\s*not|couldn'?t|could\s+not)\s+breathe|hard to breathe|trouble breathing|short of breath", re.I)
 SERIOUS = re.compile(r"hungry|pain|hurt|soiled|sitting in|cry|skipped|never|nobody|no one|hours?\b", re.I)
 

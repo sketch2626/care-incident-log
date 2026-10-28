@@ -52,21 +52,20 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
     - A greeting by time of day.
     - Idle: asleep at 5 min and dimmed at 15 min (`IDLE` config). Any tap, key or talk wakes her.
     - Screen Wake Lock unless `/api/power` says on battery. That route isn't built yet, so for now the screen stays on.
-  - Minimal entry points (wrap-up, 2026-10-26):
-    - `Start Mary.bat` starts `server.py --no-browser` and opens `/mary.html` in the default browser.
-    - The home screen's first "More" link is "Talk to Mary".
-    - Nothing is uncommitted. Everything is syntax-checked and API-tested only: **nobody has seen it run in a window yet.**
+  - **Full entry points, T5 done 2026-10-28** (97aee7c, 89bd43d; 170 tests pass):
+    - `power.py`: `plugged_in()` (`GetSystemPowerStatus`; True/False/None, a desktop with no battery is True), `keep_display_on(p)` = `p is not False`, and a `KeepAwake` thread. Every `SetThreadExecutionState` call and the release on stop run on that thread. Plugged in or unknown means the display stays on; on battery, the normal timeout applies. `GET /api/power` → `{plugged_in}`. Tests are in `tests/test_power.py`.
+    - `desktop.py --mary` opens `/mary.html` full screen, titled "Mary":
+      - `MaryApi.close_window()` makes the menu show Close.
+      - The WebView2 autoplay flag is set through the env var. The env var replaces pywebview's own args, so `--disable-features=ElasticOverscroll` is repeated.
+      - `private_mode=False` with storage in `DATA\webview`.
+      - KeepAwake starts before the window opens and is stopped in a `finally`.
+      - Without WebView2, it opens the browser at `/mary.html` with no KeepAwake.
+    - `Start Mary.bat` runs `packaging\.venv\Scripts\pythonw.exe desktop.py --mary`, because only that venv has pywebview. Without the venv it uses the system `pythonw`, which falls back to the browser.
+    - Home shows "Talk to Sam" when `companion` is "him". My info has the note "Mary uses this key too…"
+    - **Not yet seen in a real window:** full screen, Close, autoplay voice and the keep-awake.
   - **Next for a fresh worker, in order:**
-    1. **T5 (Sonnet `coder`), the full entry points:**
-       - `power.py`: `plugged_in()` via `GetSystemPowerStatus`, `keep_display_on(p)` = `p is not False`, and a `KeepAwake` thread that calls `SetThreadExecutionState(ES_CONTINUOUS|ES_DISPLAY_REQUIRED|ES_SYSTEM_REQUIRED)` and releases it on stop.
-       - `GET /api/power` → `{plugged_in}`. The page already polls it, and a 404 counts as plugged in.
-       - `desktop.py --mary`: opens `/mary.html` full screen, titled "Mary". It has a `js_api.close_window()` (the page menu shows Close when that exists), sets `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--autoplay-policy=no-user-gesture-required`, and runs KeepAwake start/stop.
-       - Point `Start Mary.bat` at `pythonw desktop.py --mary`.
-       - The home link says "Talk to Sam" when `companion` is "him".
-       - My info gets the note "Mary uses this key too. A free key comes from Google AI Studio."
-       - Tests in `tests/test_power.py`.
-    2. **Andy tries Mary as user #1.** Fix what he finds: voice choice, timings and layout at his screen size. Then measure Gemini speed with his key (`tools/mary_speed.py`).
-    3. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
+    1. **Andy tries Mary as user #1.** Fix what he finds: voice choice, timings and layout at his screen size. Then measure Gemini speed with his key (`tools/mary_speed.py`).
+    2. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 
 ## Next steps
 1. ~~Quiet test suite~~ **Done 2026-10-24** (371bba0, ea5c4c2, 1c0182d): 59 tests, about 2 s. 5 BUG skips in `tests/test_guess.py` that `guess_incident()` gets wrong. It marks "bled", "couldn't breathe" and "can’t breathe" (curly apostrophe) as minor. It reads "twenty five minutes" as 5 and "half an hour" as 60. Fix them in a small worker, then remove the skips.

@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 import assist
 import mary
+import power
 
 # In the packaged app, web/ is unpacked next to the program (sys._MEIPASS).
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -494,6 +495,8 @@ class Handler(SimpleHTTPRequestHandler):
         path, query = parsed.path.rstrip("/"), parse_qs(parsed.query)
         q = lambda k: (query.get(k) or [""])[0]
         m = re.fullmatch(r"/api/incidents/(\d+)", path)
+        if method == "GET" and path == "/api/power":
+            return self._send({"plugged_in": power.plugged_in()})
         if path.startswith("/api/mary/"):
             return self._mary(method, path, q)
         with connect() as conn:

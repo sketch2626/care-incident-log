@@ -230,6 +230,7 @@ function lastNoteWords() {
 function renderHome() {
   const first = (state.settings.resident_name || '').trim().split(/\s+/)[0];
   $('#who').textContent = first ? `Hello, ${first}` : '';
+  $('#maryName').textContent = state.settings.companion === 'him' ? 'Sam' : 'Mary';
 
   const month = thisMonth(), counts = monthCounts();
   CATS.forEach(c => {

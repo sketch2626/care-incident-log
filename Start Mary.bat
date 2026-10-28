@@ -1,7 +1,5 @@
 @echo off
-rem Opens Mary. Double-click this file.
-rem For now she opens in the web browser; the full-screen desktop version (desktop.py --mary) comes next.
+rem Opens Mary full screen. Double-click this file.
+rem Close her from her menu (the three dots), or press Alt+F4.
 cd /d "%~dp0"
-start "" pythonw "%~dp0server.py" --no-browser
-timeout /t 2 /nobreak >nul
-start "" "http://localhost:8765/mary.html"
+if exist "%~dp0packaging\.venv\Scripts\pythonw.exe" (start "" "%~dp0packaging\.venv\Scripts\pythonw.exe" "%~dp0desktop.py" --mary) else (start "" pythonw "%~dp0desktop.py" --mary)

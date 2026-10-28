@@ -514,6 +514,9 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     def _send(self, body, status=200, ctype="application/json", extra=None):
+        conn, self._conn = getattr(self, "_conn", None), None
+        if conn is not None and status < 400 and conn.in_transaction:
+            conn.commit()  # the page may read the log the moment this reply lands
         if not isinstance(body, bytes):
             body = json.dumps(body).encode("utf-8")
         self.send_response(status)
@@ -603,6 +606,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path.startswith("/api/mary/"):
             return self._mary(method, path, q)
         with connect() as conn:
+            self._conn = conn  # _send commits it first, so a reply never arrives before its save is on disk
             if method == "GET" and path == "/api/incidents":
                 import reports  # lazy, like the export routes
                 rows = list_incidents(conn, q("from"), q("to"))

@@ -60,6 +60,18 @@ class HomePageTests(unittest.TestCase):
         self.assertNotIn("Talk to <span", html)
         self.assertIn("$('#maryTo').hidden = false", js)
 
+    def test_andyflow_switch_hidden_until_installed(self):
+        html, js = read("index.html"), read("app.js")
+        self.assertIn('<div id="flowInfo" hidden>', html)
+        self.assertLess(html.index('id="flowInfo"'), html.index('id="i-andyflow_enabled"'))
+        self.assertLess(html.index('id="i-andyflow_enabled"'), html.index('<h2 class="smarth">Smart helper'))
+        self.assertIn("$('#flowInfo').hidden = !state.inbox.installed", js)
+
+    def test_andyflow_setting_sent_only_when_installed(self):
+        js = read("app.js")
+        self.assertIn("installed: !!inbox.installed", js)
+        self.assertIn("if (state.inbox.installed) payload.andyflow_enabled", js)
+
 
 if __name__ == "__main__":
     unittest.main()

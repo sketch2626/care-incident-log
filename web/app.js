@@ -107,16 +107,16 @@ function askConfirm(text) {
 
 /* ---------- Data ---------- */
 
-let state = { incidents: [], settings: {}, inbox: { available: false, items: [] } };
+let state = { incidents: [], settings: {}, inbox: { available: false, installed: false, enabled: false, items: [] } };
 let lastLoad = 0;
 
 async function load() {
   const [incidents, settings, inbox] = await Promise.all([
     api('/api/incidents'),
     api('/api/settings'),
-    api('/api/inbox').catch(() => ({ available: false, items: [] })),
+    api('/api/inbox').catch(() => ({ available: false, installed: false, enabled: false, items: [] })),
   ]);
-  state = { incidents, settings, inbox: { available: !!inbox.available, items: inbox.items || [] } };
+  state = { incidents, settings, inbox: { available: !!inbox.available, installed: !!inbox.installed, enabled: !!inbox.enabled, items: inbox.items || [] } };
   lastLoad = Date.now();
   setBanner('');
 }
@@ -824,10 +824,16 @@ function fillInfo() {
   $('#keyState').textContent = s.gemini_key_set ? 'A key is saved. Leave this empty to keep it.' : 'No key is saved yet.';
   $('#infoError').hidden = true;
   updateGemState();
+  // The Andy Flow switch only appears on a computer that has Andy Flow; the link starts off.
+  $('#flowInfo').hidden = !state.inbox.installed;
+  $('#i-andyflow_enabled').checked = s.andyflow_enabled === '1';
+  updateFlowState();
 }
 
 function updateGemState() { $('#gemState').textContent = $('#i-gemini_enabled').checked ? 'It is on.' : 'It is off.'; }
 $('#i-gemini_enabled').addEventListener('change', updateGemState);
+function updateFlowState() { $('#flowState').textContent = $('#i-andyflow_enabled').checked ? 'It is on.' : 'It is off.'; }
+$('#i-andyflow_enabled').addEventListener('change', updateFlowState);
 $('#infoForm').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
 
 $('#infoForm').addEventListener('submit', async e => {
@@ -837,10 +843,12 @@ $('#infoForm').addEventListener('submit', async e => {
   btn.disabled = true;
   const payload = Object.fromEntries(INFO_FIELDS.map(k => [k, $(`#i-${k}`).value.trim()]));
   payload.gemini_enabled = $('#i-gemini_enabled').checked ? '1' : '0';
+  if (state.inbox.installed) payload.andyflow_enabled = $('#i-andyflow_enabled').checked ? '1' : '0';
   const key = $('#i-gemini_key').value.trim();
   if (key) payload.gemini_key = key; // blank means "keep the saved key"
   try {
     state.settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
+    try { await load(); } catch { /* the banner says so */ } // so home shows or hides the Andy Flow parts
     fillInfo();
     toast('Saved.');
   } catch (err) {

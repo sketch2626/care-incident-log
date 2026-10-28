@@ -146,6 +146,18 @@ class WindowOptionsTests(unittest.TestCase):
         self.assertNotIn("fullscreen", opts["kwargs"])
         self.assertTrue(opts["kwargs"]["maximized"])
 
+    def test_window_trouble_is_written_to_desktop_log(self):
+        path = server.DATA / "desktop.log"
+        path.unlink(missing_ok=True)
+        try:
+            raise RuntimeError("no WebView2 here")
+        except RuntimeError:
+            desktop.log_error("window failed")
+        text = path.read_text(encoding="utf-8")
+        self.assertIn("window failed", text)
+        self.assertIn("no WebView2 here", text)
+        path.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

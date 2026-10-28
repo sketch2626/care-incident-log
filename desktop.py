@@ -11,7 +11,9 @@ the page's own Wake Lock covers it.
 import os
 import sys
 import threading
+import traceback
 import webbrowser
+from datetime import datetime
 from http.server import ThreadingHTTPServer
 
 import power
@@ -31,6 +33,18 @@ def start_server():
     server.init_db()
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return f"http://127.0.0.1:{httpd.server_port}"
+
+
+def log_error(what):
+    """pythonw has no console, so note what went wrong in the data folder (desktop.log) for a helper to read."""
+    try:
+        path = server.DATA / "desktop.log"
+        if path.exists() and path.stat().st_size > 200_000:
+            path.unlink()  # keep it small; only recent trouble matters
+        with path.open("a", encoding="utf-8") as f:
+            f.write(f"\n{datetime.now():%Y-%m-%d %H:%M:%S}  {what}\n{traceback.format_exc()}")
+    except Exception:
+        pass
 
 
 def window_options(mary):
@@ -81,6 +95,7 @@ def open_window(url, mary=False):
         webview.start(**start_args)
         return True
     except Exception:
+        log_error("The app window couldn't open; using the web browser instead.")
         return False
     finally:
         if keep_awake:
@@ -96,4 +111,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        log_error("The app stopped with an error.")
+        raise

@@ -114,6 +114,40 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(status, 200)
 
 
+class HardeningTests(unittest.TestCase):
+    def setUp(self):
+        reset_db()
+
+    def test_csv_cells_cannot_run_as_formulas(self):
+        api("POST", "/api/incidents", incident(description='=HYPERLINK("http://x","click")', witnesses="+1+1"))
+        status, body, _ = api("GET", "/api/export.csv")
+        self.assertEqual(status, 200)
+        text = body.decode("utf-8-sig")
+        self.assertIn("'=HYPERLINK", text)
+        self.assertIn("'+1+1", text)
+
+    def test_pages_cannot_be_framed_by_other_sites(self):
+        _, _, headers = api("GET", "/api/settings")
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        _, _, headers = api("GET", "/index.html")
+        self.assertIn("frame-ancestors 'none'", headers.get("Content-Security-Policy", ""))
+
+    def test_head_checks_the_host_too(self):
+        status, _, _ = api("HEAD", "/index.html", host="evil.example")
+        self.assertEqual(status, 403)
+        status, _, _ = api("HEAD", "/index.html")
+        self.assertEqual(status, 200)
+        status, _, _ = api("HEAD", "/api/settings")
+        self.assertEqual(status, 405)
+
+    def test_mcp_survives_odd_arguments(self):
+        import mcp_server
+        for args in ([1], {"limit": "abc"}, {"limit": -5}):
+            with self.subTest(args=args):
+                out = mcp_server.handle({"method": "tools/call", "params": {"name": "list_incidents", "arguments": args}})
+                self.assertIn("content", out)
+
+
 class SettingsTests(unittest.TestCase):
     def setUp(self):
         reset_db()

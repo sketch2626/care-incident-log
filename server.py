@@ -461,10 +461,16 @@ def export_csv(rows):
                 "Witnesses", "Logged at"])
     for r in sorted(rows, key=lambda r: (r["occurred_date"], r["occurred_time"])):
         w.writerow([r["occurred_date"], r["occurred_time"], CATEGORIES.get(r["category"], r["category"]),
-                    r["severity"].title(), r["description"], r["wait_minutes"] or "",
-                    "Yes" if r["never_came"] else "", r["staff_involved"], r["reported_to"],
-                    r["outcome"], r["witnesses"], r["logged_at"]])
+                    r["severity"].title(), _csv_safe(r["description"]), r["wait_minutes"] or "",
+                    "Yes" if r["never_came"] else "", _csv_safe(r["staff_involved"]), _csv_safe(r["reported_to"]),
+                    _csv_safe(r["outcome"]), _csv_safe(r["witnesses"]), r["logged_at"]])
     return ("﻿" + out.getvalue()).encode("utf-8")  # BOM so Excel reads it correctly
+
+
+def _csv_safe(value):
+    """Words starting with = + - @ would run as a formula when an inspector opens the file in Excel."""
+    value = str(value or "")
+    return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -476,6 +482,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Options", "DENY")  # no other website may show the log inside its own page
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
         super().end_headers()
 
     # Only answer this computer, and only our own page (custom header blocks other websites).
@@ -693,12 +701,16 @@ class Handler(SimpleHTTPRequestHandler):
         return None
 
     def _handle(self, method):
-        mutating = method != "GET"
+        mutating = method not in ("GET", "HEAD")
         if not self._allowed(mutating):
             return
         if not self.path.startswith("/api/") and urlparse(self.path).path.rstrip("/") != "/report":
             if method == "GET":
                 return super().do_GET()
+            if method == "HEAD":
+                return super().do_HEAD()
+            return self.send_error(405)
+        if method == "HEAD":
             return self.send_error(405)
         try:
             if self._route(method) is None:
@@ -712,6 +724,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         self._handle("GET")
+
+    def do_HEAD(self):
+        self._handle("HEAD")  # through _allowed() like everything else
 
     def do_POST(self):
         self._handle("POST")

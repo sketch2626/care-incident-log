@@ -80,11 +80,11 @@ def search_andy_flow(query="", since="", limit=30):
     af = sqlite3.connect(tracker.ANDYFLOW_DB.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)
     try:
         items = [{"kind": "dictation", "id": i, "at": at, "app": app, "text": t[:1500]} for i, at, app, t in af.execute(
-            "SELECT id, timestamp, COALESCE(app_name, ''), text FROM dictations "
+            "SELECT id, timestamp, COALESCE(app_name, ''), COALESCE(text, '') FROM dictations "
             "WHERE timestamp >= ? AND text LIKE ? ORDER BY timestamp DESC LIMIT ?", (since, like, limit))]
         items += [{"kind": "note", "id": i, "at": at, "folder": f, "text": f"{ti}\n{b}".strip()[:1500]}
                   for i, at, ti, b, f in af.execute(
-            "SELECT id, updated_at, title, body, folder FROM notes "
+            "SELECT id, updated_at, COALESCE(title, ''), COALESCE(body, ''), folder FROM notes "
             "WHERE updated_at >= ? AND (title LIKE ? OR body LIKE ?) ORDER BY updated_at DESC LIMIT ?",
             (since, like, like, limit))]
     finally:
@@ -93,7 +93,17 @@ def search_andy_flow(query="", since="", limit=30):
     return {"available": True, "items": items[:limit]}
 
 
+def _limit(value, default):
+    # Clamp a requested row count to 1..500; anything unusable gets the default.
+    try:
+        return max(1, min(500, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 def call_tool(name, args):
+    if not isinstance(args, dict):
+        args = {}
     with tracker.connect() as conn:
         if name == "tracker_summary":
             return summary(conn)
@@ -101,7 +111,7 @@ def call_tool(name, args):
             rows = tracker.list_incidents(conn, args.get("date_from", ""), args.get("date_to", ""))
             if args.get("category"):
                 rows = [r for r in rows if r["category"] == args["category"]]
-            return rows[:args.get("limit", 50)]
+            return rows[:_limit(args.get("limit", 50), 50)]
         if name == "add_incident":
             row = tracker.clean_incident({**args, "source": "claude"})
             return {"id": tracker.insert_incident(conn, row)}
@@ -130,7 +140,7 @@ def call_tool(name, args):
             tracker.mark_seen(conn, args["kind"], args["source_id"], "dismissed")
             return {"ok": True}
     if name == "search_andy_flow":
-        return search_andy_flow(args.get("query", ""), args.get("since", ""), args.get("limit", 30))
+        return search_andy_flow(args.get("query", ""), args.get("since", ""), _limit(args.get("limit", 30), 30))
     raise ValueError(f"Unknown tool: {name}")
 
 
@@ -150,7 +160,7 @@ def handle(msg):
         try:
             result = call_tool(params["name"], params.get("arguments") or {})
             return {"content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}]}
-        except (ValueError, KeyError, sqlite3.Error) as e:
+        except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True}
     raise LookupError(method)
 
@@ -163,8 +173,11 @@ def main():
     for line in sys.stdin:
         if not line.strip():
             continue
-        msg = json.loads(line)
-        if "id" not in msg:
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue  # not JSON: skip the bad line rather than stop the server
+        if not isinstance(msg, dict) or "id" not in msg:
             continue  # notifications (e.g. notifications/initialized) need no reply
         try:
             reply = {"jsonrpc": "2.0", "id": msg["id"], "result": handle(msg)}

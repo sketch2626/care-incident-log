@@ -297,6 +297,7 @@ VOICE_ERRORS = {  # kind -> (plain sentence, HTTP status)
     "bad_key": ("Google didn't accept the Gemini key. Please check it in My info.", 400),
     "no_gemini": ("I couldn't reach Gemini just now. Please try again in a moment.", 502),
     "unknown_voice": ("I don't know that voice.", 400),
+    "no_offline": ("The offline voice isn't installed on this computer yet.", 503),
 }
 
 
@@ -599,22 +600,30 @@ class Handler(SimpleHTTPRequestHandler):
         if method == "POST" and path in ("/api/mary/voices/sample", "/api/mary/live/token"):
             body = self._body()
             key = mary_settings()["key"]
-            if not key:
+            offline = path.endswith("/sample") and str(body.get("id") or "").strip().startswith("kokoro:")
+            if not key and not offline:  # the offline voice needs no Gemini key
                 return self._send(*voice_failure("no_key"))
             try:
-                if path.endswith("/sample"):
+                if offline:
+                    got = voices.kokoro_sample(str(body.get("id") or ""), DATA)
+                elif path.endswith("/sample"):
                     got = voices.tts_sample(str(body.get("id") or ""), key, DATA)
                 else:
-                    got = voices.live_token(str(body.get("voice") or ""), key,
-                                            mary_settings()["companion"] or "mary", mary_memory().name, DATA)
+                    companion = str(body.get("companion") or "")  # try a voice as Mary or as Sam
+                    if companion not in mary.COMPANIONS:
+                        companion = mary_settings()["companion"] or "mary"
+                    got = voices.live_token(str(body.get("voice") or ""), key, companion, mary_memory().name, DATA)
             except voices.VoiceError as e:
                 return self._send(*voice_failure(e.kind))
             if not path.endswith("/sample"):
                 return self._send(got)
-            return self._send(got["wav"], 200, "audio/wav", {
+            headers = {
                 "X-First-Sound-Ms": str(got["first_sound_ms"]), "X-Total-Ms": str(got["total_ms"]),
                 "X-Audio-S": str(got["audio_s"]), "X-Cached": "1" if got["cached"] else "0",
-                "X-Word-Timings": "1" if got["word_timings"] else "0", "X-Voice-Path": got["path"]})
+                "X-Word-Timings": "1" if got["word_timings"] else "0", "X-Voice-Path": got["path"]}
+            if "rtf" in got:
+                headers["X-Rtf"] = str(got["rtf"])
+            return self._send(got["wav"], 200, "audio/wav", headers)
         if method == "POST" and path == "/api/mary/voices/log":
             voices.log({**self._body(), "event": "live"}, DATA)  # the page's Live numbers; only whitelisted keys are kept
             return self._send({"ok": True})

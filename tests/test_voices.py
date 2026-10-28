@@ -4,6 +4,8 @@ import base64
 import io
 import json
 import shutil
+import sys
+import time
 import unittest
 import urllib.error
 import wave
@@ -289,7 +291,9 @@ class RouteTests(VoicesCase):
         self.assertTrue(got["has_key"])
         ids = [c["id"] for c in got["candidates"]]
         self.assertEqual(ids, ["gemini:Sulafat", "gemini:Vindemiatrix", "gemini:Achernar",
-                               "gemini:Achird", "gemini:Algieba", "gemini:Umbriel"])
+                               "gemini:Achird", "gemini:Algieba", "gemini:Umbriel",
+                               "kokoro:af_heart", "kokoro:af_bella", "kokoro:bf_emma",
+                               "kokoro:am_michael", "kokoro:am_fenrir", "kokoro:bm_george"])
         self.assertEqual(got["candidates"][0],
                          {"id": "gemini:Sulafat", "kind": "gemini", "voice": "Sulafat",
                           "gender": "female", "about": "Warm", "ready": True})
@@ -369,6 +373,20 @@ class RouteTests(VoicesCase):
         self.assertIn("Sam", system)
         self.assertIn("Name: Ruth", system)
 
+    def test_token_route_companion_in_the_body_overrides_the_saved_one(self):
+        self.save_key()
+        helpers.api("PUT", "/api/settings", {"companion": "mary"})
+        for body_companion, saved, is_sam in (("him", "mary", True), ("mary", "him", False), ("nobody", "him", True),
+                                              ("", "mary", False), (["him"], "mary", False)):
+            helpers.api("PUT", "/api/settings", {"companion": saved})
+            net = self.use(Resp({"name": "auth_tokens/zzz"}))
+            status, _, _ = helpers.api("POST", "/api/mary/live/token",
+                                       {"voice": "live:Algieba", "companion": body_companion})
+            self.assertEqual(status, 200, body_companion)
+            system = net.body()["liveConnectConstraints"]["config"]["systemInstruction"]["parts"][0]["text"]
+            self.assertEqual("a kind and friendly gentleman" in system, is_sam, (body_companion, saved))
+            self.assertEqual("Sam" in system, is_sam, (body_companion, saved))
+
     def test_posts_need_the_tracker_header(self):
         self.save_key()
         net = self.use()
@@ -384,17 +402,180 @@ class RouteTests(VoicesCase):
         status, got, _ = helpers.api("PUT", "/api/settings",
                                      {"voice_mary": "gemini:Sulafat", "voice_sam": "live:Achird"})
         self.assertEqual((status, got["voice_mary"], got["voice_sam"]), (200, "gemini:Sulafat", "live:Achird"))
-        for junk in ("gemini:Nope", "evil", "live:", ":Sulafat", "kokoro:af_heart", 5, ["gemini:Sulafat"]):
+        for junk in ("gemini:Nope", "evil", "live:", ":Sulafat", "kokoro:Sulafat", "kokoro:", 5, ["gemini:Sulafat"]):
             _, got, _ = helpers.api("PUT", "/api/settings", {"voice_mary": junk, "voice_sam": junk})
             self.assertEqual((got["voice_mary"], got["voice_sam"]), ("gemini:Sulafat", "live:Achird"), junk)
         _, got, _ = helpers.api("PUT", "/api/settings", {"voice_mary": "  ", "voice_sam": "live:Umbriel"})
         self.assertEqual((got["voice_mary"], got["voice_sam"]), ("", "live:Umbriel"))  # blank clears
 
     def test_valid_choice(self):
-        for ok in ("gemini:Sulafat", "live:Achird", "live:Umbriel"):
+        for ok in ("gemini:Sulafat", "live:Achird", "live:Umbriel", "kokoro:af_heart", "kokoro:bm_george"):
             self.assertTrue(voices.valid_choice(ok), ok)
-        for bad in ("", None, "gemini", "gemini:", "gemini:sulafat", "live:Nope", "kokoro:x", 3):
+        for bad in ("", None, "gemini", "gemini:", "gemini:sulafat", "live:Nope", "kokoro:x", "kokoro:AF_HEART",
+                    "kokoro:Sulafat", "gemini:af_heart", 3):
             self.assertFalse(voices.valid_choice(bad), bad)
+
+
+class FakeKokoro:
+    """Stands in for kokoro_onnx.Kokoro: 0.1 s of audio per sentence, no model, no onnxruntime."""
+
+    def __init__(self):
+        self.calls = []
+
+    def create(self, text, voice, speed=1.0, lang="en-us"):
+        self.calls.append((text, voice, speed, lang))
+        return [0.0, 0.5, -0.5, 1.5, -1.5] * 480, 24000
+
+
+class KokoroTests(VoicesCase):
+    def setUp(self):
+        super().setUp()
+        self.fake = FakeKokoro()
+        self.loads = 0
+        voices._kokoro = None
+        self.addCleanup(setattr, voices, "_kokoro", None)
+        for name, new in (("kokoro_ready", lambda: True), ("_load_kokoro", self.load)):
+            patcher = mock.patch.object(voices, name, new)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def load(self):
+        self.loads += 1
+        time.sleep(0.02)
+        return self.fake
+
+    def lines(self):
+        return [json.loads(x) for x in self.log_text().splitlines()]
+
+    def test_the_offline_voice_needs_no_key_and_returns_a_wav(self):
+        status, wav, headers = helpers.api("POST", "/api/mary/voices/sample", {"id": "kokoro:af_heart"})
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "audio/wav")
+        rate, _, _, frames = wav_info(wav)
+        self.assertEqual(rate, 24000)
+        self.assertEqual(frames, 3 * 2400 + 2 * int(24000 * voices.KOKORO_PAUSE_S))  # three sentences, two pauses
+        self.assertEqual((headers["X-Voice-Path"], headers["X-Cached"], headers["X-Word-Timings"]), ("kokoro", "0", "0"))
+        self.assertGreaterEqual(float(headers["X-Rtf"]), 0)
+        self.assertEqual(headers["X-Audio-S"], "0.6")
+        self.assertEqual([c[0] for c in self.fake.calls],
+                         ["Hello there!", "It's so good to see you today.",
+                          "I'm right here whenever you'd like to talk, or just to keep you company."])
+        self.assertEqual({c[1:] for c in self.fake.calls}, {("af_heart", 1.0, "en-us")})
+
+    def test_british_voices_use_british_english(self):
+        voices.kokoro_sample("kokoro:bf_emma", server.DATA)
+        voices.kokoro_sample("kokoro:bm_george", server.DATA)
+        voices.kokoro_sample("kokoro:am_fenrir", server.DATA)
+        langs = {c[1]: c[3] for c in self.fake.calls}
+        self.assertEqual(langs, {"bf_emma": "en-gb", "bm_george": "en-gb", "am_fenrir": "en-us"})
+
+    def test_the_model_loads_once_and_only_the_first_call_reports_it(self):
+        first = voices.kokoro_sample("kokoro:af_bella", server.DATA)
+        again = voices.kokoro_sample("kokoro:am_michael", server.DATA)
+        self.assertEqual(self.loads, 1)
+        self.assertGreaterEqual(first["load_ms"], 15)
+        self.assertGreaterEqual(first["first_sound_ms"], first["load_ms"])
+        self.assertEqual(again["load_ms"], 0)
+        self.assertGreaterEqual(first["total_ms"], first["first_sound_ms"])
+        for got in (first, again):
+            self.assertEqual((got["path"], got["word_timings"], got["cached"], got["audio_s"]), ("kokoro", False, False, 0.6))
+            self.assertGreaterEqual(got["rtf"], 0)
+        self.assertFalse((server.DATA / "mary" / "voices").exists())  # never saved: every play measures again
+
+    def test_samples_are_logged_with_speed_numbers(self):
+        voices.kokoro_sample("kokoro:am_michael", server.DATA)
+        (line,) = self.lines()
+        self.assertEqual((line["ok"], line["id"], line["voice"], line["path"]), (True, "kokoro:am_michael", "am_michael", "kokoro"))
+        for key in ("rtf", "load_ms", "first_sound_ms", "total_ms", "audio_s"):
+            self.assertIn(key, line)
+        self.assertEqual(line["audio_s"], 0.6)
+
+    def test_not_installed_is_a_plain_503_and_is_logged(self):
+        with mock.patch.object(voices, "kokoro_ready", lambda: False):
+            status, got, _ = helpers.api("POST", "/api/mary/voices/sample", {"id": "kokoro:af_heart"})
+            self.assertEqual(status, 503)
+            self.assertEqual(got, {"error": "The offline voice isn't installed on this computer yet.",
+                                   "bad_key": False, "no_key": False})
+            with self.assertRaises(voices.VoiceError) as cm:
+                voices.kokoro_sample("kokoro:af_heart", server.DATA)
+            self.assertEqual(cm.exception.kind, "no_offline")
+        self.assertEqual(self.loads, 0)
+        self.assertEqual([(x["ok"], x["error"]) for x in self.lines()], [(False, "no_offline")] * 2)
+
+    def test_an_engine_that_breaks_is_no_offline_and_can_try_again(self):
+        def boom():
+            raise RuntimeError(r"cannot open C:\Users\Someone\secret\kokoro.onnx")
+        with mock.patch.object(voices, "_load_kokoro", boom):
+            status, got, _ = helpers.api("POST", "/api/mary/voices/sample", {"id": "kokoro:af_heart"})
+        self.assertEqual(status, 503)
+        self.assertNotIn("Someone", json.dumps(got))
+        self.assertIsNone(voices._kokoro)
+        self.assertEqual(voices.kokoro_sample("kokoro:af_heart", server.DATA)["path"], "kokoro")  # next try loads fine
+        self.fake.create = mock.Mock(side_effect=ValueError("bad phonemes"))
+        status, got, _ = helpers.api("POST", "/api/mary/voices/sample", {"id": "kokoro:af_heart"})
+        self.assertEqual(status, 503)
+
+    def test_unknown_offline_voice_is_refused_without_the_engine(self):
+        status, got, _ = helpers.api("POST", "/api/mary/voices/sample", {"id": "kokoro:nope"})
+        self.assertEqual((status, got["error"]), (400, "I don't know that voice."))
+        status, got, _ = helpers.api("POST", "/api/mary/voices/sample", {"id": "gemini:Sulafat"})  # Gemini still needs the key
+        self.assertEqual((status, got["no_key"]), (400, True))
+        self.assertEqual(self.loads, 0)
+
+    def test_candidates_say_whether_the_offline_voices_are_ready(self):
+        offline = [c for c in voices.candidates() if c["kind"] == "kokoro"]
+        self.assertEqual(len(offline), 6)
+        self.assertTrue(all(c["ready"] for c in offline))
+        self.assertEqual({c["gender"] for c in offline}, {"female", "male"})
+        with mock.patch.object(voices, "kokoro_ready", lambda: False):
+            self.assertFalse(any(c["ready"] for c in voices.candidates() if c["kind"] == "kokoro"))
+            self.assertTrue(all(c["ready"] for c in voices.candidates() if c["kind"] == "gemini"))
+
+    def test_the_settings_keep_an_offline_voice_choice(self):
+        _, got, _ = helpers.api("PUT", "/api/settings", {"voice_mary": "kokoro:af_heart", "voice_sam": "kokoro:am_michael"})
+        self.assertEqual((got["voice_mary"], got["voice_sam"]), ("kokoro:af_heart", "kokoro:am_michael"))
+
+
+class KokoroReadyTests(unittest.TestCase):
+    def test_ready_needs_both_files_and_the_package_without_importing_it(self):
+        files = (voices.Path("m.onnx"), voices.Path("v.bin"))
+        spec = object()
+        with mock.patch.object(voices, "_kokoro_files", lambda: files), \
+                mock.patch("importlib.util.find_spec", lambda name: spec if name == "kokoro_onnx" else None):
+            self.assertTrue(voices.kokoro_ready())
+        with mock.patch.object(voices, "_kokoro_files", lambda: None), \
+                mock.patch("importlib.util.find_spec", lambda name: spec):
+            self.assertFalse(voices.kokoro_ready())
+        with mock.patch.object(voices, "_kokoro_files", lambda: files), \
+                mock.patch("importlib.util.find_spec", lambda name: None):
+            self.assertFalse(voices.kokoro_ready())
+
+    def test_files_are_found_in_the_app_folder_or_the_data_folder(self):
+        root = server.DATA / "kokoro-test"
+        shutil.rmtree(root, ignore_errors=True)
+        self.addCleanup(shutil.rmtree, root, True)
+        (root / "app").mkdir(parents=True)
+        with mock.patch.object(voices, "_HERE", root / "app"), mock.patch.dict("os.environ", {"APPDATA": str(root / "ad")}):
+            self.assertIsNone(voices._kokoro_files())
+            folder = root / "ad" / "CareIncidentLog" / "models" / "kokoro"
+            folder.mkdir(parents=True)
+            (folder / voices.KOKORO_MODEL).write_bytes(b"x")
+            self.assertIsNone(voices._kokoro_files())  # one file is not enough
+            (folder / voices.KOKORO_VOICE_FILE).write_bytes(b"x")
+            self.assertEqual(voices._kokoro_files(), (folder / voices.KOKORO_MODEL, folder / voices.KOKORO_VOICE_FILE))
+            app = root / "app" / "models" / "kokoro"
+            app.mkdir(parents=True)
+            (app / voices.KOKORO_MODEL).write_bytes(b"x")
+            (app / voices.KOKORO_VOICE_FILE).write_bytes(b"x")
+            self.assertEqual(voices._kokoro_files()[0], app / voices.KOKORO_MODEL)  # the app's own folder wins
+
+    def test_samples_become_clipped_16_bit_with_or_without_numpy(self):
+        samples = [0.0, 0.5, -0.5, 1.5, -1.5]
+        want = b"\x00\x00" + (16383).to_bytes(2, "little", signed=True) + (-16383).to_bytes(2, "little", signed=True) \
+            + (32767).to_bytes(2, "little", signed=True) + (-32768).to_bytes(2, "little", signed=True)
+        self.assertEqual(voices._pcm16(samples), want)
+        with mock.patch.dict(sys.modules, {"numpy": None}):
+            self.assertEqual(voices._pcm16(samples), want)
 
 
 class LogTests(VoicesCase):

@@ -6,15 +6,21 @@ a message or a log. Stdlib only.
 """
 import base64
 import hashlib
+import importlib.util
 import io
 import json
 import math
+import os
 import re
+import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 import wave
+from array import array
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import mary
@@ -34,8 +40,17 @@ GEMINI_VOICES = [
     ("Sulafat", "female", "Warm"), ("Vindemiatrix", "female", "Gentle"), ("Achernar", "female", "Soft"),
     ("Achird", "male", "Friendly"), ("Algieba", "male", "Smooth"), ("Umbriel", "male", "Easy-going"),
 ]
-# Offline candidates ("kokoro:<voice>"): (name, gender, about). A later task adds the engine and fills this in.
-KOKORO_VOICES = []
+# Offline candidates ("kokoro:<voice>"): (name, gender, about). Names starting with "b" are British.
+KOKORO_VOICES = [
+    ("af_heart", "female", "Warm, American"), ("af_bella", "female", "Bright, American"),
+    ("bf_emma", "female", "Gentle, British"),
+    ("am_michael", "male", "Calm, American"), ("am_fenrir", "male", "Deep, American"),
+    ("bm_george", "male", "Kind, British"),
+]
+KOKORO_MODEL = "kokoro-v1.0.int8.onnx"   # fetched by tools/get_voice_model.py into models/kokoro/
+KOKORO_VOICE_FILE = "voices-v1.0.bin"
+KOKORO_PAUSE_S = 0.15                     # quiet gap put between the sentences of one sample
+_HERE = Path(__file__).resolve().parent
 
 SOCKET_TIMEOUT = 15  # seconds to wait on any one read
 DEADLINE = 30        # seconds for a whole sample
@@ -48,7 +63,8 @@ LOG_MAX = 200_000
 
 
 class VoiceError(Exception):
-    """kind is "bad_key" (Google turned the key down), "no_gemini" (couldn't get an answer) or "unknown_voice".
+    """kind is "bad_key" (Google turned the key down), "no_gemini" (couldn't get an answer), "no_offline"
+    (the offline voice isn't installed or failed) or "unknown_voice".
     The message is only the kind, so no key, URL or response text can leak through it."""
 
     def __init__(self, kind, detail=""):
@@ -95,7 +111,8 @@ def _other_failure(exc, where):
 def candidates():
     out = [{"id": f"gemini:{n}", "kind": "gemini", "voice": n, "gender": g, "about": a, "ready": True}
            for n, g, a in GEMINI_VOICES]
-    out += [{"id": f"kokoro:{n}", "kind": "kokoro", "voice": n, "gender": g, "about": a, "ready": False}
+    ready = kokoro_ready()
+    out += [{"id": f"kokoro:{n}", "kind": "kokoro", "voice": n, "gender": g, "about": a, "ready": ready}
             for n, g, a in KOKORO_VOICES]
     return out
 
@@ -105,7 +122,7 @@ def live_choices():
 
 
 def valid_choice(v):
-    """True for a known candidate id: gemini:<Name>, live:<Name> (or kokoro:<voice> once there is one)."""
+    """True for a known candidate id: gemini:<Name>, live:<Name> or kokoro:<voice>."""
     if not isinstance(v, str) or ":" not in v:
         return False
     kind, _, name = v.partition(":")
@@ -118,7 +135,8 @@ def _voice_name(voice, kind):
     """The bare voice name from 'Sulafat' or 'gemini:Sulafat'; VoiceError if it isn't one of ours."""
     voice = str(voice or "").strip()
     name = voice.split(":", 1)[1] if voice.startswith((kind + ":",)) else voice
-    if name not in [n for n, _, _ in GEMINI_VOICES]:
+    known = KOKORO_VOICES if kind == "kokoro" else GEMINI_VOICES
+    if name not in [n for n, _, _ in known]:
         raise VoiceError("unknown_voice")
     return name
 
@@ -133,7 +151,7 @@ def _data(data):
 # ---------------------------------------------------------------- log
 
 _LOG_NUMBERS = ("first_sound_ms", "total_ms", "audio_s", "reply_gap_ms", "first_audio_ms",
-                "turns", "interruptions", "seconds", "close_code")
+                "turns", "interruptions", "seconds", "close_code", "rtf", "load_ms")
 _LOG_BOOLS = ("word_timings", "ok")
 _LOG_STRINGS = ("event", "id", "voice", "model", "path", "error")
 
@@ -383,6 +401,107 @@ def tts_sample(voice, api_key, data=None):
             pass  # not saving a copy only costs a second call later
         log({**event, "ok": True, **({"note": fell_back} if fell_back else {}),
              **{k: out[k] for k in ("first_sound_ms", "total_ms", "audio_s", "path", "word_timings")}}, data)
+        return out
+    except VoiceError as e:
+        log({**event, "ok": False, "error": e.kind, **({"note": e.detail} if e.detail else {})}, data)
+        raise
+
+
+# ---------------------------------------------------------------- offline voice (Kokoro)
+
+_kokoro = None                      # the loaded engine, kept for the life of the server
+_kokoro_lock = threading.Lock()     # one load and one synthesis at a time
+
+
+def _kokoro_files():
+    """(model, voices) paths: the app's models/kokoro folder, then the one in %APPDATA%\\CareIncidentLog\\models."""
+    dirs = [_HERE / "models" / "kokoro"]
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        dirs.append(Path(appdata) / "CareIncidentLog" / "models" / "kokoro")
+    for d in dirs:
+        if (d / KOKORO_MODEL).is_file() and (d / KOKORO_VOICE_FILE).is_file():
+            return d / KOKORO_MODEL, d / KOKORO_VOICE_FILE
+    return None
+
+
+def kokoro_ready():
+    """True when both model files are on disk and the kokoro_onnx package is installed (nothing is imported)."""
+    try:
+        return _kokoro_files() is not None and importlib.util.find_spec("kokoro_onnx") is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _load_kokoro():
+    """Build the engine (tests replace this). Slow: reads the ~90 MB model."""
+    files = _kokoro_files()
+    if files is None:
+        raise FileNotFoundError("kokoro model files")
+    from kokoro_onnx import Kokoro
+    return Kokoro(str(files[0]), str(files[1]))
+
+
+def _sentences(text):
+    return [p for p in re.split(r"(?<=[.!?])\s+", text.strip()) if p]
+
+
+def _pcm16(samples):
+    """Little-endian 16-bit PCM bytes from float samples in -1..1 (clipped)."""
+    try:
+        import numpy as np
+        return np.clip(np.asarray(samples, dtype=np.float32) * 32767.0, -32768, 32767).astype("<i2").tobytes()
+    except ImportError:
+        out = array("h", (max(-32768, min(32767, int(x * 32767.0))) for x in samples))
+        if sys.byteorder == "big":
+            out.byteswap()
+        return out.tobytes()
+
+
+def kokoro_sample(voice, data=None):
+    """One spoken sample of LINE made on this computer. Same result shape as tts_sample, plus rtf (seconds of
+    synthesis per second of speech) and load_ms (model load, only on the first call). Never cached, so every
+    play measures the speed again. Raises VoiceError("no_offline"). Every call is logged."""
+    voice_id = str(voice or "").strip()
+    event = {"event": "tts", "id": voice_id, "model": KOKORO_MODEL.rsplit(".", 1)[0]}
+    try:
+        name = _voice_name(voice_id, "kokoro")
+        voice_id = f"kokoro:{name}"
+        event.update(id=voice_id, voice=name)
+        if not kokoro_ready():
+            raise VoiceError("no_offline", "model files or kokoro_onnx missing")
+        lang = "en-gb" if name.startswith("b") else "en-us"
+        global _kokoro
+        try:
+            with _kokoro_lock:
+                load_ms = 0
+                if _kokoro is None:
+                    t = time.monotonic()
+                    _kokoro = _load_kokoro()
+                    load_ms = int((time.monotonic() - t) * 1000)
+                pieces, rate, synth, first_ms = [], 0, 0.0, 0
+                for sentence in _sentences(LINE):
+                    t = time.monotonic()
+                    samples, r = _kokoro.create(sentence, voice=name, speed=1.0, lang=lang)
+                    took = time.monotonic() - t
+                    synth += took
+                    if not pieces:
+                        first_ms = int(took * 1000) + load_ms
+                    rate = rate or int(r)
+                    pieces.append(_pcm16(samples))
+        except Exception as e:  # missing file, bad model, out of memory
+            raise VoiceError("no_offline", _other_failure(e, "kokoro")) from None
+        if not rate or not any(pieces):
+            raise VoiceError("no_offline", "kokoro gave no audio")
+        speech_s = sum(len(p) for p in pieces) / (2 * rate)
+        gap = b"\x00\x00" * int(rate * KOKORO_PAUSE_S)
+        pcm = gap.join(pieces)
+        wav = _wav(pcm, rate)
+        out = {"wav": wav, "first_sound_ms": first_ms, "total_ms": load_ms + int(synth * 1000),
+               "audio_s": round(len(pcm) / (2 * rate), 2), "path": "kokoro", "word_timings": False,
+               "cached": False, "rtf": round(synth / speech_s, 3), "load_ms": load_ms}
+        log({**event, "ok": True, **{k: out[k] for k in ("first_sound_ms", "total_ms", "audio_s", "path",
+                                                          "word_timings", "rtf", "load_ms")}}, data)
         return out
     except VoiceError as e:
         log({**event, "ok": False, "error": e.kind, **({"note": e.detail} if e.detail else {})}, data)

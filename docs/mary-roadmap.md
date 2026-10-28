@@ -11,13 +11,14 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 
 ## Items, in order
 
-### M1. Her words: what she can do (small; worker `mary-fixes`, Haiku)
+### M1. Her words: what she can do — **done 2026-10-28 (dc6f847)**
 - Add a "What you can do" section to `mary/instructions.md` and test it in `tests/test_mary.py`:
   - She never calls herself "just a voice".
   - She never sends someone to the call light except for a real care need. The emergency rules are unchanged.
   - Games she can play by talking right now: trivia, 20 questions, riddles, word games, "name that tune" by humming. She says on-screen games are coming soon.
   - Things she can't do yet (open sites, apps): a warm "not yet, soon", never a flat no.
 - **Done when:** the tests pass and her replies to "let's play a game" or "can you pull up a game?" offer a talking game.
+- **Built:** a "What you can do" section in `mary/instructions.md` (version 3), 3 offline tests in `tests/test_mary.py`, and live-check cases `play_game` and `not_yet` in `tests/mary_conversations.json` (run `tools/mary_speed.py` with a key). Name that tune uses spoken clues from her, because speech-to-text can't hear humming. Not yet heard live.
 
 ### M2. Voice and conversation audition (Andy picks by ear; worker, Sonnet)
 - Build a small page, `/mary/voices.html`, opened in Mary's window, with big play buttons. It holds the same short Mary line in each candidate voice. Use 2-3 female and 2-3 male voices each:

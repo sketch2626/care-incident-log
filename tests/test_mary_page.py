@@ -60,6 +60,16 @@ class MaryPageTests(unittest.TestCase):
         self.assertIn('id="closeBtn"', html)
         self.assertIn('data-act="done"', html)
 
+    def test_listening_guards_double_tap_and_slow_first_stop(self):
+        # a tremor double tap must not end the recording at once, and the first stop (which waits for the
+        # voice model to load on a slow laptop) gets 60 s, with a kind line instead of "didn't catch that"
+        js, _ = self.get("/mary/app.js")
+        self.assertRegex(js, r"var MIN_LISTEN_MS = 800;")
+        self.assertRegex(js, r"Date\.now\(\) - t0 < MIN_LISTEN_MS")
+        self.assertEqual(js.count("/api/listen/stop?raw=1', {}, { ms: 60000 }"), 3)
+        self.assertNotIn("/api/listen/stop?raw=1', {}, { ms: 30000 }", js)
+        self.assertIn("I'm still waking up my ears", js)
+
     def test_face_files_still_load(self):
         self.get("/mary/face.js")
         self.get("/mary/face.css")

@@ -32,6 +32,8 @@
   function log(e) { try { console.error(e); } catch (x) { /* nothing */ } }
 
   var RATE_MIN = 0.6, RATE_MAX = 1.4, VOL_MIN = 0.2, VOL_MAX = 1.0;
+  var MIN_LISTEN_MS = 800;       // a second tap this soon after the mic opens is a double tap, not "I'm done"
+  var SILENCE_NOISE = /^\W*(?:you|thank you|thanks|thank you for watching|thanks for watching|bye|okay|ok|so|um+|uh+)?\W*$/i;
 
   var MSG = {
     tapToTalk: "Tap the button and talk to me any time.",
@@ -39,6 +41,7 @@
     listening: "I'm listening…",
     silence: "I didn't hear anything. Tap the button and talk whenever you're ready.",
     notCaught: "I didn't quite catch that. Could you say it again?",
+    waking: "I'm still waking up my ears. Please try again in a moment.",
     sorry: "I'm sorry, something went wrong. Let's try again.",
     nokey: "I need my key before we can chat. Please paste it in My info, in the Smart helper key box.",
     emergency: "Please press your call light or tell a staff member right now. If it's serious, call 911.",
@@ -442,7 +445,7 @@
       u.volume = S.volume;
       V.refs.push(u);                       // keep a reference, or Chromium may drop the end event
       if (V.refs.length > 12) { V.refs.shift(); }
-      var failed = false;
+      var failed = false, began = false;
 
       function fail(why) {
         if (failed || settled || Sp.sess !== s) { return; }
@@ -459,7 +462,8 @@
         captionOnly();
       }
 
-      u.onend = function () { if (!failed) { done(); } };
+      u.onstart = function () { began = true; };
+      u.onend = function () { began = true; if (!failed) { done(); } };
       u.onerror = function (ev) { fail(ev && ev.error ? ev.error : 'error'); };
       addTimer(s, function () { fail('timeout'); }, est * 2 + 2000);
       var wait = Math.max(0, Sp.cancelAt + 120 - Date.now());   // Chromium drops a speak() right after cancel()
@@ -468,7 +472,10 @@
         try {
           window.speechSynthesis.resume();
           window.speechSynthesis.speak(u);
-        } catch (e) { fail('error'); }
+        } catch (e) { fail('error'); return; }
+        if (voice && !voice.localService) {   // an online voice that never starts: don't wait for the long timer
+          addTimer(s, function () { if (!began) { fail('timeout'); } }, 2500);
+        }
       }, wait);
     }
 
@@ -569,7 +576,7 @@
   function listenOnce() {
     var my = S.turn;
     return new Promise(function (resolve, reject) {
-      var ended = false, started = false, pending = '';
+      var ended = false, started = false, pending = '', t0 = Date.now();
       var timer = null, hard = null, fails = 0, notRec = 0;
       S.listenReason = '';
       setPhase('listening');
@@ -589,8 +596,10 @@
         cleanup();
         S.listenReason = reason;
         setPhase('thinking');
-        api('POST', '/api/listen/stop?raw=1', {}, { ms: 30000 }).then(function (j) {
-          resolve(reason === 'silence' ? '' : String((j && j.text) || '').trim());
+        api('POST', '/api/listen/stop?raw=1', {}, { ms: 60000 }).then(function (j) {
+          var heard = String((j && j.text) || '').trim();   // whatever was heard counts, even if the level never showed a voice,
+          if (reason === 'silence' && SILENCE_NOISE.test(heard)) { heard = ''; }   // except what Whisper invents in a quiet room
+          resolve(heard);
         }).catch(function (e) { e.stage = 'stop'; reject(e); });
       }
       function poll() {
@@ -615,11 +624,14 @@
         });
       }
 
-      S.stopNow = function () { finish('tap'); };
+      S.stopNow = function () {
+        if (!started || Date.now() - t0 < MIN_LISTEN_MS) { return; }   // double tap while the mic opens
+        finish('tap');
+      };
       S.listenAbort = function () {
         if (ended) { return; }
         cleanup();
-        api('POST', '/api/listen/stop?raw=1', {}, { ms: 30000 }).catch(noop);
+        api('POST', '/api/listen/stop?raw=1', {}, { ms: 60000 }).catch(noop);
         var e = new Error('cancelled');
         e.cancelled = true;
         reject(e);
@@ -627,7 +639,8 @@
 
       api('POST', '/api/listen/start', {}, { ms: 15000 }).then(function () {
         started = true;
-        if (ended) { api('POST', '/api/listen/stop?raw=1', {}, { ms: 30000 }).catch(noop); return; }
+        t0 = Date.now();
+        if (ended) { api('POST', '/api/listen/stop?raw=1', {}, { ms: 60000 }).catch(noop); return; }
         if (pending) { finish(pending); return; }
         hard = setTimeout(function () { finish('cap'); }, 60000);
         poll();
@@ -642,7 +655,7 @@
 
   function kindMessage(m) {
     m = String(m || '').trim();
-    if (!m || m.length > 160 || /traceback|exception|errno|http \d/i.test(m)) { return "I can't hear you right now."; }
+    if (!m || m.length > 160 || /traceback|exception|errno|http \d|^something went wrong/i.test(m)) { return "I can't hear you right now."; }
     if (!/[.!?]$/.test(m)) { m += '.'; }
     return m;
   }
@@ -659,16 +672,19 @@
     var my = newTurn();
     return listenOnce().then(function (text) {
       if (my !== S.turn) { return undefined; }
-      if (S.listenReason === 'silence') { return say(MSG.silence, 'talking'); }
-      if (!text) { return say(MSG.notCaught, 'talking'); }
+      if (!text) { return say(S.listenReason === 'silence' ? MSG.silence : MSG.notCaught, 'talking'); }
       return talkTo(text);
     }).catch(function (e) {
       if ((e && e.cancelled) || my !== S.turn) { return undefined; }
       log(e);
-      if (e && e.stage === 'start') {
+      if (e && (e.stage === 'start' || (e.stage === 'stop' && e.serverMessage))) {
         setPhase('idle');
         openTyping();
         return say("I'm sorry. " + kindMessage(e.serverMessage) + " You can type to me instead.", 'sorry');
+      }
+      if (e && e.stage === 'stop' && e.name === 'AbortError') {      // the first stop waits for the voice model to load
+        setPhase('idle');
+        return say(MSG.waking, 'sorry');
       }
       return say(MSG.notCaught, 'talking');
     });
@@ -696,8 +712,11 @@
     if (!o || typeof o !== 'object') { return null; }
     T.gotLine = true;
     if (o.done) { return o; }
-    if (o.error) { return { done: true, error: String(o.error), text: '' }; }
-    if (o.mood) { applyMood(String(o.mood)); }
+    if (o.error) {
+      if (T.streamed) { return { done: true, text: T.streamed, mood: T.mood }; }     // she already said part of it: keep that
+      return { done: true, error: String(o.error), text: '' };
+    }
+    if (o.mood) { T.mood = String(o.mood); applyMood(T.mood); }
     if (typeof o.text === 'string' && o.text) { onPiece(o.text, T); }
     return null;
   }
@@ -751,6 +770,7 @@
       try { d = JSON.parse(all); } catch (e) { d = null; }
       if (d && typeof d === 'object') { T.gotLine = true; return d; }
     }
+    if (T.streamed) { return { done: true, text: T.streamed, mood: T.mood }; }       // the stream stopped early: keep what arrived
     return null;
   }
 
@@ -809,7 +829,7 @@
     setCaption('You said: ' + text, 'said');
     setPhase('thinking');
 
-    var T = { turn: turn, streamed: '', rest: '', sess: null, gotLine: false, gotResponse: false, dead: false };
+    var T = { turn: turn, streamed: '', rest: '', mood: '', sess: null, gotLine: false, gotResponse: false, dead: false };
     var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
     S.ctrl = ctrl;
     var timer = null;
@@ -942,12 +962,16 @@
     say(MSG.light, 'concerned');
     clearTimeout(S.lightTimer);
     var seq = S.emSeq;
-    S.lightTimer = setTimeout(function () {
-      if (S.screen === 'emergency' && S.emSeq === seq && !S.helpAsked) {
-        S.helpAsked = true;
-        say(MSG.helpAsk, 'concerned');
+    function askHelp() {
+      if (S.screen !== 'emergency' || S.emSeq !== seq || S.helpAsked) { return; }
+      if (S.phase === 'listening' || S.phase === 'thinking') {     // never talk over the resident: ask again shortly
+        S.lightTimer = setTimeout(askHelp, 5000);
+        return;
       }
-    }, 180000);
+      S.helpAsked = true;
+      say(MSG.helpAsk, 'concerned');
+    }
+    S.lightTimer = setTimeout(askHelp, 180000);
   }
 
   function onOkNow() {
@@ -1038,7 +1062,11 @@
     if (!st) {
       try { st = await refreshStatus(); } catch (e) { st = null; }
     }
-    await pListen;
+    // The mic check can be slow on a cold laptop: wait 3 s at most, and let a late answer update the button.
+    await Promise.race([pListen, new Promise(function (r) { setTimeout(r, 3000); })]);
+    pListen.then(function () {
+      if (S.typingOnly && S.phase === 'idle' && $('caption').textContent === MSG.tapToTalk) { setCaption(MSG.tapToType); }
+    });
 
     if (!st) {
       show('everyday');

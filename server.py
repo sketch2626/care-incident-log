@@ -40,6 +40,9 @@ ANDYFLOW_DB = Path(os.environ.get("APPDATA", "")) / "Andyflow" / "history.db"
 PORT = int(os.environ.get("TRACKER_PORT", "8765"))
 PAGE_TITLE = "Care Incident Log"
 KEEP_BACKUPS = 30
+MAX_BODY = 5 * 1024 * 1024  # biggest request body the server will read
+BAD_REQUEST = "That request didn't look right."
+NOT_FOUND = "That entry wasn't found."
 
 CATEGORIES = {
     "call_light": "Call light not answered",
@@ -108,19 +111,30 @@ def connect():
     return conn
 
 
-def has_incidents(path):
+def log_is_empty(path):
+    """True if the log at path doesn't exist yet or holds no incidents and no settings.
+    Any other trouble reading it counts as "not empty", so a real log is never overwritten."""
+    if not path.exists():
+        return True
     try:
-        with sqlite3.connect(path) as conn:
-            return conn.execute("SELECT 1 FROM incidents LIMIT 1").fetchone() is not None
+        with closing(sqlite3.connect(path)) as conn:
+            for table in ("incidents", "settings"):
+                try:
+                    if conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None:
+                        return False
+                except sqlite3.OperationalError as e:
+                    if "no such table" not in str(e):
+                        return False
+        return True
     except sqlite3.Error:
         return False
 
 
 def migrate_legacy_data():
-    """Copy an older data/ folder into the per-user folder until the new log has incidents.
-    The old copy is left in place."""
+    """Copy an older data/ folder into the per-user folder until the new log has incidents
+    or settings. The old copy is left in place."""
     old_db = LEGACY_DATA / "incidents.db"
-    if DATA != DEFAULT_DATA or not old_db.exists() or (DB_PATH.exists() and has_incidents(DB_PATH)):
+    if DATA != DEFAULT_DATA or not old_db.exists() or not log_is_empty(DB_PATH):
         return
     with sqlite3.connect(old_db) as src, sqlite3.connect(DB_PATH) as dst:
         src.backup(dst)
@@ -141,23 +155,46 @@ def init_db():
 
 
 def backup_db():
-    """One copy per day, newest KEEP_BACKUPS kept. Evidence should never live in one file."""
-    BACKUPS.mkdir(exist_ok=True)
-    target = BACKUPS / f"incidents_{datetime.now():%Y-%m-%d}.db"
-    if not target.exists():
-        with connect() as src, sqlite3.connect(target) as dst:
-            src.backup(dst)
-    for old in sorted(BACKUPS.glob("incidents_*.db"))[:-KEEP_BACKUPS]:
-        old.unlink()
+    """One copy per day, newest KEEP_BACKUPS kept. Evidence should never live in one file.
+    Called at start-up and after each save, so a window left open for days still gets one.
+    Never raises: a failed backup must not stop the app or a save, and tries again next time."""
+    tmp = None
+    try:
+        BACKUPS.mkdir(exist_ok=True)
+        target = BACKUPS / f"incidents_{datetime.now():%Y-%m-%d}.db"
+        if not target.exists():
+            # Copy to a temporary name first, so a half-written file is never taken for today's backup.
+            tmp = target.with_suffix(".tmp")
+            tmp.unlink(missing_ok=True)
+            with closing(connect()) as src, closing(sqlite3.connect(tmp)) as dst:
+                src.backup(dst)
+            os.replace(tmp, target)
+        for old in sorted(BACKUPS.glob("incidents_*.db"))[:-KEEP_BACKUPS]:
+            old.unlink()
+    except Exception:
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def clean_incident(data):
     """Validate and normalise an incident payload. Raises ValueError with a plain-language message."""
     row = {k: str(data.get(k) or "").strip() for k in TEXT_FIELDS}
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", row["occurred_date"]):
-        raise ValueError("Please choose the date it happened.")
-    if row["occurred_time"] and not re.fullmatch(r"\d{2}:\d{2}", row["occurred_time"]):
-        raise ValueError("The time doesn't look right.")
+    try:  # the shape is checked first; strptime then rejects dates like 2026-02-31
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", row["occurred_date"]):
+            raise ValueError
+        datetime.strptime(row["occurred_date"], "%Y-%m-%d")
+    except ValueError:
+        raise ValueError("Please choose the date it happened.") from None
+    try:
+        if row["occurred_time"]:
+            if not re.fullmatch(r"\d{2}:\d{2}", row["occurred_time"]):
+                raise ValueError
+            datetime.strptime(row["occurred_time"], "%H:%M")
+    except ValueError:
+        raise ValueError("The time doesn't look right.") from None
     if row["category"] not in CATEGORIES:
         raise ValueError("Please choose what kind of problem it was.")
     if not row["description"]:
@@ -165,9 +202,12 @@ def clean_incident(data):
     if row["severity"] not in SEVERITIES:
         row["severity"] = "minor"
     row["source"] = row["source"] or "manual"
-    wait = data.get("wait_minutes")
-    row["wait_minutes"] = int(wait) if str(wait or "").strip().isdigit() else None
-    row["never_came"] = 1 if data.get("never_came") else 0
+    try:  # "30", 30, "30.0" and 30.5 all mean 30; anything else is "not known"
+        wait = int(float(str(data.get("wait_minutes")).strip()))
+    except (ValueError, OverflowError):
+        wait = None
+    row["wait_minutes"] = wait if wait is not None and 0 <= wait <= 100000 else None
+    row["never_came"] = 1 if str(data.get("never_came")).strip().lower() in ("1", "true", "yes") else 0
     return row
 
 
@@ -244,6 +284,7 @@ def mary_write_incident(incident):
     with closing(connect()) as conn:
         new_id = insert_incident(conn, clean_incident({**incident, "source": "mary"}))
         conn.commit()
+    backup_db()  # Mary's window stays open for days: her first save of a day makes that day's backup
     return new_id
 
 
@@ -299,25 +340,31 @@ def scan_andyflow(conn):
         return {"available": False, "items": []}
     seen = {(r["kind"], r["source_id"]) for r in conn.execute("SELECT kind, source_id FROM inbox_seen")}
     items = []
-    try:
-        af = sqlite3.connect(f"file:{ANDYFLOW_DB.as_posix()}?mode=ro", uri=True, timeout=2)
-    except sqlite3.Error:
+    try:  # read-only; as_uri() escapes a # or % in the path
+        af = sqlite3.connect(ANDYFLOW_DB.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)
+    except Exception:
         return {"available": False, "items": []}
     try:
+        # A missing (NULL) value in Andy Flow's file reads as empty text, and a row with no time is skipped.
         for id_, at, text, window in af.execute(
-                "SELECT id, timestamp, text, COALESCE(window_title, '') FROM dictations"):
+                "SELECT id, COALESCE(timestamp, ''), COALESCE(text, ''), COALESCE(window_title, '') FROM dictations"):
+            if not at:
+                continue
             if PAGE_TITLE.lower() in window.lower():
                 continue  # dictated straight into this tracker, already logged
             if INBOX_TRIGGER.search(text) and ("dictation", id_) not in seen:
                 items.append({"kind": "dictation", "source_id": id_, "at": at, "text": text.strip()})
         for id_, at, title, body, folder in af.execute(
-                "SELECT id, created_at, title, body, folder FROM notes"):
+                "SELECT id, COALESCE(created_at, ''), COALESCE(title, ''), COALESCE(body, ''), "
+                "COALESCE(folder, '') FROM notes"):
+            if not at:
+                continue
             text = (body or title).strip()
-            in_folder = "incident" in (folder or "").lower()
+            in_folder = "incident" in folder.lower()
             if text and (in_folder or INBOX_TRIGGER.search(title) or INBOX_TRIGGER.search(body)) \
                     and ("note", id_) not in seen:
                 items.append({"kind": "note", "source_id": id_, "at": at, "text": text})
-    except sqlite3.Error:
+    except Exception:
         return {"available": False, "items": []}
     finally:
         af.close()
@@ -392,6 +439,10 @@ def insert_incident(conn, row):
 
 def import_andyflow(conn):
     """The 'Update from Andy Flow' button: log every new 'Incident' dictation or note in one go."""
+    # Take the write lock before looking at what was already seen, so two imports (two clicks, or the
+    # app and Claude's MCP) can't both add the same items. The caller's `with connect()` commits.
+    if not conn.in_transaction:
+        conn.execute("BEGIN IMMEDIATE")
     inbox = scan_andyflow(conn)
     ids = []
     for item in inbox["items"]:
@@ -451,8 +502,16 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     def _body(self):
-        n = int(self.headers.get("Content-Length") or 0)
-        return json.loads(self.rfile.read(n) or b"{}")
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 <= n <= MAX_BODY:
+                raise ValueError
+            data = json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:  # includes bad JSON and bad UTF-8
+            raise ValueError(BAD_REQUEST) from None
+        if not isinstance(data, dict):
+            raise ValueError(BAD_REQUEST)
+        return data
 
     def _mary(self, method, path, q):
         """Mary's routes. Returns None for a path that isn't one of hers."""
@@ -590,12 +649,17 @@ class Handler(SimpleHTTPRequestHandler):
                 row = clean_incident(self._body())
                 row.pop("source"), row.pop("source_id")
                 row["updated_at"] = now()
-                conn.execute(f"UPDATE incidents SET {', '.join(k + ' = ?' for k in row)} WHERE id = ?",
-                             [*row.values(), int(m.group(1))])
+                cur = conn.execute(f"UPDATE incidents SET {', '.join(k + ' = ?' for k in row)} "
+                                   "WHERE id = ? AND deleted_at IS NULL", [*row.values(), int(m.group(1))])
+                if cur.rowcount == 0:
+                    return self._send({"error": NOT_FOUND}, 404)
                 return self._send({"ok": True})
             if method == "DELETE" and m:
                 # Soft delete: the entry disappears from the log but stays recoverable in the file.
-                conn.execute("UPDATE incidents SET deleted_at = ? WHERE id = ?", (now(), int(m.group(1))))
+                cur = conn.execute("UPDATE incidents SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+                                   (now(), int(m.group(1))))
+                if cur.rowcount == 0:
+                    return self._send({"error": NOT_FOUND}, 404)
                 return self._send({"ok": True})
             if method == "PUT" and path == "/api/settings":
                 for k, v in self._body().items():
@@ -617,7 +681,14 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send(import_andyflow(conn))
             if method == "POST" and path == "/api/inbox/dismiss":
                 data = self._body()
-                mark_seen(conn, data["kind"], data["source_id"], "dismissed")
+                kind = str(data.get("kind") or "").strip()
+                try:
+                    source_id = int(data.get("source_id"))
+                except (TypeError, ValueError):
+                    source_id = None
+                if not kind or source_id is None:
+                    raise ValueError(BAD_REQUEST)
+                mark_seen(conn, kind, source_id, "dismissed")
                 return self._send({"ok": True})
         return None
 
@@ -632,6 +703,8 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if self._route(method) is None:
                 self._send({"error": "Not found"}, 404)
+            elif mutating and not self.path.startswith("/api/mary/"):
+                backup_db()  # the first save of a new day makes that day's backup; otherwise a quick no-op
         except ValueError as e:
             self._send({"error": str(e)}, 400)
         except Exception as e:  # keep the server alive; show a readable message

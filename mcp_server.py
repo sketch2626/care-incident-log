@@ -77,7 +77,7 @@ def search_andy_flow(query="", since="", limit=30):
         return {"available": False, "items": []}
     since = since or str(datetime.now().date() - timedelta(days=30))
     like = f"%{query}%"
-    af = sqlite3.connect(f"file:{tracker.ANDYFLOW_DB.as_posix()}?mode=ro", uri=True, timeout=2)
+    af = sqlite3.connect(tracker.ANDYFLOW_DB.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)
     try:
         items = [{"kind": "dictation", "id": i, "at": at, "app": app, "text": t[:1500]} for i, at, app, t in af.execute(
             "SELECT id, timestamp, COALESCE(app_name, ''), text FROM dictations "
@@ -117,7 +117,10 @@ def call_tool(name, args):
                          [*row.values(), args["id"]])
             return {"ok": True}
         if name == "remove_incident":
-            conn.execute("UPDATE incidents SET deleted_at = ? WHERE id = ?", (tracker.now(), args["id"]))
+            cur = conn.execute("UPDATE incidents SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+                               (tracker.now(), args["id"]))
+            if cur.rowcount == 0:
+                raise ValueError(f"No incident with id {args['id']}.")
             return {"ok": True}
         if name == "andy_flow_inbox":
             return tracker.scan_andyflow(conn)

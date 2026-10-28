@@ -815,6 +815,7 @@ $('#xlsxBtn').addEventListener('click', e => {
 /* ---------- My info ---------- */
 
 const INFO_FIELDS = ['resident_name', 'room', 'facility', 'facility_address', 'state', 'gemini_model'];
+const FROM_MARY = new URLSearchParams(location.search).get('from') === 'mary'; // Mary sent the resident here
 
 function fillInfo() {
   const s = state.settings;
@@ -828,7 +829,37 @@ function fillInfo() {
   $('#flowInfo').hidden = !state.inbox.installed;
   $('#i-andyflow_enabled').checked = s.andyflow_enabled === '1';
   updateFlowState();
+  $('#backName').textContent = s.companion === 'him' ? 'Sam' : 'Mary';
+  $('#backToMary').hidden = !FROM_MARY;
 }
+
+// The Paste button reads the clipboard with no key combos: through the app window's
+// paste_text (desktop.py), or the browser's clipboard in a plain web browser.
+// The key is never shown; it goes into the hidden box and only Save sends it.
+async function readClipboard() {
+  const app = window.pywebview && window.pywebview.api;
+  if (app && typeof app.paste_text === 'function') return ((await app.paste_text()) || '').trim();
+  if (navigator.clipboard && navigator.clipboard.readText) return (await navigator.clipboard.readText()).trim();
+  throw new Error('no clipboard');
+}
+
+$('#pasteKey').addEventListener('click', async () => {
+  const btn = $('#pasteKey');
+  btn.disabled = true;
+  try {
+    const text = await readClipboard();
+    if (!text) {
+      $('#keyState').textContent = 'There is nothing to paste yet. Copy your key first, then tap Paste.';
+    } else if (/\s/.test(text) || text.length > 200) {
+      $('#keyState').textContent = "That doesn't look like a key. Copy just the key, then tap Paste.";
+    } else {
+      $('#i-gemini_key').value = text;
+      $('#keyState').textContent = 'Key pasted. Tap Save.';
+    }
+  } catch {
+    $('#keyState').textContent = "I couldn't reach what you copied. Right-click the box and choose Paste, then tap Save.";
+  } finally { btn.disabled = false; }
+});
 
 function updateGemState() { $('#gemState').textContent = $('#i-gemini_enabled').checked ? 'It is on.' : 'It is off.'; }
 $('#i-gemini_enabled').addEventListener('change', updateGemState);
@@ -850,7 +881,10 @@ $('#infoForm').addEventListener('submit', async e => {
     state.settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
     try { await load(); } catch { /* the banner says so */ } // so home shows or hides the Andy Flow parts
     fillInfo();
-    toast('Saved.');
+    if (FROM_MARY) {
+      toast(`Saved. Tap "Back to ${$('#backName').textContent}" to talk again.`);
+      $('#backToMary').focus(); // brings the big way back into view
+    } else toast('Saved.');
   } catch (err) {
     $('#infoError').textContent = err.message;
     $('#infoError').hidden = false;

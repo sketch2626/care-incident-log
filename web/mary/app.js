@@ -945,7 +945,7 @@
     else if (act === 'louder') { adjust('volume', 0.1); }
     else if (act === 'switch') { switchCompanion(); }
     else if (act === 'type') { openTyping(); }
-    else if (act === 'notes') { window.location.href = '/'; }
+    else if (act === 'notes') { window.location.href = '/?from=mary'; }
     else if (act === 'close') {
       try { window.pywebview.api.close_window(); } catch (e) { log(e); }
     }
@@ -1083,7 +1083,7 @@
     $('menu').addEventListener('click', onMenuClick);
     $('lightBtn').addEventListener('click', onLightPressed);
     $('okBtn').addEventListener('click', onOkNow);
-    $('infoBtn').addEventListener('click', function () { window.location.href = '/#info'; });
+    $('infoBtn').addEventListener('click', function () { window.location.href = '/?from=mary#info'; });
     $('typeForm').addEventListener('submit', function (ev) { ev.preventDefault(); submitTyping(); });
     $('typeCancel').addEventListener('click', function () { closeTyping(true); });
     $('typeText').addEventListener('keydown', function (ev) {

@@ -72,6 +72,31 @@ class HomePageTests(unittest.TestCase):
         self.assertIn("installed: !!inbox.installed", js)
         self.assertIn("if (state.inbox.installed) payload.andyflow_enabled", js)
 
+    def test_key_box_has_big_paste_button_no_key_combos(self):
+        html, js, css = read("index.html"), read("app.js"), read("styles.css")
+        row = html[html.index('<div class="keyrow">'):]
+        row = row[:row.index("</div>")]
+        self.assertIn('id="i-gemini_key"', row)
+        self.assertIn('type="button" class="pastebtn" id="pasteKey">Paste<', row)
+        rule = re.search(r"\.pastebtn\{([^}]*)\}", css).group(1)
+        self.assertGreaterEqual(int(re.search(r"min-height:(\d+)px", rule).group(1)), 64)
+        self.assertGreaterEqual(int(re.search(r"font-size:(\d+)px", rule).group(1)), 20)
+        self.assertIn("app.paste_text()", js)  # the app window (desktop.py)
+        self.assertIn("navigator.clipboard.readText()", js)  # a plain browser
+        self.assertIn("Key pasted. Tap Save.", js)
+        self.assertIn("I couldn't reach what you copied.", js)
+        paste = js[js.index("async function readClipboard"):js.index("$('#infoForm').addEventListener('keydown'")]
+        self.assertNotIn("console.", paste)  # the key is never logged
+        self.assertNotIn("api(", paste.replace("window.pywebview.api", ""))  # only Save sends it
+
+    def test_my_info_has_way_back_to_mary(self):
+        html, js, mary = read("index.html"), read("app.js"), read("mary/app.js")
+        self.assertIn("window.location.href = '/?from=mary#info'", mary)
+        self.assertIn('<a class="bigbtn alt" id="backToMary" href="/mary.html" hidden>', html)
+        self.assertIn("get('from') === 'mary'", js)
+        self.assertIn("$('#backToMary').hidden = !FROM_MARY", js)
+        self.assertIn("s.companion === 'him' ? 'Sam' : 'Mary'", js)
+
 
 if __name__ == "__main__":
     unittest.main()

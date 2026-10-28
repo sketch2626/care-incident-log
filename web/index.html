@@ -223,8 +223,12 @@
       <label class="opt"><input type="checkbox" id="i-gemini_enabled"><span class="box row"><span class="t">Use the smart helper</span><span class="hint" id="gemState">It is off.</span></span></label>
     </div>
     <label class="fl gap" for="i-gemini_key">Smart helper key</label>
-    <input class="txt" type="password" id="i-gemini_key" autocomplete="new-password" spellcheck="false">
-    <p class="note" id="keyState"></p>
+    <!-- Paste button: no key combos needed (many residents can't use Ctrl+V) -->
+    <div class="keyrow">
+      <input class="txt" type="password" id="i-gemini_key" autocomplete="new-password" spellcheck="false">
+      <button type="button" class="pastebtn" id="pasteKey">Paste</button>
+    </div>
+    <p class="note" id="keyState" aria-live="polite"></p>
     <p class="note">Mary uses this key too. A free key comes from Google AI Studio.</p>
     <label class="fl" for="i-gemini_model">Smart helper model (you can leave this empty)</label>
     <input class="txt" type="text" id="i-gemini_model" autocomplete="off" spellcheck="false">
@@ -232,6 +236,8 @@
     <p class="formerr" id="infoError" role="alert" hidden></p>
     <button type="submit" class="primary left" id="infoSave">Save</button>
   </form>
+  <!-- Shown when Mary sent the resident here (/?from=mary): a big way back, no key combos -->
+  <a class="bigbtn alt" id="backToMary" href="/mary.html" hidden>Back to <span id="backName">Mary</span></a>
 </section>
 
 </main>

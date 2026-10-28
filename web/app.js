@@ -59,18 +59,50 @@ async function api(path, opts = {}) {
   let res;
   try { res = await fetch(path, init); } catch { throw new Error('Could not reach the tracker. Is it still running?'); }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong. Please try again.'), { status: res.status });
   return data;
 }
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, ms = 4000) {
   const t = $('#toast');
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+// Good news fades after 4 seconds; a problem stays up for 8 so it can be read slowly.
+const toastError = msg => toast(msg, 8000);
+
+// An "Are you sure?" panel on the page itself (the system box has tiny text). Resolves true for Yes, false for No.
+function askConfirm(text) {
+  return new Promise(resolve => {
+    const box = $('#confirmBox'), yes = $('#confirmYes'), no = $('#confirmNo'), back = document.activeElement;
+    $('#confirmText').textContent = text;
+    box.hidden = false;
+    no.focus(); // the safe answer is the one under the cursor
+    const done = answer => {
+      box.hidden = true;
+      yes.removeEventListener('click', onYes);
+      no.removeEventListener('click', onNo);
+      box.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKey, true);
+      if (back && back.isConnected) back.focus();
+      resolve(answer);
+    };
+    const onYes = () => done(true);
+    const onNo = () => done(false);
+    const onBackdrop = e => { if (e.target === box) done(false); };
+    const onKey = e => {
+      if (e.key === 'Escape') { e.preventDefault(); done(false); }
+      else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === yes ? no : yes).focus(); } // keep focus inside the panel
+    };
+    yes.addEventListener('click', onYes);
+    no.addEventListener('click', onNo);
+    box.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKey, true);
+  });
 }
 
 /* ---------- Data ---------- */
@@ -231,6 +263,7 @@ function renderHome() {
   const first = (state.settings.resident_name || '').trim().split(/\s+/)[0];
   $('#who').textContent = first ? `Hello, ${first}` : '';
   $('#maryName').textContent = state.settings.companion === 'him' ? 'Sam' : 'Mary';
+  $('#maryTo').hidden = false; // the link says just "Talk" until we know which friend it is (Mary if settings can't load)
 
   const month = thisMonth(), counts = monthCounts();
   CATS.forEach(c => {
@@ -274,7 +307,7 @@ $('#pullBtn').addEventListener('click', async () => {
     toast(r.added ? `Added ${r.added} from Andy Flow.` : 'Nothing new in Andy Flow.');
     await load();
     renderCurrent();
-  } catch (err) { toast(err.message); } finally { pulling = false; btn.disabled = false; }
+  } catch (err) { toastError(err.message); } finally { pulling = false; btn.disabled = false; }
 });
 
 /* ---------- Add / edit ---------- */
@@ -567,6 +600,12 @@ async function talkInto(id) {
 
 $$('[data-talk]').forEach(b => b.addEventListener('click', () => talkInto(b.dataset.talk)));
 
+// Used by Save: wait out a start or stop in flight, then stop a box that is still listening (the same path as tapping Stop).
+async function finishFieldTalk() {
+  for (let n = 0; field.busy && n < 600; n++) await new Promise(r => setTimeout(r, 50));
+  if (field.id) await talkInto(field.id);
+}
+
 /* ---------- Save ---------- */
 
 function formFail(message, focusSel) {
@@ -581,6 +620,10 @@ $('#form').addEventListener('submit', async e => {
   if (add.busy) return;
   $('#formError').hidden = true;
   if (mic.state === 'listening') await stopTalk(); // Save while still listening: finish the recording first
+  if (field.id || field.busy) { // same for a detail box's Talk button: let its words land in the box before they are read
+    await finishFieldTalk();
+    if (add.busy) return; // another tap on Save got there first
+  }
   const text = $('#words').value.trim();
   if (!text) return formFail('Please tell me or type what happened first.', '#words');
   let when;
@@ -624,6 +667,11 @@ $('#form').addEventListener('submit', async e => {
     go(`saved/${id}`);
   } catch (err) {
     add.busy = false;
+    if (err.status === 404 && add.editing) { // this note was already removed: say so, then show the fresh list
+      toastError(err.message);
+      try { await load(); } catch { /* the list below still opens */ }
+      return go('list', true);
+    }
     btn.disabled = false;
     btn.textContent = 'Save';
     formFail(err.message);
@@ -675,14 +723,18 @@ $('#entries').addEventListener('click', async e => {
   const b = e.target.closest('[data-edit],[data-del]');
   if (!b) return;
   if (b.dataset.edit) return go(`edit/${b.dataset.edit}`);
-  if (!confirm('Remove this note? It will disappear from your list.')) return;
+  if (!(await askConfirm('Remove this note? It will disappear from your list.'))) return;
   b.disabled = true;
   try {
     await api(`/api/incidents/${b.dataset.del}`, { method: 'DELETE' });
     toast('Removed.');
     await load();
     renderList();
-  } catch (err) { b.disabled = false; toast(err.message); }
+  } catch (err) {
+    b.disabled = false;
+    toastError(err.message);
+    try { await load(); renderList(); } catch { /* still can't reach it: the list stays as it was */ } // an entry that is already gone drops off the list
+  }
 });
 
 /* ---------- From Andy Flow ---------- */
@@ -717,7 +769,7 @@ $('#inboxList').addEventListener('click', async e => {
     await post('/api/inbox/dismiss', { kind: it.kind, source_id: it.source_id });
     await load();
     renderCurrent();
-  } catch (err) { b.disabled = false; toast(err.message); }
+  } catch (err) { b.disabled = false; toastError(err.message); }
 });
 
 /* ---------- Make a report ---------- */

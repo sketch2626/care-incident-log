@@ -1,13 +1,16 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folders at a scratch folder)
 
 import http.client
+import io
 import json
 import re
 import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 from pathlib import Path
+from unittest import mock
 
 import mary
 import server
@@ -377,6 +380,34 @@ class TestRoutes(TalkCase):
         self.assertFalse(body["emergency"])
         self.assertEqual(self.fake.bodies, [])
 
+    def refuse(self, code, body=b""):
+        def raiser(*args, **kwargs):  # a new error each time: its body can be read only once
+            raise urllib.error.HTTPError("https://example.invalid/", code, "x", {}, io.BytesIO(body))
+        mary._gemini_stream = raiser  # TalkCase.tearDown puts the real one back
+
+    def test_a_key_gemini_refuses_says_so(self):
+        self.refuse(400, b'{"error": {"message": "API key not valid. Please pass a valid API key."}}')
+        status, body, _ = self.talk()
+        self.assertEqual(status, 200)
+        self.assertTrue(body["bad_key"])
+        self.assertFalse(body["needs_key"])
+        self.assertEqual((body["error"], body["text"], body["mood"]), (mary.BAD_KEY, mary.BAD_KEY_TEXT, "sorry"))
+        self.assertFalse(body["emergency"])
+        self.assertNotIn(KEY, json.dumps(body))
+        status, raw, _ = self.stream()
+        done = self.lines(raw)[-1]
+        self.assertTrue(done["bad_key"])
+        self.assertEqual(done["text"], mary.BAD_KEY_TEXT)
+        self.assertNotIn(KEY, raw.decode("utf-8"))
+
+    def test_other_failures_are_not_a_bad_key(self):
+        self.refuse(503)
+        status, body, _ = self.talk()
+        self.assertFalse(body["bad_key"])
+        self.assertEqual((body["error"], body["text"]), (mary.NO_GEMINI, mary.OFFLINE_TEXT))
+        mary._gemini_stream = self.fake
+        self.assertFalse(self.talk()[1]["bad_key"])
+
     def test_offline_emergency_without_a_key_still_answers(self):
         status, body, _ = self.talk(text="I can't breathe", key="")
         self.assertTrue(body["emergency"])
@@ -546,6 +577,13 @@ class TestRoutes(TalkCase):
         status, body, _ = helpers.api("POST", "/api/mary/hello", {"text": "call me mister bill"})
         self.assertEqual(body["name"], "Mister Bill")
         self.assertEqual(self.fake.bodies, [])  # no key, no Gemini
+
+    def test_hello_still_greets_when_the_memory_file_is_locked(self):
+        with mock.patch.object(mary.Memory, "save", side_effect=PermissionError(13, "locked")):
+            status, body, _ = helpers.api("POST", "/api/mary/hello", {"text": "my name is dorothy"})
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"name": "Dorothy",
+                                "text": "It's lovely to meet you, Dorothy! I'm here whenever you'd like to talk."})
 
     def test_hello_without_a_name_changes_nothing(self):
         helpers.api("POST", "/api/mary/hello", {"text": "dorothy"})

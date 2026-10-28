@@ -1,9 +1,15 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folders at a scratch folder)
 
+import io
 import json
+import os
 import tempfile
+import time
 import unittest
+import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 import mary
 
@@ -381,6 +387,198 @@ class TestYesSavesIt(MaryTestCase):
         self.assertEqual(r["text"], "Of course.")
         self.assertIsNone(r["logged"])
         self.assertEqual(self.written, [])
+
+    def test_an_old_offer_is_not_saved(self):
+        self.offered()
+        self.memory.pending_offer["at"] -= mary.OFFER_TTL_S + 1
+        r = self.turn("Yes", ["Hello there."])
+        self.assertEqual(self.written, [])
+        self.assertIsNone(r["logged"])
+        self.assertEqual(r["text"], "Hello there.")
+        self.assertIsNone(self.memory.pending_offer)
+
+    def test_an_offer_with_no_time_is_not_saved(self):
+        for bad in ("missing", None, "yesterday", True, float("nan")):
+            with self.subTest(bad=bad):
+                self.memory = mary.Memory(self.path)
+                self.offered()
+                if bad == "missing":
+                    del self.memory.pending_offer["at"]
+                else:
+                    self.memory.pending_offer["at"] = bad
+                self.turn("Yes", ["Hello there."])
+                self.assertEqual(self.written, [])
+
+    def test_a_recent_offer_still_saves_after_a_restart(self):
+        self.offered()
+        self.memory.pending_offer["at"] -= mary.OFFER_TTL_S - 30
+        self.memory.save()
+        self.memory = mary.Memory(self.path)  # the app was closed and reopened
+        r = self.turn("Yes please")
+        self.assertEqual(len(self.written), 1)
+        self.assertEqual(r["text"], mary.SAVED_TEXT)
+
+
+def http_error(code, body=b""):
+    return urllib.error.HTTPError("https://example.invalid/", code, "x", {}, io.BytesIO(body))
+
+
+class TestGeminiFailures(MaryTestCase):
+    BAD_KEY_BODY = b'{"error": {"code": 400, "message": "API key not valid. Please pass a valid API key."}}'
+
+    def failing_with(self, error):
+        def raiser(body, api_key, model=""):
+            raise error
+        mary._gemini_stream = raiser
+
+    def test_a_key_gemini_refuses_is_not_called_offline(self):
+        for error in (http_error(400, self.BAD_KEY_BODY), http_error(401), http_error(403, b'{"error": {}}')):
+            with self.subTest(code=error.code):
+                self.failing_with(error)
+                r = self.say("Hello", memory=mary.Memory(self.dir / f"{error.code}.json"))
+                self.assertEqual(r["error"], mary.BAD_KEY)
+                self.assertEqual(r["text"], mary.BAD_KEY_TEXT)
+                self.assertEqual(r["mood"], "sorry")
+                self.assertNotIn(KEY, r["text"])
+                self.assertNotIn(KEY, r["error"])
+
+    def test_other_failures_still_sound_offline(self):
+        for error in (http_error(400, b'{"error": {"message": "Invalid JSON payload"}}'), http_error(400),
+                      http_error(404, b"models/nope is not found"), http_error(429), http_error(503),
+                      urllib.error.URLError("no route"), OSError("dropped")):
+            with self.subTest(error=repr(error)):
+                self.failing_with(error)
+                r = self.say("Hello", memory=mary.Memory(self.dir / "other.json"))
+                self.assertEqual(r["error"], mary.NO_GEMINI)
+                self.assertEqual(r["text"], mary.OFFLINE_TEXT)
+
+    def test_an_unreadable_400_body_is_just_offline(self):
+        class Broken(io.BytesIO):
+            def read(self, *args):
+                raise OSError("reset")
+        self.failing_with(urllib.error.HTTPError("https://example.invalid/", 400, "x", {}, Broken()))
+        r = self.say("Hello")
+        self.assertEqual((r["error"], r["text"]), (mary.NO_GEMINI, mary.OFFLINE_TEXT))
+
+    def test_a_bad_key_in_an_emergency_still_gives_the_emergency_words(self):
+        self.failing_with(http_error(403))
+        r = self.say("I fell this morning")
+        self.assertTrue(r["text"].startswith(mary.EMERGENCY_TEXT["medical"]))
+        self.assertNotIn(mary.BAD_KEY_TEXT, r["text"])
+        self.assertEqual((r["emergency"], r["mood"], r["error"]), ("medical", "alert", mary.BAD_KEY))
+
+    def test_a_slow_trickle_stops_at_the_deadline_with_what_was_said(self):
+        clock = [1000.0]
+
+        def sse(text):
+            return b"data: " + json.dumps({"candidates": [{"content": {"parts": [{"text": text}]}}]}).encode("utf-8")
+
+        def lines():
+            yield sse("I hear you. ")
+            clock[0] += mary.GEMINI_DEADLINE_S + 1
+            yield sse("This comes too late.")
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                return lines()
+
+        fake_time = SimpleNamespace(monotonic=lambda: clock[0], time=time.time, sleep=time.sleep)
+        with mock.patch("urllib.request.urlopen", return_value=Response()) as urlopen, \
+                mock.patch.object(mary, "time", fake_time):
+            got = list(self._real({"contents": []}, KEY))
+        self.assertEqual(got, ["I hear you. "])
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 10)
+        self.assertEqual(urlopen.call_args.args[0].get_header("X-goog-api-key"), KEY)
+
+
+class TestRobustMemory(MaryTestCase):
+    def test_save_retries_when_windows_has_the_file_open(self):
+        real = os.replace
+        calls = []
+
+        def flaky(src, dst):
+            calls.append(src)
+            if len(calls) <= 2:
+                raise PermissionError(13, "The process cannot access the file")
+            return real(src, dst)
+
+        m = mary.Memory(self.path)
+        m.name = "Ruth"
+        with mock.patch.object(mary.os, "replace", flaky):
+            m.save()
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(mary.Memory(self.path).name, "Ruth")
+        self.assertEqual(list(self.dir.glob("*.tmp")), [])
+
+    def test_save_gives_up_after_five_tries_and_reply_still_answers(self):
+        calls = []
+
+        def locked(src, dst):
+            calls.append(src)
+            raise PermissionError(13, "locked")
+
+        m = mary.Memory(self.path)
+        with mock.patch.object(mary.os, "replace", locked):
+            with self.assertRaises(PermissionError):
+                m.save()
+            self.assertEqual(len(calls), 5)
+            r = self.say("Hello", memory=m)  # reply swallows the failed save
+        self.assertEqual(r["text"], "I hear you.")
+
+    def test_call_me_is_a_name_only_at_the_start_of_a_sentence(self):
+        for said in ("The aides call me honey and I hate it.", "They call me names.", "Call me at five, would you?",
+                     "Please call me at five.", "Call me later.", "They always call me when I'm busy.",
+                     "my name is not important", "Call me anything you like.", "Whatever, call me whatever."):
+            with self.subTest(said):
+                memory = mary.Memory(self.dir / "none.json")
+                self.say(said, memory=memory)
+                self.assertEqual(memory.name, "")
+
+    def test_names_people_really_give(self):
+        for said in ("call me Dorothy", "Call me dorothy.", "My name is Dorothy", "Hello Mary, my name is Dorothy.",
+                     "You can call me Dorothy", "Please call me Dorothy", "Just call me Dorothy",
+                     "Good morning. Call me Dorothy.", "I’d like you to call me Dorothy", "Hi! Call me Dorothy"):
+            with self.subTest(said):
+                memory = mary.Memory(self.dir / "dorothy.json")
+                self.say(said, memory=memory)
+                self.assertEqual(memory.name, "Dorothy")
+
+    def test_a_good_name_is_not_overwritten_by_a_false_match(self):
+        memory = mary.Memory(self.path)
+        self.say("My name is Dorothy", memory=memory)
+        self.say("The aides call me honey and I hate it", memory=memory)
+        self.assertEqual(memory.name, "Dorothy")
+
+    def test_a_null_or_odd_list_keeps_the_name(self):
+        for content in ('{"name": "Ruth", "facts": null, "recent": null}',
+                        '{"name": "Ruth", "facts": 5, "recent": "x"}',
+                        '{"name": "Ruth", "facts": {"a": 1}, "recent": {"role": "user"}}'):
+            with self.subTest(content):
+                self.path.write_text(content, encoding="utf-8")
+                m = mary.Memory(self.path)
+                self.assertEqual((m.name, m.facts, m.recent), ("Ruth", [], []))
+
+    def test_a_fact_is_capped(self):
+        m = mary.Memory(self.path)
+        self.assertTrue(m.add_fact("likes tea " * 60))
+        self.assertLessEqual(len(m.facts[0]), mary.MAX_FACT_CHARS)
+        self.assertEqual(m.facts[0], m.facts[0].strip())
+
+    def test_she_is_told_to_ask_the_name_only_while_it_is_unknown(self):
+        memory = mary.Memory(self.path)
+        self.say("Good morning", memory=memory)
+        asked = self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("You don't know their name yet.", asked)
+        self.assertIn("[name: First name]", asked)
+        memory.name = "Ruth"
+        self.say("Good morning", memory=memory)
+        self.assertNotIn("don't know their name", self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"])
 
 
 class TestConversations(MaryTestCase):

@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +29,10 @@ SAVED_TEXT = "All right, I've written that down for you, with today's date and t
 SAVE_FAILED_TEXT = "I'm sorry, I couldn't save that just now. Could we try again in a moment?"
 NO_KEY = "No Gemini key."
 NO_GEMINI = "Mary couldn't reach Gemini."
+BAD_KEY = "Gemini didn't accept the key."
+BAD_KEY_TEXT = "I'm sorry, my thinking key isn't working. Could someone check it in My info?"
+GEMINI_DEADLINE_S = 20  # a whole answer; the socket timeout alone lets a trickling stream run on
+OFFER_TTL_S = 600       # a "yes" to "write that down?" counts for ten minutes
 
 # Her face (web/mary/face.js has the same list, in the same order). Gemini starts each reply with [mood: X].
 MOODS = ("resting", "listening", "thinking", "talking", "happy", "laughing",
@@ -37,6 +42,7 @@ COMPANIONS = {"mary": "Mary", "him": "Sam"}
 MAX_FACTS = 40
 MAX_RECENT = 12
 MAX_TURN_CHARS = 500
+MAX_FACT_CHARS = 200
 
 _I = re.IGNORECASE
 _MEDICAL = re.compile("|".join([
@@ -71,8 +77,14 @@ _DECLINE = re.compile(
 _LAPSE_WORDS = re.compile(
     r"\b(nobody|no one|never|didn'?t|did not|wasn'?t|late|cold|missed|skipped|wait(ed|ing)?|ignored|left me|forgot|rude|yell\w*)\b", _I)
 _ASKS = re.compile(r"write (that|it|this) down|note (that|it|this)|jot", _I)
-_NAME = re.compile(r"\b(?:my name is|call me)\s+([A-Z][a-z]+)", _I)
-_NOT_NAMES = {"back", "when", "if", "later", "please", "crazy", "maybe", "sometime", "tomorrow", "tonight", "today", "again", "not", "a", "an", "the"}
+# "call me" only counts at the start of a sentence or after "you can" and the like: "the aides call me honey" is not a name.
+_NAME = re.compile(
+    r"(?:\bmy name is"
+    r"|(?:^\s*|[.!?]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be)\s+)call me)"
+    r"\s+([A-Z][a-z]+)", _I)
+_NOT_NAMES = {"back", "when", "if", "later", "please", "crazy", "maybe", "sometime", "tomorrow", "tonight", "today", "again", "not", "a", "an", "the",
+              "names", "on", "for", "about", "anything", "whatever", "anytime",
+              "at", "in", "to", "by", "after", "before", "now", "soon"}
 _TAG = re.compile(r"\[(remember|name):\s*([^\]]+)\]")
 _MOOD_TAG = re.compile(r"\[\s*mood\s*:\s*([^\[\]]*?)\s*\]", _I)
 # A "[" so far that may still turn into a mood tag, so the stream waits for more before deciding.
@@ -122,9 +134,10 @@ class Memory:
             if not isinstance(data, dict):
                 return
             name = data.get("name")
-            facts = [f for f in data.get("facts", []) if isinstance(f, str) and f.strip()]
+            facts, recent = data.get("facts"), data.get("recent")  # null or odd values must not lose the name
+            facts = [f for f in (facts if isinstance(facts, list) else []) if isinstance(f, str) and f.strip()]
             recent = [{"role": t["role"], "text": t["text"], "at": str(t.get("at", ""))}
-                      for t in data.get("recent", [])
+                      for t in (recent if isinstance(recent, list) else [])
                       if isinstance(t, dict) and t.get("role") in ("user", "model") and isinstance(t.get("text"), str)]
             offer = data.get("pending_offer")
         except (OSError, ValueError, TypeError, AttributeError, KeyError):
@@ -136,7 +149,7 @@ class Memory:
 
     def add_fact(self, fact):
         """Returns True if the fact was new."""
-        fact = " ".join(str(fact).split())
+        fact = " ".join(str(fact).split())[:MAX_FACT_CHARS].rstrip()
         if not fact or fact.lower() in (f.lower() for f in self.facts):
             return False
         self.facts.append(fact)
@@ -152,7 +165,14 @@ class Memory:
         data = {"name": self.name, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer}
         tmp = self.path.with_name(self.path.name + ".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, self.path)
+        for attempt in range(5):  # Windows refuses the swap while another thread or a virus scan has the file open
+            try:
+                os.replace(tmp, self.path)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05)
 
 
 def _plain(text):
@@ -222,15 +242,23 @@ def is_yes(text):
 
 
 def lapse_offer(text):
-    """None, or {"incident": guess, "question": ...} when the resident describes a care lapse."""
+    """None, or {"incident": guess, "question": ..., "at": time} when the resident describes a care lapse."""
     import server  # lazy: server will import mary
     text = _plain(text)
     guess = server.guess_incident(re.sub(r"\bfell asleep\b", "slept", text, flags=_I), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     if (guess.get("wait_minutes") is not None or guess.get("never_came")
             or (guess.get("category") != "other"
                 and (guess.get("severity") != "minor" or _LAPSE_WORDS.search(text)))):
-        return {"incident": guess, "question": OFFER_QUESTION}
+        return {"incident": guess, "question": OFFER_QUESTION, "at": time.time()}
     return None
+
+
+def _offer_fresh(offer):
+    """False for an offer with no usable time or older than OFFER_TTL_S: a 'yes' hours later is about something else."""
+    at = offer.get("at")
+    if isinstance(at, bool) or not isinstance(at, (int, float)):
+        return False
+    return 0 <= time.time() - at <= OFFER_TTL_S
 
 
 def _name_case(word):
@@ -316,13 +344,17 @@ class _ReplyStream:
 
 
 def _gemini_stream(body, api_key, model=""):
-    """Yields the text pieces of Gemini's streamed answer. Raises on any network or API problem."""
+    """Yields the text pieces of Gemini's streamed answer. Raises on any network or API problem.
+    Stops yielding after GEMINI_DEADLINE_S, so a slow trickle ends with what was said."""
     url = assist.ENDPOINT.replace(":generateContent", ":streamGenerateContent").format(model=model or assist.DEFAULT_MODEL) + "?alt=sse"
     req = urllib.request.Request(
         url, data=json.dumps(body).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key})
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    deadline = time.monotonic() + GEMINI_DEADLINE_S
+    with urllib.request.urlopen(req, timeout=10) as resp:
         for line in resp:
+            if time.monotonic() > deadline:
+                return
             line = line.decode("utf-8", "replace").strip()
             if not line.startswith("data:"):
                 continue
@@ -335,6 +367,19 @@ def _gemini_stream(body, api_key, model=""):
                     yield part["text"]
 
 
+def _key_refused(err):
+    """True when Gemini turned the key down: 401/403, or a 400 whose message is about the API key.
+    A 404 (wrong model name) and 5xx are not the key. Never puts the key or the body in a message."""
+    if err.code in (401, 403):
+        return True
+    if err.code != 400:
+        return False
+    try:
+        return "api key" in err.read(2048).decode("utf-8", "replace").lower()
+    except Exception:
+        return False
+
+
 def _body(text, memory, kind, companion="mary"):
     system = load_instructions()
     if companion == "him":
@@ -344,6 +389,9 @@ def _body(text, memory, kind, companion="mary"):
     lines = ([f"Name: {memory.name}"] if memory.name else []) + [f"- {f}" for f in memory.facts]
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
+    if not memory.name:
+        system += ("\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called; "
+                   "when they tell you, add the line [name: First name].")
     if kind:
         system += (f"\n\nThe app has already told them: {EMERGENCY_TEXT[kind]} "
                    "Don't repeat it word for word; follow on calmly and kindly.")
@@ -418,7 +466,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
 
     prior = memory.pending_offer  # an offer lives exactly one turn
     memory.pending_offer = None
-    if not (isinstance(prior, dict) and isinstance(prior.get("incident"), dict)):
+    if not (isinstance(prior, dict) and isinstance(prior.get("incident"), dict) and _offer_fresh(prior)):
         prior = None
     kind = is_emergency(text)
     said_yes = bool(prior) and is_yes(text)
@@ -438,7 +486,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         offer = None if kind == "self_harm" else lapse_offer(text)
         if offer:
             memory.pending_offer = offer
-    m = _NAME.search(text)
+    m = _NAME.search(_plain(text))
     if m and m.group(1).lower() not in _NOT_NAMES:
         memory.name = m.group(1).capitalize()
 
@@ -462,6 +510,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             for chunk in _gemini_stream(_body(text, memory, kind, companion), api_key, model):
                 raw += chunk
                 stream.feed(chunk)
+        except urllib.error.HTTPError as e:
+            error = BAD_KEY if _key_refused(e) else NO_GEMINI
         except Exception:
             error = NO_GEMINI
         for tag, value in _TAG.findall(raw):
@@ -479,7 +529,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     if not spoken.strip() and not kind:
         gemini_alert = False  # a bare "alert" tag with no words is not something to act on
         set_mood("sorry")
-        emit(OFFLINE_TEXT)
+        emit(BAD_KEY_TEXT if error == BAD_KEY else OFFLINE_TEXT)
         if not api_key:
             error = NO_KEY
     elif mood is None:

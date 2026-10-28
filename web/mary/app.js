@@ -786,8 +786,9 @@
       await replyFailed();
       return;
     }
-    if (d.error && !d.emergency && !full.trim()) { await replyFailed(); return; }
-    if (d.error && !d.emergency && !d.mood) { setMood('sorry'); }
+    if (d.error && !d.emergency && !d.bad_key && !full.trim()) { await replyFailed(); return; }
+    // A key Gemini refused: her own "my key isn't working" line is the caption, not the generic sorry.
+    if (d.error && !d.emergency && (d.bad_key || !d.mood)) { setMood('sorry'); }
 
     setCaption(caption);
     var tail = splitSentences(T.rest, true).sentences;

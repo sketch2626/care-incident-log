@@ -257,6 +257,7 @@ def mary_talk(text, on_text=None, on_mood=None):
             "emergency": bool(r["emergency"] or r["gemini_alert"]),
             "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
             "offer": r["offer"], "logged": r["logged"], "error": r["error"], "needs_key": not s["key"],
+            "bad_key": r["error"] == mary.BAD_KEY,
             "first_words_s": r["first_words_s"], "total_s": r["total_s"]}
 
 
@@ -464,7 +465,10 @@ class Handler(SimpleHTTPRequestHandler):
                 with _mary_lock:
                     memory = mary_memory()
                     memory.name = name
-                    memory.save()
+                    try:
+                        memory.save()
+                    except OSError:
+                        pass  # she still greets them; with no saved name she asks again later
                 return self._send({"name": name,
                                    "text": f"It's lovely to meet you, {name}! I'm here whenever you'd like to talk."})
             if not text:

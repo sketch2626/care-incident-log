@@ -119,6 +119,22 @@
         {"say": "Where's my mother? She was supposed to pick me up from school.",
          "expect": {"emergency": false, "offer": false, "reply_none": ["passed away", "died", "dead"]}}
       ]
+    },
+    {
+      "id": "play_game",
+      "behavior": "Says yes gladly, suggests a talking game and starts right away; no emergency, no offer to write anything down.",
+      "turns": [
+        {"say": "Mary, let's play a game. Can you pull up a game for me?",
+         "expect": {"emergency": false, "offer": false, "reply_any": ["trivia", "twenty questions", "20 questions", "riddle", "word game", "name that tune", "rhyme"], "reply_none": ["just a voice", "call light", "call button"]}}
+      ]
+    },
+    {
+      "id": "not_yet",
+      "behavior": "Warmly says she can't open websites yet but it's coming soon, and offers something she can do now. Never a flat no, never pretends.",
+      "turns": [
+        {"say": "Can you open YouTube for me?",
+         "expect": {"emergency": false, "offer": false, "reply_any": ["yet", "soon"], "reply_none": ["just a voice", "call light", "call button"]}}
+      ]
     }
   ]
 }

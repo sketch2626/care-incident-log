@@ -67,6 +67,35 @@ class TestBasics(MaryTestCase):
         self.assertLess(len(text), len(raw))
         self.assertIn(text, raw)
 
+    def test_instructions_say_what_she_can_do(self):
+        text = mary.load_instructions()
+        section = text[text.index("What you can do"):text.index("Remembering")]
+        for needle in ("trivia", "twenty questions", "riddles", "word games", "name that tune", "coming soon",
+                       "Never call yourself just a voice", "never because you can't do something"):
+            with self.subTest(needle):
+                self.assertIn(needle, section)
+        # the emergency rules still come first and are unchanged in substance
+        self.assertLess(text.index("Emergencies come first"), text.index("What you can do"))
+        self.assertIn("press the call light or call out for staff right now", text)
+        self.assertIn("988", text)
+
+    def test_sam_gets_the_same_skills(self):
+        body = mary._body("Let's play a game", mary.Memory(self.path), None, "him")
+        system = body["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("What you can do", system)
+        self.assertIn("twenty questions", system)
+        self.assertNotIn("Mary", system)
+
+    def test_game_and_app_requests_are_not_emergencies_or_offers(self):
+        for said in ("Let's play a game.", "Can you pull up a game for me?", "Can you open YouTube for me?",
+                     "Play me some music."):
+            with self.subTest(said):
+                r = self.say(said, ["[mood: happy] I'd love to! How about twenty questions?"])
+                self.assertFalse(r["emergency"])
+                self.assertFalse(r["offer"])
+                sent = self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"]
+                self.assertIn("What you can do", sent)
+
     def test_decline_phrases(self):
         for said in ("Please don't write that down.", "Don't put it down", "do not report this", "Don’t tell anyone",
                      "Keep that between us"):

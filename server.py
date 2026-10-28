@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlparse
 import assist
 import mary
 import power
+import voices
 
 # In the packaged app, web/ is unpacked next to the program (sys._MEIPASS).
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -61,7 +62,8 @@ TEXT_FIELDS = ["occurred_date", "occurred_time", "category", "description", "sev
                "formal_summary"]
 SETTING_KEYS = {"resident_name", "room", "facility", "facility_address", "state",
                 "gemini_enabled", "gemini_key", "gemini_model",
-                "companion", "voice_rate", "voice_volume", "andyflow_enabled"}
+                "companion", "voice_rate", "voice_volume", "andyflow_enabled",
+                "voice_mary", "voice_sam"}  # the last two: the voice the resident picked in the audition
 # Mary's voice settings: (lowest, highest, default). Saved values are clamped into range.
 VOICE_LIMITS = {"voice_rate": (0.6, 1.4, 0.92), "voice_volume": (0.2, 1.0, 1.0)}
 NO_SPEECH = "Talking isn't set up on this computer yet. You can type instead."
@@ -287,6 +289,31 @@ def mary_status():
     return {"companion": s["companion"], "first_run": not s["companion"],
             "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name,
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"]}
+
+
+# The voice audition page (/mary/voices.html).
+VOICE_ERRORS = {  # kind -> (plain sentence, HTTP status)
+    "no_key": ("Mary needs her Gemini key first. You can add it in My info.", 400),
+    "bad_key": ("Google didn't accept the Gemini key. Please check it in My info.", 400),
+    "no_gemini": ("I couldn't reach Gemini just now. Please try again in a moment.", 502),
+    "unknown_voice": ("I don't know that voice.", 400),
+}
+
+
+def voice_failure(kind):
+    """(JSON body, status) for a failed voice call. No key, URL or Google reply text is ever included."""
+    text, status = VOICE_ERRORS.get(kind, VOICE_ERRORS["no_gemini"])
+    return {"error": text, "bad_key": kind == "bad_key", "no_key": kind == "no_key"}, status
+
+
+def mary_voices():
+    s = mary_settings()
+    with closing(connect()) as conn:
+        saved = get_settings(conn)
+    return {"line": voices.LINE, "tts_model": voices.TTS_MODEL, "candidates": voices.candidates(),
+            "live": {"model": voices.LIVE_MODEL, "voices": voices.live_choices()},
+            "chosen": {"mary": saved.get("voice_mary", ""), "him": saved.get("voice_sam", "")},
+            "has_key": bool(s["key"])}
 
 
 def mary_write_incident(incident):
@@ -567,6 +594,30 @@ class Handler(SimpleHTTPRequestHandler):
             if q("stream") == "1":
                 return self._mary_stream(text)
             return self._send(mary_talk(text))
+        if method == "GET" and path == "/api/mary/voices":
+            return self._send(mary_voices())
+        if method == "POST" and path in ("/api/mary/voices/sample", "/api/mary/live/token"):
+            body = self._body()
+            key = mary_settings()["key"]
+            if not key:
+                return self._send(*voice_failure("no_key"))
+            try:
+                if path.endswith("/sample"):
+                    got = voices.tts_sample(str(body.get("id") or ""), key, DATA)
+                else:
+                    got = voices.live_token(str(body.get("voice") or ""), key,
+                                            mary_settings()["companion"] or "mary", mary_memory().name, DATA)
+            except voices.VoiceError as e:
+                return self._send(*voice_failure(e.kind))
+            if not path.endswith("/sample"):
+                return self._send(got)
+            return self._send(got["wav"], 200, "audio/wav", {
+                "X-First-Sound-Ms": str(got["first_sound_ms"]), "X-Total-Ms": str(got["total_ms"]),
+                "X-Audio-S": str(got["audio_s"]), "X-Cached": "1" if got["cached"] else "0",
+                "X-Word-Timings": "1" if got["word_timings"] else "0", "X-Voice-Path": got["path"]})
+        if method == "POST" and path == "/api/mary/voices/log":
+            voices.log({**self._body(), "event": "live"}, DATA)  # the page's Live numbers; only whitelisted keys are kept
+            return self._send({"ok": True})
         return None
 
     def _mary_stream(self, text):
@@ -703,6 +754,10 @@ class Handler(SimpleHTTPRequestHandler):
                         v = clean_voice_setting(k, v)
                         if v is None:
                             continue
+                    if k in ("voice_mary", "voice_sam"):
+                        v = str(v).strip()
+                        if v and not voices.valid_choice(v):
+                            continue  # a known voice id, or blank to clear
                     if k == "andyflow_enabled":
                         v = "1" if str(v).strip().lower() in ("1", "true", "yes", "on") else "0"
                     if k in SETTING_KEYS:

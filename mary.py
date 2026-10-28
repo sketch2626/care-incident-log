@@ -451,18 +451,25 @@ def _key_refused(err):
         return False
 
 
-def _body(text, memory, kind, companion="mary"):
+def system_text(memory, companion="mary", facts=True):
+    """Her system prompt: the instructions, Sam's swap, and what she knows of the resident.
+    facts=False keeps only the resident's name (no facts list, no ask-for-a-name tag): for a live voice chat."""
     system = load_instructions()
     if companion == "him":
         name = COMPANIONS["him"]
         first, newline, rest = system.partition("\n")
         system = (first + " You are a man, a kind and friendly gentleman." + newline + rest).replace("Mary", name)
-    lines = ([f"Name: {memory.name}"] if memory.name else []) + [f"- {f}" for f in memory.facts]
+    lines = ([f"Name: {memory.name}"] if memory.name else []) + ([f"- {f}" for f in memory.facts] if facts else [])
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
-    if not memory.name:
+    if facts and not memory.name:
         system += ("\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called; "
                    "when they tell you, add the line [name: First name].")
+    return system
+
+
+def _body(text, memory, kind, companion="mary"):
+    system = system_text(memory, companion)
     if kind:
         system += (f"\n\nThe app has already told them: {EMERGENCY_TEXT[kind]} "
                    "Don't repeat it word for word; follow on calmly and kindly.")

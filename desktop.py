@@ -2,6 +2,7 @@
 
 Run:  python desktop.py          (the packaged "Care Incident Log.exe" starts here)
       python desktop.py --mary   (Mary's full-screen window; the display stays on while plugged in)
+      python desktop.py --voices (the voice audition page, full screen, set up exactly like --mary)
 
 If the built-in window can't open (no WebView2 on this PC), the log opens in the
 default web browser instead and keeps running until the computer restarts. In that
@@ -52,8 +53,10 @@ def log_error(what):
         pass
 
 
-def window_options(mary):
+def window_options(mary, voices=False):
     """Title, page path and create_window arguments. No GUI needed."""
+    if voices:
+        return {"title": "Mary voices", "path": "/mary/voices.html", "kwargs": {"fullscreen": True}}
     if mary:
         return {"title": "Mary", "path": "/mary.html", "kwargs": {"fullscreen": True}}
     return {"title": server.PAGE_TITLE, "path": "",
@@ -160,7 +163,7 @@ def allow_edit_menu(edge_cls):
     edge_cls.on_webview_ready = on_webview_ready
 
 
-def open_window(url, mary=False):
+def open_window(url, mary=False, voices=False):
     """Show the app in its own window until it is closed. False if no window is possible."""
     keep_awake = power.KeepAwake() if mary else None
     try:
@@ -171,7 +174,7 @@ def open_window(url, mary=False):
         from webview.platforms import edgechromium
         allow_edit_menu(edgechromium.EdgeChrome)
         webview.settings["ALLOW_DOWNLOADS"] = True  # "Download spreadsheet" shows a Save dialog
-        opts = window_options(mary)
+        opts = window_options(mary, voices)
         start_args = {"gui": "edgechromium"}
         api = AppApi()
         if mary:
@@ -199,10 +202,11 @@ def open_window(url, mary=False):
 
 
 def main():
-    mary = "--mary" in sys.argv
+    voices = "--voices" in sys.argv
+    mary = "--mary" in sys.argv or voices
     url = start_server()
-    if not open_window(url, mary):
-        webbrowser.open(url + (window_options(mary)["path"]))
+    if not open_window(url, mary, voices):
+        webbrowser.open(url + (window_options(mary, voices)["path"]))
         threading.Event().wait()  # keep serving the browser tab
 
 

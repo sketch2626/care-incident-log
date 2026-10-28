@@ -63,12 +63,13 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
     - `Start Mary.bat` runs `packaging\.venv\Scripts\pythonw.exe desktop.py --mary`, because only that venv has pywebview. Without the venv it uses the system `pythonw`, which falls back to the browser.
     - Home shows "Talk to Sam" when `companion` is "him". My info has the note "Mary uses this key too…"
     - **Not yet seen in a real window:** full screen, Close, autoplay voice and the keep-awake.
+  - **Full review done 2026-10-28** (`docs/review-2026-10-28.md`; 10 fix commits 1b6a8e1…fae791f; 236 tests, no skips). Fixed: the hidden Close on first run (blocker), missed emergency phrases, bad-key message, offers that didn't save, server data integrity, installer bundling. Ranked open items are in the doc. If Mary gets stuck full screen, the hub stops the `pythonw desktop.py --mary` process; `desktop.log` in the data folder has window errors.
   - **Next for a fresh worker, in order:**
     1. **Andy tries Mary as user #1.** Fix what he finds: voice choice, timings and layout at his screen size. Then measure Gemini speed with his key (`tools/mary_speed.py`).
     2. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 
 ## Next steps
-1. ~~Quiet test suite~~ **Done 2026-10-24** (371bba0, ea5c4c2, 1c0182d): 59 tests, about 2 s. 5 BUG skips in `tests/test_guess.py` that `guess_incident()` gets wrong. It marks "bled", "couldn't breathe" and "can’t breathe" (curly apostrophe) as minor. It reads "twenty five minutes" as 5 and "half an hour" as 60. Fix them in a small worker, then remove the skips.
+1. ~~Quiet test suite~~ **Done 2026-10-24** (371bba0, ea5c4c2, 1c0182d): 59 tests, about 2 s. The 5 `guess_incident()` BUG skips were fixed 2026-10-28 (1b6a8e1).
 2. **Mary prototype, with Andy as user #1** (`docs/companion-plan.md`). **Brain done 2026-10-25** (ed6ec4e, 5ecb2d2): `mary/instructions.md`, `mary.py` (`reply(text, memory, api_key)`), `tests/test_mary.py`, speed test `tools/mary_speed.py` (needs env `GEMINI_API_KEY`; no key is saved yet, so Gemini speed is unmeasured). Speech fix done (fad93ba, `beam_size=1`): speech-to-text median about 1-1.6 s, p90 under 3 s (was 5.5 s).
    - **Face, in mock-ups:** round 1 (`mockups/mary/face-boards.html`, ade6015) was rejected. A was "scary", C was out, and B's warm glow came closest.
    - **Round 2 direction (Andy, 2026-10-25):** the screen IS her face, with no head outline and a warm light filling the screen. A soft edge glow changes color with her mood (soft pinkish red for an emergency, never scary).

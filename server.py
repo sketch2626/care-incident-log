@@ -61,7 +61,7 @@ TEXT_FIELDS = ["occurred_date", "occurred_time", "category", "description", "sev
                "formal_summary"]
 SETTING_KEYS = {"resident_name", "room", "facility", "facility_address", "state",
                 "gemini_enabled", "gemini_key", "gemini_model",
-                "companion", "voice_rate", "voice_volume"}
+                "companion", "voice_rate", "voice_volume", "andyflow_enabled"}
 # Mary's voice settings: (lowest, highest, default). Saved values are clamped into range.
 VOICE_LIMITS = {"voice_rate": (0.6, 1.4, 0.92), "voice_volume": (0.2, 1.0, 1.0)}
 NO_SPEECH = "Talking isn't set up on this computer yet. You can type instead."
@@ -151,6 +151,11 @@ def init_db():
         conn.executescript(SCHEMA)
         if "formal_summary" not in {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}:
             conn.execute("ALTER TABLE incidents ADD COLUMN formal_summary TEXT NOT NULL DEFAULT ''")
+        # The Andy Flow link is the resident's choice and starts off. A log that already holds entries
+        # imported from Andy Flow was connected before this setting existed, so it keeps the link, once.
+        if "andyflow_enabled" not in get_settings(conn) and conn.execute(
+                "SELECT 1 FROM incidents WHERE source LIKE 'andyflow-%' LIMIT 1").fetchone():
+            conn.execute("INSERT INTO settings (key, value) VALUES ('andyflow_enabled', '1')")
     backup_db()
 
 
@@ -226,6 +231,11 @@ def list_incidents(conn, date_from="", date_to=""):
 
 def get_settings(conn):
     return {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
+
+
+def andyflow_on(conn):
+    """True only when the resident has turned the Andy Flow link on. Off or never set: its file is never opened."""
+    return get_settings(conn).get("andyflow_enabled") == "1"
 
 
 def public_settings(conn):
@@ -335,15 +345,19 @@ def tidy(conn, text):
 
 
 def scan_andyflow(conn):
-    """Dictations and notes from Andy Flow that start with 'Incident' and haven't been handled yet."""
-    if not ANDYFLOW_DB.exists():
-        return {"available": False, "items": []}
+    """Dictations and notes from Andy Flow that start with 'Incident' and haven't been handled yet.
+    "enabled" is the resident's switch, "installed" whether Andy Flow's file is on this computer."""
+    installed = ANDYFLOW_DB.exists()  # only looks at the file; never opens it
+    if not andyflow_on(conn):
+        return {"available": False, "enabled": False, "installed": installed, "items": []}
+    if not installed:
+        return {"available": False, "enabled": True, "installed": False, "items": []}
     seen = {(r["kind"], r["source_id"]) for r in conn.execute("SELECT kind, source_id FROM inbox_seen")}
     items = []
     try:  # read-only; as_uri() escapes a # or % in the path
         af = sqlite3.connect(ANDYFLOW_DB.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)
     except Exception:
-        return {"available": False, "items": []}
+        return {"available": False, "enabled": True, "installed": True, "items": []}
     try:
         # A missing (NULL) value in Andy Flow's file reads as empty text, and a row with no time is skipped.
         for id_, at, text, window in af.execute(
@@ -365,13 +379,13 @@ def scan_andyflow(conn):
                     and ("note", id_) not in seen:
                 items.append({"kind": "note", "source_id": id_, "at": at, "text": text})
     except Exception:
-        return {"available": False, "items": []}
+        return {"available": False, "enabled": True, "installed": True, "items": []}
     finally:
         af.close()
     items.sort(key=lambda i: i["at"], reverse=True)
     for item in items:
         item["guess"] = guess_incident(item["text"], item["at"])
-    return {"available": True, "items": items}
+    return {"available": True, "enabled": True, "installed": True, "items": items}
 
 
 def mark_seen(conn, kind, source_id, status):
@@ -441,6 +455,8 @@ def import_andyflow(conn):
     """The 'Update from Andy Flow' button: log every new 'Incident' dictation or note in one go."""
     # Take the write lock before looking at what was already seen, so two imports (two clicks, or the
     # app and Claude's MCP) can't both add the same items. The caller's `with connect()` commits.
+    if not andyflow_on(conn):
+        return {"available": False, "enabled": False, "added": 0, "ids": []}
     if not conn.in_transaction:
         conn.execute("BEGIN IMMEDIATE")
     inbox = scan_andyflow(conn)
@@ -450,7 +466,7 @@ def import_andyflow(conn):
                               "source_id": str(item["source_id"])})
         ids.append(insert_incident(conn, row))
         mark_seen(conn, item["kind"], item["source_id"], "added")
-    return {"available": inbox["available"], "added": len(ids), "ids": ids}
+    return {"available": inbox["available"], "enabled": inbox["enabled"], "added": len(ids), "ids": ids}
 
 
 def export_csv(rows):
@@ -683,6 +699,8 @@ class Handler(SimpleHTTPRequestHandler):
                         v = clean_voice_setting(k, v)
                         if v is None:
                             continue
+                    if k == "andyflow_enabled":
+                        v = "1" if str(v).strip().lower() in ("1", "true", "yes", "on") else "0"
                     if k in SETTING_KEYS:
                         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                                      (k, str(v).strip()))
@@ -690,6 +708,8 @@ class Handler(SimpleHTTPRequestHandler):
             if method == "POST" and path == "/api/inbox/import":
                 return self._send(import_andyflow(conn))
             if method == "POST" and path == "/api/inbox/dismiss":
+                if not andyflow_on(conn):
+                    raise ValueError("The Andy Flow link is off.")
                 data = self._body()
                 kind = str(data.get("kind") or "").strip()
                 try:

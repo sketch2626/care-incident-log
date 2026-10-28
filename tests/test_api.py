@@ -1,4 +1,5 @@
 """Server API tests. Scratch data only (see helpers.py)."""
+import json
 import shutil
 import sqlite3
 import threading
@@ -9,7 +10,9 @@ from datetime import datetime
 from unittest import mock
 
 from tests import helpers
-from tests.helpers import api, db_rows, incident, make_andyflow_db, reset_db
+from tests.helpers import api, db_rows, enable_andyflow, incident, make_andyflow_db, reset_db
+
+import mcp_server  # noqa: E402  (the same server module the helpers loaded)
 
 
 class IncidentTests(unittest.TestCase):
@@ -227,6 +230,7 @@ class AndyFlowInboxTests(unittest.TestCase):
 
     def setUp(self):
         reset_db()
+        enable_andyflow()
 
     def texts(self, body):
         return {(i["kind"], i["source_id"]) for i in body["items"]}
@@ -234,14 +238,15 @@ class AndyFlowInboxTests(unittest.TestCase):
     def test_no_andyflow_db(self):
         status, body, _ = api("GET", "/api/inbox")
         self.assertEqual(status, 200)
-        self.assertIs(body["available"], False)
-        self.assertEqual(body["items"], [])
+        self.assertEqual(body, {"available": False, "enabled": True, "installed": False, "items": []})
 
     def test_inbox_lists_only_incident_items(self):
         make_andyflow_db(self.DICTATIONS, self.NOTES)
         status, body, _ = api("GET", "/api/inbox")
         self.assertEqual(status, 200)
         self.assertIs(body["available"], True)
+        self.assertIs(body["enabled"], True)
+        self.assertIs(body["installed"], True)
         self.assertEqual(self.texts(body), {("dictation", 1), ("note", 1)})
         self.assertTrue(all(i["guess"]["category"] for i in body["items"]))
 
@@ -354,6 +359,7 @@ class MissingEntryTests(unittest.TestCase):
 class BadBodyTests(unittest.TestCase):
     def setUp(self):
         reset_db()
+        enable_andyflow()  # dismiss checks the link first, then the body
 
     def test_dismiss_needs_kind_and_id(self):
         for body in ({}, {"source_id": 1}, {"kind": "note"}, {"kind": "note", "source_id": "abc"}):
@@ -379,6 +385,7 @@ class BadBodyTests(unittest.TestCase):
 class AndyFlowRobustnessTests(unittest.TestCase):
     def setUp(self):
         reset_db()
+        enable_andyflow()
 
     def keys(self, body):
         return {(i["kind"], i["source_id"]) for i in body["items"]}
@@ -432,7 +439,179 @@ class AndyFlowRobustnessTests(unittest.TestCase):
         helpers.server.ANDYFLOW_DB.parent.mkdir(parents=True, exist_ok=True)
         helpers.server.ANDYFLOW_DB.write_bytes(b"this is not a database" * 50)
         status, body, _ = api("GET", "/api/inbox")
-        self.assertEqual((status, body), (200, {"available": False, "items": []}))
+        self.assertEqual((status, body), (200, {"available": False, "enabled": True, "installed": True, "items": []}))
+
+
+class AndyFlowLinkTests(unittest.TestCase):
+    """The Andy Flow link is a setting the resident turns on. Off (the default) never opens history.db."""
+    DICTATIONS = [
+        (1, "2026-10-20 14:30:00", "Incident: nobody brought my lunch tray", "Notepad"),
+        (2, "2026-10-20 15:00:00", "Remind me to call my sister", "Notepad"),
+    ]
+
+    def setUp(self):
+        reset_db()
+
+    def spy_on_opens(self):
+        """Record every sqlite file opened while the test runs; the real connect still runs."""
+        real, opened = sqlite3.connect, []
+
+        def spy(target, *args, **kwargs):
+            opened.append(str(target))
+            return real(target, *args, **kwargs)
+
+        patcher = mock.patch.object(sqlite3, "connect", spy)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return opened
+
+    def never_opened(self, opened):
+        self.assertGreater(len(opened), 0)  # the spy is working: the log itself was opened
+        self.assertEqual([p for p in opened if "history.db" in p], [])
+
+    def test_off_by_default_and_never_opens_the_file(self):
+        make_andyflow_db(self.DICTATIONS)
+        opened = self.spy_on_opens()
+        status, body, _ = api("GET", "/api/inbox")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"available": False, "enabled": False, "installed": True, "items": []})
+        self.never_opened(opened)
+
+    def test_off_and_not_installed(self):
+        _, body, _ = api("GET", "/api/inbox")
+        self.assertEqual(body, {"available": False, "enabled": False, "installed": False, "items": []})
+
+    def test_saved_off_is_the_same_as_never_set(self):
+        make_andyflow_db(self.DICTATIONS)
+        enable_andyflow(False)
+        opened = self.spy_on_opens()
+        self.assertIs(api("GET", "/api/inbox")[1]["enabled"], False)
+        self.never_opened(opened)
+
+    def test_import_when_off_adds_nothing(self):
+        make_andyflow_db(self.DICTATIONS)
+        opened = self.spy_on_opens()
+        status, body, _ = api("POST", "/api/inbox/import")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"available": False, "enabled": False, "added": 0, "ids": []})
+        self.assertEqual(db_rows("SELECT id FROM incidents"), [])
+        self.assertEqual(db_rows("SELECT * FROM inbox_seen"), [])
+        self.never_opened(opened)
+
+    def test_dismiss_when_off_is_refused(self):
+        make_andyflow_db(self.DICTATIONS)
+        status, body, _ = api("POST", "/api/inbox/dismiss", {"kind": "dictation", "source_id": 1})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["error"], "The Andy Flow link is off.")
+        self.assertEqual(db_rows("SELECT * FROM inbox_seen"), [])
+
+    def test_turning_it_on_normalises_the_value_and_connects(self):
+        make_andyflow_db(self.DICTATIONS)
+        for value in ("true", True, "1", " Yes ", "ON"):
+            api("PUT", "/api/settings", {"andyflow_enabled": False})
+            _, body, _ = api("PUT", "/api/settings", {"andyflow_enabled": value})
+            self.assertEqual(body["andyflow_enabled"], "1", value)
+        self.assertEqual(db_rows("SELECT value FROM settings WHERE key = 'andyflow_enabled'"), [{"value": "1"}])
+        _, inbox, _ = api("GET", "/api/inbox")
+        self.assertEqual((inbox["available"], inbox["enabled"], inbox["installed"]), (True, True, True))
+        self.assertEqual([i["source_id"] for i in inbox["items"]], [1])
+        imported = api("POST", "/api/inbox/import")[1]
+        self.assertEqual((imported["available"], imported["enabled"], imported["added"]), (True, True, 1))
+
+    def test_anything_else_turns_it_off(self):
+        make_andyflow_db(self.DICTATIONS)
+        for value in ("0", "false", "no", "off", "", "maybe", False, None, 2):
+            api("PUT", "/api/settings", {"andyflow_enabled": True})
+            _, body, _ = api("PUT", "/api/settings", {"andyflow_enabled": value})
+            self.assertEqual(body["andyflow_enabled"], "0", value)
+            self.assertIs(api("GET", "/api/inbox")[1]["enabled"], False, value)
+
+    def init_db_after(self, setting=None, sources=()):
+        """Set up the scratch log (an optional saved setting, incidents with these sources), run init_db,
+        and return the saved andyflow_enabled value (None if never saved)."""
+        reset_db()
+        if setting is not None:
+            enable_andyflow(setting)
+        for n, source in enumerate(sources):
+            api("POST", "/api/incidents", incident(source=source, source_id=str(n)))
+        helpers.server.init_db()
+        rows = db_rows("SELECT value FROM settings WHERE key = 'andyflow_enabled'")
+        return rows[0]["value"] if rows else None
+
+    def test_init_db_keeps_an_existing_andyflow_user_connected(self):
+        self.assertEqual(self.init_db_after(sources=["andyflow-dictation"]), "1")
+        self.assertEqual(self.init_db_after(sources=["manual", "andyflow-note"]), "1")
+
+    def test_init_db_counts_deleted_andyflow_entries_too(self):
+        reset_db()
+        _, made, _ = api("POST", "/api/incidents", incident(source="andyflow-dictation", source_id="9"))
+        self.assertEqual(api("DELETE", f"/api/incidents/{made['id']}")[0], 200)
+        helpers.server.init_db()
+        self.assertEqual(db_rows("SELECT value FROM settings WHERE key = 'andyflow_enabled'"), [{"value": "1"}])
+
+    def test_init_db_leaves_a_new_install_off(self):
+        self.assertIsNone(self.init_db_after())
+        self.assertIsNone(self.init_db_after(sources=["manual", "claude"]))
+
+    def test_init_db_never_changes_a_saved_value(self):
+        self.assertEqual(self.init_db_after(setting=False, sources=["andyflow-dictation"]), "0")
+        self.assertEqual(self.init_db_after(setting=True, sources=["manual"]), "1")
+
+
+class AndyFlowMcpTests(unittest.TestCase):
+    """Claude's MCP tools honour the same switch."""
+    OFF_MESSAGE = {"message": "The Andy Flow link is off. Turn on 'Connect Andy Flow' in My info."}
+    TOOLS = {"andy_flow_inbox": {}, "update_from_andy_flow": {}, "search_andy_flow": {"query": "lunch"},
+             "dismiss_andy_flow_item": {"kind": "dictation", "source_id": 1}}
+
+    def setUp(self):
+        reset_db()
+        make_andyflow_db([(1, "2026-10-20 14:30:00", "Incident: nobody brought my lunch tray", "Notepad")])
+
+    def test_it_is_the_same_log_as_the_server(self):
+        self.assertIs(mcp_server.tracker, helpers.server)
+
+    def test_off_every_andy_flow_tool_says_so_and_opens_nothing(self):
+        real, opened = sqlite3.connect, []
+
+        def spy(target, *args, **kwargs):
+            opened.append(str(target))
+            return real(target, *args, **kwargs)
+
+        with mock.patch.object(sqlite3, "connect", spy):
+            for name, args in self.TOOLS.items():
+                self.assertEqual(mcp_server.call_tool(name, args), self.OFF_MESSAGE, name)
+            self.assertEqual(mcp_server.call_tool("tracker_summary", {})["andy_flow_waiting"], 0)
+        self.assertGreater(len(opened), 0)  # the spy is working: the log itself was opened
+        self.assertEqual([p for p in opened if "history.db" in p], [])
+        self.assertEqual(db_rows("SELECT id FROM incidents"), [])
+        self.assertEqual(db_rows("SELECT * FROM inbox_seen"), [])
+
+    def test_off_message_is_a_plain_result_not_an_error(self):
+        reply = mcp_server.handle({"method": "tools/call", "params": {"name": "andy_flow_inbox", "arguments": {}}})
+        self.assertNotIn("isError", reply)
+        self.assertEqual(json.loads(reply["content"][0]["text"]), self.OFF_MESSAGE)
+
+    def test_on_the_tools_work(self):
+        enable_andyflow()
+        self.assertEqual([i["source_id"] for i in mcp_server.call_tool("andy_flow_inbox", {})["items"]], [1])
+        self.assertEqual(mcp_server.call_tool("tracker_summary", {})["andy_flow_waiting"], 1)
+        self.assertEqual(mcp_server.call_tool("update_from_andy_flow", {})["added"], 1)
+        self.assertEqual(mcp_server.call_tool("dismiss_andy_flow_item", self.TOOLS["dismiss_andy_flow_item"]),
+                         {"ok": True})
+
+    def test_on_search_reads_andy_flow(self):
+        enable_andyflow()
+        helpers.server.ANDYFLOW_DB.unlink()  # the search reads its own columns, so use a matching fixture
+        with closing(sqlite3.connect(helpers.server.ANDYFLOW_DB)) as af:
+            af.execute("CREATE TABLE dictations (id INTEGER PRIMARY KEY, timestamp TEXT, app_name TEXT, text TEXT)")
+            af.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, updated_at TEXT, title TEXT, body TEXT, folder TEXT)")
+            af.execute("INSERT INTO dictations VALUES (1, ?, 'Notepad', 'my lunch tray never came')",
+                       (f"{datetime.now():%Y-%m-%d} 12:00:00",))
+            af.commit()
+        found = mcp_server.call_tool("search_andy_flow", {"query": "lunch"})
+        self.assertIs(found["available"], True)
+        self.assertEqual([i["id"] for i in found["items"]], [1])
 
 
 class BackupTests(unittest.TestCase):

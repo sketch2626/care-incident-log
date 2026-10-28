@@ -125,6 +125,15 @@ def reset_db():
         pass
 
 
+def enable_andyflow(on=True):
+    """Turn the Andy Flow link on (or off) in the scratch settings. It starts off; reset_db clears it."""
+    start_server()
+    with closing(sqlite3.connect(server.DB_PATH)) as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('andyflow_enabled', ?)",
+                     ("1" if on else "0",))
+        conn.commit()
+
+
 def make_andyflow_db(dictations=(), notes=()):
     """Create a fixture Andy Flow db at server.ANDYFLOW_DB (inside the scratch folder).
 

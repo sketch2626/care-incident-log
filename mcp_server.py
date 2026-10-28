@@ -72,6 +72,10 @@ def summary(conn):
     }
 
 
+ANDY_FLOW_TOOLS = {"andy_flow_inbox", "update_from_andy_flow", "dismiss_andy_flow_item", "search_andy_flow"}
+ANDY_FLOW_OFF = {"message": "The Andy Flow link is off. Turn on 'Connect Andy Flow' in My info."}
+
+
 def search_andy_flow(query="", since="", limit=30):
     if not tracker.ANDYFLOW_DB.exists():
         return {"available": False, "items": []}
@@ -104,6 +108,10 @@ def _limit(value, default):
 def call_tool(name, args):
     if not isinstance(args, dict):
         args = {}
+    if name in ANDY_FLOW_TOOLS:
+        with tracker.connect() as conn:
+            if not tracker.andyflow_on(conn):
+                return ANDY_FLOW_OFF  # the resident hasn't turned the link on: never open Andy Flow's file
     with tracker.connect() as conn:
         if name == "tracker_summary":
             return summary(conn)

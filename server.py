@@ -343,11 +343,17 @@ GUESS_CATEGORY = [(k, re.compile(p, re.I)) for k, p in [
     ("staff", r"rude|yell|attitude|disrespect|scream|cuss"),
 ]]
 NEVER_CAME = re.compile(r"\b(never|nobody|no one|no-one)\s+(ever\s+)?(came|showed|answered|brought|asked)\b(?!\s+(for|until)\b)", re.I)
-WORD_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-             "seven": 7, "eight": 8, "nine": 9, "ten": 10, "fifteen": 15, "twenty": 20, "thirty": 30,
-             "forty": 40, "forty-five": 45, "fifty": 50}
-WAIT = re.compile(r"\b(\d+|" + "|".join(sorted(WORD_NUMS, key=len, reverse=True)) + r")\s*(hours?|hrs?|minutes?|mins?)\b", re.I)
-DANGEROUS = re.compile(r"\bfell\b|\bfall\b|injur|bleed|chok|fever|can'?t breathe|unsafe", re.I)
+_UNITS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "ninety": 90}
+WORD_NUMS = {"a": 1, "an": 1, **_UNITS, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+             "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+             **_TENS, **{f"{t} {u}": tn + un for t, tn in _TENS.items() for u, un in _UNITS.items()}}
+# Longest first, so "twenty five" wins over "twenty"; a space in a key also matches a hyphen ("twenty-five").
+_NUM_WORDS = "|".join(k.replace(" ", r"[\s-]+") for k in sorted(WORD_NUMS, key=len, reverse=True))
+WAIT = re.compile(r"\b(\d+|" + _NUM_WORDS + r")(\s+and\s+a\s+half)?\s*(hours?|hrs?|minutes?|mins?)(\s+and\s+a\s+half)?\b", re.I)
+HALF_HOUR = re.compile(r"\b(?:a\s+)?half\s+(?:an?\s+)?hour\b", re.I)
+DANGEROUS = re.compile(r"\bfell\b|\bfall\b|injur|bleed|\bbled\b|chok|fever|unsafe|"
+                       r"\b(?:can'?t|can\s*not|couldn'?t|could\s+not)\s+breathe|hard to breathe|trouble breathing|short of breath", re.I)
 SERIOUS = re.compile(r"hungry|pain|hurt|soiled|sitting in|cry|skipped|never|nobody|no one|hours?\b", re.I)
 
 
@@ -358,11 +364,16 @@ def guess_incident(text, at):
     body = body[:1].upper() + body[1:]
     category = next((k for k, rx in GUESS_CATEGORY if rx.search(body)), "other")
     wait = None
-    m = WAIT.search(body)
-    if m:
-        n = int(m.group(1)) if m.group(1).isdigit() else WORD_NUMS[m.group(1).lower()]
-        wait = n * 60 if m.group(2).lower().startswith("h") else n
-    severity = "dangerous" if DANGEROUS.search(body) else "serious" if SERIOUS.search(body) else "minor"
+    m, half = WAIT.search(body), HALF_HOUR.search(body)
+    if half and (not m or half.start() <= m.start()):
+        wait = 30  # "half an hour", "a half hour"
+    elif m:
+        word = re.sub(r"[\s-]+", " ", m.group(1).lower())
+        n = int(word) if word.isdigit() else WORD_NUMS[word]
+        hours = m.group(3).lower().startswith("h")
+        wait = n * 60 + (30 if hours and (m.group(2) or m.group(4)) else 0) if hours else n
+    plain = body.replace("’", "'")  # dictation often types a curly apostrophe: can’t
+    severity = "dangerous" if DANGEROUS.search(plain) else "serious" if SERIOUS.search(plain) else "minor"
     return {"occurred_date": at[:10], "occurred_time": at[11:16], "category": category,
             "description": body, "severity": severity, "wait_minutes": wait,
             "never_came": bool(NEVER_CAME.search(body))}

@@ -65,17 +65,14 @@ class GuessIncidentTests(unittest.TestCase):
                 self.assertEqual(got["occurred_date"], date)
                 self.assertEqual(got["occurred_time"], time)
 
-    @unittest.skip("BUG: 'couldn't breathe' is marked minor, should be dangerous")
     def test_couldnt_breathe_is_dangerous(self):
         got = server.guess_incident("Incident: I couldn't breathe for a while", AT)
         self.assertEqual(got["severity"], "dangerous")
 
-    @unittest.skip("BUG: 'bled' is marked minor, should be dangerous")
     def test_bled_is_dangerous(self):
         got = server.guess_incident("Incident: I bled from my arm", AT)
         self.assertEqual(got["severity"], "dangerous")
 
-    @unittest.skip("BUG: 'twenty five' and 'thirty five' minutes are read as 5 minutes")
     def test_compound_number_minutes_are_read_whole(self):
         cases = [
             ("Incident: I waited twenty five minutes for water", 25),
@@ -86,15 +83,39 @@ class GuessIncidentTests(unittest.TestCase):
                 got = server.guess_incident(text, AT)
                 self.assertEqual(got["wait_minutes"], minutes)
 
-    @unittest.skip("BUG: 'half an hour' is read as 60 minutes, should be 30")
     def test_half_an_hour_is_thirty_minutes(self):
         got = server.guess_incident("Incident: I had to wait half an hour for my pills", AT)
         self.assertEqual(got["wait_minutes"], 30)
 
-    @unittest.skip("BUG: curly apostrophe in 'can't breathe' is marked minor, should be dangerous")
     def test_curly_apostrophe_cant_breathe_is_dangerous(self):
         got = server.guess_incident("Incident: I can’t breathe at night", AT)
         self.assertEqual(got["severity"], "dangerous")
+
+    def test_more_spoken_waits(self):
+        cases = [
+            ("Incident: I waited an hour and a half for help", 90),
+            ("Incident: I waited two and a half hours for my pills", 150),
+            ("Incident: I waited a half hour for water", 30),
+            ("Incident: I waited twenty-five minutes for water", 25),
+            ("Incident: I waited forty five minutes for water", 45),
+            ("Incident: I waited fifteen minutes for water", 15),
+            ("Incident: I waited twelve minutes for water", 12),
+            ("Incident: I waited twenty minutes for water", 20),
+            ("Incident: I waited 2 hours for water", 120),
+        ]
+        for text, minutes in cases:
+            with self.subTest(text=text):
+                self.assertEqual(server.guess_incident(text, AT)["wait_minutes"], minutes)
+
+    def test_more_breathing_trouble_is_dangerous(self):
+        for text in ("Incident: I could not breathe", "Incident: I cannot breathe lying flat",
+                     "Incident: it was hard to breathe and nobody came"):
+            with self.subTest(text=text):
+                self.assertEqual(server.guess_incident(text, AT)["severity"], "dangerous")
+
+    def test_blood_pressure_is_not_bleeding(self):
+        got = server.guess_incident("Incident: they forgot to check my blood pressure", AT)
+        self.assertNotEqual(got["severity"], "dangerous")
 
 
 if __name__ == "__main__":

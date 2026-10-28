@@ -1,6 +1,7 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folder at a scratch dir)
 
 """Mary's screen is served: the page, its script and its style load, and the page uses the face script."""
+import re
 import unittest
 
 api = helpers.api
@@ -44,6 +45,20 @@ class MaryPageTests(unittest.TestCase):
         self.assertRegex(js, r"var IDLE = \{\s*sleepMin:\s*5,\s*dimMin:\s*15\s*\}")
         self.assertIn("/api/power", js)
         self.assertIn("wakeLock", js)
+
+    def test_more_button_stays_on_first_run_screens_and_menu_keeps_a_way_out(self):
+        # first run has no other way out of her full-screen window, so More must show on choose and hello,
+        # and the menu there must keep Close and Done while hiding the items that would derail the first run
+        css, _ = self.get("/mary/mary.css")
+        html, _ = self.get("/mary.html")
+        self.assertNotRegex(css, r'\[data-screen="(choose|hello)"\]\s*\.more')
+        rule = re.search(r'\[data-screen="choose"\] \.menu \.panel > ([^,{]+),\s*\[data-screen="hello"\] \.menu \.panel > ([^{]+)\{display:none\}', css)
+        self.assertIsNotNone(rule, "first-run menu rule is missing")
+        for selector in rule.groups():
+            self.assertIn(":not(#closeBtn)", selector)
+            self.assertIn(':not([data-act="done"])', selector)
+        self.assertIn('id="closeBtn"', html)
+        self.assertIn('data-act="done"', html)
 
     def test_face_files_still_load(self):
         self.get("/mary/face.js")

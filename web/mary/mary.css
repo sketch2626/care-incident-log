@@ -15,6 +15,7 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 
 /* the dock: Talk button, caption, chip */
 .dock{position:absolute;left:24px;right:24px;bottom:24px;z-index:10;display:flex;flex-direction:column;gap:16px;pointer-events:none}
+/* No scrolling here: on a very short window the Talk button must stay in view. More sits above the dock (z-index 20), so it can always be tapped. */
 .dock > *{pointer-events:auto}
 .row{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
 
@@ -65,7 +66,7 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 [data-screen="nokey"] .nokeybox{display:block}
 
 /* More button, top right */
-.more{position:absolute;top:24px;right:24px;z-index:10;min-width:64px;min-height:64px;padding:0 24px;
+.more{position:absolute;top:24px;right:24px;z-index:20;min-width:64px;min-height:64px;padding:0 24px;
   background:#fffefa;color:#1f1b16;border:3px solid #1f1b16;border-radius:24px;font-size:24px;font-weight:700}
 
 /* menu and typing */
@@ -83,13 +84,16 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .panel.typing .btns .btn{flex:1 1 200px;width:auto}
 
 /* first run: Choose your companion (board R4Choose) and First hello (R4FirstHello). firstrun.js builds the cards.
-   The talk button and More are hidden on both; the talk button comes back while she is listening for your name. */
-[data-screen="choose"] .more,[data-screen="hello"] .more{display:none}
+   The talk button is hidden on both; it comes back while she is listening for your name. More stays, so there is always a way out,
+   but on these two screens its menu offers only Close (when this is her own window) and Done: the other items would derail the first run. */
+[data-screen="choose"] .menu .panel > :not(#closeBtn):not([data-act="done"]),
+[data-screen="hello"] .menu .panel > :not(#closeBtn):not([data-act="done"]){display:none}
 [data-screen="choose"] .talk{display:none}
 [data-screen="hello"]:not([data-phase="listening"]) .talk{display:none}
 
 .choose{position:absolute;inset:0;z-index:5;opacity:1;transition:opacity .5s ease;
-  --fw:max(220px,min(520px,40vw,calc((100vh - 330px) * 1.6)));
+  --fw:max(220px,min(520px,40vw,calc(50vw - 230px),calc((100vh - 330px) * 1.6)));
+  /* 50vw - 230px: the right card's edge is 50vw + fw + 60px, so it ends left of More (starts at 100vw - 164px at the widest) */
   background:radial-gradient(ellipse at 50% 42%,#fffaf0 0%,#fff0d2 50%,#fadcaa 100%)}
 .choose.leaving{opacity:0;pointer-events:none}
 .choose .edge{position:absolute;inset:0;pointer-events:none;will-change:opacity;animation:fr-edge 6s ease-in-out infinite;
@@ -116,6 +120,7 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
    The layer sits inside her face (.mf-root), between the glow and her face, so her face stays brighter than the room. */
 .mf-dim{position:absolute;inset:0;background:#241d2e;opacity:0;pointer-events:none;will-change:opacity;transition:opacity .6s ease}
 .mf-dim.on{opacity:.45;transition:opacity 20s linear}
+.mf-root:has(.mf-dim.on) *{animation-play-state:paused}   /* dimmed = nobody around: her face stops animating to save battery */
 
 @media (max-width:900px){
   .row{flex-wrap:wrap;justify-content:flex-end}

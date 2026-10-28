@@ -60,20 +60,25 @@
   var CH = null;                // { root, faces: {mary, him}, picked, timer }
   var SAM_FALLBACK = 'Sam';
 
-  var MARY_WORDS = ['mary', 'marie', 'mari', 'merry', 'her', 'she', 'woman', 'lady', 'girl', 'you'];
-  var SAM_WORDS = ['sam', 'sammy', 'him', 'he', 'man', 'gentleman', 'guy', 'boy'];
+  var MARY_WORDS = ['mary', 'marie', 'mari', 'merry'];                // names count anywhere in what was said
+  var SAM_WORDS = ['sam', 'sammy'];
+  var MARY_HINTS = ['her', 'she', 'woman', 'lady', 'girl', 'you'];    // pronouns and descriptors count only in a short answer,
+  var SAM_HINTS = ['him', 'he', 'man', 'gentleman', 'guy', 'boy'];    // so "what do you mean?" or TV chatter picks no one
+  var HINT_MAX_WORDS = 5;
+  var YOU_MAX_WORDS = 3;                                              // "You!" or "I'll take you" picks Mary; "what do you mean?" doesn't
 
   // What the resident said -> 'mary' | 'him' | '' (unclear, or both named)
   function parseChoice(text) {
-    var words = String(text || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/);
+    var words = String(text || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
     var himName = String(A.companionName('him') || SAM_FALLBACK).toLowerCase();
     var maryName = String(A.companionName('mary') || 'Mary').toLowerCase();
+    var hints = words.length <= HINT_MAX_WORDS;
     var m = false, s = false;
     for (var i = 0; i < words.length; i++) {
       var w = words[i];
-      if (!w) { continue; }
-      if (w === maryName || MARY_WORDS.indexOf(w) >= 0) { m = true; }
-      if (w === himName || SAM_WORDS.indexOf(w) >= 0) { s = true; }
+      if (w === 'you' && words.length > YOU_MAX_WORDS) { continue; }
+      if (w === maryName || MARY_WORDS.indexOf(w) >= 0 || (hints && MARY_HINTS.indexOf(w) >= 0)) { m = true; }
+      if (w === himName || SAM_WORDS.indexOf(w) >= 0 || (hints && SAM_HINTS.indexOf(w) >= 0)) { s = true; }
     }
     if (m && !s) { return 'mary'; }
     if (s && !m) { return 'him'; }
@@ -154,8 +159,10 @@
     var f = CH && CH.faces.mary;
     if (f) { f.setActivity('listening'); }
     function end() {
-      A.setPhase('idle');
-      if (f && CH && !CH.picked) { f.setActivity('resting'); }
+      if (CH && !CH.picked) {                    // a tap may have chosen already; then her mouth must not stop mid-sentence
+        A.setPhase('idle');
+        if (f) { f.setActivity('resting'); }
+      }
     }
     return A.listenOnce().then(function (t) {
       end();
@@ -293,7 +300,7 @@
   }
 
   // What she hears (or what is typed). Resolves { text } or { skipped: true }.
-  function getAnswer() {
+  function getAnswer(question) {
     if (S.typingOnly) { return typeName(); }
     return A.listenOnce().then(function (t) {
       A.setPhase('idle');
@@ -302,6 +309,7 @@
       A.setPhase('idle');
       if (e && e.cancelled) { return { text: '' }; }
       log(e);
+      A.setCaption(question);                     // the caption would still say "I'm listening…" over the typing box
       return typeName();
     });
   }
@@ -310,7 +318,7 @@
     var asks = ['What would you like me to call you?', "I didn't quite catch that. What should I call you?"];
     for (var i = 0; i < asks.length; i++) {
       await A.say(asks[i], 'happy');
-      var ans = await getAnswer();
+      var ans = await getAnswer(asks[i]);
       if (ans.skipped) { break; }
       if (!ans.text) { continue; }
       A.setPhase('thinking');
@@ -547,8 +555,12 @@
   function onAct(ev) {
     lastAct = Date.now();
     if (skipOn && S.screen === 'hello' && ev && ev.type === 'pointerdown') {
-      skipAhead();
-      return;
+      var onUi = false;
+      try { onUi = !!(ev.target && ev.target.closest && ev.target.closest('button, .overlay')); } catch (e) { onUi = false; }
+      if (!onUi) {                                // a tap on More, Done or Close is not "skip": only a tap on her face is
+        skipAhead();
+        return;
+      }
     }
     if (!asleep) { return; }
     var t = ev && ev.target;

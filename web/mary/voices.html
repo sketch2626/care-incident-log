@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose a voice</title>
+<link rel="stylesheet" href="/mary/face.css">
+<link rel="stylesheet" href="/mary/voices.css">
+</head>
+<body>
+<div class="layout">
+  <div id="face"></div>
+
+  <main id="panel">
+    <button id="backBtn" class="btn light back" type="button">&lsaquo; Back to Mary</button>
+    <h1>Choose a voice</h1>
+    <p class="lead">Tap Play to hear each voice say the same hello. Then pick the one you like best.</p>
+    <p id="loadError" class="errbox" role="alert" hidden>I couldn't load the voices. Please go back to Mary and try again.</p>
+
+    <div class="tabs">
+      <button id="tabGemini" class="btn light tab" type="button" aria-pressed="true">Gemini voices</button>
+      <button id="tabLive" class="btn light tab" type="button" aria-pressed="false">Live talk</button>
+      <button id="tabOffline" class="btn light tab" type="button" aria-pressed="false">Offline voices</button>
+    </div>
+
+    <section id="secGemini">
+      <p class="intro">Natural voices from Google. These need the internet.</p>
+      <div class="cols">
+        <div class="col">
+          <h2>For Mary</h2>
+          <div id="geminiMary" class="cards"></div>
+        </div>
+        <div class="col">
+          <h2>For Sam</h2>
+          <div id="geminiSam" class="cards"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="secLive" hidden>
+      <p class="intro">Talk with her for real, back and forth, like a phone call. You can interrupt her any time.</p>
+      <div id="liveVoices" class="livevoices"></div>
+      <button id="liveStart" class="btn dark big" type="button">Start talking</button>
+      <p id="liveStatus" class="livestatus" aria-live="polite"></p>
+      <div id="liveCaption" class="caption" aria-live="polite"></div>
+      <p id="liveStats" class="stats"></p>
+      <button id="liveUse" class="btn light" type="button">Use this voice</button>
+    </section>
+
+    <section id="secOffline" hidden>
+      <p class="intro">These work with no internet, right on this computer. The first one takes a few seconds to get ready.</p>
+      <div class="cols">
+        <div class="col">
+          <h2>For Mary</h2>
+          <div id="offlineMary" class="cards"></div>
+        </div>
+        <div class="col">
+          <h2>For Sam</h2>
+          <div id="offlineSam" class="cards"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="/mary/face.js"></script>
+<script src="/mary/voices.js"></script>
+<script src="/mary/live.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Mary skills: the plug-in design (M13)
 
-Status: **design, waiting for Andy** (2026-10-29). Roadmap item M13 in `docs/mary-roadmap.md`.
+Status: **approved by Andy 2026-10-29** (first skill `voice_comfort`; in-repo reviewed skills only; switches in My info and by voice), with changes A (internet only through the core) and B (voice switching both ways, plus helper locks). Roadmap item M13 in `docs/mary-roadmap.md`.
 
 ## In plain words, for Andy
 
@@ -20,7 +20,11 @@ Nobody touches Mary's brain to add it.
 - Mary says "That's not working right now."
 - Everything else keeps going: her talk, her safety checks, the other skills.
 
-Before a skill is loaded at all, the app checks its card and code with automatic tests, and a skill that fails isn't loaded. A resident (or the helper who sets up the laptop) can switch any skill on or off. Her emergency and safety rules aren't skills, so they can never be switched off or broken by one.
+Before a skill is loaded at all, the app checks its card and code with automatic tests, and a skill that fails isn't loaded. A resident can switch any skill on or off just by asking Mary ("turn the crossword back on"), or in My info. Only a skill the helper **locked** during setup needs My info to change. Her emergency and safety rules aren't skills, so they can never be switched off or broken by one.
+
+**The internet only goes through Mary's core.** A skill can't reach the internet by itself. It asks the core, and the core only lets it visit the websites listed on its card. Every visit has a time limit and a size limit, and is written in a log.
+
+*Approved by Andy 2026-10-29, with two changes: internet only through the core (A) and voice switching in both directions (B).*
 
 **Why it matters beyond the nursing home.** It's a small, safe way for anyone to teach an AI companion a new trick, and to have it understand that trick on its own. The card follows the same shape as MCP tools (a standard way AIs are offered tools), so a skill made for Mary could later be offered to other AIs too.
 
@@ -73,7 +77,7 @@ tests/test_skills_contract.py # runs the contract on every folder in skills/
     }
   ],
   "storage": true,
-  "needs": {"internet": false, "mic": false, "modes": ["live", "normal", "offline"]},
+  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
   "offline": "works",
   "default_on": true
 }
@@ -84,6 +88,14 @@ tests/test_skills_contract.py # runs the contract on every folder in skills/
 - **`offline_phrases`**: short trigger phrases for Offline mode, for example `["louder", "speak up", "turn it up"]`. Matched only for actions with no required inputs.
 - **`offline`**: `"works"` or `"needs_internet"`. With `needs_internet`, the core makes Mary say "I need the internet for that" instead of calling the skill.
 - **`storage`**: whether it gets a private store.
+- **`needs.internet_hosts`** (change A): the only hosts `ctx.fetch` may reach, as exact names or one leading wildcard label (`"*.wikipedia.org"`, `"upload.wikimedia.org"`). An empty list means no internet at all.
+
+**`ctx.fetch(url, method="GET", params=None, headers=None, max_bytes=2_000_000, timeout=6)`** (change A) is the only way a skill reaches the internet:
+- `https` only. The host must match `internet_hosts`, and the check runs again after every redirect.
+- It always has a timeout (at most 8 s) and a size cap (at most 5 MB); a response over the cap is an error, not a cut-off.
+- No request body: it's GET with query `params`. The core adds nothing of the resident's (no memory, no transcript, no key), so resident text goes out only when the action's own arguments carry it.
+- Every fetch is logged in `skills.log` as the skill, the host, the status and the byte count. It never logs the path, the query or the response.
+- It returns `{status, content_type, body: bytes}` and raises `SkillFetchError` on anything refused or failed. Offline mode refuses it at once.
 
 ### 4. The core loader (`skills_core.py`)
 1. At start, scan `skills/*/manifest.json`. For each one: validate the manifest (the contract checks in section 8 that can run fast), import `skill.py` as module `skills.<name>.skill`, and check that every declared action has a handler `def <action>(ctx, **args)`. Any failure means the skill isn't loaded, with a line in `DATA\skills.log`.
@@ -126,6 +138,7 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 **Offline mode:**
 1. Before `OFFLINE_TEXT`, `reply()` asks `skills_core.offline_match(text)`, which checks the `offline_phrases` of enabled, `offline: works` skills.
 2. A match runs the action like any other and says the skill's `say` text (handlers return a short `say` line for this; Gemini words it in the other modes).
+3. "Turn <title> on/off" (and "back on", "stop the <title>") is matched offline too, against each skill's `title`, and runs `set_skill`. Then the voice switch works with no internet.
 
 **The page:** `web/mary/skills.js` gets `GET /api/mary/skills` (enabled skills, menu entries and page script URLs) and loads each `screen.js`, which calls `MarySkills.register(name, {enter, leave, effect(kind, data)})`. It plugs into the existing `registerScreen()`, and adds menu buttons from `screen.menu_label`. Resident moves on a skill screen go to `POST /api/mary/skills/<name>/event`, which runs `skill.py`'s `on_event(ctx, event)` in the guard.
 
@@ -146,7 +159,10 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
   - `ctx.store.get/put/delete/keys` is bound to its own skill name by the core. There's no API that takes another skill's name, and the value is JSON, at most 64 KB per key.
   - Skills never get a database connection, the incident tables or file paths. If one needs files, `ctx.files` is a folder `DATA\skills\<name>\` with paths that are checked to stay inside it.
 - **Settings it may change:** only keys listed in the manifest under `"settings": ["voice_rate", "voice_volume"]`, through `ctx.settings_put`. Anything else is refused.
-- **Per-resident on/off:** the setting `skills_off` (a list of names), shown in My info as "Things Mary can do", with a big switch per skill. Mary can also switch one off when asked ("Mary, stop the crossword for good") through a core tool `turn_skill_off(name)`. Switching back on is in My info. Core features (talk, emergency, incident safety) aren't in the list.
+- **Per-resident on/off (change B): two lists in settings.**
+  - **`skills_off`**: the resident's own choice. It changes in both directions by voice ("turn the crossword back on", "stop the crossword") through the core tool `set_skill(name, on)`, or with the big switch per skill in My info ("Things Mary can do"). Residents who can't use their hands need the voice way.
+  - **`skills_locked`**: set by the helper during setup, as `{name: "off"|"on"}`. A locked skill can't be changed by voice: `set_skill` answers `{"error": "locked"}` and Mary says "the person who set up your laptop chose that." Only My info's helper section (or setup) changes it. This fits the two setup modes in `docs/companion-plan.md`: "Mary only" locks the computer skills off, and "Mary plus the computer" leaves them free.
+  - **Enabled** = loaded, not tripped, not locked off, and (locked on or not in `skills_off`). `set_skill` is a core tool, always present, and its `name` enum lists every loaded skill. Core features (talk, emergency, incident safety) aren't in either list.
 
 ### 8. Contract tests (`tests/test_skills_contract.py`, run for every folder in `skills/`)
 1. `manifest.json` parses and has every required field. `name` = folder name, and `contract` is supported.
@@ -154,8 +170,8 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 3. Every `inputSchema` uses only the Gemini-safe subset, and every property has a `description`.
 4. The text size limits: `instructions` at most 400 characters and descriptions at most 200. The total instruction text of all shipped skills stays under a budget (4,000 characters) so her prompt doesn't swell.
 5. `skill.py` imports cleanly, with a handler for every action, and `view` when `sees`.
-6. **Static safety:** `skill.py` doesn't import `server`, `sqlite3`, `mary`, `assist`, `subprocess`, `ctypes` or `socket`, and doesn't open files outside `ctx.files`. Checked from its source with `ast`.
-7. **A call smoke test:** each action is called with arguments generated from its schema (the minimal valid ones) against a scratch store. The result is JSON-able, under 4 KB, and `view()` returns a string under 600 characters. It must work with no internet: `urllib` is blocked during the test, and a `needs_internet` skill must fail politely, not crash.
+6. **Static safety:** `skill.py` doesn't import `server`, `sqlite3`, `mary`, `assist`, `subprocess`, `ctypes`, `multiprocessing`, `importlib`, or anything for the network (`urllib`, `http`, `requests`, `httpx`, `aiohttp`, `socket`, `ssl`, `ftplib`, `smtplib`, `websocket(s)`; change A). It doesn't call `open`, `exec`, `eval` or `__import__`. Checked from its source with `ast`; the loader runs the same check.
+7. **A call smoke test:** each action is called with arguments generated from its schema (the minimal valid ones) against a scratch store. The result is JSON-able, under 4 KB, and `view()` returns a string under 600 characters. It must work with no internet: `ctx.fetch` is replaced by one that refuses, and a `needs_internet` skill must fail politely, not crash. Every `internet_hosts` entry is a valid host pattern.
 8. **Effects:** every effect is a known core kind or `skill == name`.
 9. **Offline phrases:** only on actions with no required inputs, and none clash across skills or with the emergency or yes/no word lists.
 10. **The page half:** `screen.js` exists if `screen` is set. A tiny Node check, if Node is present, confirms it parses and calls `MarySkills.register` with its own name. Otherwise it's skipped with a note.

@@ -25,6 +25,9 @@
   var MSG_END = "That's the end of the practice chat. Tap Start to talk again.";
   var MSG_STOPPED = 'Stopped. Tap Start to talk again.';
 
+  // Sent once when the line is ready, so she speaks first (and we can time how long her hello takes).
+  var GREET = '(The resident just opened this talk. Say a short, warm hello and ask how they are, in one or two sentences.)';
+
   // Runs in the audio thread: hands the microphone to the page in blocks of 1024 samples.
   var WORKLET_SRC =
     "class MicTap extends AudioWorkletProcessor {" +
@@ -113,18 +116,24 @@
 
   function statsLine(s) {
     var bits = [];
+    if (s.greetMs !== null) {
+      bits.push(s.pron + ' said hello in ' + (s.greetMs / 1000).toFixed(1) + ' s' +
+        (s.greetFrom === 'mic' ? ' after the microphone was ready' : ' after you tapped'));
+    }
     if (s.gaps.length) {
       bits.push(s.pron + ' answered in about ' + (median(s.gaps) / 1000).toFixed(1) + ' s');
     }
-    bits.push(s.turns + (s.turns === 1 ? ' turn' : ' turns'));
-    bits.push(s.interruptions + (s.interruptions === 1 ? ' interruption' : ' interruptions'));
+    if (s.turns || s.interruptions) {
+      bits.push(s.turns + (s.turns === 1 ? ' turn' : ' turns'));
+      bits.push(s.interruptions + (s.interruptions === 1 ? ' interruption' : ' interruptions'));
+    }
     return bits.join(' · ');
   }
 
   function showStats(s) {
     var lines = [];
     if (s.youText) lines.push('You: ' + s.youText);
-    if (s.turns || s.interruptions) lines.push(statsLine(s));
+    if (s.turns || s.interruptions || s.greetMs !== null) lines.push(statsLine(s));
     statsEl.textContent = lines.join('\n');
   }
 
@@ -266,6 +275,15 @@
     var at = Math.max(s.outCtx.currentTime + 0.05, s.playhead);
     src.start(at);
     s.playhead = at + buf.duration;
+    var ctx = s.outCtx;
+    // The moment this sound will really come out of the speakers.
+    var soundAt = performance.now() + (at - ctx.currentTime + (ctx.outputLatency || ctx.baseLatency || 0)) * 1000;
+    if (s.greetMs === null) {
+      var fromMic = s.micMs > 1000;   // the Allow question took time, so count from when the microphone was ready
+      s.greetFrom = fromMic ? 'mic' : 'tap';
+      s.greetMs = Math.max(0, Math.round(soundAt - (fromMic ? s.micAt : s.tapAt)));
+      showStats(s);
+    }
     s.sources.push(src);
     src.onended = function () {
       var at2 = s.sources.indexOf(src);
@@ -282,6 +300,7 @@
       act('talking');
       setStatus(s.name + ' is talking. Talk over ' + s.her + ' any time to interrupt.');
     }
+    return soundAt;
   }
 
   // ------------------------------------------------------------ what Live tells us
@@ -297,16 +316,16 @@
 
   function onAudio(s, b64) {
     var now = performance.now();
+    var soundAt = playChunk(s, b64) || now;   // when her voice will really reach the speakers
     if (!s.turnOpen) {
       s.turnOpen = true;
       if (s.firstAudioMs === null) s.firstAudioMs = Math.round(now - s.readyAt);
       if (s.voiceSince && now - s.lastVoiceAt <= GAP_WINDOW_MS) {
-        s.gaps.push(Math.max(0, Math.round(now - s.lastVoiceAt)));
+        s.gaps.push(Math.max(0, Math.round(soundAt - s.lastVoiceAt)));
         s.voiceSince = false;
       }
     }
     startOfTurn(s, now, true);
-    playChunk(s, b64);
   }
 
   function onInterrupted(s) {
@@ -335,6 +354,8 @@
       }
     }
 
+    var ot = sc.outputTranscription;
+    if (ot && (ot.startOffset !== undefined || ot.endOffset !== undefined)) s.offsets = true;   // word timings really do come
     if (sc.outputTranscription && sc.outputTranscription.text) {
       startOfTurn(s, now, false);
       s.caption += sc.outputTranscription.text;
@@ -370,6 +391,9 @@
     act('listening');
     setStatus(MSG_LISTEN);
     setStart('Stop talking', false);
+    try {
+      s.ws.send(JSON.stringify({clientContent: {turns: [{role: 'user', parts: [{text: GREET}]}], turnComplete: true}}));
+    } catch (e) { /* she will simply wait for the resident to speak */ }
   }
 
   function handleText(s, text) {
@@ -457,7 +481,13 @@
       error: '',
       limitTimer: 0,
       connectTimer: 0,
-      drainTimer: 0
+      drainTimer: 0,
+      tapAt: performance.now(),
+      micAt: null,
+      micMs: null,
+      greetMs: null,
+      greetFrom: 'tap',
+      offsets: false
     };
   }
 
@@ -468,6 +498,9 @@
       voice: s.voiceId.replace(/^live:/, ''),
       model: s.model,
       first_audio_ms: s.firstAudioMs === null ? undefined : s.firstAudioMs,
+      greet_ms: s.greetMs === null ? undefined : s.greetMs,
+      mic_ms: s.micMs === null ? undefined : s.micMs,
+      word_timings: s.offsets,
       reply_gap_ms: s.gaps.length ? Math.round(median(s.gaps)) : undefined,
       turns: s.turns,
       interruptions: s.interruptions,
@@ -641,6 +674,8 @@
         return null;
       }
       s.stream = stream;
+      s.micAt = performance.now();
+      s.micMs = Math.round(s.micAt - s.tapAt);
       if (s.inCtx.resume) s.inCtx.resume().catch(function () {});
       return openCapture(s).then(function () {
         if (alive(s)) return getToken(s);

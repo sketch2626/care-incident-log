@@ -12,9 +12,7 @@
   var face = MaryFace.create(document.getElementById('face'), {companion: 'mary'});
 
   var data = null;          // loaded from /api/mary/voices
-  var audio = null;         // the sample playing now
-  var audioUrl = null;      // object URL for that sample
-  var current = null;       // {card, btn} of the sample being fetched or played
+  var current = null;       // the sample being fetched or played: its card, button, audio context, reader and counters
   var playToken = 0;        // bumped on every start or stop; late answers with an old token are ignored
   var selectedLive = null;  // the live voice picked in the Live talk tab
 
@@ -40,39 +38,79 @@
     box.hidden = false;
   }
 
-  function freeUrl() {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      audioUrl = null;
+  // Stops the stream, every scheduled piece of sound and the audio context. Never throws.
+  function teardown(run) {
+    run.dead = true;
+    clearTimeout(run.soundTimer);
+    try {
+      if (run.reader && run.reader.cancel) {
+        var cancelled = run.reader.cancel();
+        if (cancelled && cancelled.catch) cancelled.catch(function () {});
+      }
+    } catch (e) { /* already closed */ }
+    var list = run.sources;
+    run.sources = [];
+    for (var i = 0; i < list.length; i++) {
+      list[i].onended = null;
+      try { list[i].stop(); } catch (e2) { /* not started yet */ }
+      try { list[i].disconnect(); } catch (e3) { /* already gone */ }
     }
+    try {
+      if (run.ctx && run.ctx.close) {
+        var closed = run.ctx.close();
+        if (closed && closed.catch) closed.catch(function () {});
+      }
+    } catch (e4) { /* already closed */ }
+  }
+
+  // Tells the server how a sample went, once per sample. It only helps us tune the voices.
+  function logPlay(run, ok, error) {
+    if (run.logged) return;
+    run.logged = true;
+    var entry = {
+      event: 'played',
+      id: run.c.id,
+      voice: run.c.voice,
+      path: run.c.kind,
+      tap_to_sound_ms: run.tapToSound === null ? undefined : run.tapToSound,
+      cached: run.cached,
+      gaps: run.gaps,
+      gap_ms: Math.round(run.gapMs),
+      load_ms: run.loadMs,
+      ok: ok
+    };
+    if (error) entry.error = error;
+    try {
+      fetch('/api/mary/voices/log', {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify(entry),
+        keepalive: true
+      }).catch(function () {});
+    } catch (e) { /* the log is only a help */ }
   }
 
   function stopSound() {
     playToken++;
-    if (audio) {
-      audio.pause();
-      audio = null;
-    }
-    freeUrl();
     if (current) {
-      setButton(current.btn, '▶ Play', false);
+      var run = current;
       current = null;
+      teardown(run);
+      if (run.started) logPlay(run, false, 'stopped');
+      setButton(run.btn, '▶ Play', false);
     }
     face.setActivity('resting');
   }
 
-  function fmtSecs(raw) {
-    if (raw === null || raw === '') return '?';
-    var ms = Number(raw);
-    return isFinite(ms) ? (ms / 1000).toFixed(1) : '?';
-  }
-
-  function statsText(c, h) {
-    var text = 'First sound in ' + fmtSecs(h.get('X-First-Sound-Ms')) +
-      ' s · whole line ' + fmtSecs(h.get('X-Total-Ms')) + ' s';
-    if (h.get('X-Cached') === '1') text += ' · saved copy';
-    var rtf = Number(h.get('X-Rtf'));
-    if (c.kind === 'kokoro' && rtf > 0) text += ' · speed ×' + (1 / rtf).toFixed(1);
+  function statsText(run) {
+    var text = 'Started speaking ' + (run.tapToSound / 1000).toFixed(1) + ' s after your tap';
+    if (run.cached) text += ' · saved copy';
+    if (run.loadMs > 0) {
+      text += ' · includes ' + (run.loadMs / 1000).toFixed(1) + ' s getting the offline voice ready';
+    }
+    if (run.gaps) {
+      text += ' · paused ' + run.gaps + (run.gaps === 1 ? ' time' : ' times') + ' waiting for more';
+    }
     return text;
   }
 
@@ -89,49 +127,114 @@
   }
 
   function fail(card, btn, msg) {
+    if (current) teardown(current);
     current = null;
     setButton(btn, '▶ Play', false);
     face.setActivity('resting');
     showError(card, msg);
   }
 
-  function startSound(c, card, btn, blob, h, token) {
-    freeUrl();
-    audioUrl = URL.createObjectURL(blob);
-    audio = new Audio(audioUrl);
-
-    var stats = card.querySelector('.stats');
-    stats.textContent = statsText(c, h);
+  function showStats(run) {
+    var stats = run.card.querySelector('.stats');
+    stats.textContent = statsText(run);
     stats.hidden = false;
-    setButton(btn, 'Playing…', true);
+  }
 
-    audio.onplaying = function () {
-      if (token === playToken) face.setActivity('talking');
-    };
-    audio.onended = function () {
-      if (token !== playToken) return;
-      current = null;
-      setButton(btn, '▶ Play again', false);
-      face.setActivity('resting');
-      face.setMood('happy');
-      face.bounce();
-    };
-    audio.onerror = function () {
-      if (token === playToken) fail(card, btn, BAD_SOUND);
+  // The stream is finished and the last piece of sound has been heard.
+  function finishSound(run) {
+    teardown(run);
+    current = null;
+    setButton(run.btn, '▶ Play again', false);
+    face.setActivity('resting');
+    face.setMood('happy');
+    face.bounce();
+    showStats(run);
+    logPlay(run, !run.streamBroke, run.streamBroke ? 'stream stopped early' : '');
+  }
+
+  function checkEnd(run, token) {
+    if (run.dead || token !== playToken || !run.streamDone || run.sources.length) return;
+    if (run.tapToSound === null) fail(run.card, run.btn, BAD_SOUND);
+    else finishSound(run);
+  }
+
+  // Turns one piece of raw 16-bit sound into a buffer and queues it right after the last piece.
+  function queueBytes(run, token, bytes) {
+    if (run.dead) return;
+    if (run.leftover) {
+      var joined = new Uint8Array(run.leftover.length + bytes.length);
+      joined.set(run.leftover, 0);
+      joined.set(bytes, run.leftover.length);
+      bytes = joined;
+      run.leftover = null;
+    }
+    var frameBytes = 2 * run.channels;
+    var usable = bytes.length - (bytes.length % frameBytes);
+    if (usable < bytes.length) run.leftover = new Uint8Array(bytes.subarray(usable));
+    if (!usable) return;
+
+    var ctx = run.ctx;
+    var frames = usable / frameBytes;
+    var view = new DataView(bytes.buffer, bytes.byteOffset, usable);
+    var buf = ctx.createBuffer(run.channels, frames, run.rate);
+    for (var ch = 0; ch < run.channels; ch++) {
+      var out = buf.getChannelData(ch);
+      for (var i = 0; i < frames; i++) {
+        out[i] = view.getInt16((i * run.channels + ch) * 2, true) / 32768;
+      }
+    }
+
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    var now = ctx.currentTime;
+    var at = Math.max(now + 0.05, run.playhead);
+    if (run.scheduled && run.playhead < now) {   // the sound ran dry before this piece came
+      run.gaps++;
+      run.gapMs += (now - run.playhead) * 1000;
+    }
+    src.start(at);
+    run.playhead = at + buf.duration;
+    run.sources.push(src);
+    src.onended = function () {
+      var at2 = run.sources.indexOf(src);
+      if (at2 >= 0) run.sources.splice(at2, 1);
+      try { src.disconnect(); } catch (e) { /* already gone */ }
+      checkEnd(run, token);
     };
 
-    var started = audio.play();
-    if (started && started.catch) {
-      started.catch(function () {
-        if (token === playToken) fail(card, btn, BAD_SOUND);
-      });
+    if (!run.scheduled) {
+      run.scheduled = true;
+      var wait = (at - now + (ctx.outputLatency || ctx.baseLatency || 0)) * 1000;
+      var soundAt = performance.now() + wait;
+      run.tapToSound = Math.round(soundAt - run.tapAt);
+      showStats(run);
+      run.soundTimer = setTimeout(function () {
+        if (token !== playToken) return;
+        run.started = true;
+        face.setActivity('talking');
+        setButton(run.btn, 'Playing…', true);
+      }, Math.max(0, wait));
     }
   }
 
+  function pump(run, token) {
+    return run.reader.read().then(function (r) {
+      if (run.dead || token !== playToken) return null;
+      if (r.done) {
+        run.streamDone = true;
+        checkEnd(run, token);
+        return null;
+      }
+      if (r.value && r.value.length) queueBytes(run, token, r.value);
+      return pump(run, token);
+    });
+  }
+
   function playCandidate(c, card, btn) {
+    var tapAt = performance.now();
     stopSound();
     var token = ++playToken;
-    current = {card: card, btn: btn};
     var female = c.gender === 'female';
 
     card.querySelector('.errbox').hidden = true;
@@ -140,23 +243,73 @@
     face.setCompanion(female ? 'mary' : 'him');
     face.setActivity('thinking');
 
-    fetch('/api/mary/voices/sample', {
+    // Made right here, inside the tap, so the browser lets it make sound.
+    var ctx = null;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+    } catch (e) {
+      ctx = null;
+    }
+    if (!ctx) {
+      fail(card, btn, BAD_SOUND);
+      return;
+    }
+    try {
+      var resumed = ctx.resume();
+      if (resumed && resumed.catch) resumed.catch(function () {});
+    } catch (e2) { /* it may start on its own */ }
+
+    var run = {
+      c: c, card: card, btn: btn, ctx: ctx, tapAt: tapAt,
+      reader: null, sources: [], soundTimer: 0, leftover: null,
+      rate: 24000, channels: 1, playhead: 0,
+      scheduled: false, started: false, streamDone: false, streamBroke: false, dead: false, logged: false,
+      tapToSound: null, cached: false, gaps: 0, gapMs: 0, loadMs: 0
+    };
+    current = run;
+
+    fetch('/api/mary/voices/stream', {
       method: 'POST',
       headers: HEADERS,
       body: JSON.stringify({id: c.id})
     })
       .then(function (res) {
-        if (res.ok) {
-          return res.blob().then(function (blob) {
-            if (token === playToken) startSound(c, card, btn, blob, res.headers, token);
+        if (token !== playToken) {
+          try { if (res.body && res.body.cancel) res.body.cancel(); } catch (e3) { /* nothing to cancel */ }
+          return null;
+        }
+        if (!res.ok) {
+          return res.json().catch(function () { return {}; }).then(function (j) {
+            if (token === playToken) fail(card, btn, errorText(j));
           });
         }
-        return res.json().catch(function () { return {}; }).then(function (j) {
-          if (token === playToken) fail(card, btn, errorText(j));
+        var rate = Number(res.headers.get('X-Rate'));
+        var channels = Number(res.headers.get('X-Channels'));
+        run.rate = rate > 0 ? rate : 24000;
+        run.channels = channels >= 1 && channels <= 2 ? Math.floor(channels) : 1;
+        run.cached = res.headers.get('X-Cached') === '1';
+        run.loadMs = Math.max(0, Number(res.headers.get('X-Load-Ms')) || 0);
+        if (res.body && res.body.getReader) {
+          run.reader = res.body.getReader();
+          return pump(run, token);
+        }
+        return res.arrayBuffer().then(function (buf) {
+          if (run.dead || token !== playToken) return;
+          queueBytes(run, token, new Uint8Array(buf));
+          run.streamDone = true;
+          checkEnd(run, token);
         });
       })
       .catch(function () {
-        if (token === playToken) fail(card, btn, BAD_SOUND);
+        if (run.dead || token !== playToken) return;
+        if (run.tapToSound === null) {
+          fail(card, btn, BAD_SOUND);
+          return;
+        }
+        run.streamBroke = true;
+        run.streamDone = true;
+        checkEnd(run, token);
       });
   }
 

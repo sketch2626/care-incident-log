@@ -88,6 +88,13 @@ class MaryPageTests(unittest.TestCase):
             self.assertIn(needle, live)
         self.assertNotIn("gemini_key", live)
         self.assertNotIn("keydown", live)
+        for needle in ("clientContent", "greet_ms", "mic_ms", "outputLatency", "startOffset"):
+            self.assertIn(needle, live)
+        voices, _ = self.get("/mary/voices.js")
+        for needle in ("/api/mary/voices/stream", "getReader", "tapAt", "'played'", "outputLatency"):
+            self.assertIn(needle, voices)
+        for needle in ("X-First-Sound-Ms", "new Audio("):
+            self.assertNotIn(needle, voices)
 
 
 if __name__ == "__main__":

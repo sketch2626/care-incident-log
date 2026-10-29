@@ -1,0 +1,32 @@
+{
+  "contract": 1,
+  "name": "coin_flip",
+  "version": "0.1.0",
+  "title": "Coin flip",
+  "summary": "Mary flips a coin and shows it on screen.",
+  "instructions": "Offer it when they want to let chance decide something. Say heads or tails warmly.",
+  "screen": {"menu_label": "Flip a coin", "menu_icon": "coin", "full_screen": false},
+  "sees": true,
+  "actions": [
+    {
+      "name": "flip",
+      "description": "Flip a coin and show heads or tails on screen.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["flip a coin"]
+    },
+    {
+      "name": "set_coin",
+      "description": "Choose which coin to show, for example a quarter.",
+      "inputSchema": {"type": "object",
+                      "properties": {"coin": {"type": "string", "enum": ["penny", "nickel", "dime", "quarter"],
+                                              "description": "Which coin"}},
+                      "required": ["coin"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    }
+  ],
+  "storage": true,
+  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
+  "offline": "works",
+  "default_on": true
+}

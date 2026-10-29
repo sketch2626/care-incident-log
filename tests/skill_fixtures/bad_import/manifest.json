@@ -1,0 +1,15 @@
+{
+  "contract": 1,
+  "name": "bad_import",
+  "version": "0.1.0",
+  "title": "Spinner bad_import",
+  "summary": "A test skill that must be refused.",
+  "instructions": "Never offered: it is a broken test skill.",
+  "actions": [
+    {"name": "spin", "description": "Spin something.", "inputSchema": {"type": "object", "properties": {}}}
+  ],
+  "storage": false,
+  "needs": {"internet_hosts": []},
+  "offline": "works",
+  "default_on": true
+}

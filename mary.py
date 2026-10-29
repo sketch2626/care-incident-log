@@ -432,9 +432,30 @@ class _ReplyStream:
         return held
 
 
+# --- skills hook (M13) ---
+MAX_TOOL_ROUNDS = 3  # tool rounds per turn (docs/skills-design.md section 5)
+NOT_WORKING_TEXT = "I'm sorry, that's not working right now."
+SKILL_DONE_TEXT = "All right."  # an offline skill match whose action gave no line to say
+
+
+class ToolCall:
+    """One functionCall part from Gemini, kept exactly as received (Gemini 3 needs its thoughtSignature back)."""
+    __slots__ = ("part",)
+
+    def __init__(self, part):
+        self.part = part
+
+
+def skill_blocked(text):
+    """True for words no skill may answer offline or claim as a phrase: emergencies and yes/no words."""
+    return bool(is_emergency(text) or is_yes(text) or is_decline(text))
+# --- end skills hook ---
+
+
 def _gemini_stream(body, api_key, model=""):
     """Yields the text pieces of Gemini's streamed answer. Raises on any network or API problem.
-    Stops yielding after GEMINI_DEADLINE_S, so a slow trickle ends with what was said."""
+    Stops yielding after GEMINI_DEADLINE_S, so a slow trickle ends with what was said.
+    A functionCall part is yielded as a ToolCall (skills, M13)."""
     url = assist.ENDPOINT.replace(":generateContent", ":streamGenerateContent").format(model=model or assist.DEFAULT_MODEL) + "?alt=sse"
     req = urllib.request.Request(
         url, data=json.dumps(body).encode("utf-8"), method="POST",
@@ -454,6 +475,8 @@ def _gemini_stream(body, api_key, model=""):
             for part in (data.get("candidates") or [{}])[0].get("content", {}).get("parts", []):
                 if part.get("text"):
                     yield part["text"]
+                elif "functionCall" in part:  # --- skills hook (M13) ---
+                    yield ToolCall(part)
 
 
 def _key_refused(err):
@@ -525,24 +548,39 @@ def _app_facts_text(companion):  # M9b
         return ""
 
 
-def _body(text, memory, kind, companion="mary"):
+def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     system = system_text(memory, companion)
     if kind:
         system += (f"\n\nThe app has already told them: {EMERGENCY_TEXT[kind]} "
                    "Don't repeat it word for word; follow on calmly and kindly.")
+    # --- skills hook (M13) --- an emergency line gets no skills at all
+    tools = []
+    if skills is not None and not kind:
+        extra = skills.instruction_text(screen)
+        if extra:
+            system += "\n\n" + extra
+        tools = skills.gemini_tools()
+    # --- end skills hook ---
     turns = list(memory.recent)
     while turns and turns[0]["role"] != "user":
         turns.pop(0)
     contents = [{"role": t["role"], "parts": [{"text": t["text"]}]} for t in turns]
     contents.append({"role": "user", "parts": [{"text": text}]})
-    return {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
+    body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": 256}}
+    if tools:  # --- skills hook (M13) ---
+        body["tools"] = tools
+    return body
 
 
-def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None):
+def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
+          skills=None, screen=None, on_effect=None):
     """Mary's answer to what the resident said.
 
-    Returns {text, mood, emergency, gemini_alert, offer, logged, remembered, error, first_words_s, total_s}.
+    Returns {text, mood, emergency, gemini_alert, offer, logged, remembered, error, effects, first_words_s, total_s}.
+    Skills (M13): skills is a skills_core.SkillHost, screen the skill now on screen. Gemini's tool calls run
+    through it (at most MAX_TOOL_ROUNDS rounds); each effect goes to on_effect as it happens and into effects.
+    With no Gemini (no key, or it failed) an offline phrase can still run a skill. An emergency gets no skills.
     on_text gets each spoken piece as it is ready. on_mood gets her mood as soon as it is known,
     once (a reply that is only a mood tag, no words, is corrected to "sorry" with a second call).
     Mood tags are never spoken or remembered. An offline emergency always means "alert";
@@ -559,6 +597,14 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     gemini_mood_seen = gemini_alert = streamed = False
     if companion not in COMPANIONS:
         companion = "mary"
+    # --- skills hook (M13) ---
+    effects, says, rounds, gap = [], [], 0, False
+
+    def add_effect(effect):
+        effects.append(effect)
+        if on_effect:
+            on_effect(effect)
+    # --- end skills hook ---
 
     def emit(piece, sep=False):
         nonlocal spoken, first_words_s
@@ -592,12 +638,12 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         set_mood(value)
 
     def speak(piece, after_tag=False):
-        nonlocal streamed
+        nonlocal streamed, gap
         if after_tag and (not spoken or spoken[-1].isspace()):
             piece = piece.lstrip()  # the gap a removed tag leaves
         if piece:
-            emit(piece, sep=not streamed)
-            streamed = True
+            emit(piece, sep=not streamed or gap)  # gap: a new tool round starts a new sentence (M13)
+            streamed, gap = True, False
 
     prior = memory.pending_offer  # an offer lives exactly one turn
     memory.pending_offer = None
@@ -641,10 +687,41 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     elif api_key:
         raw = ""
         stream = _ReplyStream(speak, take_mood)
+        body = _body(text, memory, kind, companion, skills, screen)  # --- skills hook (M13) ---
         try:
-            for chunk in _gemini_stream(_body(text, memory, kind, companion), api_key, model):
-                raw += chunk
-                stream.feed(chunk)
+            while True:  # --- skills hook (M13) --- one pass per tool round
+                calls, said = [], ""
+                for chunk in _gemini_stream(body, api_key, model):
+                    if isinstance(chunk, ToolCall):  # --- skills hook (M13) ---
+                        calls.append(chunk.part)
+                        continue
+                    raw += chunk
+                    said += chunk
+                    stream.feed(chunk)
+                # --- skills hook (M13) --- run her tool calls, then ask again with their answers
+                if not calls or skills is None or kind or rounds >= MAX_TOOL_ROUNDS:
+                    break
+                rounds += 1
+                answers = []
+                for part in calls:
+                    call = part.get("functionCall") or {}
+                    result = skills.call(call.get("name"), call.get("args"))
+                    for effect in result["effects"]:
+                        add_effect(effect)
+                    if result["say"]:
+                        says.append(result["say"])
+                    answer = {"name": call.get("name"), "response": result["response"]}
+                    if call.get("id"):
+                        answer["id"] = call["id"]
+                    answers.append({"functionResponse": answer})
+                body = dict(body, contents=body["contents"] + [
+                    {"role": "model", "parts": ([{"text": said}] if said else []) + calls},  # parts as received
+                    {"role": "user", "parts": answers}])
+                tail = stream.finish()
+                if tail.strip():
+                    speak(tail)
+                stream, raw, gap = _ReplyStream(speak, take_mood), raw + "\n", True
+                # --- end skills hook ---
         except urllib.error.HTTPError as e:
             error = BAD_KEY if _key_refused(e) else NO_GEMINI
         except Exception:
@@ -658,8 +735,29 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         tail = stream.finish()
         if tail.strip():
             speak(tail)
+        if rounds and not spoken.strip():  # --- skills hook (M13) --- her follow-up failed or had no words
+            if says:
+                emit(" ".join(says))
+            else:
+                set_mood("sorry")
+                emit(NOT_WORKING_TEXT)
         if not streamed and not error:
             error = NO_GEMINI
+
+    # --- skills hook (M13) --- no Gemini (no key, or it failed): an offline phrase can still run a skill
+    if (skills is not None and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
+            and not (prior and (said_yes or is_decline(text)))):
+        hit = skills.offline_match(text, is_blocked=skill_blocked)
+        if hit:
+            for effect in hit["effects"]:
+                add_effect(effect)
+            gemini_alert = False
+            failed = bool(hit["response"].get("error"))
+            set_mood("sorry" if failed else "talking")
+            emit(hit["say"] or (NOT_WORKING_TEXT if failed else SKILL_DONE_TEXT))
+            if not api_key:
+                error = NO_KEY
+    # --- end skills hook ---
 
     if not spoken.strip() and not kind:
         gemini_alert = False  # a bare "alert" tag with no words is not something to act on
@@ -684,5 +782,5 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     except OSError:
         pass
     return {"text": final, "mood": mood, "emergency": kind, "gemini_alert": gemini_alert, "offer": offer,
-            "logged": logged, "remembered": remembered, "error": error,
+            "logged": logged, "remembered": remembered, "error": error, "effects": effects,  # effects: M13
             "first_words_s": first_words_s, "total_s": time.monotonic() - start}

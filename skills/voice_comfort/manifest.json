@@ -1,0 +1,51 @@
+{
+  "contract": 1,
+  "name": "voice_comfort",
+  "version": "0.1.0",
+  "title": "Voice comfort",
+  "summary": "Makes Mary's voice slower, faster, quieter or louder, and switches between Mary and Sam.",
+  "instructions": "Use when they ask you to talk slower, faster, quieter or louder, or to switch between Mary and Sam. The resident can't use their hands well, so do these when asked by voice. Then ask if that is better.",
+  "sees": true,
+  "settings": ["voice_rate", "voice_volume", "companion"],
+  "actions": [
+    {
+      "name": "slower",
+      "description": "Make Mary's voice a little slower.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["slow down", "speak slower", "talk slower", "slower please"]
+    },
+    {
+      "name": "faster",
+      "description": "Make Mary's voice a little faster.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["speed up", "talk faster", "speak faster"]
+    },
+    {
+      "name": "quieter",
+      "description": "Make Mary's voice a little quieter.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["quieter", "not so loud", "turn it down"]
+    },
+    {
+      "name": "louder",
+      "description": "Make Mary's voice a little louder.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["louder", "speak up", "turn it up", "i can't hear you"]
+    },
+    {
+      "name": "switch_companion",
+      "description": "Switch between Mary and Sam.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["switch to sam", "switch to mary", "let me talk to sam", "let me talk to mary"]
+    }
+  ],
+  "storage": false,
+  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
+  "offline": "works",
+  "default_on": true
+}

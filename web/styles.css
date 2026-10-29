@@ -148,6 +148,15 @@ input[type=date],input[type=time]{display:block;width:100%;max-width:440px;min-h
 .bigbtn.alt{background:#fff;color:var(--brand)}
 .bigbtn[aria-disabled=true]{opacity:.55;cursor:not-allowed}
 .infocard{max-width:760px}
+.skillscard{margin-top:20px}
+.smarth.first{margin-top:0;padding-top:0;border-top:0}
+.skillrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;padding:14px 0;border-bottom:2px solid #e6dcc9}
+.skilltext{flex:1 1 280px}
+.skilltext p{margin:4px 0}
+.skillgroup{display:flex;flex-wrap:wrap;gap:10px}
+.skillbtn{min-height:64px;min-width:150px;padding:0 20px;background:#fff;color:var(--brand);border:4px solid var(--brand);border-radius:16px;font-size:22px;font-weight:700;cursor:pointer}
+.skillbtn[aria-pressed=true]{background:var(--brand);color:#fff}
+.skillbtn:disabled{opacity:.55;cursor:not-allowed}
 .smarth{margin:30px 0 10px;padding-top:20px;border-top:3px solid #d6cab6}
 .warn{margin:0 0 16px;padding:14px 18px;background:#fff;border:3px solid var(--line);border-left:14px solid #b25e00;border-radius:14px;font-size:23px}
 

@@ -45,12 +45,12 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   2. **Normal:** the laptop turns speech into words → Gemini → Gemini voice, so the voice stays on the laptop.
   3. **Offline:** Kokoro or Piper, the no-internet backup.
 
-  The back-and-forth (M5) must work in Normal mode too, not only Live. Every mode gets the same brain (M9) and the same "hands" (M12).
+  The back-and-forth (M5) must work in Normal mode too, not only Live. Every mode gets the same brain (M9) and the same actions (M12).
 - **What Andy found (2026-10-29), to fix in M2:**
   - **Live talk:** "could not reach Gemini". Find out why from `audition.log`, fix it, and let him retry.
   - **The first-sound timing is wrong.** The offline male voices showed "0.8 s", but the sound took much longer. The female top card's "4 s" felt closer. Measure from the tap to the moment sound actually starts playing, including the warm-up.
   - **Mary still had the robot voice afterwards.** That's expected: the audition only saves the picks, and M4 builds them into Mary. But see M9: she wrongly told him "I have the same friendly voice that I always have".
-- **Fixed 2026-10-29, waiting for Andy's retry:**
+- **Fixed 2026-10-29, then retried by Andy:**
   - **Live** (0e25ce7): Google refused the token with `400 Unknown name "liveConnectConstraints"`, the field name from Google's own docs page. The request now goes the way Google's own SDK sends it (`bidiGenerateContentSetup`). If v1beta doesn't know that field, it tries v1alpha once, and the log says which version worked. She now says hello first, so the delay from his tap to her voice can be measured too.
   - **Timing** (0707535, fa4d2e8, 93384b7):
     - **What was wrong:** the page downloaded the whole sample before playing it, and the number shown was the server's first chunk. Andy's log shows it. The offline male voices showed 0.7-0.9 s as their first sound, but the whole line took 4.4-5.3 s to make, so that's when sound really started. The Gemini voices showed 2.1-3.4 s first, with 4.2-6.2 s for the whole line.
@@ -60,7 +60,16 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
       - It counts any pause where the sound ran dry. Each play adds a `played` line to `audition.log`.
       - Saved copies from the first try aren't reused, so his first play of each voice times Google again.
   - **Word timings (for M3):** Google's Live reference lists `startOffset`/`endOffset` on her transcript pieces. The Live log now records whether they really come (`word_timings`).
-- **Real numbers after the retry** (from `audition.log`): 
+- **Andy liked Live (retry, 2026-10-29): story plus instant interruption.** He asked for a story, she made one up on the spot, and when he talked over her she stopped at once.
+- **Real numbers after the retry** (from `audition.log`, 2026-10-29, his laptop):
+  - **Live** (2 talks, Sulafat and Vindemiatrix, token on v1beta):
+    - Her hello started 3.1-3.2 s after his tap. That covers the token, the connection, Google's setup and her first words.
+    - The microphone was ready 0.3-0.8 s after the tap.
+    - She answered 1.8-2.0 s after he stopped talking (the median reply gap per talk).
+    - One interruption was caught, and she stopped at once.
+    - **No word timings:** Live sent no `startOffset`/`endOffset` on her words, so the M3/M4 captions use estimates timed to her text pieces.
+  - **Gemini and offline voices:** not played on the retry yet. Their tap-to-sound numbers go here after his next plays. The `played` lines in `audition.log` hold them.
+- **Also from the retry, fixed next:** Sam's Live voices were easy to miss, all in one row with Mary's. Saving gave no clear sign it worked.
 
 ### M3. Mock-up boards: captions and the one-button screen (visual; worker, boards on a Design canvas first)
 - Boards for:
@@ -109,7 +118,7 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
 - **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
 - **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
 
-### M12. Mary's hands: she runs the app and fetches pictures (after M4; alongside M9b)
+### M12. Mary does things: she runs the app and shows pictures (after M4; alongside M9b)
 Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up all the games, do all the stuff… pictures from the web… show me a picture of this bird."
 - **How:** Gemini **function calling** works in Live and in Normal mode. The app gives her a list of tools; she decides when to use one, and the page carries it out:
   - `show_picture(what)`

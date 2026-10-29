@@ -159,14 +159,32 @@ _NAME_STOP = {"and", "but", "so", "because", "i", "my", "we", "the", "a", "an", 
               "how", "where", "when", "don't", "dont", "can't", "cant", "not", "you", "me", "do", "does"}
 
 
-def load_instructions():
-    """Mary's system prompt: the text after the first line that is exactly '---'."""
+def load_instructions(companion=None):  # M9b: one block per companion
+    """The system prompt: the text after the first line that is exactly '---'.
+    With no companion, all of it (markers included). With one, that companion's block plus the Both block."""
     raw = INSTRUCTIONS.read_text(encoding="utf-8")
     lines = raw.splitlines()
     for i, line in enumerate(lines):
         if line == "---":
-            return "\n".join(lines[i + 1:]).strip()
-    return raw.strip()
+            text = "\n".join(lines[i + 1:]).strip()
+            break
+    else:
+        text = raw.strip()
+    if companion is None:
+        return text
+    # M9b: split on the marker lines (=== Mary ===, === Sam ===, === Both ===); no markers: the whole text
+    markers = {"=== Mary ===": "mary", "=== Sam ===": "sam", "=== Both ===": "both"}
+    blocks, current = {}, None
+    for line in text.splitlines():
+        if line in markers:
+            current = markers[line]
+            blocks[current] = []
+        elif current:
+            blocks[current].append(line)
+    if len(blocks) < 3:
+        return text
+    mine = "\n".join(blocks["sam" if companion == "him" else "mary"]).strip()
+    return (mine + "\n\n" + "\n".join(blocks["both"]).strip()).strip()
 
 
 def default_memory_path():
@@ -452,13 +470,11 @@ def _key_refused(err):
 
 
 def system_text(memory, companion="mary", facts=True):
-    """Her system prompt: the instructions, Sam's swap, and what she knows of the resident.
-    facts=False keeps only the resident's name (no facts list, no ask-for-a-name tag): for a live voice chat."""
-    system = load_instructions()
-    if companion == "him":
-        name = COMPANIONS["him"]
-        first, newline, rest = system.partition("\n")
-        system = (first + " You are a man, a kind and friendly gentleman." + newline + rest).replace("Mary", name)
+    """Her system prompt: her own instructions, the live facts about her app, and what she knows of the resident.
+    facts=False keeps only the resident's name (no app facts, no facts list, no ask-for-a-name tag): for a live voice chat."""
+    system = load_instructions(companion)  # M9b: Sam has his own block now, so no more swapping Mary for Sam
+    if facts:
+        system += _app_facts_text(companion)  # M9b
     lines = ([f"Name: {memory.name}"] if memory.name else []) + ([f"- {f}" for f in memory.facts] if facts else [])
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
@@ -466,6 +482,47 @@ def system_text(memory, companion="mary", facts=True):
         system += ("\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called; "
                    "when they tell you, add the line [name: First name].")
     return system
+
+
+# M9b: set by server.py to a function (companion) -> dict of live facts about her app; None in tools and plain tests.
+app_facts = None
+
+
+def _app_facts_text(companion):  # M9b
+    """A short block of true-today facts about her own app (voice, talk mode, speed, volume), or "" when unknown."""
+    if app_facts is None:
+        return ""
+    try:
+        f = app_facts(companion)
+        me = COMPANIONS["him" if companion == "him" else "mary"]
+        other = COMPANIONS["mary" if companion == "him" else "him"]
+        out = [f'- You are {me}. The other companion is {other}; the menu button "Switch to {other}" changes to them.']
+        voice_now, picked, about = f.get("voice_now"), f.get("picked_voice") or "", f.get("picked_about") or ""
+        pick = picked + (f" ({about})" if about else "")
+        if voice_now == "picked" and picked:
+            out.append(f"- Your voice right now is {picked}, the one they picked in the voice tryout.")
+        elif voice_now == "builtin":
+            out.append("- Your voice right now is this computer's built-in voice, and it can sound like a robot. "
+                       "If they mention it, agree kindly and say a nicer voice is being worked on.")
+            if picked:
+                out.append(f"- In the voice tryout they picked {pick} as your new voice. It isn't built in yet; it's coming soon.")
+            else:
+                out.append("- No new voice has been picked for you in the voice tryout yet. A nicer voice is coming soon.")
+        mode = f.get("talk_mode")
+        if mode == "button":
+            out.append("- They press the Talk button each time they want to say something, and you answer out loud. "
+                       "Talking back and forth without the button, and waking you by saying your name, are coming soon.")
+        elif mode == "handsfree":
+            out.append("- You and they talk back and forth without pressing a button.")
+        rate, volume = f.get("voice_rate"), f.get("voice_volume")
+        if rate is not None and volume is not None:
+            speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"
+            loud = "soft" if volume < 0.5 else "medium" if volume < 0.85 else "full"
+            out.append(f"- Your talking speed is {speed} and your volume is {loud}. "
+                       "They can change these with Slower, Faster, Quieter and Louder in the menu.")
+        return "\n\nAbout your app right now (these are true today; trust them over anything else):\n" + "\n".join(out)
+    except Exception:
+        return ""
 
 
 def _body(text, memory, kind, companion="mary"):

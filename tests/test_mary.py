@@ -84,7 +84,8 @@ class TestBasics(MaryTestCase):
         system = body["systemInstruction"]["parts"][0]["text"]
         self.assertIn("What you can do", system)
         self.assertIn("twenty questions", system)
-        self.assertNotIn("Mary", system)
+        self.assertIn("You are Sam", system)  # M9b: Sam has his own block and names Mary only for the switch button
+        self.assertNotIn("You are Mary", system)
 
     def test_game_and_app_requests_are_not_emergencies_or_offers(self):
         for said in ("Let's play a game.", "Can you pull up a game for me?", "Can you open YouTube for me?",
@@ -727,6 +728,171 @@ class TestConversations(MaryTestCase):
                     if "name" in expect:
                         self.assertEqual(memory.name, expect["name"])
 
+
+
+
+# Version 3's safety bullets, word for word (HEAD:mary/instructions.md before M9b). They must not change.
+SAFETY_SECTIONS = (
+    ('Emergencies come first', (
+        "- If they mention trouble breathing, chest pain or pressure, a fall, bleeding, or stroke signs (a drooping face, a weak arm, slurred speech, sudden confusion), your very first words tell them to press the call light or call out for staff right now, and to call 911 if it's serious. Then stay calm and kind.",
+        '- The same goes for someone with a spinal cord injury who mentions a sudden pounding headache, sweating or flushing (autonomic dysreflexia).',
+        '- If they talk about wanting to die or hurting themselves, take it seriously and be kind. Tell them to tell a nurse or staff now, and that they can call or text 988 any time, day or night.',
+        "- If they say someone hurt, hit, threatened or stole from them, take it seriously and kindly, say plainly that it's not okay, suggest telling a nurse or person in charge they trust, and offer to write it down. Never promise that you will report it yourself.",
+    )),
+    ('You are not a doctor', (
+        "- Never diagnose, guess what's wrong, or advise on medicines or doses.",
+        "- Say kindly that it's a question for their nurse or doctor.",
+    )),
+    ('When something goes wrong with their care', (
+        "- Listen first, and say you're sorry it happened.",
+        '- Then gently offer to write it down, for example: "That sounds hard. Would you like me to write that down?" Offer once per problem.',
+        '- Never say you have written anything down. The resident decides, and the app does the writing only after they say yes.',
+        '- If they say no, or "don\'t write that down", respect it right away. Say that\'s fine and nothing gets written, and don\'t bring it up again.',
+        "- Talk about what happened, not who did it. Don't name or blame staff, even if they do.",
+        "- Their usual first step is to tell the facility, like the charge nurse or the social worker. They can always go to the state or the ombudsman as well, because that's their legal right.",
+        "- If they're afraid of getting in trouble, or of staff taking it out on them, reassure them: retaliation against residents is against the law, nothing is written or sent without their say, and the long-term care ombudsman can help them in confidence.",
+    )),
+    ('On their side, and toward people', (
+        '- You work for the resident, not the facility.',
+        "- When they're lonely, be good company, and gently nudge them toward people: a call to family, a visit, an activity, a chat with a neighbor. You never replace them.",
+        '- Never nag, lecture, or push them to report anything.',
+    )),
+)
+
+
+# The instructions file itself names "About your app right now", so test for the block system_text() adds.
+FACTS_HEAD = "About your app right now (these are true today"
+
+
+class TestBrainV4(MaryTestCase):
+    """M9b: per-companion instructions (version 4), the safety text kept word for word, and what she knows of her own app."""
+
+    def setUp(self):
+        super().setUp()
+        self._real_facts = mary.app_facts
+        _, got, _ = helpers.api("GET", "/api/settings")
+        self._saved_voices = {k: (got.get(k, "") if isinstance(got, dict) else "") for k in ("voice_mary", "voice_sam")}
+
+    def tearDown(self):
+        mary.app_facts = self._real_facts
+        helpers.api("PUT", "/api/settings", self._saved_voices)
+        super().tearDown()
+
+    def _system(self, companion, facts=True):
+        return mary.system_text(mary.Memory(self.path), companion, facts)
+
+    def test_safety_text_is_kept_word_for_word(self):
+        for companion in ("mary", "him"):
+            text = mary.load_instructions(companion)
+            lines = text.splitlines()
+            at = -1
+            for heading, bullets in SAFETY_SECTIONS:
+                with self.subTest(companion=companion, heading=heading):
+                    self.assertIn(heading, lines)
+                    self.assertGreater(text.index(heading), at)
+                    at = text.index(heading)
+                    for bullet in bullets:
+                        self.assertIn(bullet, lines)
+
+    def test_veterans_crisis_line_for_both(self):
+        for companion in ("mary", "him"):
+            system = self._system(companion)
+            with self.subTest(companion):
+                self.assertIn("call 988 and press 1, or text 838255", system)
+                self.assertIn("never instead of them", system)
+
+    def test_guns_are_talked_about_not_refused(self):
+        for companion in ("mary", "him"):
+            system = self._system(companion)
+            with self.subTest(companion):
+                self.assertIn("talk guns gladly", system)
+                self.assertIn("Second Amendment", system)
+                for banned in ("gun handling", "don't talk about guns", "never talk about guns", "no guns"):
+                    self.assertNotIn(banned, system)
+
+    def test_self_knowledge_comes_from_settings(self):
+        helpers.api("PUT", "/api/settings", {"voice_mary": "gemini:Achernar", "voice_sam": "live:Achird"})
+        mine = self._system("mary")
+        for needle in (FACTS_HEAD, "Achernar", "built-in voice", "Talk button"):
+            with self.subTest(needle):
+                self.assertIn(needle, mine)
+        his = self._system("him")
+        self.assertIn("Achird", his)
+        self.assertIn("Switch to Mary", his)
+        helpers.api("PUT", "/api/settings", {"voice_mary": "gemini:Vindemiatrix"})
+        mine = self._system("mary")
+        self.assertIn("Vindemiatrix", mine)
+        self.assertNotIn("Achernar", mine)
+        # the live voice chat gets no app facts; a broken facts function never breaks her
+        self.assertNotIn(FACTS_HEAD, self._system("mary", facts=False))
+
+        def broken(companion):
+            raise RuntimeError("boom")
+        mary.app_facts = broken
+        text = self._system("mary")
+        self.assertNotIn(FACTS_HEAD, text)
+        self.assertIn("You are Mary", text)
+        mary.app_facts = None
+        self.assertNotIn(FACTS_HEAD, self._system("mary"))
+
+    def test_app_facts_wording(self):
+        facts = {"voice_now": "builtin", "talk_mode": "button", "picked_voice": "", "picked_about": "",
+                 "voice_rate": 0.7, "voice_volume": 0.4}
+        mary.app_facts = lambda companion: dict(facts)
+        text = self._system("mary")
+        self.assertIn("No new voice has been picked for you in the voice tryout yet", text)
+        self.assertIn("slower than usual and your volume is soft", text)
+        facts.update(picked_voice="Sulafat", picked_about="Warm", voice_rate=1.0, voice_volume=0.7)
+        text = self._system("mary")
+        self.assertIn("they picked Sulafat (Warm) as your new voice", text)
+        self.assertIn("about normal and your volume is medium", text)
+        facts.update(voice_now="picked", talk_mode="handsfree", voice_rate=1.3, voice_volume=1.0)
+        text = self._system("him")
+        self.assertIn("Your voice right now is Sulafat, the one they picked", text)
+        self.assertIn("without pressing a button", text)
+        self.assertNotIn("built-in voice", text)
+        self.assertIn("faster than usual and your volume is full", text)
+
+    def test_server_reports_the_picked_voice(self):
+        import server
+        helpers.api("PUT", "/api/settings", {"voice_mary": "kokoro:af_heart", "voice_sam": "gemini:Algieba"})
+        got = server.mary_app_facts("mary")
+        self.assertEqual((got["voice_now"], got["talk_mode"]), ("builtin", "button"))
+        self.assertEqual(got["picked_voice"], "the offline voice")
+        self.assertEqual(got["picked_about"], "Warm, American")
+        got = server.mary_app_facts("him")
+        self.assertEqual((got["picked_voice"], got["picked_about"]), ("Algieba", "Smooth"))
+        helpers.api("PUT", "/api/settings", {"voice_mary": ""})
+        got = server.mary_app_facts("mary")
+        self.assertEqual((got["picked_voice"], got["picked_about"]), ("", ""))
+        self.assertIs(self._real_facts, server.mary_app_facts)
+
+    def test_no_false_self_talk(self):
+        for companion in ("mary", "him"):
+            system = self._system(companion)
+            sentences = [s for chunk in system.split("\n") for s in chunk.split(". ")]
+            for said in ("just a voice", "same voice", "only a voice"):
+                for sentence in (s for s in sentences if said in s):
+                    with self.subTest(companion=companion, said=said):
+                        self.assertTrue("never" in sentence or "Never" in sentence, sentence)
+
+    def test_each_companion_has_only_their_own_block(self):
+        mary_text, sam_text = mary.load_instructions("mary"), mary.load_instructions("him")
+        self.assertTrue(mary_text.startswith("You are Mary"))
+        self.assertNotIn("You are Sam", mary_text)
+        self.assertTrue(sam_text.startswith("You are Sam"))
+        self.assertNotIn("You are Mary", sam_text)
+        for text in (mary_text, sam_text):
+            self.assertFalse([line for line in text.splitlines() if line.startswith("===")])
+        self.assertEqual(mary.load_instructions("anything else"), mary_text)
+        self.assertIn("=== Both ===", mary.load_instructions())
+
+    def test_faith_and_pet_names(self):
+        for companion in ("mary", "him"):
+            system = self._system(companion)
+            with self.subTest(companion):
+                self.assertIn("Pray with them", system)
+                self.assertIn("ask first", system)
 
 
 class PackagingTests(unittest.TestCase):

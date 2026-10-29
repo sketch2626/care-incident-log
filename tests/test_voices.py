@@ -345,8 +345,8 @@ class TokenTests(VoicesCase):
         net = self.use(Resp({"name": "auth_tokens/x"}))
         voices.live_token("Umbriel", KEY, "him", "", server.DATA)
         system = net.body()["bidiGenerateContentSetup"]["systemInstruction"]["parts"][0]["text"]
-        self.assertIn("Sam", system)
-        self.assertNotIn("Mary", system)
+        self.assertIn("You are Sam", system)
+        self.assertNotIn("You are Mary", system)  # M9b: "the Hail Mary" is in the shared prayer line
 
     def test_token_errors_and_logging(self):
         for item, kind in ((http_error(403), "bad_key"), (http_error(500), "no_gemini"),
@@ -512,8 +512,8 @@ class RouteTests(VoicesCase):
                                        {"voice": "live:Algieba", "companion": body_companion})
             self.assertEqual(status, 200, body_companion)
             system = net.body()["bidiGenerateContentSetup"]["systemInstruction"]["parts"][0]["text"]
-            self.assertEqual("a kind and friendly gentleman" in system, is_sam, (body_companion, saved))
-            self.assertEqual("Sam" in system, is_sam, (body_companion, saved))
+            self.assertEqual("You are Sam" in system, is_sam, (body_companion, saved))  # M9b: Sam has his own block
+            self.assertEqual("You are Mary" in system, not is_sam, (body_companion, saved))
 
     def test_posts_need_the_tracker_header(self):
         self.save_key()

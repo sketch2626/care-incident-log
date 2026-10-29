@@ -291,6 +291,34 @@ def mary_status():
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"]}
 
 
+# M9b: what Mary and Sam are told about their own app, so they never guess about their voice or the Talk button.
+MARY_VOICE_NOW = "builtin"  # web/mary/app.js speaks with speechSynthesis, the computer's built-in voice; M4 changes this to "picked"
+MARY_TALK_MODE = "button"  # the resident presses Talk for each turn; M5 changes this to "handsfree"
+
+
+def mary_app_facts(companion):
+    """Live facts about her app for her system prompt: the voice, talk mode, and the voice the resident picked."""
+    s = mary_settings()
+    with closing(connect()) as conn:
+        saved = get_settings(conn)
+    picked = str(saved.get("voice_sam" if companion == "him" else "voice_mary") or "")
+    kind, _, name = picked.partition(":")
+    voice = about = ""
+    if kind in ("gemini", "live"):
+        for n, _g, a in voices.GEMINI_VOICES:
+            if n == name:
+                voice, about = n, a
+    elif kind == "kokoro":
+        for n, _g, a in voices.KOKORO_VOICES:
+            if n == name:
+                voice, about = "the offline voice", a
+    return {"voice_now": MARY_VOICE_NOW, "talk_mode": MARY_TALK_MODE, "picked_voice": voice, "picked_about": about,
+            "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"]}
+
+
+mary.app_facts = mary_app_facts  # M9b: Mary's live facts about her own app
+
+
 # The voice audition page (/mary/voices.html).
 VOICE_ERRORS = {  # kind -> (plain sentence, HTTP status)
     "no_key": ("Mary needs her Gemini key first. You can add it in My info.", 400),

@@ -220,14 +220,13 @@ class TestMoodTags(TalkCase):
         system = self.fake.system()
         self.assertIn("[mood: X]", system)
         self.assertIn("You are Mary", system)
-        self.assertNotIn("Sam", system)
+        self.assertNotIn("You are Sam", system)  # M9b: the app facts name Sam for the switch button
 
     def test_him_is_sam_in_the_prompt(self):
         self.say(companion="him")
         system = self.fake.system()
         self.assertIn("Sam", system)
-        self.assertNotIn("You are Mary", system)
-        self.assertNotIn("Mary", system)
+        self.assertNotIn("You are Mary", system)  # M9b: Sam's app facts name Mary for the switch button
         self.assertIn("You are a man", system)
         self.assertIn("[mood: X]", system)
 

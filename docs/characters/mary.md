@@ -1,5 +1,5 @@
 # Mary: character sheet
-**Status: revised 2026-10-29 with Andy's answers (roadmap M9a).** Every question is answered; awaiting Andy's final OK. The brain (`mary/instructions.md`) doesn't change until Andy gives the final OK. Writing the brain from this sheet is M9b.
+**Status: approved by Andy, 2026-10-29 ("Yes, approved."; roadmap M9a).** The brain (`mary/instructions.md`) is written from this sheet (M9b).
 
 How to read this:
 - This sheet says who Mary is. Sam has his own sheet (`docs/characters/sam.md`) with the same sections.

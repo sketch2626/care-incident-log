@@ -113,5 +113,5 @@ Andy has a second Claude account (gifted). The terminal version of Claude Code (
 - **Put it back together:** the hub reads the report, runs `python run_tests.py -q` in the worktree, merges into `main` only when it passes and Andy has approved any design, then runs `git worktree remove`.
 - **Models on the second account (Andy, 2026-10-29):**
   - Its worker may run the `coder` agent with `model: "opus"` and `effort: "xhigh"` for tricky code written from scratch. Sonnet does ordinary logic and Haiku small edits, and the worker decides which.
-  - **Haiku limits apply on both accounts:** exact line ranges, at most about 150 lines per read, at most about 8 reads, one or two files, and a brief under about 2k characters. Anything bigger goes to Sonnet.
+  - **Haiku stays under 100,000 tokens of context on both accounts (Andy: its price changes dramatically above that).** Use exact line ranges, at most about 150 lines per read, at most about 8 reads, one or two files, and a brief under about 2k characters. Anything bigger goes to Sonnet. This rule is also in the `token-saving` skill and `.claude/agents/quick-coder.md`.
 - **Never at the same time:** a worker here and the other account never change the same files at once. Its memory folder is separate, so its brief must carry the essentials.

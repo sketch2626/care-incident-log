@@ -27,6 +27,19 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **An offline natural voice** (Piper or Kokoro) as the no-internet backup.
 - Measure, with his key: time to first sound, cost per minute, and whether word timings are available (needed for M3).
 - **Done when:** Andy picks Mary's voice and Sam's voice, and picks between the Live and pipeline (speech-to-text → Gemini → voice) designs. Record the choice here.
+- **Built 2026-10-28** (a1d10fa, 7db6a85, 45d3509, c7ca3cc; 311 tests). Open it with `packaging\.venv\Scripts\pythonw.exe desktop.py --voices` (Mary's full-screen window at `/mary/voices.html`). Not yet heard in a real window.
+  - **Gemini voices** (`gemini-3.8-flash-tts`): Mary Sulafat "Warm", Vindemiatrix "Gentle", Achernar "Soft"; Sam Achird "Friendly", Algieba "Smooth", Umbriel "Easy-going". `voices.py` calls the Interactions API with streaming, falling back to `generateContent`. Each sample is made once on the server with the saved key, then kept in `DATA\mary\voices\`.
+  - **Live talk** (`gemini-3.8-live`, native audio, same six voices): a real back-and-forth (3 minutes at most). The server makes a one-use token that lasts a minute to start (`/api/mary/live/token`), so the key stays on the server. The page talks to Google directly, using the browser microphone with echo cancellation so she doesn't hear herself and you can interrupt her by talking. WebView2 asks once to use the microphone.
+  - **Offline voices** (Kokoro-82M int8 through `kokoro-onnx` 0.6.1, model in `models\kokoro\` from `tools/get_voice_model.py`): Mary Heart, Bella, Emma (British); Sam Michael, Fenrir, George (British). On this laptop (Ryzen 5 7520U): first load 2.6 s, then first sound 0.9 s, real-time factor 0.75 (it makes speech only a little faster than it plays). On a slower laptop that could mean gaps between sentences; Piper (about 10× faster, plainer voice) is the fallback if so.
+  - **Logs:** `DATA\mary\audition.log` holds each sample's time to first sound, total time, path, whether word timings came back, Kokoro's speed, and each Live session's reply gap, turns, interruptions and Google's close reason. It never holds the key or token.
+  - **Word timings (for M3):** Google's TTS and Live docs show none. Live sends her words as text pieces alongside the audio (`outputTranscription`), and Kokoro gives none. Plan M3/M4 captions on estimates (each word's length against the audio length), synced to Live's text pieces if Live wins. The first real Gemini sample checks again (`X-Word-Timings`, logged).
+  - **Cost per minute** (Google pricing page, 2026-10-28; audio = 25 tokens per second):
+    - TTS, pipeline: about $0.0135 per minute of her speech through Dec 31, 2026 ($9 per 1M audio tokens), then $0.027 from Jan 1, 2027. `gemini-3.8-flash-lite-tts` costs $0.009, then $0.018. Add the small text reply cost (`gemini-3.5-flash-lite`).
+    - Live: $0.005 per minute of microphone audio (billed the whole time the mic is open) plus $0.018 per minute of her speech. That's about $0.014 per minute of conversation if she talks half the time.
+  - **Free tier:** every one of these models is free of charge on the free tier. Google's rate-limit page lists no numbers; they show only in AI Studio for the key. **Privacy:** on the free tier, content "Used to improve our products" is Yes (No on paid). That matters for residents' talks and has to go into the backend and consent plans before a pilot.
+  - Installer cost when bundled (Next step 5): about 22 MB of packages (`packaging/requirements.txt`) plus 115 MB of Kokoro model. `build.py` doesn't bundle or download it yet.
+  - Also measure Gemini text-reply speed with his key (M8, `tools/mary_speed.py`) when he picks the pipeline.
+- **Andy's choice:** 
 
 ### M3. Mock-up boards: captions and the one-button screen (visual; worker, boards on a Design canvas first)
 - Boards for:

@@ -323,7 +323,8 @@ def _generate_content(voice, api_key, started):
 
 
 def _cache_files(voice_id, voice, data):
-    key = hashlib.sha256(f"{TTS_MODEL}|{LINE}|{STYLE}|{voice}".encode("utf-8")).hexdigest()[:8]
+    # "stream": copies saved before 2026-10-29 aren't reused, so each voice's first play times Google again
+    key = hashlib.sha256(f"{TTS_MODEL}|{LINE}|{STYLE}|{voice}|stream".encode("utf-8")).hexdigest()[:8]
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", voice_id)
     wav = _data(data) / "mary" / "voices" / f"{safe}-{key}.wav"
     return wav, wav.with_suffix(".json")

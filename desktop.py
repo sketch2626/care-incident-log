@@ -10,6 +10,7 @@ browser fallback Mary has no KeepAwake (we can't tell when a browser tab closes)
 the page's own Wake Lock covers it.
 """
 import ctypes
+import faulthandler
 import os
 import sys
 import threading
@@ -28,6 +29,8 @@ PYWEBVIEW_ARG = "--disable-features=ElasticOverscroll"
 CF_UNICODETEXT = 13  # Windows clipboard format for text
 # Right-click menu: only these editing items stay (no Back, Reload, Save as, Inspect...).
 EDIT_MENU_ITEMS = {"undo", "redo", "cut", "copy", "paste", "pasteAndMatchStyle", "selectAll"}
+STARTUP_WAIT_S = 30  # the window and page are up long before this; if not, desktop.log says where it stuck
+SW_SHOWMAXIMIZED = 3
 
 
 def start_server():
@@ -41,16 +44,114 @@ def start_server():
     return f"http://127.0.0.1:{httpd.server_port}"
 
 
-def log_error(what):
-    """pythonw has no console, so note what went wrong in the data folder (desktop.log) for a helper to read."""
+def log_note(what, detail=""):
+    """pythonw has no console, so note what happened in the data folder (desktop.log) for a helper to read."""
+    path = server.DATA / "desktop.log"
     try:
-        path = server.DATA / "desktop.log"
         if path.exists() and path.stat().st_size > 200_000:
             path.unlink()  # keep it small; only recent trouble matters
+    except OSError:
+        pass  # the startup watch holds it open; trim it next time
+    try:
         with path.open("a", encoding="utf-8") as f:
-            f.write(f"\n{datetime.now():%Y-%m-%d %H:%M:%S}  {what}\n{traceback.format_exc()}")
+            f.write(f"\n{datetime.now():%Y-%m-%d %H:%M:%S}  {what}\n{detail}")
     except Exception:
         pass
+
+
+def log_error(what):
+    log_note(what, traceback.format_exc())
+
+
+def thread_stacks():
+    """Where every thread is, for desktop.log (code lines only, no values)."""
+    names = {t.ident: t.name for t in threading.enumerate()}
+    return "".join(f"Thread {names.get(ident, ident)}:\n" + "".join(traceback.format_stack(frame))
+                   for ident, frame in sys._current_frames().items())
+
+
+class Startup:
+    """Watches the start, so a start that hangs is never silent. If the window and page aren't showing
+    after `wait` seconds, desktop.log gets the last step reached and every thread's stack, and the page
+    opens in the web browser so something is on screen. If Python itself is stuck, faulthandler writes
+    the stacks a second later instead. A good start leaves one line."""
+
+    def __init__(self, mode, wait=STARTUP_WAIT_S):
+        self.mode, self.wait = mode, wait
+        self.step = "starting"
+        self.page = None  # the page's address, once the server is up
+        self.began = time.monotonic()
+        self.ready = threading.Event()
+        self._dump = None  # desktop.log, held open for faulthandler
+        self._browser_tried = False
+        self._lock = threading.Lock()
+
+    def at(self, step):
+        self.step = step
+
+    def watch(self):
+        try:
+            server.DATA.mkdir(parents=True, exist_ok=True)
+            self._dump = (server.DATA / "desktop.log").open("a", encoding="utf-8")
+            faulthandler.dump_traceback_later(self.wait + 1, file=self._dump)
+        except Exception:
+            self._dump = None
+        threading.Thread(target=self._watch, name="startup-watch", daemon=True).start()
+
+    def _watch(self):
+        if self.ready.wait(self.wait):
+            return
+        log_note(f"Startup stuck ({self.mode}): nothing showing after {self.wait} s. Last step: {self.step}.",
+                 thread_stacks())
+        faulthandler.cancel_dump_traceback_later()  # the stacks are written; it was only the backup
+        if self.page:
+            self.open_browser()
+
+    def open_browser(self):
+        """Show the page in the web browser instead (once). False if that didn't open either."""
+        if self._browser_tried:
+            return self.ready.is_set()
+        self._browser_tried = True
+        self.at("opening the web browser")
+        try:
+            opened = webbrowser.open(self.page)
+        except Exception:
+            log_error("The web browser couldn't be opened.")
+            opened = False
+        if opened:
+            self.done("opened in the web browser")
+        else:
+            self.at("the web browser didn't open")
+            log_note(f"The web browser didn't open ({self.mode}).")
+        return opened
+
+    def done(self, how):
+        with self._lock:
+            if self.ready.is_set():
+                return
+            if self._dump:
+                faulthandler.cancel_dump_traceback_later()
+                self._dump.close()
+                self._dump = None
+            log_note(f"Started ({self.mode}): {how} after {time.monotonic() - self.began:.1f} s.")
+            self.ready.set()
+
+
+def bring_up(window, user32=None):
+    """True once the window is on screen. If the launcher asked Windows for a hidden start (for example
+    PowerShell's Start-Process -WindowStyle Hidden), Windows applies that to the window's first show and it
+    stays invisible while the app runs. Show it maximized ourselves when that happens."""
+    try:
+        user32 = user32 or ctypes.windll.user32
+        hwnd = window.native.Handle.ToInt64()
+        if not user32.IsWindowVisible(hwnd):
+            log_note("Windows started the window hidden; showing it.")
+            user32.ShowWindow(hwnd, SW_SHOWMAXIMIZED)
+            user32.SetForegroundWindow(hwnd)
+        return bool(user32.IsWindowVisible(hwnd))
+    except Exception:
+        log_error("The window couldn't be checked or shown.")
+        return False
 
 
 def window_options(mary, voices=False):
@@ -163,14 +264,18 @@ def allow_edit_menu(edge_cls):
     edge_cls.on_webview_ready = on_webview_ready
 
 
-def open_window(url, mary=False, voices=False):
+def open_window(url, mary=False, voices=False, startup=None):
     """Show the app in its own window until it is closed. False if no window is possible."""
+    startup = startup or Startup("voices" if voices else "mary" if mary else "app")
     keep_awake = power.KeepAwake() if mary else None
     try:
+        startup.at("loading the window library")
         import webview
         from webview.platforms import winforms
         if winforms.renderer != "edgechromium":
-            return False  # pywebview would fall back to Internet Explorer, which can't run the page
+            # pywebview would fall back to Internet Explorer, which can't run the page
+            log_note(f"No WebView2 window (pywebview found {winforms.renderer!r}); using the web browser.")
+            return False
         from webview.platforms import edgechromium
         allow_edit_menu(edgechromium.EdgeChrome)
         webview.settings["ALLOW_DOWNLOADS"] = True  # "Download spreadsheet" shows a Save dialog
@@ -186,11 +291,26 @@ def open_window(url, mary=False, voices=False):
             storage = server.DATA / "webview"
             storage.mkdir(parents=True, exist_ok=True)
             start_args.update(private_mode=False, storage_path=str(storage))
+        startup.at("creating the window")
         window = webview.create_window(opts["title"], url + opts["path"], js_api=api, **opts["kwargs"])
         if mary:
             api._window = window
+
+        def shown():
+            startup.at("window shown, page loading")
+            bring_up(window)
+
+        def loaded():
+            if bring_up(window):
+                startup.done("window and page showing")
+            else:
+                startup.at("page loaded, but the window isn't showing")
+
+        window.events.shown += shown
+        window.events.loaded += loaded
         if keep_awake:
             keep_awake.start()
+        startup.at("starting the window")
         webview.start(**start_args)
         return True
     except Exception:
@@ -204,10 +324,14 @@ def open_window(url, mary=False, voices=False):
 def main():
     voices = "--voices" in sys.argv
     mary = "--mary" in sys.argv or voices
+    startup = Startup("voices" if voices else "mary" if mary else "app")
+    startup.watch()
+    startup.at("starting the server")
     url = start_server()
-    if not open_window(url, mary, voices):
-        webbrowser.open(url + (window_options(mary, voices)["path"]))
-        threading.Event().wait()  # keep serving the browser tab
+    startup.page = url + window_options(mary, voices)["path"]
+    if not open_window(url, mary, voices, startup):
+        startup.open_browser()
+        threading.Event().wait()  # keep serving the browser tab  # keep serving the browser tab
 
 
 if __name__ == "__main__":

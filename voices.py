@@ -246,7 +246,7 @@ def _from_interactions(resp, started):
     Returns (chunks, first_sound_ms, timing_seen)."""
     audio, flags, plain, first = [], {"timing": False}, [], None
     for raw in resp:
-        if time.monotonic() - started > DEADLINE:
+        if time.perf_counter() - started > DEADLINE:
             raise VoiceError("no_gemini")
         line = raw.decode("utf-8", "replace").strip() if isinstance(raw, bytes) else str(raw).strip()
         if not line or line.startswith((":", "event:", "id:", "retry:")):
@@ -261,7 +261,7 @@ def _from_interactions(resp, started):
                 before = len(audio)
                 _walk(node, audio, flags)
                 if first is None and len(audio) > before:
-                    first = int((time.monotonic() - started) * 1000)
+                    first = int((time.perf_counter() - started) * 1000)
         else:
             plain.append(line)
     if not audio and plain:
@@ -277,7 +277,7 @@ def _from_interactions(resp, started):
         for node in nodes:
             _walk(node, audio, flags)
         if audio:
-            first = int((time.monotonic() - started) * 1000)
+            first = int((time.perf_counter() - started) * 1000)
     return audio, first, flags["timing"]
 
 
@@ -321,7 +321,7 @@ def _generate_content(voice, api_key, started):
                 rate = rate or r
     if not pcm:
         raise VoiceError("no_gemini")
-    total = int((time.monotonic() - started) * 1000)
+    total = int((time.perf_counter() - started) * 1000)
     return pcm, rate or SAMPLE_RATE, 1, total, flags["timing"]
 
 
@@ -358,7 +358,7 @@ def tts_sample(voice, api_key, data=None):
             return out
         except (OSError, EOFError, wave.Error, ZeroDivisionError, ValueError, TypeError):
             pass  # no usable saved copy; ask Google
-        started = time.monotonic()
+        started = time.perf_counter()
         path, fell_back = "interactions", ""
         try:
             got = _interactions(name, api_key, started)
@@ -388,7 +388,7 @@ def tts_sample(voice, api_key, data=None):
                 raise VoiceError("no_gemini", _scrub(f"{fell_back} | {_other_failure(e, 'generateContent')}", api_key)) from None
         pcm, rate, channels, first, timing = got
         wav = _wav(pcm, rate, channels)
-        total = int((time.monotonic() - started) * 1000)
+        total = int((time.perf_counter() - started) * 1000)
         out = {"wav": wav, "first_sound_ms": first if first is not None else total, "total_ms": total,
                "audio_s": round(len(pcm) / (2 * channels * rate), 2), "path": path,
                "word_timings": bool(timing), "cached": False}
@@ -476,14 +476,14 @@ def kokoro_sample(voice, data=None):
             with _kokoro_lock:
                 load_ms = 0
                 if _kokoro is None:
-                    t = time.monotonic()
+                    t = time.perf_counter()
                     _kokoro = _load_kokoro()
-                    load_ms = int((time.monotonic() - t) * 1000)
+                    load_ms = int((time.perf_counter() - t) * 1000)
                 pieces, rate, synth, first_ms = [], 0, 0.0, 0
                 for sentence in _sentences(LINE):
-                    t = time.monotonic()
+                    t = time.perf_counter()
                     samples, r = _kokoro.create(sentence, voice=name, speed=1.0, lang=lang)
-                    took = time.monotonic() - t
+                    took = time.perf_counter() - t
                     synth += took
                     if not pieces:
                         first_ms = int(took * 1000) + load_ms

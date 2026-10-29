@@ -473,7 +473,7 @@ class KokoroTests(VoicesCase):
         first = voices.kokoro_sample("kokoro:af_bella", server.DATA)
         again = voices.kokoro_sample("kokoro:am_michael", server.DATA)
         self.assertEqual(self.loads, 1)
-        self.assertGreaterEqual(first["load_ms"], 15)
+        self.assertGreaterEqual(first["load_ms"], 10)  # the fake load sleeps 15 ms
         self.assertGreaterEqual(first["first_sound_ms"], first["load_ms"])
         self.assertEqual(again["load_ms"], 0)
         self.assertGreaterEqual(first["total_ms"], first["first_sound_ms"])

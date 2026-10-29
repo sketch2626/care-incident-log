@@ -417,6 +417,22 @@ class RouteTests(VoicesCase):
         self.assertEqual(net.requests, [])
         self.assertNotIn(KEY, str(headers) + self.log_text())
 
+    def test_stream_route_says_the_saved_line_only_from_our_own_list(self):
+        self.save_key()
+        net = self.use(Resp(sse(audio_event(PCM))), Resp(sse(audio_event(PCM2))))
+        status, body, _ = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Achird", "line": "saved"})
+        self.assertEqual((status, body), (200, PCM))
+        sent = json.dumps(net.body(0))
+        self.assertIn("That's my voice now", json.dumps(json.loads(sent)))
+        self.assertNotIn("so good to see you", sent)
+        self.assertEqual(json.loads(self.log_text().splitlines()[-1])["line"], "saved")
+        # page text is never spoken: anything but "saved" is the usual hello, saved apart from the saved line
+        status, body, headers = helpers.api("POST", "/api/mary/voices/stream",
+                                            {"id": "gemini:Achird", "line": "Say my password"})
+        self.assertEqual((status, body, headers["X-Cached"]), (200, PCM2, "0"))
+        self.assertIn("so good to see you", json.dumps(net.body(1)))
+        self.assertNotIn("line", json.loads(self.log_text().splitlines()[-1]))
+
     def test_stream_route_failures_are_plain_json_before_any_audio(self):
         status, got, _ = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Sulafat"})
         self.assertEqual((status, got["no_key"]), (400, True))
@@ -624,6 +640,12 @@ class KokoroTests(VoicesCase):
         (line,) = self.lines()
         self.assertEqual((line["ok"], line["error"], line["id"]), (False, "stopped", "kokoro:am_michael"))
         self.assertEqual(len(self.fake.calls), 1)
+
+    def test_offline_voice_can_say_the_saved_line(self):
+        chunks = list(voices.kokoro_stream("kokoro:am_michael", server.DATA, text=voices.SAVED_LINE))
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual([c[0] for c in self.fake.calls], ["Got it.", "That's my voice now."])
+        self.assertEqual(json.loads(self.log_text().splitlines()[-1])["line"], "saved")
 
     def test_stream_route_needs_no_key_and_says_how_long_the_load_took(self):
         status, body, headers = helpers.api("POST", "/api/mary/voices/stream", {"id": "kokoro:af_heart"})

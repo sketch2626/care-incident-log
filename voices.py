@@ -37,6 +37,8 @@ TOKEN_VERSIONS = ("v1beta", "v1alpha")
 LINE = ("Hello there! It's so good to see you today. "
         "I'm right here whenever you'd like to talk, or just to keep you company.")
 STYLE = "warm, gentle and unhurried, like a kind friend"
+SAVED_LINE = "Got it. That's my voice now."  # said in the new voice when it is saved
+LINES = {"hello": LINE, "saved": SAVED_LINE}
 
 # (name, gender, Google's one-word description). Gemini ids are "gemini:<Name>", Live ids "live:<Name>".
 GEMINI_VOICES = [
@@ -157,7 +159,7 @@ _LOG_NUMBERS = ("first_sound_ms", "total_ms", "audio_s", "reply_gap_ms", "first_
                 "turns", "interruptions", "seconds", "close_code", "rtf", "load_ms",
                 "tap_to_sound_ms", "gaps", "gap_ms", "greet_ms", "mic_ms")
 _LOG_BOOLS = ("word_timings", "ok", "cached")
-_LOG_STRINGS = ("event", "id", "voice", "model", "path", "error")
+_LOG_STRINGS = ("event", "id", "voice", "model", "path", "error", "line")
 
 
 def log(event, data=None):
@@ -286,11 +288,11 @@ def _iter_interactions(resp, started, flags):
         yield from found
 
 
-def _interactions(voice, api_key, started, flags):
+def _interactions(voice, api_key, started, flags, text=LINE):
     """Ask for the sample and yield its audio chunks as they arrive (nothing is yielded when Google sends none)."""
     body = {"model": TTS_MODEL,
             "input": [{"type": "user_input", "content": [
-                {"type": "text", "text": LINE,
+                {"type": "text", "text": text,
                  "annotations": [{"type": "speech_metadata", "style": STYLE}]}]}],
             "response_format": {"type": "audio"},
             "generation_config": {"speech_config": [{"voice": voice}]},
@@ -299,8 +301,8 @@ def _interactions(voice, api_key, started, flags):
         yield from _iter_interactions(resp, started, flags)
 
 
-def _generate_content(voice, api_key, started):
-    body = {"contents": [{"parts": [{"text": LINE}]}],
+def _generate_content(voice, api_key, started, text=LINE):
+    body = {"contents": [{"parts": [{"text": text}]}],
             "generationConfig": {"responseModalities": ["AUDIO"],
                                  "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
     with _post(f"{API}/models/{TTS_MODEL}:generateContent", body, api_key) as resp:
@@ -322,9 +324,9 @@ def _generate_content(voice, api_key, started):
     return pcm, rate or SAMPLE_RATE, 1, total, flags["timing"]
 
 
-def _cache_files(voice_id, voice, data):
+def _cache_files(voice_id, voice, data, text=LINE):
     # "stream": copies saved before 2026-10-29 aren't reused, so each voice's first play times Google again
-    key = hashlib.sha256(f"{TTS_MODEL}|{LINE}|{STYLE}|{voice}|stream".encode("utf-8")).hexdigest()[:8]
+    key = hashlib.sha256(f"{TTS_MODEL}|{text}|{STYLE}|{voice}|stream".encode("utf-8")).hexdigest()[:8]
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", voice_id)
     wav = _data(data) / "mary" / "voices" / f"{safe}-{key}.wav"
     return wav, wav.with_suffix(".json")
@@ -351,20 +353,25 @@ def _saved_copy(wav_file, meta_file):
         return None
 
 
-def tts_stream(voice, api_key, data=None, summary=None):
+def _line_tag(text):
+    """Log lines for anything but the hello say which line it was, so the audition timings stay clean."""
+    return {} if text == LINE else {"line": next((k for k, v in LINES.items() if v == text), "other")}
+
+
+def tts_stream(voice, api_key, data=None, summary=None, text=LINE):
     """One spoken sample of LINE, handed over as it arrives: yields {"pcm", "rate", "channels"} for each piece of
     audio; the first also has "cached" and "path". A saved copy comes in one piece with no network. Raises
     VoiceError before the first piece, exactly as tts_sample does. When the stream ends, `summary` (a dict, if
     given) is filled with what tts_sample returns. Every call is logged; a consumer that stops early is logged
     as "stopped" and nothing is saved."""
     voice_id = str(voice or "").strip()
-    event = {"event": "tts", "id": voice_id, "model": TTS_MODEL}
+    event = {"event": "tts", "id": voice_id, "model": TTS_MODEL, **_line_tag(text)}
     done = False
     try:
         name = _voice_name(voice_id, "gemini")
         voice_id = f"gemini:{name}"
         event.update(id=voice_id, voice=name)
-        wav_file, meta_file = _cache_files(voice_id, name, data)
+        wav_file, meta_file = _cache_files(voice_id, name, data, text)
         saved = _saved_copy(wav_file, meta_file)
         if saved is not None:
             log({**event, "ok": True, "note": "saved copy", **{k: saved[k] for k in ("audio_s", "path")}}, data)
@@ -379,7 +386,7 @@ def tts_stream(voice, api_key, data=None, summary=None):
         flags = {"timing": False}
         pieces, rate, channels, first, carry = [], 0, 1, None, b""
         try:
-            for node in _interactions(name, api_key, started, flags):
+            for node in _interactions(name, api_key, started, flags, text):
                 if first is None:
                     first = int((time.perf_counter() - started) * 1000)
                 chunk, r, c = _decode(node)
@@ -409,7 +416,7 @@ def tts_stream(voice, api_key, data=None, summary=None):
         if not pieces:
             path, first = "generateContent", None
             try:
-                pcm, rate, channels, first, timing = _generate_content(name, api_key, started)
+                pcm, rate, channels, first, timing = _generate_content(name, api_key, started, text)
             except urllib.error.HTTPError as e:
                 refused, detail = _http_failure(e, api_key, "generateContent")
                 raise VoiceError("bad_key" if refused else "no_gemini", _scrub(f"{fell_back} | {detail}", api_key)) from None
@@ -507,7 +514,7 @@ def _pcm16(samples):
         return out.tobytes()
 
 
-def kokoro_stream(voice, data=None, summary=None):
+def kokoro_stream(voice, data=None, summary=None, text=LINE):
     """One spoken sample of LINE made on this computer, handed over a sentence at a time: yields
     {"pcm", "rate", "channels"}; each sentence after the first starts with the pause. The first piece also has
     "cached", "path" and "load_ms" (model load, only on the first call). Raises VoiceError("no_offline") before
@@ -515,7 +522,7 @@ def kokoro_stream(voice, data=None, summary=None):
     returns. Never cached, so every play measures the speed again. Every call is logged; a consumer that stops
     early is logged as "stopped"."""
     voice_id = str(voice or "").strip()
-    event = {"event": "tts", "id": voice_id, "model": KOKORO_MODEL.rsplit(".", 1)[0]}
+    event = {"event": "tts", "id": voice_id, "model": KOKORO_MODEL.rsplit(".", 1)[0], **_line_tag(text)}
     done = False
     try:
         name = _voice_name(voice_id, "kokoro")
@@ -536,7 +543,7 @@ def kokoro_stream(voice, data=None, summary=None):
         except Exception as e:  # missing file, bad model, out of memory
             raise VoiceError("no_offline", _other_failure(e, "kokoro")) from None
         pieces, rate, synth, first_ms, speech = [], 0, 0.0, None, 0
-        for sentence in _sentences(LINE):
+        for sentence in _sentences(text):
             try:
                 with _kokoro_lock:  # held for one sentence only, so another play can slot in
                     t = time.perf_counter()

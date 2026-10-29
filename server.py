@@ -626,23 +626,26 @@ class Handler(SimpleHTTPRequestHandler):
                 headers["X-Rtf"] = str(got["rtf"])
             return self._send(got["wav"], 200, "audio/wav", headers)
         if method == "POST" and path == "/api/mary/voices/stream":
-            voice_id = str(self._body().get("id") or "")
+            body = self._body()
+            voice_id = str(body.get("id") or "")
+            text = voices.LINES.get(str(body.get("line") or ""), voices.LINE)  # only our own lines, never page text
             offline = voice_id.strip().startswith("kokoro:")
             key = mary_settings()["key"]
             if not key and not offline:  # the offline voice needs no Gemini key
                 return self._send(*voice_failure("no_key"))
-            return self._voice_stream(voice_id, key, offline)
+            return self._voice_stream(voice_id, key, offline, text)
         if method == "POST" and path == "/api/mary/voices/log":
             body = self._body()  # the page's numbers; only whitelisted keys are kept
             voices.log({**body, "event": "played" if body.get("event") == "played" else "live"}, DATA)
             return self._send({"ok": True})
         return None
 
-    def _voice_stream(self, voice_id, key, offline):
+    def _voice_stream(self, voice_id, key, offline, text=voices.LINE):
         """One voice sample as raw 16-bit PCM, sent as it is made so the page can play it at once. Nothing is
         sent until the first audio is ready, so a failure is still a plain JSON answer. No Content-Length: the
         connection closing ends it (HTTP/1.0)."""
-        gen = voices.kokoro_stream(voice_id, DATA) if offline else voices.tts_stream(voice_id, key, DATA)
+        gen = (voices.kokoro_stream(voice_id, DATA, text=text) if offline
+               else voices.tts_stream(voice_id, key, DATA, text=text))
         try:
             first = next(gen)
         except voices.VoiceError as e:

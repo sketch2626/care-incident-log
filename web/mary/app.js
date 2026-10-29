@@ -705,6 +705,38 @@
     }
   }
 
+  // --- skills hook (M13) --- effects from a skill go to skills.js; T.effects counts those already applied
+  function applyEffect(effect, T) {
+    if (T) { T.effects = (T.effects || 0) + 1; }
+    try { if (window.MarySkills) { window.MarySkills.apply(effect); } } catch (e) { log(e); }
+  }
+  function skillScreen() {
+    try { return (window.MarySkills && window.MarySkills.isSkillScreen(S.screen)) ? S.screen : undefined; } catch (e) { return undefined; }
+  }
+  function applySettings(values) {
+    values = values || {};
+    if (values.voice_rate != null) { S.rate = clampNum(values.voice_rate, RATE_MIN, RATE_MAX, S.rate); }
+    if (values.voice_volume != null) { S.volume = clampNum(values.voice_volume, VOL_MIN, VOL_MAX, S.volume); }
+    if (values.companion === 'mary' || values.companion === 'him') {
+      if (values.companion !== S.companion) {
+        setCompanion(values.companion, { noSave: true });
+        try { face.bounce(); } catch (e) { /* nothing */ }
+      }
+    }
+  }
+  // Runs a menu action through the voice_comfort skill; resolves true when the skill answered, false to fall back.
+  async function skillMenu(action, mood) {
+    try {
+      if (!window.MarySkills) { return false; }
+      var r = await window.MarySkills.call('voice_comfort__' + action, {});
+      if (!r || !r.response || r.response.error || !r.say) { return false; }
+      newTurn();
+      say(r.say, mood);
+      return true;
+    } catch (e) { log(e); return false; }
+  }
+  // --- end skills hook ---
+
   // One NDJSON line. Returns the final object when the line is the last one.
   function handleLine(line, T) {
     var o;
@@ -716,6 +748,7 @@
       if (T.streamed) { return { done: true, text: T.streamed, mood: T.mood }; }     // she already said part of it: keep that
       return { done: true, error: String(o.error), text: '' };
     }
+    if (o.effect) { applyEffect(o.effect, T); }   // --- skills hook (M13) ---
     if (o.mood) { T.mood = String(o.mood); applyMood(T.mood); }
     if (typeof o.text === 'string' && o.text) { onPiece(o.text, T); }
     return null;
@@ -726,7 +759,7 @@
       method: 'POST',
       cache: 'no-store',
       headers: { 'X-Tracker': '1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text })
+      body: JSON.stringify({ text: text, screen: skillScreen() })   // skills hook (M13)
     };
     if (ctrl) { init.signal = ctrl.signal; }
     var resp = await fetch('/api/mary/talk?stream=1', init);
@@ -775,7 +808,7 @@
   }
 
   async function plainReply(text, ctrl) {
-    return await api('POST', '/api/mary/talk', { text: text }, { signal: ctrl ? ctrl.signal : undefined, ms: 30000 });
+    return await api('POST', '/api/mary/talk', { text: text, screen: skillScreen() }, { signal: ctrl ? ctrl.signal : undefined, ms: 30000 });
   }
 
   async function replyFailed() {
@@ -785,7 +818,15 @@
   async function finishReply(d, T) {
     if (d.mood) { applyMood(String(d.mood)); }
     if (d.emergency && S.screen !== 'emergency') { show('emergency'); }
-    if (d.needs_key && !d.emergency) {
+    // --- skills hook (M13) --- a skill's effects (when not already streamed to us)
+    if (!T.effects && d.effects && d.effects.length) {
+      for (var ei = 0; ei < d.effects.length; ei++) { applyEffect(d.effects[ei], T); }
+    }
+    // With no key, an offline voice phrase that ran a skill still gets spoken (no key screen). The server
+    // sets mood "talking" for that and "sorry" for its own no-key line.
+    var skillRan = !!T.effects || (String(d.text || '').trim() && d.mood === 'talking');
+    // --- end skills hook ---
+    if (d.needs_key && !d.emergency && !skillRan) {
       spCancel();
       S.hasKey = false;
       show('nokey');
@@ -939,11 +980,13 @@
     if (!t || t === $('menu')) { return; }
     var act = t.getAttribute('data-act');
     closeMenu();
-    if (act === 'slower') { adjust('rate', -0.08); }
-    else if (act === 'faster') { adjust('rate', 0.08); }
-    else if (act === 'quieter') { adjust('volume', -0.1); }
-    else if (act === 'louder') { adjust('volume', 0.1); }
-    else if (act === 'switch') { switchCompanion(); }
+    // --- skills hook (M13) --- voice_comfort does these; the old code is the fallback
+    if (act === 'slower') { skillMenu('slower').then(function (ok) { if (!ok) { adjust('rate', -0.08); } }); }
+    else if (act === 'faster') { skillMenu('faster').then(function (ok) { if (!ok) { adjust('rate', 0.08); } }); }
+    else if (act === 'quieter') { skillMenu('quieter').then(function (ok) { if (!ok) { adjust('volume', -0.1); } }); }
+    else if (act === 'louder') { skillMenu('louder').then(function (ok) { if (!ok) { adjust('volume', 0.1); } }); }
+    else if (act === 'switch') { skillMenu('switch_companion', 'happy').then(function (ok) { if (!ok) { switchCompanion(); } }); }
+    // --- end skills hook ---
     else if (act === 'type') { openTyping(); }
     else if (act === 'notes') { window.location.href = '/?from=mary'; }
     else if (act === 'close') {
@@ -1121,6 +1164,8 @@
     startFirstRun: startFirstRun,
     onActivity: noop,                        // firstrun.js replaces it: a talk started, wake her if she is sleepy
     companionName: companionName,
+    applySettings: applySettings,            // skills hook (M13)
+    currentScreen: function () { return S.screen; },
     api: api,
     getFace: function () { return face; }
   };

@@ -39,7 +39,13 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Free tier:** every one of these models is free of charge on the free tier. Google's rate-limit page lists no numbers; they show only in AI Studio for the key. **Privacy:** already decided. Free tier for Andy's own testing now, paid tier before any other resident. See "Gemini free tier and privacy" in `docs/companion-plan.md`.
   - Installer cost when bundled (Next step 5): about 22 MB of packages (`packaging/requirements.txt`) plus 115 MB of Kokoro model. `build.py` doesn't bundle or download it yet.
   - Also measure Gemini text-reply speed with his key (M8, `tools/mary_speed.py`) when he picks the pipeline.
-- **Andy's choice:** made in the audition on 2026-10-29 and saved with its "Use for Mary/Sam" buttons (read the names from the voice settings). Live vs pipeline is still open, because Live didn't work.
+- **Andy's choice:** made in the audition on 2026-10-29 and saved with its "Use for Mary/Sam" buttons (read the names from the voice settings).
+- **Talk modes, decided (Andy, 2026-10-29):** he likes Live best for the back-and-forth. All three are **choices** in settings, with Live as the default:
+  1. **Live:** native audio both ways, instant interruptions.
+  2. **Normal:** the laptop turns speech into words → Gemini → Gemini voice, so the voice stays on the laptop.
+  3. **Offline:** Kokoro or Piper, the no-internet backup.
+
+  The back-and-forth (M5) must work in Normal mode too, not only Live. Every mode gets the same brain (M9) and the same "hands" (M12).
 - **What Andy found (2026-10-29), to fix in M2:**
   - **Live talk:** "could not reach Gemini". Find out why from `audition.log`, fix it, and let him retry.
   - **The first-sound timing is wrong.** The offline male voices showed "0.8 s", but the sound took much longer. The female top card's "4 s" felt closer. Measure from the tap to the moment sound actually starts playing, including the warm-up.
@@ -102,6 +108,21 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
 - **M9c, memory of the resident:** name, family, interests, past talks, on the laptop.
 - **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
 - **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
+
+### M12. Mary's hands: she runs the app and fetches pictures (after M4; alongside M9b)
+Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up all the games, do all the stuff… pictures from the web… show me a picture of this bird."
+- **How:** Gemini **function calling** works in Live and in Normal mode. The app gives her a list of tools; she decides when to use one, and the page carries it out:
+  - `show_picture(what)`
+  - `start_game(name)`
+  - `open(screen)`: menu, My info, games
+  - `set_voice` / `set_mode`
+  - `save_incident`
+  - `call_help`: shows the call-light help
+  - Later: weather, news, music, reminders. This is "Mary and the computer" Level 1-2 in `docs/companion-plan.md`.
+- **Pictures:** the server fetches real photos from **Wikipedia/Wikimedia** (free, no key). It prefers the main image of the matching Wikipedia article, which is safer than open image search. Pictures show full screen with a caption, and she talks about them. Check the licenses and show the photo credit.
+- **Web facts:** use Gemini's built-in Google Search grounding (supported in Live) for questions like "what's the weather" or "who won the game".
+- **Offline mode:** tools still work locally; pictures and search say "I need the internet for that".
+- **Done when:** in each mode, "show me a cardinal" puts up a real cardinal photo, and "let's play word search" opens the game once M7 exists.
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
 - **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.

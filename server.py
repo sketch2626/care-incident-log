@@ -364,6 +364,12 @@ def set_skill_host_for_tests(host):
     global _skill_host
     with _skill_host_lock:
         _skill_host = host
+
+
+def mary_live_skill_setup(screen=None):
+    """What live_token() adds to bidiGenerateContentSetup (tools) and to the system text; wired when Mary's own
+    Live session is built (M4)."""
+    return {"tools": skill_host().gemini_tools(), "instruction": skill_host().instruction_text(screen)}
 # --- end skills hook ---
 
 

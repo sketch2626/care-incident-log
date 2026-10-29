@@ -831,6 +831,67 @@ function fillInfo() {
   updateFlowState();
   $('#backName').textContent = s.companion === 'him' ? 'Sam' : 'Mary';
   $('#backToMary').hidden = !FROM_MARY;
+  loadSkills();
+}
+
+/* ---------- Things Mary can do ---------- */
+
+function skillBtn(text, pressed, disabled, onTap) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'skillbtn';
+  b.textContent = text;
+  b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  b.disabled = !!disabled;
+  b.addEventListener('click', onTap);
+  return b;
+}
+
+function renderSkills(list) {
+  const rows = $('#skillsList'), locks = $('#skillsLocks');
+  rows.textContent = ''; locks.textContent = '';
+  $('#skillsMsg').textContent = list.length ? '' : "Mary doesn't have any extra skills yet.";
+  $('#skillsLockHead').hidden = !list.length;
+  list.forEach(s => {
+    const url = `/api/mary/skills/${encodeURIComponent(s.name)}`;
+    const row = document.createElement('div');
+    row.className = 'skillrow';
+    const t = document.createElement('div');
+    t.className = 'skilltext';
+    const h = document.createElement('b'); h.textContent = s.title || s.name;
+    const p = document.createElement('p'); p.className = 'note'; p.textContent = s.summary || '';
+    t.append(h, p);
+    if (s.tripped) { const w = document.createElement('p'); w.className = 'warn'; w.textContent = 'Not working right now'; t.append(w); }
+    row.append(t);
+    const label = s.locked ? 'Set by your helper' : (s.on ? 'On' : 'Off');
+    row.append(skillBtn(label, s.on, !!s.locked, () => skillChange(url, { on: !s.on })));
+    rows.append(row);
+
+    const lr = document.createElement('div');
+    lr.className = 'skillrow lockrow';
+    const ln = document.createElement('b'); ln.textContent = s.title || s.name;
+    const grp = document.createElement('div'); grp.className = 'skillgroup';
+    [['Resident chooses', null], ['Always on', 'on'], ['Always off', 'off']].forEach(([text, val]) => {
+      grp.append(skillBtn(text, (s.locked || null) === val, false, () => skillChange(url + '/lock', { state: val })));
+    });
+    lr.append(ln, grp);
+    locks.append(lr);
+  });
+}
+
+async function loadSkills() {
+  try { renderSkills((await api('/api/mary/skills')).skills || []); }
+  catch (err) { $('#skillsMsg').textContent = "I couldn't get Mary's skills just now. " + err.message; }
+}
+
+async function skillChange(path, body) {
+  try {
+    const r = await api(path, { method: 'PUT', body: JSON.stringify(body) });
+    if (r && r.error) throw new Error(r.error === 'locked' ? 'Your helper set this one.' : r.error);
+    await loadSkills(); // show what the server now says
+  } catch (err) {
+    $('#skillsMsg').textContent = "That didn't change. " + err.message;
+  }
 }
 
 // The Paste button reads the clipboard with no key combos: through the app window's

@@ -14,6 +14,7 @@
   <main id="panel">
     <button id="backBtn" class="btn light back" type="button">&lsaquo; Back to Mary</button>
     <h1>Choose a voice</h1>
+    <p id="savedNow" class="savednow" aria-live="polite"></p>
     <p class="lead">Tap Play to hear each voice say the same hello. Then pick the one you like best.</p>
     <p id="loadError" class="errbox" role="alert" hidden>I couldn't load the voices. Please go back to Mary and try again.</p>
 
@@ -39,12 +40,21 @@
 
     <section id="secLive" hidden>
       <p class="intro">Talk with her for real, back and forth, like a phone call. You can interrupt her any time.</p>
-      <div id="liveVoices" class="livevoices"></div>
-      <button id="liveStart" class="btn dark big" type="button">Start talking</button>
-      <p id="liveStatus" class="livestatus" aria-live="polite"></p>
-      <div id="liveCaption" class="caption" aria-live="polite"></div>
-      <p id="liveStats" class="stats"></p>
-      <button id="liveUse" class="btn light" type="button">Use this voice</button>
+      <div class="session">
+        <p id="liveStatus" class="livestatus" aria-live="polite"></p>
+        <div id="liveCaption" class="caption" aria-live="polite"></div>
+        <p id="liveStats" class="stats"></p>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <h2>For Mary</h2>
+          <div id="liveMary" class="cards"></div>
+        </div>
+        <div class="col">
+          <h2>For Sam</h2>
+          <div id="liveSam" class="cards"></div>
+        </div>
+      </div>
     </section>
 
     <section id="secOffline" hidden>

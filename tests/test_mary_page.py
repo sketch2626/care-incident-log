@@ -76,9 +76,12 @@ class MaryPageTests(unittest.TestCase):
 
     def test_voices_page_and_files_load(self):
         html, _ = self.get("/mary/voices.html")
-        for needle in ('id="tabGemini"', 'id="tabLive"', 'id="tabOffline"', 'id="backBtn"', 'id="liveStart"', 'id="liveUse"',
+        for needle in ('id="tabGemini"', 'id="tabLive"', 'id="tabOffline"', 'id="backBtn"',
+                       'id="liveMary"', 'id="liveSam"', 'id="savedNow"',
                        "/mary/face.js", "/mary/voices.js", "/mary/live.js", "/mary/voices.css"):
             self.assertIn(needle, html)
+        for gone in ('id="liveStart"', 'id="liveUse"', 'id="liveVoices"'):
+            self.assertNotIn(gone, html)
         for path in ("/mary/voices.html", "/mary/voices.js", "/mary/live.js", "/mary/voices.css"):
             text, _ = self.get(path)
             self.assertNotRegex(text, r"key(down|up|press)", path)
@@ -91,8 +94,14 @@ class MaryPageTests(unittest.TestCase):
         for needle in ("clientContent", "greet_ms", "mic_ms", "outputLatency", "startOffset"):
             self.assertIn(needle, live)
         voices, _ = self.get("/mary/voices.js")
-        for needle in ("/api/mary/voices/stream", "getReader", "tapAt", "'played'", "outputLatency"):
+        for needle in ("/api/mary/voices/stream", "getReader", "tapAt", "'played'", "outputLatency",
+                       "line: 'saved'", "Saving…", "/api/settings", "Saved — "):
             self.assertIn(needle, voices)
+        for needle in ("liveVoices", "liveUse", "selectedLive"):
+            self.assertNotIn(needle, voices)
+        for needle in ("livetalk", "activeBtn"):
+            self.assertIn(needle, live)
+        self.assertNotIn("liveStart", live)
         for needle in ("X-First-Sound-Ms", "new Audio("):
             self.assertNotIn(needle, voices)
 

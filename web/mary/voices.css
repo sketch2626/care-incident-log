@@ -233,34 +233,34 @@ h2 {
   margin: 16px 0;
 }
 
-/* Live talk */
-.livevoices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 16px 0 20px;
-}
-
-.livevoice {
-  width: auto;
-  flex: 1 1 220px;
-}
-
-.livevoice[aria-pressed="true"] {
-  background: #1f1b16;
+/* The big proof that a choice is kept: on the saved card, and the summary under the title */
+.saved {
+  background: #2e7d32;
   color: #fff;
-  border-color: #1f1b16;
-  box-shadow: 0 7px 0 rgba(0, 0, 0, 0.28);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin: 12px 0 0;
 }
 
-.btn.chosen {
-  border: 6px solid #2e7d32;
+.savednow {
+  background: #fff;
+  border-radius: 24px;
+  font-size: 22px;
+  font-weight: 700;
+  padding: 12px 20px;
+  margin: 0 0 16px;
 }
 
-#liveStart {
-  font-size: 32px;
-  min-height: 96px;
-  margin: 16px 0;
+.savednow:empty {
+  display: none;
+}
+
+/* Live talk */
+.session {
+  margin: 0 0 16px;
 }
 
 .livestatus {
@@ -276,8 +276,4 @@ h2 {
   font-size: 30px;
   min-height: 4.5em;
   margin: 12px 0;
-}
-
-#liveUse {
-  margin-top: 16px;
 }

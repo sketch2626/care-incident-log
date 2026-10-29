@@ -15,15 +15,15 @@
 
   var MSG_READY = 'Getting ready… If the computer asks to use the microphone, tap Allow.';
   var MSG_LISTEN = "I'm listening. Go ahead and talk.";
-  var MSG_MIC = 'I need to hear you. Tap Start again and choose Allow.';
+  var MSG_MIC = 'I need to hear you. Tap the Talk button again and choose Allow.';
   var MSG_NO_MIC = "I can't find a microphone on this computer.";
-  var MSG_MIC_OTHER = "I couldn't use the microphone. Tap Start to try again.";
+  var MSG_MIC_OTHER = "I couldn't use the microphone. Tap a Talk button to try again.";
   var MSG_NO_AUDIO = "This computer can't do a voice chat here.";
   var MSG_TOKEN = "I couldn't get ready. Please try again.";
-  var MSG_CONNECT = "I couldn't connect. Tap Start to try again.";
-  var MSG_LOST = 'I lost the connection. Tap Start to try again.';
-  var MSG_END = "That's the end of the practice chat. Tap Start to talk again.";
-  var MSG_STOPPED = 'Stopped. Tap Start to talk again.';
+  var MSG_CONNECT = "I couldn't connect. Tap a Talk button to try again.";
+  var MSG_LOST = 'I lost the connection. Tap a Talk button to try again.';
+  var MSG_END = "That's the end of the practice chat. Tap a Talk button to talk again.";
+  var MSG_STOPPED = 'Stopped. Tap a Talk button to talk again.';
 
   // Sent once when the line is ready, so she speaks first (and we can time how long her hello takes).
   var GREET = '(The resident just opened this talk. Say a short, warm hello and ask how they are, in one or two sentences.)';
@@ -44,11 +44,11 @@
     "}" +
     "registerProcessor('mic-tap', MicTap);";
 
-  var startBtn = document.getElementById('liveStart');
+  var activeBtn = null;   // the card's talk button that started the session in progress
   var statusEl = document.getElementById('liveStatus');
   var captionEl = document.getElementById('liveCaption');
   var statsEl = document.getElementById('liveStats');
-  if (!startBtn || !statusEl || !captionEl || !statsEl) return;
+  if (!statusEl || !captionEl || !statsEl) return;
   statsEl.style.whiteSpace = 'pre-line';
 
   var sessionId = 0;   // bumped on every start; events from an old session are ignored
@@ -69,14 +69,20 @@
     statusEl.textContent = text;
   }
 
+  // Changes the words on the button that started the talk ("Start talking" puts its own words back).
   function setStart(text, disabled) {
-    startBtn.textContent = text;
-    startBtn.disabled = disabled;
+    if (!activeBtn) return;
+    activeBtn.textContent = text === 'Start talking' ? activeBtn.getAttribute('data-label') : text;
+    activeBtn.disabled = disabled;
   }
 
+  // While a talk runs, the other talk buttons are off. A button with no key stays off.
   function lockVoices(locked) {
-    var all = document.querySelectorAll('.livevoice');
-    for (var i = 0; i < all.length; i++) all[i].disabled = locked;
+    var all = document.querySelectorAll('.livetalk');
+    for (var i = 0; i < all.length; i++) {
+      if (all[i] === activeBtn) continue;
+      all[i].disabled = locked || all[i].hasAttribute('data-nokey');
+    }
   }
 
   function alive(s) {
@@ -390,7 +396,7 @@
     s.limitTimer = setTimeout(function () { endSession(s, 'timeout', MSG_END); }, MAX_MS);
     act('listening');
     setStatus(MSG_LISTEN);
-    setStart('Stop talking', false);
+    setStart('■ Stop talking', false);
     try {
       s.ws.send(JSON.stringify({clientContent: {turns: [{role: 'user', parts: [{text: GREET}]}], turnComplete: true}}));
     } catch (e) { /* she will simply wait for the resident to speak */ }
@@ -556,6 +562,8 @@
     setStatus(text || MSG_STOPPED);
     setStart('Start talking', false);
     lockVoices(false);
+    activeBtn = null;
+    if (window.Voices) window.Voices.liveBusy = false;
     showStats(s);
     if (s.model) writeLog(s, why);
   }
@@ -621,24 +629,26 @@
     });
   }
 
-  function startSession() {
-    var picked = document.querySelector('#liveVoices [aria-pressed="true"]');
-    if (!picked) {
-      setStatus('Tap a voice first, then tap Start talking.');
-      return;
-    }
-    var voiceId = picked.getAttribute('data-id');
-    var companion = picked.getAttribute('data-gender') === 'male' ? 'him' : 'mary';
+  function startSession(btn) {
+    var voiceId = btn.getAttribute('data-id');
+    var companion = btn.getAttribute('data-gender') === 'male' ? 'him' : 'mary';
     var s = newSession(voiceId, companion);
     S = s;
+    activeBtn = btn;
 
-    if (window.Voices) window.Voices.stopSound();
+    if (window.Voices) {
+      window.Voices.stopSound();
+      window.Voices.liveBusy = true;
+    }
     var f = face();
     if (f) f.setCompanion(companion);
     act('thinking');
     setStart('Start talking', true);
     lockVoices(true);
     setStatus(MSG_READY);
+    try {
+      statusEl.scrollIntoView({block: 'nearest'});
+    } catch (e0) { /* the page just stays where it is */ }
     captionEl.textContent = '';
     statsEl.textContent = '';
 
@@ -689,12 +699,16 @@
     });
   }
 
-  startBtn.addEventListener('click', function () {
+  // One listener for every card's talk button (they are made by voices.js).
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    var btn = t && t.closest ? t.closest('.livetalk') : null;
+    if (!btn || btn.disabled) return;
     if (S) {
-      if (S.ready) endSession(S, 'user', MSG_STOPPED);
+      if (S.ready && btn === activeBtn) endSession(S, 'user', MSG_STOPPED);
       return;
     }
-    startSession();
+    startSession(btn);
   });
 
   function stopNow() {

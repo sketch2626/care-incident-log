@@ -8,13 +8,14 @@
   var NO_KEY = 'Add your Gemini key in My info first, then try again.';
   var BAD_KEY = "That Gemini key didn't work. Check it in My info.";
   var TABS = {tabGemini: 'secGemini', tabLive: 'secLive', tabOffline: 'secOffline'};
+  var KIND_LABEL = {gemini: 'Gemini voice', live: 'Live talk', kokoro: 'offline voice'};
 
   var face = MaryFace.create(document.getElementById('face'), {companion: 'mary'});
 
   var data = null;          // loaded from /api/mary/voices
   var current = null;       // the sample being fetched or played: its card, button, audio context, reader and counters
   var playToken = 0;        // bumped on every start or stop; late answers with an old token are ignored
-  var selectedLive = null;  // the live voice picked in the Live talk tab
+  var liveList = [];        // the Live talk voices, made into cards like the others (kind 'live')
 
   function byId(id) {
     return document.getElementById(id);
@@ -30,6 +31,11 @@
   function setButton(btn, text, disabled) {
     btn.textContent = text;
     btn.disabled = disabled;
+  }
+
+  // A quiet run (the spoken "saved" line) never touches its card's Play button.
+  function setRunButton(run, text, disabled) {
+    if (run.btn && !run.quiet) setButton(run.btn, text, disabled);
   }
 
   function showError(card, msg) {
@@ -65,7 +71,7 @@
 
   // Tells the server how a sample went, once per sample. It only helps us tune the voices.
   function logPlay(run, ok, error) {
-    if (run.logged) return;
+    if (run.logged || run.quiet) return;
     run.logged = true;
     var entry = {
       event: 'played',
@@ -97,7 +103,7 @@
       current = null;
       teardown(run);
       if (run.started) logPlay(run, false, 'stopped');
-      setButton(run.btn, '▶ Play', false);
+      setRunButton(run, '▶ Play', false);
     }
     face.setActivity('resting');
   }
@@ -126,15 +132,18 @@
     return n.charAt(0).toUpperCase() + n.slice(1);
   }
 
-  function fail(card, btn, msg) {
+  // A quiet run fails without a word: the written "Saved" line is the real confirmation.
+  function fail(card, btn, msg, quiet) {
     if (current) teardown(current);
     current = null;
-    setButton(btn, '▶ Play', false);
     face.setActivity('resting');
+    if (quiet) return;
+    setButton(btn, '▶ Play', false);
     showError(card, msg);
   }
 
   function showStats(run) {
+    if (run.quiet) return;
     var stats = run.card.querySelector('.stats');
     stats.textContent = statsText(run);
     stats.hidden = false;
@@ -144,7 +153,7 @@
   function finishSound(run) {
     teardown(run);
     current = null;
-    setButton(run.btn, '▶ Play again', false);
+    setRunButton(run, '▶ Play again', false);
     face.setActivity('resting');
     face.setMood('happy');
     face.bounce();
@@ -154,7 +163,7 @@
 
   function checkEnd(run, token) {
     if (run.dead || token !== playToken || !run.streamDone || run.sources.length) return;
-    if (run.tapToSound === null) fail(run.card, run.btn, BAD_SOUND);
+    if (run.tapToSound === null) fail(run.card, run.btn, BAD_SOUND, run.quiet);
     else finishSound(run);
   }
 
@@ -213,7 +222,7 @@
         if (token !== playToken) return;
         run.started = true;
         face.setActivity('talking');
-        setButton(run.btn, 'Playing…', true);
+        setRunButton(run, 'Playing…', true);
       }, Math.max(0, wait));
     }
   }
@@ -231,15 +240,22 @@
     });
   }
 
-  function playCandidate(c, card, btn) {
+  // opts.quiet: the short spoken "saved" line. It leaves the card's Play button, stats and log alone,
+  // and any problem is silent. opts.line names which fixed line the server should say.
+  function playCandidate(c, card, btn, opts) {
     var tapAt = performance.now();
     stopSound();
     var token = ++playToken;
     var female = c.gender === 'female';
+    var quiet = !!(opts && opts.quiet);
+    var payload = {id: c.kind === 'live' ? 'gemini:' + c.voice : c.id};
+    if (opts && opts.line) payload.line = opts.line;
 
-    card.querySelector('.errbox').hidden = true;
-    card.querySelector('.stats').hidden = true;
-    setButton(btn, 'Getting ' + (female ? 'her' : 'his') + ' voice ready…', true);
+    if (!quiet) {
+      card.querySelector('.errbox').hidden = true;
+      card.querySelector('.stats').hidden = true;
+      setButton(btn, 'Getting ' + (female ? 'her' : 'his') + ' voice ready…', true);
+    }
     face.setCompanion(female ? 'mary' : 'him');
     face.setActivity('thinking');
 
@@ -252,7 +268,7 @@
       ctx = null;
     }
     if (!ctx) {
-      fail(card, btn, BAD_SOUND);
+      fail(card, btn, BAD_SOUND, quiet);
       return;
     }
     try {
@@ -261,7 +277,7 @@
     } catch (e2) { /* it may start on its own */ }
 
     var run = {
-      c: c, card: card, btn: btn, ctx: ctx, tapAt: tapAt,
+      c: c, card: card, btn: btn, quiet: quiet, ctx: ctx, tapAt: tapAt,
       reader: null, sources: [], soundTimer: 0, leftover: null,
       rate: 24000, channels: 1, playhead: 0,
       scheduled: false, started: false, streamDone: false, streamBroke: false, dead: false, logged: false,
@@ -272,7 +288,7 @@
     fetch('/api/mary/voices/stream', {
       method: 'POST',
       headers: HEADERS,
-      body: JSON.stringify({id: c.id})
+      body: JSON.stringify(payload)
     })
       .then(function (res) {
         if (token !== playToken) {
@@ -281,7 +297,7 @@
         }
         if (!res.ok) {
           return res.json().catch(function () { return {}; }).then(function (j) {
-            if (token === playToken) fail(card, btn, errorText(j));
+            if (token === playToken) fail(card, btn, errorText(j), quiet);
           });
         }
         var rate = Number(res.headers.get('X-Rate'));
@@ -304,7 +320,7 @@
       .catch(function () {
         if (run.dead || token !== playToken) return;
         if (run.tapToSound === null) {
-          fail(card, btn, BAD_SOUND);
+          fail(card, btn, BAD_SOUND, quiet);
           return;
         }
         run.streamBroke = true;
@@ -313,39 +329,86 @@
       });
   }
 
+  // Saves the pick, then asks the server what it really has and only says true if it matches.
   function choose(id, gender) {
     var female = gender === 'female';
-    var body = female ? {voice_mary: id} : {voice_sam: id};
+    var key = female ? 'voice_mary' : 'voice_sam';
+    var body = {};
+    body[key] = id;
     return fetch('/api/settings', {
       method: 'PUT',
       headers: HEADERS,
       body: JSON.stringify(body)
     })
       .then(function (res) {
-        if (!res.ok) return false;
+        if (!res.ok) throw new Error('save ' + res.status);
+        return fetch('/api/settings');
+      })
+      .then(function (res) {
+        if (!res.ok) throw new Error('check ' + res.status);
+        return res.json();
+      })
+      .then(function (saved) {
+        if (!saved || saved[key] !== id) return false;
         data.chosen = data.chosen || {};
         if (female) data.chosen.mary = id;
         else data.chosen.him = id;
         markChosen();
+        showSavedNow();
         return true;
       })
       .catch(function () { return false; });
   }
 
+  function findVoice(id) {
+    var all = ((data && data.candidates) || []).concat(liveList);
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id === id) return all[i];
+    }
+    return null;
+  }
+
+  function voiceWords(c) {
+    return niceName(c.voice) + ' (' + (KIND_LABEL[c.kind] || 'voice') + ')';
+  }
+
+  function savedPart(who, id) {
+    if (!id) return who + ': not chosen yet';
+    var c = findVoice(id);
+    if (c) return who + ': ' + voiceWords(c);
+    return who + ': ' + niceName(String(id).replace(/^[a-z]+:/, ''));
+  }
+
+  // The line under the title that always says what is saved right now.
+  function showSavedNow() {
+    var chosen = (data && data.chosen) || {};
+    byId('savedNow').textContent = 'Saved now — ' + savedPart('Mary', chosen.mary) + ' · ' + savedPart('Sam', chosen.him);
+  }
+
+  // Only the voice cards are marked; the Talk buttons carry data-id too but are never "chosen".
   function markChosen() {
     var chosen = (data && data.chosen) || {};
-    var nodes = document.querySelectorAll('[data-id]');
+    var nodes = document.querySelectorAll('.card[data-id]');
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
       var female = node.getAttribute('data-gender') === 'female';
       var isChosen = node.getAttribute('data-id') === (female ? chosen.mary : chosen.him);
       node.classList.toggle('chosen', isChosen);
-      if (node.classList.contains('card')) {
-        var use = node.querySelector('.use');
-        if (isChosen) use.textContent = female ? "✓ Mary's voice" : "✓ Sam's voice";
-        else use.textContent = female ? 'Use for Mary' : 'Use for Sam';
-      }
+      node.querySelector('.saved').hidden = !isChosen;
+      var use = node.querySelector('.use');
+      if (isChosen) use.textContent = female ? "✓ Mary's voice" : "✓ Sam's voice";
+      else use.textContent = female ? 'Use for Mary' : 'Use for Sam';
     }
+  }
+
+  // After a confirmed save: the voice itself says "Got it. That's my voice now."
+  function sayItsSaved(c, card) {
+    if (window.Voices && window.Voices.liveBusy) return;   // a live chat is on; don't talk over it
+    if (c.kind !== 'kokoro' && !data.hasKey) return;
+    if (c.kind === 'kokoro' && !c.ready) return;
+    try {
+      playCandidate(c, card, null, {quiet: true, line: 'saved'});
+    } catch (e) { /* the written line is the confirmation */ }
   }
 
   function makeCard(c, hasKey) {
@@ -356,17 +419,34 @@
     card.appendChild(el('h3', 'vname', niceName(c.voice)));
     card.appendChild(el('p', 'about', c.about));
 
-    var play = el('button', 'btn dark play');
-    play.type = 'button';
-    if (c.kind === 'gemini' && !hasKey) {
-      setButton(play, 'Needs the Gemini key (My info)', true);
-    } else if (!c.ready) {
-      setButton(play, 'Not set up yet', true);
+    if (c.kind === 'live') {
+      // Live.js owns this button: it starts and stops the talk. No click listener here.
+      var talkLabel = '▶ Talk with ' + (female ? 'Mary' : 'Sam');
+      var talk = el('button', 'btn dark play livetalk');
+      talk.type = 'button';
+      talk.setAttribute('data-id', c.id);
+      talk.setAttribute('data-gender', c.gender);
+      talk.setAttribute('data-label', talkLabel);
+      if (!hasKey) {
+        talk.setAttribute('data-nokey', '1');
+        setButton(talk, 'Needs the Gemini key (My info)', true);
+      } else {
+        setButton(talk, talkLabel, false);
+      }
+      card.appendChild(talk);
     } else {
-      setButton(play, '▶ Play', false);
+      var play = el('button', 'btn dark play');
+      play.type = 'button';
+      if (c.kind === 'gemini' && !hasKey) {
+        setButton(play, 'Needs the Gemini key (My info)', true);
+      } else if (!c.ready) {
+        setButton(play, 'Not set up yet', true);
+      } else {
+        setButton(play, '▶ Play', false);
+      }
+      play.addEventListener('click', function () { playCandidate(c, card, play); });
+      card.appendChild(play);
     }
-    play.addEventListener('click', function () { playCandidate(c, card, play); });
-    card.appendChild(play);
 
     var stats = el('p', 'stats');
     stats.hidden = true;
@@ -380,42 +460,39 @@
     var use = el('button', 'btn light use', female ? 'Use for Mary' : 'Use for Sam');
     use.type = 'button';
     use.addEventListener('click', function () {
+      if (use.disabled) return;
+      card.querySelector('.errbox').hidden = true;
+      setButton(use, 'Saving…', true);
       choose(c.id, c.gender).then(function (ok) {
-        if (!ok) showError(card, BAD_SAVE);
+        use.disabled = false;
+        markChosen();   // puts the button's words right again, saved or not
+        if (!ok) {
+          showError(card, BAD_SAVE);
+          return;
+        }
+        sayItsSaved(c, card);
       });
     });
     card.appendChild(use);
 
+    // Big, plain proof that the choice is kept. Only the saved card shows it.
+    var saved = el('p', 'saved', '✓ Saved — ' + (female ? 'Mary' : 'Sam') + ' will use ' + voiceWords(c));
+    saved.setAttribute('role', 'status');
+    saved.hidden = true;
+    card.appendChild(saved);
+
     return card;
   }
 
+  // Live talk voices get cards like the others: Mary's on the left, Sam's on the right.
   function renderLive() {
-    var box = byId('liveVoices');
-    var voices = data.live.voices;
-    var first = null;
-    box.textContent = '';
-
-    voices.forEach(function (v) {
-      if (!first && v.gender === 'female') first = v;
+    var boxes = {female: byId('liveMary'), male: byId('liveSam')};
+    liveList = [];
+    data.live.voices.forEach(function (v) {
+      var c = {id: v.id, kind: 'live', voice: v.voice, gender: v.gender, about: v.about, ready: true};
+      liveList.push(c);
+      boxes[c.gender === 'female' ? 'female' : 'male'].appendChild(makeCard(c, data.hasKey));
     });
-
-    voices.forEach(function (v) {
-      var b = el('button', 'btn light livevoice', (v.gender === 'female' ? 'Mary' : 'Sam') + ' · ' + v.voice);
-      b.type = 'button';
-      b.setAttribute('data-id', v.id);
-      b.setAttribute('data-gender', v.gender);
-      b.setAttribute('aria-pressed', v === first ? 'true' : 'false');
-      b.addEventListener('click', function () {
-        selectedLive = v;
-        var all = document.querySelectorAll('.livevoice');
-        for (var i = 0; i < all.length; i++) {
-          all[i].setAttribute('aria-pressed', all[i] === b ? 'true' : 'false');
-        }
-      });
-      box.appendChild(b);
-    });
-
-    selectedLive = first;
   }
 
   function render() {
@@ -430,6 +507,7 @@
     });
     renderLive();
     markChosen();
+    showSavedNow();
   }
 
   function showTab(tabId) {
@@ -441,7 +519,8 @@
     });
   }
 
-  window.Voices = {face: face, stopSound: stopSound, choose: choose, data: data};
+  // liveBusy: live.js sets it while a live talk is on, so the spoken "saved" line never talks over it.
+  window.Voices = {face: face, stopSound: stopSound, choose: choose, data: data, liveBusy: false};
 
   byId('backBtn').addEventListener('click', function () {
     location.href = '/mary.html';
@@ -449,14 +528,6 @@
 
   Object.keys(TABS).forEach(function (tabId) {
     byId(tabId).addEventListener('click', function () { showTab(tabId); });
-  });
-
-  byId('liveUse').addEventListener('click', function () {
-    if (!selectedLive) return;
-    var status = byId('liveStatus');
-    choose(selectedLive.id, selectedLive.gender).then(function (ok) {
-      status.textContent = ok ? 'Saved.' : BAD_SAVE;
-    });
   });
 
   fetch('/api/mary/voices')

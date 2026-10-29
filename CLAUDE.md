@@ -111,4 +111,7 @@ Andy has a second Claude account (gifted). The terminal version of Claude Code (
 - **Start it:** the hub runs it in a Terminal panel tab so Andy can watch: `& 'C:\Users\Andyb\.local\bin\claude.exe' --permission-mode acceptEdits --allowedTools "Bash(git:*)" "Bash(python:*)" "Bash(py:*)" "Bash(node:*)" "Read docs/handoff/<item>.md and follow it."` with cwd `.worktrees/<item>`. To continue after Andy answers, use `claude -c "<Andy's answer>"` in the same folder.
 - **Watch it:** a background Bash loop waits for a "WAITING:" or "DONE:" commit on `other/<item>` and exits, which wakes the hub. Never poll in the foreground.
 - **Put it back together:** the hub reads the report, runs `python run_tests.py -q` in the worktree, merges into `main` only when it passes and Andy has approved any design, then runs `git worktree remove`.
+- **Models on the second account (Andy, 2026-10-29):**
+  - Its worker may run the `coder` agent with `model: "opus"` and `effort: "xhigh"` for tricky code written from scratch. Sonnet does ordinary logic and Haiku small edits, and the worker decides which.
+  - **Haiku limits apply on both accounts:** exact line ranges, at most about 150 lines per read, at most about 8 reads, one or two files, and a brief under about 2k characters. Anything bigger goes to Sonnet.
 - **Never at the same time:** a worker here and the other account never change the same files at once. Its memory folder is separate, so its brief must carry the essentials.

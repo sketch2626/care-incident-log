@@ -142,6 +142,18 @@ Andy (2026-10-29): make it so new things "can just be plugged right in" with a m
   2. Port one existing feature as the first skill, for example voice settings or incident saving.
   3. Then build pictures (M12) and the games (M7) as skills from day one.
 - **Done when:** a new skill folder can be added without touching core code, passes the contract tests, and Mary uses it by voice in every mode.
+- **Progress (second account, branch `other/M13`, 2026-10-29):**
+  - Design approved by Andy, with change A (internet only through the core, `ctx.fetch` and the allowed hosts) and change B (voice switching both ways, plus helper locks). Commits 4dd52bf and 0d1e7bc, in `docs/skills-design.md`.
+  - Core: `skills_core.py`, which covers the loader, manifest and safety checks, the guard and trip rule, the private store, `ctx.fetch`, on/off/locks, Gemini tools and the contract tests (72c3772, by the Opus coder at xhigh).
+  - Normal and Offline talk: the tool loop, with Gemini 3 signatures echoed back, effects streamed, offline phrases, the skill routes and the settings guard (ebd04e2, by the Opus coder at xhigh).
+  - First skill `voice_comfort`: slower, faster, quieter, louder and Mary/Sam by voice, offline too. Also the page skills layer and Live tool-call handling (ca99c76, by the Sonnet coder).
+  - My info "Things Mary can do", with the resident's on/off and the helper locks. Also the Live setup and a mocked Live round trip (a229fcf, by the Sonnet coder).
+  - `docs/how-to-make-a-skill.md` (by the Haiku coder).
+  - **Not yet:**
+    - Hearing and seeing it in a real window.
+    - The one-line `live_token()` hook in `voices.py`, from `server.mary_live_skill_setup()`, which lands with Mary's own Live session (M4).
+    - A real installer build. `packaging/build.py` now bundles `skills/`, but it hasn't been built. Stdlib modules that only a skill imports (for example `random`) may need PyInstaller `--hidden-import`.
+    - Moving incident saving over as the second port.
 
 ### M12. Mary does things: she runs the app and shows pictures (after M4; alongside M9b)
 Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up all the games, do all the stuff… pictures from the web… show me a picture of this bird."

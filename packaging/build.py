@@ -47,6 +47,7 @@ def main():
         "--windowed", "--name", NAME, "--icon", ICON,
         "--add-data", f"{ROOT / 'web'}{os.pathsep}web",
         "--add-data", f"{ROOT / 'mary' / 'instructions.md'}{os.pathsep}mary",  # Mary's instructions (mary.py reads ROOT/mary/)
+        "--add-data", f"{ROOT / 'skills'}{os.pathsep}skills",  # Mary's skills (M13; server.py reads ROOT/skills/)
         "--add-data", f"{ROOT / MODEL}{os.pathsep}{MODEL}", *SPEECH_ARGS,
         "--distpath", APP_DIST, "--workpath", WORK, "--specpath", WORK,
         ROOT / "desktop.py")

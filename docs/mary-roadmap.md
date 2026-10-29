@@ -103,6 +103,10 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
 - **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
 - **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
 
+### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
+- **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.
+- **M11. Reporting portal overhaul,** the incident log screens (`web/`): a complete visual redo, with boards first. Also decide **how much of it each resident sees**: whether they get the full-screen portal at all, which parts make sense for them, and what stays behind Mary. Decide this with Andy when we get there.
+
 ## Order and dependencies
 - M1 runs now, on its own.
 - M2 decides how M4 and M5 are built, and M3 needs M2's word-timing answer.

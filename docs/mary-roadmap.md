@@ -99,6 +99,7 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 
 ### M7. Games with Mary, on screen (worker per game; plan in `docs/companion-plan.md`)
 - Word search first, then tic-tac-toe, then solitaire. She suggests a game, scoots aside, and helps by voice.
+- Add a **crossword** (Andy, 2026-10-29). She plays along live: "this hint is too hard, give me an easier one", and she rewrites the clue on screen on the spot. She can also give a letter, explain a word, or check an answer. Every game follows the rule under M12.
 - Mock-up boards first, then the build.
 
 ### M8. Fit and speed
@@ -131,6 +132,10 @@ Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up
 - **Pictures:** the server fetches real photos from **Wikipedia/Wikimedia** (free, no key). It prefers the main image of the matching Wikipedia article, which is safer than open image search. Pictures show full screen with a caption, and she talks about them. Check the licenses and show the photo credit.
 - **Web facts:** use Gemini's built-in Google Search grounding (supported in Live) for questions like "what's the weather" or "who won the game".
 - **Offline mode:** tools still work locally; pictures and search say "I need the internet for that".
+- **The rule for every screen and game (Andy, 2026-10-29: she should be able to do "pretty much anything… live on the spot"):**
+  - Each screen tells Mary what's on it right now: the puzzle, the clue, the resident's square, the score. It sends updates into her live session as things change.
+  - It offers general actions she can improvise with, for example `set_hint`, `reveal_letter`, `check_answer` and `new_puzzle`, not just one fixed action per button.
+  - She can only see what a screen tells her, and only do the actions it offers. So every new screen ships with both.
 - **Done when:** in each mode, "show me a cardinal" puts up a real cardinal photo, and "let's play word search" opens the game once M7 exists.
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)

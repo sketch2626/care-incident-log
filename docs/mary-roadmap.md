@@ -36,7 +36,7 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Cost per minute** (Google pricing page, 2026-10-28; audio = 25 tokens per second):
     - TTS, pipeline: about $0.0135 per minute of her speech through Dec 31, 2026 ($9 per 1M audio tokens), then $0.027 from Jan 1, 2027. `gemini-3.8-flash-lite-tts` costs $0.009, then $0.018. Add the small text reply cost (`gemini-3.5-flash-lite`).
     - Live: $0.005 per minute of microphone audio (billed the whole time the mic is open) plus $0.018 per minute of her speech. That's about $0.014 per minute of conversation if she talks half the time.
-  - **Free tier:** every one of these models is free of charge on the free tier. Google's rate-limit page lists no numbers; they show only in AI Studio for the key. **Privacy:** on the free tier, content "Used to improve our products" is Yes (No on paid). That matters for residents' talks and has to go into the backend and consent plans before a pilot.
+  - **Free tier:** every one of these models is free of charge on the free tier. Google's rate-limit page lists no numbers; they show only in AI Studio for the key. **Privacy:** already decided. Free tier for Andy's own testing now, paid tier before any other resident. See "Gemini free tier and privacy" in `docs/companion-plan.md`.
   - Installer cost when bundled (Next step 5): about 22 MB of packages (`packaging/requirements.txt`) plus 115 MB of Kokoro model. `build.py` doesn't bundle or download it yet.
   - Also measure Gemini text-reply speed with his key (M8, `tools/mary_speed.py`) when he picks the pipeline.
 - **Andy's choice:** 

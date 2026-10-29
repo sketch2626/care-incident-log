@@ -31,9 +31,17 @@ A friendly animated companion fills most of the screen. Residents simply talk to
 ## How she works (first version)
 - **Listening:** speech-to-text on the laptop, using the existing `speech.py`. The resident's voice never leaves the laptop.
 - **Waking her:** "Hey Mary", detected on the laptop (for example with openWakeWord), so residents who can't use their hands can start talking. The room isn't recorded all the time.
-- **Thinking:** Gemini, paid API only. Google can use free-tier conversations to improve its products, so the free tier is out. Only words go to the cloud.
+- **Thinking:** Gemini. Only words go to the cloud. See "Gemini free tier and privacy" below for which tier is used when.
   - Check: Gemini through Google Cloud (Vertex AI) under a BAA, for medical-grade handling.
   - Residents are told plainly that their conversations go to Google.
+
+### Gemini free tier and privacy (decided by Andy; written down 2026-10-29)
+- **The issue:** on Gemini's free tier, Google's pricing page lists content as "Used to improve our products". Google may read and use what's sent. On the paid tier it doesn't. Residents' talks can include health details, names and complaints about staff, so they must never go through the free tier.
+- **Now, while Andy is the only tester:** use the free tier. Andy made a fresh free-tier key just for this project, and only his own test talks go through it. He knows Google may use them, and he accepts that.
+- **Later in testing:** Andy expects to add money to that same key. That moves it to the paid tier (no product-improvement use) and unlocks better models, for example a newer Flash, for speed and quality.
+- **Before any other resident uses Mary** (the pilot and beyond), it's paid tier only, or Vertex AI under a BAA if that gets checked and set up. Each resident's own key, or a funded key, must be on a paid plan before setup. Helpers check this during setup.
+- **Plain words for residents and consent:** "What you say to Mary is sent to Google's Gemini to work out her answer. We use Google's paid service, where Google doesn't use your words to train or improve its products." This goes into the consent screen and the privacy policy (`docs/backend-plan.md`, `docs/pilot-checklist.md`).
+- **In the app:** the audition (M2) and the early tests run on Andy's free key, and nothing here changes the code. Before the pilot, add a setup check that tells the helper whether a key is on the free tier (roadmap M8 or the pilot checklist).
 - **Speaking:** the friendliest, least robotic voice the budget allows.
   - Start with a free voice that runs on the laptop, for example Kokoro: open, natural-sounding and private.
   - Test it by ear against paid cloud voices from Google or ElevenLabs.

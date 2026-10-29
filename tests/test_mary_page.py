@@ -82,6 +82,12 @@ class MaryPageTests(unittest.TestCase):
         for path in ("/mary/voices.html", "/mary/voices.js", "/mary/live.js", "/mary/voices.css"):
             text, _ = self.get(path)
             self.assertNotRegex(text, r"key(down|up|press)", path)
+        live, _ = self.get("/mary/live.js")
+        for needle in ("echoCancellation", "interrupted", "/api/mary/live/token", "/api/mary/voices/log",
+                       "audioStreamEnd"):
+            self.assertIn(needle, live)
+        self.assertNotIn("gemini_key", live)
+        self.assertNotIn("keydown", live)
 
 
 if __name__ == "__main__":

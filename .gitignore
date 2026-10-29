@@ -15,3 +15,6 @@ __pycache__/
 
 # Private plans (protection, partners): never commit
 private/
+
+# Second-account work folders (git worktrees)
+.worktrees/

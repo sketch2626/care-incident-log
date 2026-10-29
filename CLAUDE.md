@@ -100,3 +100,15 @@ Run the `token-saving` skill at the start of every task (`~/.claude/skills/token
 - **Tests:** `python run_tests.py -q` prints one summary line plus any failures and BUG skips, and exits 1 on failure. Commit only when it passes. `tests/helpers.py` points `APPDATA`/`TRACKER_DATA` at a temp folder before importing `server`, and stops if a path would leave it. Every test file imports `from tests import helpers` first. It runs one in-process server on a free port (`helpers.api(...)`, `reset_db()`, `make_andyflow_db(...)`, `incident(...)`).
 - **Quality first.** Never leave out features, polish or expressiveness to save tokens. The hub/worker/helper method is how tokens are saved. Andy has a second account to continue on, so keep handoff state in this file and in committed files.
 - When the hub gets long, update Status/Next steps here, and Andy starts a fresh hub with "Continue with the next work."
+
+### Second account: parallel pieces in their own folder (Andy, 2026-10-29)
+Andy has a second Claude account (gifted). The terminal version of Claude Code (`C:\Users\Andyb\.local\bin\claude.exe`, on PATH) is logged into it. The desktop app stays on Andy's own account. Andy: anything that "can be done and set aside in a folder for you to then put back together… I trust you."
+- **Pick pieces that stand alone:** mostly new files, little overlap with what workers here are changing, and no Design canvas (boards stay on Andy's account, where he sees them).
+- **Its own folder and branch:** `git worktree add .worktrees/<item> -b other/<item>` from `main` (`.worktrees/` is gitignored). Then copy `.claude/agents/` into it, because `.claude/` isn't in git and the helpers live there.
+- **The brief:** `docs/handoff/<item>.md`, committed to `main` before the worktree is made. It has the same shape as a worker brief (token-saving skill), plus:
+  - Commit only on `other/<item>`, and never push, merge or touch `main`.
+  - Put the report in the last commit message. Subject "WAITING: …" when Andy must decide something, "DONE: …" when finished.
+- **Start it:** the hub runs it in a Terminal panel tab so Andy can watch: `& 'C:\Users\Andyb\.local\bin\claude.exe' --permission-mode acceptEdits --allowedTools "Bash(git:*)" "Bash(python:*)" "Bash(py:*)" "Bash(node:*)" "Read docs/handoff/<item>.md and follow it."` with cwd `.worktrees/<item>`. To continue after Andy answers, use `claude -c "<Andy's answer>"` in the same folder.
+- **Watch it:** a background Bash loop waits for a "WAITING:" or "DONE:" commit on `other/<item>` and exits, which wakes the hub. Never poll in the foreground.
+- **Put it back together:** the hub reads the report, runs `python run_tests.py -q` in the worktree, merges into `main` only when it passes and Andy has approved any design, then runs `git worktree remove`.
+- **Never at the same time:** a worker here and the other account never change the same files at once. Its memory folder is separate, so its brief must carry the essentials.

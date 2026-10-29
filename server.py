@@ -625,10 +625,52 @@ class Handler(SimpleHTTPRequestHandler):
             if "rtf" in got:
                 headers["X-Rtf"] = str(got["rtf"])
             return self._send(got["wav"], 200, "audio/wav", headers)
+        if method == "POST" and path == "/api/mary/voices/stream":
+            voice_id = str(self._body().get("id") or "")
+            offline = voice_id.strip().startswith("kokoro:")
+            key = mary_settings()["key"]
+            if not key and not offline:  # the offline voice needs no Gemini key
+                return self._send(*voice_failure("no_key"))
+            return self._voice_stream(voice_id, key, offline)
         if method == "POST" and path == "/api/mary/voices/log":
-            voices.log({**self._body(), "event": "live"}, DATA)  # the page's Live numbers; only whitelisted keys are kept
+            body = self._body()  # the page's numbers; only whitelisted keys are kept
+            voices.log({**body, "event": "played" if body.get("event") == "played" else "live"}, DATA)
             return self._send({"ok": True})
         return None
+
+    def _voice_stream(self, voice_id, key, offline):
+        """One voice sample as raw 16-bit PCM, sent as it is made so the page can play it at once. Nothing is
+        sent until the first audio is ready, so a failure is still a plain JSON answer. No Content-Length: the
+        connection closing ends it (HTTP/1.0)."""
+        gen = voices.kokoro_stream(voice_id, DATA) if offline else voices.tts_stream(voice_id, key, DATA)
+        try:
+            first = next(gen)
+        except voices.VoiceError as e:
+            return self._send(*voice_failure(e.kind))
+        except StopIteration:
+            return self._send(*voice_failure("no_offline" if offline else "no_gemini"))
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/L16")
+        self.send_header("X-Rate", str(first["rate"]))
+        self.send_header("X-Channels", str(first["channels"]))
+        self.send_header("X-Cached", "1" if first.get("cached") else "0")
+        self.send_header("X-Voice-Path", str(first.get("path", "")))
+        if "load_ms" in first:
+            self.send_header("X-Load-Ms", str(first["load_ms"]))
+        self.end_headers()
+        try:
+            self.wfile.write(first["pcm"])
+            self.wfile.flush()
+            for chunk in gen:
+                self.wfile.write(chunk["pcm"])
+                self.wfile.flush()
+        except (OSError, ValueError):
+            pass  # the page went away
+        except voices.VoiceError:
+            pass  # failed part-way: it is logged, and the page keeps the short audio it has
+        finally:
+            gen.close()  # a stopped sample is logged and never saved
+        return True
 
     def _mary_stream(self, text):
         """Mary's answer as it happens: one JSON line per event (mood, text pieces, then done).

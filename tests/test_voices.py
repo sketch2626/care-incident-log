@@ -42,6 +42,22 @@ class Resp:
         return False
 
 
+PCM2 = b"\x02\x00" * 2400
+
+
+class SlowResp(Resp):
+    """A Resp that counts the lines read so far, to show a chunk leaves before the rest of the answer arrives."""
+
+    def __init__(self, body):
+        super().__init__(body)
+        self.read_lines = 0
+
+    def __iter__(self):
+        for line in self.body.splitlines(keepends=True):
+            self.read_lines += 1
+            yield line
+
+
 def http_error(code, body=b"{}"):
     return urllib.error.HTTPError("https://example.test/x", code, "msg", {}, io.BytesIO(body))
 
@@ -221,6 +237,43 @@ class SampleTests(VoicesCase):
         self.assertEqual(lines[1]["error"], "no_gemini")
         self.assertNotIn(KEY, self.log_text())
 
+    def test_stream_hands_over_the_first_chunk_before_the_second_line_is_read(self):
+        resp = SlowResp(sse(audio_event(PCM), audio_event(PCM2)))  # 3 lines per event
+        self.use(resp)
+        gen = voices.tts_stream("gemini:Sulafat", KEY, server.DATA)
+        self.assertEqual(next(gen), {"pcm": PCM, "rate": 24000, "channels": 1, "cached": False, "path": "interactions"})
+        self.assertEqual(resp.read_lines, 2)  # the first event line and its data line, nothing more
+        self.assertEqual(next(gen), {"pcm": PCM2, "rate": 24000, "channels": 1})
+        self.assertEqual(list(gen), [])
+        self.assertEqual(resp.read_lines, 6)
+        files = list((server.DATA / "mary" / "voices").glob("gemini_Sulafat-*.wav"))
+        self.assertEqual(len(files), 1)  # saved once the last chunk was out
+        self.assertEqual(wav_info(files[0].read_bytes())[3], 4800)
+        (line,) = [json.loads(x) for x in self.log_text().splitlines()]
+        self.assertEqual((line["ok"], line["path"], line["audio_s"]), (True, "interactions", 0.2))
+
+    def test_stream_keeps_whole_samples_when_a_chunk_ends_mid_sample(self):
+        self.use(Resp(sse(audio_event(PCM + b"\x05"), audio_event(b"\x00" + PCM2))))
+        chunks = list(voices.tts_stream("gemini:Sulafat", KEY, server.DATA))
+        self.assertEqual(chunks[0]["pcm"], PCM)
+        self.assertEqual(chunks[1]["pcm"], b"\x05\x00" + PCM2)
+
+    def test_stopping_early_logs_stopped_once_saves_nothing_and_writes_no_success_line(self):
+        self.use(Resp(sse(audio_event(PCM), audio_event(PCM2))))
+        gen = voices.tts_stream("gemini:Sulafat", KEY, server.DATA)
+        next(gen)
+        gen.close()
+        gen.close()
+        self.assertFalse((server.DATA / "mary" / "voices").exists())
+        (line,) = [json.loads(x) for x in self.log_text().splitlines()]
+        self.assertEqual((line["ok"], line["error"], line["id"]), (False, "stopped", "gemini:Sulafat"))
+
+    def test_stream_falls_back_to_generate_content_only_when_nothing_came_out(self):
+        net = self.use(Resp(b'{"outputs": []}'), Resp(gen_content()))
+        chunks = list(voices.tts_stream("gemini:Sulafat", KEY, server.DATA))
+        self.assertEqual(chunks, [{"pcm": PCM, "rate": 24000, "channels": 1, "cached": False, "path": "generateContent"}])
+        self.assertEqual(len(net.requests), 2)
+
 
 class TokenTests(VoicesCase):
     def remember(self, name="Ruth", fact="likes tea"):
@@ -346,6 +399,37 @@ class RouteTests(VoicesCase):
         self.assertGreaterEqual(int(headers["X-Total-Ms"]), int(headers["X-First-Sound-Ms"]))
         status, wav2, headers2 = helpers.api("POST", "/api/mary/voices/sample", {"id": "gemini:Sulafat"})
         self.assertEqual((status, headers2["X-Cached"], wav2), (200, "1", wav))
+
+    def test_stream_route_sends_raw_pcm_then_the_saved_copy(self):
+        self.save_key()
+        self.use(Resp(sse(audio_event(PCM), audio_event(PCM2))))
+        status, body, headers = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Sulafat"})
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "audio/L16")
+        self.assertEqual((headers["X-Rate"], headers["X-Channels"], headers["X-Cached"], headers["X-Voice-Path"]),
+                         ("24000", "1", "0", "interactions"))
+        self.assertNotIn("Content-Length", headers)
+        self.assertNotIn("X-Load-Ms", headers)
+        self.assertEqual(body, PCM + PCM2)
+        net = self.use()  # an empty queue: any network call fails the test
+        status, again, headers = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Sulafat"})
+        self.assertEqual((status, again, headers["X-Cached"]), (200, PCM + PCM2, "1"))
+        self.assertEqual(net.requests, [])
+        self.assertNotIn(KEY, str(headers) + self.log_text())
+
+    def test_stream_route_failures_are_plain_json_before_any_audio(self):
+        status, got, _ = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Sulafat"})
+        self.assertEqual((status, got["no_key"]), (400, True))
+        self.save_key()
+        self.use(http_error(401), http_error(500))
+        status, got, _ = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Sulafat"})
+        self.assertEqual((status, got["bad_key"], got["error"]),
+                         (400, True, "Google didn't accept the Gemini key. Please check it in My info."))
+        status, got, _ = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Achird"})
+        self.assertEqual((status, got["bad_key"]), (502, False))
+        status, got, _ = helpers.api("POST", "/api/mary/voices/stream", {"id": "gemini:Nope"})
+        self.assertEqual((status, got["error"]), (400, "I don't know that voice."))
+        self.assertNotIn(KEY, self.log_text())
 
     def test_the_key_never_leaves_in_a_body_header_or_log(self):
         self.save_key()
@@ -518,6 +602,39 @@ class KokoroTests(VoicesCase):
             self.assertIn(key, line)
         self.assertEqual(line["audio_s"], 0.6)
 
+    def test_stream_gives_one_chunk_per_sentence_with_the_pause_before_all_but_the_first(self):
+        gen = voices.kokoro_stream("kokoro:af_heart", server.DATA)
+        first = next(gen)
+        self.assertEqual((first["rate"], first["channels"], first["cached"], first["path"]), (24000, 1, False, "kokoro"))
+        self.assertGreaterEqual(first["load_ms"], 10)
+        self.assertEqual(len(first["pcm"]), 4800)
+        self.assertEqual(len(self.fake.calls), 1)  # the next sentence is not made until it is asked for
+        rest = list(gen)
+        gap = 2 * int(24000 * voices.KOKORO_PAUSE_S)
+        self.assertEqual([len(c["pcm"]) for c in rest], [gap + 4800] * 2)
+        self.assertTrue(all(c["pcm"][:gap] == b"\x00" * gap for c in rest))
+        self.assertTrue(all(set(c) == {"pcm", "rate", "channels"} for c in rest))
+        (line,) = self.lines()
+        self.assertEqual((line["ok"], line["path"], line["audio_s"]), (True, "kokoro", 0.6))
+
+    def test_stopping_early_logs_stopped_and_no_success_line(self):
+        gen = voices.kokoro_stream("kokoro:am_michael", server.DATA)
+        next(gen)
+        gen.close()
+        (line,) = self.lines()
+        self.assertEqual((line["ok"], line["error"], line["id"]), (False, "stopped", "kokoro:am_michael"))
+        self.assertEqual(len(self.fake.calls), 1)
+
+    def test_stream_route_needs_no_key_and_says_how_long_the_load_took(self):
+        status, body, headers = helpers.api("POST", "/api/mary/voices/stream", {"id": "kokoro:af_heart"})
+        self.assertEqual((status, headers["Content-Type"], headers["X-Rate"], headers["X-Voice-Path"], headers["X-Cached"]),
+                         (200, "audio/L16", "24000", "kokoro", "0"))
+        self.assertGreaterEqual(int(headers["X-Load-Ms"]), 10)
+        self.assertEqual(len(body), 3 * 4800 + 2 * 2 * int(24000 * voices.KOKORO_PAUSE_S))
+        with mock.patch.object(voices, "kokoro_ready", lambda: False):
+            status, got, _ = helpers.api("POST", "/api/mary/voices/stream", {"id": "kokoro:af_heart"})
+        self.assertEqual((status, got["bad_key"]), (503, False))
+
     def test_not_installed_is_a_plain_503_and_is_logged(self):
         with mock.patch.object(voices, "kokoro_ready", lambda: False):
             status, got, _ = helpers.api("POST", "/api/mary/voices/sample", {"id": "kokoro:af_heart"})
@@ -621,6 +738,17 @@ class LogTests(VoicesCase):
         self.assertEqual(line, {"id": "live:Achird", "voice": "Achird", "reply_gap_ms": 812,
                                 "first_audio_ms": 640.5, "turns": 4, "interruptions": 1, "seconds": 93,
                                 "close_code": 1000, "note": "x" * 120, "ok": True})
+        self.assertNotIn(KEY, self.log_text())
+
+    def test_a_played_event_keeps_its_timing_numbers_and_drops_the_rest(self):
+        status, got, _ = helpers.api("POST", "/api/mary/voices/log", {
+            "event": "played", "id": "gemini:Sulafat", "tap_to_sound_ms": 412, "cached": True, "gaps": 1,
+            "gap_ms": "230", "greet_ms": 900, "mic_ms": 150, "evil": "drop me", "gemini_key": KEY})
+        self.assertEqual((status, got), (200, {"ok": True}))
+        line = json.loads(self.log_text().splitlines()[-1])
+        line.pop("ts")
+        self.assertEqual(line, {"event": "played", "id": "gemini:Sulafat", "cached": True, "tap_to_sound_ms": 412,
+                                "gaps": 1, "gap_ms": 230, "greet_ms": 900, "mic_ms": 150})
         self.assertNotIn(KEY, self.log_text())
 
     def test_log_is_one_json_line_per_event_and_stays_small(self):

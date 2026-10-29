@@ -154,8 +154,9 @@ def _data(data):
 # ---------------------------------------------------------------- log
 
 _LOG_NUMBERS = ("first_sound_ms", "total_ms", "audio_s", "reply_gap_ms", "first_audio_ms",
-                "turns", "interruptions", "seconds", "close_code", "rtf", "load_ms")
-_LOG_BOOLS = ("word_timings", "ok")
+                "turns", "interruptions", "seconds", "close_code", "rtf", "load_ms",
+                "tap_to_sound_ms", "gaps", "gap_ms", "greet_ms", "mic_ms")
+_LOG_BOOLS = ("word_timings", "ok", "cached")
 _LOG_STRINGS = ("event", "id", "voice", "model", "path", "error")
 
 
@@ -244,10 +245,11 @@ def _wav(pcm, rate, channels=1):
     return buf.getvalue()
 
 
-def _from_interactions(resp, started):
-    """Read the streamed answer. SSE ("data: {...}" lines) or a plain JSON body (dict or list) both work.
-    Returns (chunks, first_sound_ms, timing_seen)."""
-    audio, flags, plain, first = [], {"timing": False}, [], None
+def _iter_interactions(resp, started, flags):
+    """Read the streamed answer and hand over each audio chunk the moment its line arrives. SSE ("data: {...}"
+    lines) or a plain JSON body (dict or list) both work; a plain body can only be handed over at the end.
+    Sets flags["timing"] when a timing-looking key is seen."""
+    sent, plain = False, []
     for raw in resp:
         if time.perf_counter() - started > DEADLINE:
             raise VoiceError("no_gemini")
@@ -261,13 +263,14 @@ def _from_interactions(resp, started):
                     node = json.loads(payload)
                 except ValueError:
                     continue
-                before = len(audio)
-                _walk(node, audio, flags)
-                if first is None and len(audio) > before:
-                    first = int((time.perf_counter() - started) * 1000)
+                found = []
+                _walk(node, found, flags)
+                for audio in found:
+                    sent = True
+                    yield audio
         else:
             plain.append(line)
-    if not audio and plain:
+    if not sent and plain:
         nodes = []
         try:
             nodes = [json.loads("\n".join(plain))]
@@ -277,14 +280,14 @@ def _from_interactions(resp, started):
                     nodes.append(json.loads(p))
                 except ValueError:
                     pass
+        found = []
         for node in nodes:
-            _walk(node, audio, flags)
-        if audio:
-            first = int((time.perf_counter() - started) * 1000)
-    return audio, first, flags["timing"]
+            _walk(node, found, flags)
+        yield from found
 
 
-def _interactions(voice, api_key, started):
+def _interactions(voice, api_key, started, flags):
+    """Ask for the sample and yield its audio chunks as they arrive (nothing is yielded when Google sends none)."""
     body = {"model": TTS_MODEL,
             "input": [{"type": "user_input", "content": [
                 {"type": "text", "text": LINE,
@@ -293,16 +296,7 @@ def _interactions(voice, api_key, started):
             "generation_config": {"speech_config": [{"voice": voice}]},
             "stream": True}
     with _post(f"{API}/interactions", body, api_key) as resp:
-        audio, first, timing = _from_interactions(resp, started)
-    if not audio:
-        return None
-    pcm, rate, channels = b"", 0, 1
-    for node in audio:
-        chunk, r, c = _decode(node)
-        pcm += chunk
-        if not rate:
-            rate, channels = r, c  # the first chunk sets the format
-    return pcm, rate or SAMPLE_RATE, channels, first, timing
+        yield from _iter_interactions(resp, started, flags)
 
 
 def _generate_content(voice, api_key, started):
@@ -335,53 +329,86 @@ def _cache_files(voice_id, voice, data):
     return wav, wav.with_suffix(".json")
 
 
-def tts_sample(voice, api_key, data=None):
-    """One spoken sample of LINE. Returns {wav, first_sound_ms, total_ms, audio_s, path, word_timings, cached}.
-    A saved copy is used when there is one (no network). Raises VoiceError. Every call is logged."""
+def _saved_copy(wav_file, meta_file):
+    """The saved sample as {wav, pcm, rate, channels, first_sound_ms, total_ms, audio_s, path, word_timings,
+    cached}, or None when there is no usable copy."""
+    try:
+        wav = wav_file.read_bytes()
+        try:
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = {}
+        with wave.open(io.BytesIO(wav), "rb") as w:
+            rate, channels, frames = w.getframerate(), w.getnchannels(), w.getnframes()
+            pcm = w.readframes(frames)
+            audio_s = round(frames / rate, 2)
+        return {"wav": wav, "pcm": pcm, "rate": rate, "channels": channels,
+                "first_sound_ms": int(meta.get("first_sound_ms", 0)), "total_ms": int(meta.get("total_ms", 0)),
+                "audio_s": audio_s, "path": str(meta.get("path") or "cache"),
+                "word_timings": bool(meta.get("word_timings")), "cached": True}
+    except (OSError, EOFError, wave.Error, ZeroDivisionError, ValueError, TypeError):
+        return None
+
+
+def tts_stream(voice, api_key, data=None, summary=None):
+    """One spoken sample of LINE, handed over as it arrives: yields {"pcm", "rate", "channels"} for each piece of
+    audio; the first also has "cached" and "path". A saved copy comes in one piece with no network. Raises
+    VoiceError before the first piece, exactly as tts_sample does. When the stream ends, `summary` (a dict, if
+    given) is filled with what tts_sample returns. Every call is logged; a consumer that stops early is logged
+    as "stopped" and nothing is saved."""
     voice_id = str(voice or "").strip()
     event = {"event": "tts", "id": voice_id, "model": TTS_MODEL}
+    done = False
     try:
         name = _voice_name(voice_id, "gemini")
         voice_id = f"gemini:{name}"
         event.update(id=voice_id, voice=name)
         wav_file, meta_file = _cache_files(voice_id, name, data)
-        try:
-            wav = wav_file.read_bytes()
-            try:
-                meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                meta = {}
-            with wave.open(io.BytesIO(wav), "rb") as w:
-                audio_s = round(w.getnframes() / w.getframerate(), 2)
-            out = {"wav": wav, "first_sound_ms": int(meta.get("first_sound_ms", 0)),
-                   "total_ms": int(meta.get("total_ms", 0)), "audio_s": audio_s,
-                   "path": str(meta.get("path") or "cache"), "word_timings": bool(meta.get("word_timings")),
-                   "cached": True}
-            log({**event, "ok": True, "note": "saved copy", **{k: out[k] for k in ("audio_s", "path")}}, data)
-            return out
-        except (OSError, EOFError, wave.Error, ZeroDivisionError, ValueError, TypeError):
-            pass  # no usable saved copy; ask Google
+        saved = _saved_copy(wav_file, meta_file)
+        if saved is not None:
+            log({**event, "ok": True, "note": "saved copy", **{k: saved[k] for k in ("audio_s", "path")}}, data)
+            if summary is not None:
+                summary.update({k: v for k, v in saved.items() if k not in ("pcm", "rate", "channels")})
+            done = True
+            yield {"pcm": saved["pcm"], "rate": saved["rate"], "channels": saved["channels"],
+                   "cached": True, "path": saved["path"]}
+            return
         started = time.perf_counter()
         path, fell_back = "interactions", ""
+        flags = {"timing": False}
+        pieces, rate, channels, first, carry = [], 0, 1, None, b""
         try:
-            got = _interactions(name, api_key, started)
-            if got is None:
+            for node in _interactions(name, api_key, started, flags):
+                if first is None:
+                    first = int((time.perf_counter() - started) * 1000)
+                chunk, r, c = _decode(node)
+                if not rate:
+                    rate, channels = r or SAMPLE_RATE, c  # the first chunk sets the format
+                chunk = carry + chunk
+                whole = len(chunk) - len(chunk) % (2 * channels)  # never send half a sample
+                chunk, carry = chunk[:whole], chunk[whole:]
+                if chunk:
+                    pieces.append(chunk)
+                    head = {"cached": False, "path": path} if len(pieces) == 1 else {}
+                    yield {"pcm": chunk, "rate": rate, "channels": channels, **head}
+            if not pieces:
                 fell_back = "interactions gave no audio"
         except urllib.error.HTTPError as e:
             refused, detail = _http_failure(e, api_key, "interactions")
             if refused:
                 raise VoiceError("bad_key", detail) from None
-            if e.code not in (400, 404):
+            if e.code not in (400, 404) or pieces:
                 raise VoiceError("no_gemini", detail) from None
-            got, fell_back = None, detail
+            fell_back = detail
         except VoiceError:
             raise
         except Exception as e:  # no network, timeout, bad stream
             raise VoiceError("no_gemini", _other_failure(e, "interactions")) from None
-        if got is None:
-            path = "generateContent"
+        timing = flags["timing"]
+        if not pieces:
+            path, first = "generateContent", None
             try:
-                got = _generate_content(name, api_key, started)
+                pcm, rate, channels, first, timing = _generate_content(name, api_key, started)
             except urllib.error.HTTPError as e:
                 refused, detail = _http_failure(e, api_key, "generateContent")
                 raise VoiceError("bad_key" if refused else "no_gemini", _scrub(f"{fell_back} | {detail}", api_key)) from None
@@ -389,7 +416,10 @@ def tts_sample(voice, api_key, data=None):
                 raise VoiceError(e.kind, _scrub(f"{fell_back} | generateContent gave no audio", api_key)) from None
             except Exception as e:
                 raise VoiceError("no_gemini", _scrub(f"{fell_back} | {_other_failure(e, 'generateContent')}", api_key)) from None
-        pcm, rate, channels, first, timing = got
+            pcm = pcm[: len(pcm) - len(pcm) % (2 * channels)]
+            pieces.append(pcm)
+            yield {"pcm": pcm, "rate": rate, "channels": channels, "cached": False, "path": path}
+        pcm = b"".join(pieces)
         wav = _wav(pcm, rate, channels)
         total = int((time.perf_counter() - started) * 1000)
         out = {"wav": wav, "first_sound_ms": first if first is not None else total, "total_ms": total,
@@ -404,10 +434,25 @@ def tts_sample(voice, api_key, data=None):
             pass  # not saving a copy only costs a second call later
         log({**event, "ok": True, **({"note": fell_back} if fell_back else {}),
              **{k: out[k] for k in ("first_sound_ms", "total_ms", "audio_s", "path", "word_timings")}}, data)
-        return out
+        done = True
+        if summary is not None:
+            summary.update(out)
     except VoiceError as e:
         log({**event, "ok": False, "error": e.kind, **({"note": e.detail} if e.detail else {})}, data)
         raise
+    except GeneratorExit:  # the page went away or stopped listening
+        if not done:
+            log({**event, "ok": False, "error": "stopped"}, data)
+        raise
+
+
+def tts_sample(voice, api_key, data=None):
+    """One spoken sample of LINE. Returns {wav, first_sound_ms, total_ms, audio_s, path, word_timings, cached}.
+    A saved copy is used when there is one (no network). Raises VoiceError. Every call is logged."""
+    out = {}
+    for _ in tts_stream(voice, api_key, data, out):
+        pass
+    return out
 
 
 # ---------------------------------------------------------------- offline voice (Kokoro)
@@ -461,12 +506,16 @@ def _pcm16(samples):
         return out.tobytes()
 
 
-def kokoro_sample(voice, data=None):
-    """One spoken sample of LINE made on this computer. Same result shape as tts_sample, plus rtf (seconds of
-    synthesis per second of speech) and load_ms (model load, only on the first call). Never cached, so every
-    play measures the speed again. Raises VoiceError("no_offline"). Every call is logged."""
+def kokoro_stream(voice, data=None, summary=None):
+    """One spoken sample of LINE made on this computer, handed over a sentence at a time: yields
+    {"pcm", "rate", "channels"}; each sentence after the first starts with the pause. The first piece also has
+    "cached", "path" and "load_ms" (model load, only on the first call). Raises VoiceError("no_offline") before
+    the first piece. When the stream ends, `summary` (a dict, if given) is filled with what kokoro_sample
+    returns. Never cached, so every play measures the speed again. Every call is logged; a consumer that stops
+    early is logged as "stopped"."""
     voice_id = str(voice or "").strip()
     event = {"event": "tts", "id": voice_id, "model": KOKORO_MODEL.rsplit(".", 1)[0]}
+    done = False
     try:
         name = _voice_name(voice_id, "kokoro")
         voice_id = f"kokoro:{name}"
@@ -475,40 +524,68 @@ def kokoro_sample(voice, data=None):
             raise VoiceError("no_offline", "model files or kokoro_onnx missing")
         lang = "en-gb" if name.startswith("b") else "en-us"
         global _kokoro
+        load_ms = 0
         try:
             with _kokoro_lock:
-                load_ms = 0
                 if _kokoro is None:
                     t = time.perf_counter()
                     _kokoro = _load_kokoro()
                     load_ms = int((time.perf_counter() - t) * 1000)
-                pieces, rate, synth, first_ms = [], 0, 0.0, 0
-                for sentence in _sentences(LINE):
-                    t = time.perf_counter()
-                    samples, r = _kokoro.create(sentence, voice=name, speed=1.0, lang=lang)
-                    took = time.perf_counter() - t
-                    synth += took
-                    if not pieces:
-                        first_ms = int(took * 1000) + load_ms
-                    rate = rate or int(r)
-                    pieces.append(_pcm16(samples))
+                engine = _kokoro
         except Exception as e:  # missing file, bad model, out of memory
             raise VoiceError("no_offline", _other_failure(e, "kokoro")) from None
-        if not rate or not any(pieces):
+        pieces, rate, synth, first_ms, speech = [], 0, 0.0, None, 0
+        for sentence in _sentences(LINE):
+            try:
+                with _kokoro_lock:  # held for one sentence only, so another play can slot in
+                    t = time.perf_counter()
+                    samples, r = engine.create(sentence, voice=name, speed=1.0, lang=lang)
+                    took = time.perf_counter() - t
+                pcm = _pcm16(samples)
+            except Exception as e:
+                raise VoiceError("no_offline", _other_failure(e, "kokoro")) from None
+            synth += took
+            if first_ms is None:
+                first_ms = int(took * 1000) + load_ms
+            rate = rate or int(r)
+            if not rate:
+                raise VoiceError("no_offline", "kokoro gave no audio")
+            if not pcm:
+                continue
+            speech += len(pcm)
+            head = {"cached": False, "path": "kokoro", "load_ms": load_ms} if not pieces else {}
+            if pieces:
+                pcm = b"\x00\x00" * int(rate * KOKORO_PAUSE_S) + pcm
+            pieces.append(pcm)
+            yield {"pcm": pcm, "rate": rate, "channels": 1, **head}
+        if not pieces:
             raise VoiceError("no_offline", "kokoro gave no audio")
-        speech_s = sum(len(p) for p in pieces) / (2 * rate)
-        gap = b"\x00\x00" * int(rate * KOKORO_PAUSE_S)
-        pcm = gap.join(pieces)
-        wav = _wav(pcm, rate)
-        out = {"wav": wav, "first_sound_ms": first_ms, "total_ms": load_ms + int(synth * 1000),
-               "audio_s": round(len(pcm) / (2 * rate), 2), "path": "kokoro", "word_timings": False,
-               "cached": False, "rtf": round(synth / speech_s, 3), "load_ms": load_ms}
+        out = {"first_sound_ms": first_ms, "total_ms": load_ms + int(synth * 1000),
+               "audio_s": round(sum(len(p) for p in pieces) / (2 * rate), 2), "path": "kokoro",
+               "word_timings": False, "cached": False, "rtf": round(synth / (speech / (2 * rate)), 3),
+               "load_ms": load_ms}
         log({**event, "ok": True, **{k: out[k] for k in ("first_sound_ms", "total_ms", "audio_s", "path",
                                                           "word_timings", "rtf", "load_ms")}}, data)
-        return out
+        done = True
+        if summary is not None:
+            summary.update(out, wav=_wav(b"".join(pieces), rate))
     except VoiceError as e:
         log({**event, "ok": False, "error": e.kind, **({"note": e.detail} if e.detail else {})}, data)
         raise
+    except GeneratorExit:  # the page went away or stopped listening
+        if not done:
+            log({**event, "ok": False, "error": "stopped"}, data)
+        raise
+
+
+def kokoro_sample(voice, data=None):
+    """One spoken sample of LINE made on this computer. Same result shape as tts_sample, plus rtf (seconds of
+    synthesis per second of speech) and load_ms (model load, only on the first call). Never cached, so every
+    play measures the speed again. Raises VoiceError("no_offline"). Every call is logged."""
+    out = {}
+    for _ in kokoro_stream(voice, data, out):
+        pass
+    return out
 
 
 # ---------------------------------------------------------------- Live chat token

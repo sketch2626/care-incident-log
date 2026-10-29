@@ -44,6 +44,17 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Live talk:** "could not reach Gemini". Find out why from `audition.log`, fix it, and let him retry.
   - **The first-sound timing is wrong.** The offline male voices showed "0.8 s", but the sound took much longer. The female top card's "4 s" felt closer. Measure from the tap to the moment sound actually starts playing, including the warm-up.
   - **Mary still had the robot voice afterwards.** That's expected: the audition only saves the picks, and M4 builds them into Mary. But see M9: she wrongly told him "I have the same friendly voice that I always have".
+- **Fixed 2026-10-29, waiting for Andy's retry:**
+  - **Live** (0e25ce7): Google refused the token with `400 Unknown name "liveConnectConstraints"`, the field name from Google's own docs page. The request now goes the way Google's own SDK sends it (`bidiGenerateContentSetup`). If v1beta doesn't know that field, it tries v1alpha once, and the log says which version worked. She now says hello first, so the delay from his tap to her voice can be measured too.
+  - **Timing** (0707535, fa4d2e8, 93384b7):
+    - **What was wrong:** the page downloaded the whole sample before playing it, and the number shown was the server's first chunk. Andy's log shows it. The offline male voices showed 0.7-0.9 s as their first sound, but the whole line took 4.4-5.3 s to make, so that's when sound really started. The Gemini voices showed 2.1-3.4 s first, with 4.2-6.2 s for the whole line.
+    - **What changed:**
+      - The page now plays the audio as it arrives, the way Mary will in M4.
+      - It shows "Started speaking X s after your tap", timed on the page to the moment sound reaches the speakers. That includes download, warm-up (shown separately on the first offline use) and output delay.
+      - It counts any pause where the sound ran dry. Each play adds a `played` line to `audition.log`.
+      - Saved copies from the first try aren't reused, so his first play of each voice times Google again.
+  - **Word timings (for M3):** Google's Live reference lists `startOffset`/`endOffset` on her transcript pieces. The Live log now records whether they really come (`word_timings`).
+- **Real numbers after the retry** (from `audition.log`): 
 
 ### M3. Mock-up boards: captions and the one-button screen (visual; worker, boards on a Design canvas first)
 - Boards for:

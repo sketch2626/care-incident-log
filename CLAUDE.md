@@ -66,6 +66,12 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
   - **Full review done 2026-10-28** (`docs/review-2026-10-28.md`; fix commits 1b6a8e1…47c78f5; 254 tests, no skips). Fixed: the hidden Close on first run (blocker), missed emergency phrases, bad-key message, offers that didn't save, server data integrity, installer bundling. Ranked open items are in the doc. If Mary gets stuck full screen, the hub stops the `pythonw desktop.py --mary` process; `desktop.log` in the data folder has window errors.
   - **Next for a fresh worker, in order:**
     1. **Andy tried Mary as user #1 (2026-10-28).** Paste is fixed (4b16ebc, c1cadca) and his key is saved. His findings are the robot voice, games refused, Talk needed every turn, the captions and too many buttons. All of them are in **`docs/mary-roadmap.md`** (items M1-M8, with order and dependencies). Start one worker per item; worker `mary-fixes` (local_776f5e74) has the context for M1. **Found so far:** no paste in the app window, fixed 4b16ebc + c1cadca (see `docs/review-2026-10-28.md`, "Andy's first try").
+    1b. **In flight (2026-10-29, hub = "Main session"):**
+       - **M2:** done. Live talk works; Andy liked it (a story, and it stopped instantly when he cut in). His Mary and Sam voice picks are saved. Talk modes: Live (default), Normal, Offline, all as choices.
+       - **M9a:** character sheets approved (`docs/characters/`).
+       - **M9b:** brain rewrite running in worker `m9-characters` (local_ec4d9eb6, now on Sonnet). It touches only `mary/instructions.md` and `system_text()`.
+       - **M13 skills core:** running on the second account in `.worktrees/M13`, branch `other/M13`, peer session `m13-ad`. Andy approved the design (`docs/skills-design.md`) with two changes: internet only through `ctx.fetch` with allowed hosts, and voice on/off both ways (`skills_off` vs `skills_locked`). When its commit says "DONE: M13 skills core", review it, run the tests in the worktree, merge into `main`, then coordinate the `voices.py` `live_token()` hook. Then remove the worktree.
+       - **Next after those:** M3 boards (here), then M4 and M5 (tricky, so second account), M12 pictures as a skill, and M7 games as skills.
     2. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 
 ## Next steps

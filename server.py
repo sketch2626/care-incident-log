@@ -298,6 +298,7 @@ VOICE_ERRORS = {  # kind -> (plain sentence, HTTP status)
     "no_gemini": ("I couldn't reach Gemini just now. Please try again in a moment.", 502),
     "unknown_voice": ("I don't know that voice.", 400),
     "no_offline": ("The offline voice isn't installed on this computer yet.", 503),
+    "busy": ("Gemini's free limit is used up for now. Please try again in a few minutes.", 503),
 }
 
 

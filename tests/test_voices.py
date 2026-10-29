@@ -237,7 +237,7 @@ class TokenTests(VoicesCase):
         self.assertEqual(got["model"], "models/gemini-3.8-live")
         self.assertEqual(got["voice"], "Achird")
         self.assertTrue(got["ws"].startswith("wss://generativelanguage.googleapis.com/ws/"))
-        self.assertTrue(got["ws"].endswith("BidiGenerateContentConstrained"))
+        self.assertTrue(got["ws"].endswith("v1beta.GenerativeService.BidiGenerateContentConstrained"))
         self.assertNotIn("access_token", got["ws"])
         req = net.requests[0]
         self.assertTrue(req.full_url.endswith("/v1beta/auth_tokens"))
@@ -246,11 +246,13 @@ class TokenTests(VoicesCase):
         self.assertEqual(body["uses"], 1)
         self.assertTrue(body["expireTime"].endswith("Z") and body["newSessionExpireTime"].endswith("Z"))
         self.assertLess(body["newSessionExpireTime"], body["expireTime"])
-        cons = body["liveConnectConstraints"]
-        self.assertEqual(cons["model"], "models/gemini-3.8-live")
-        cfg = cons["config"]
-        self.assertEqual(cfg["responseModalities"], ["AUDIO"])
-        self.assertEqual(cfg["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"], "Achird")
+        self.assertNotIn("liveConnectConstraints", body)  # the name Google refused on 2026-10-29
+        self.assertNotIn("fieldMask", body)  # no mask: every field is locked
+        cfg = body["bidiGenerateContentSetup"]
+        self.assertEqual(cfg["model"], "models/gemini-3.8-live")
+        gen = cfg["generationConfig"]
+        self.assertEqual(gen["responseModalities"], ["AUDIO"])
+        self.assertEqual(gen["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"], "Achird")
         self.assertEqual((cfg["inputAudioTranscription"], cfg["outputAudioTranscription"]), ({}, {}))
         system = cfg["systemInstruction"]["parts"][0]["text"]
         self.assertIn("Mary", system)
@@ -260,10 +262,36 @@ class TokenTests(VoicesCase):
         self.assertIn("don't use them here", system)
         self.assertIn("one to three short sentences", system)
 
+    def test_token_tries_v1alpha_when_v1beta_does_not_know_the_fields(self):
+        unknown = (b'{"error":{"status":"INVALID_ARGUMENT","message":"Invalid JSON payload received. '
+                   b'Unknown name \\"bidiGenerateContentSetup\\" at \'auth_token\'"}}')
+        net = self.use(http_error(400, unknown), Resp({"name": "auth_tokens/alpha"}))
+        got = voices.live_token("live:Achird", KEY, "mary", "", server.DATA)
+        self.assertEqual(got["token"], "auth_tokens/alpha")
+        self.assertTrue(got["ws"].endswith("v1alpha.GenerativeService.BidiGenerateContentConstrained"))
+        self.assertTrue(net.requests[1].full_url.endswith("/v1alpha/auth_tokens"))
+        self.assertEqual(net.body(1), net.body(0))
+        line = json.loads(self.log_text().splitlines()[-1])
+        self.assertEqual((line["ok"], line["path"]), (True, "v1alpha"))
+        self.assertIn("Unknown name", line["note"])  # why the first try failed
+
+    def test_token_other_errors_are_not_retried_and_free_limit_is_busy(self):
+        net = self.use(http_error(500, b'{"error":{"status":"INTERNAL","message":"oops"}}'))
+        with self.assertRaises(voices.VoiceError) as cm:
+            voices.live_token("live:Achird", KEY, "mary", "", server.DATA)
+        self.assertEqual((cm.exception.kind, len(net.requests)), ("no_gemini", 1))
+        self.use(http_error(429, b'{"error":{"status":"RESOURCE_EXHAUSTED","message":"quota"}}'))
+        with self.assertRaises(voices.VoiceError) as cm:
+            voices.live_token("live:Achird", KEY, "mary", "", server.DATA)
+        self.assertEqual(cm.exception.kind, "busy")
+        body, status = server.voice_failure("busy")
+        self.assertEqual(status, 503)
+        self.assertIn("free limit", body["error"])
+
     def test_sam_gets_his_own_name(self):
         net = self.use(Resp({"name": "auth_tokens/x"}))
         voices.live_token("Umbriel", KEY, "him", "", server.DATA)
-        system = net.body()["liveConnectConstraints"]["config"]["systemInstruction"]["parts"][0]["text"]
+        system = net.body()["bidiGenerateContentSetup"]["systemInstruction"]["parts"][0]["text"]
         self.assertIn("Sam", system)
         self.assertNotIn("Mary", system)
 
@@ -369,7 +397,7 @@ class RouteTests(VoicesCase):
         self.assertEqual(status, 200)
         self.assertEqual(got["token"], "auth_tokens/zzz")
         self.assertEqual(got["voice"], "Algieba")
-        system = net.body()["liveConnectConstraints"]["config"]["systemInstruction"]["parts"][0]["text"]
+        system = net.body()["bidiGenerateContentSetup"]["systemInstruction"]["parts"][0]["text"]
         self.assertIn("Sam", system)
         self.assertIn("Name: Ruth", system)
 
@@ -383,7 +411,7 @@ class RouteTests(VoicesCase):
             status, _, _ = helpers.api("POST", "/api/mary/live/token",
                                        {"voice": "live:Algieba", "companion": body_companion})
             self.assertEqual(status, 200, body_companion)
-            system = net.body()["liveConnectConstraints"]["config"]["systemInstruction"]["parts"][0]["text"]
+            system = net.body()["bidiGenerateContentSetup"]["systemInstruction"]["parts"][0]["text"]
             self.assertEqual("a kind and friendly gentleman" in system, is_sam, (body_companion, saved))
             self.assertEqual("Sam" in system, is_sam, (body_companion, saved))
 

@@ -27,9 +27,12 @@ import mary
 
 TTS_MODEL = "gemini-3.8-flash-tts"
 LIVE_MODEL = "gemini-3.8-live"
-API = "https://generativelanguage.googleapis.com/v1beta"
+API_ROOT = "https://generativelanguage.googleapis.com"
+API = f"{API_ROOT}/v1beta"
 LIVE_WS = ("wss://generativelanguage.googleapis.com/ws/"
-           "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained")
+           "google.ai.generativelanguage.{v}.GenerativeService.BidiGenerateContentConstrained")
+# Google's docs make Live tokens on v1beta; its own SDK has said v1alpha. The socket uses the token's version.
+TOKEN_VERSIONS = ("v1beta", "v1alpha")
 
 LINE = ("Hello there! It's so good to see you today. "
         "I'm right here whenever you'd like to talk, or just to keep you company.")
@@ -521,27 +524,40 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None):
         system += "\n\n" + LIVE_EXTRA
         now = datetime.now(timezone.utc)
         stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+        # The wire shape Google's own SDK sends: the locked session setup sits in bidiGenerateContentSetup.
+        # (The docs page shows liveConnectConstraints, which the API refused on 2026-10-29: "Unknown name".)
+        # No fieldMask, so every field here is locked and the page can't change the voice or instructions.
         body = {"uses": 1,
                 "expireTime": stamp(now + timedelta(minutes=30)),
                 "newSessionExpireTime": stamp(now + timedelta(minutes=1)),
-                "liveConnectConstraints": {
+                "bidiGenerateContentSetup": {
                     "model": f"models/{LIVE_MODEL}",
-                    "config": {"responseModalities": ["AUDIO"],
-                               "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": name}}},
-                               "systemInstruction": {"parts": [{"text": system}]},
-                               "inputAudioTranscription": {}, "outputAudioTranscription": {}}}}
-        try:
-            with _post(f"{API}/auth_tokens", body, api_key) as resp:
-                token = json.loads(resp.read().decode("utf-8", "replace")).get("name")
-        except urllib.error.HTTPError as e:
-            refused, detail = _http_failure(e, api_key, "auth_tokens")
-            raise VoiceError("bad_key" if refused else "no_gemini", detail) from None
-        except Exception as e:
-            raise VoiceError("no_gemini", _other_failure(e, "auth_tokens")) from None
+                    "generationConfig": {
+                        "responseModalities": ["AUDIO"],
+                        "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": name}}}},
+                    "systemInstruction": {"parts": [{"text": system}]},
+                    "inputAudioTranscription": {}, "outputAudioTranscription": {}}}
+        token = None
+        for version in TOKEN_VERSIONS:
+            try:
+                with _post(f"{API_ROOT}/{version}/auth_tokens", body, api_key) as resp:
+                    token = json.loads(resp.read().decode("utf-8", "replace")).get("name")
+                break
+            except urllib.error.HTTPError as e:
+                refused, detail = _http_failure(e, api_key, f"auth_tokens {version}")
+                if refused:
+                    raise VoiceError("bad_key", detail) from None
+                if e.code == 429:
+                    raise VoiceError("busy", detail) from None
+                if (e.code != 404 and "Unknown name" not in detail) or version == TOKEN_VERSIONS[-1]:
+                    raise VoiceError("no_gemini", detail) from None
+                event["note"] = detail  # this version doesn't take it; try the next
+            except Exception as e:
+                raise VoiceError("no_gemini", _other_failure(e, "auth_tokens")) from None
         if not isinstance(token, str) or not token:
             raise VoiceError("no_gemini", "auth_tokens gave no name")
-        log({**event, "ok": True}, data)
-        return {"token": token, "model": f"models/{LIVE_MODEL}", "ws": LIVE_WS, "voice": name}
+        log({**event, "ok": True, "path": version}, data)
+        return {"token": token, "model": f"models/{LIVE_MODEL}", "ws": LIVE_WS.format(v=version), "voice": name}
     except VoiceError as e:
         log({**event, "ok": False, "error": e.kind, **({"note": e.detail} if e.detail else {})}, data)
         raise

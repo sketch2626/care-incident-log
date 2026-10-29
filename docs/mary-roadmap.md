@@ -121,6 +121,28 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
 - **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
 - **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
 
+### M13. Skills: a plug-in design where Mary learns each new feature by herself (groundwork; before M12 and M7)
+Andy (2026-10-29): make it so new things "can just be plugged right in" with a minimal chance of bugs. "Anything that we can do that makes this software more unique and also utilitarian… a new kind of AI architecture… we might actually get some people excited about this" beyond the nursing-home angle.
+- **A small, stable core** that rarely changes: her face, her voice, the talk loop (all three modes), the brain, the server and safety.
+- **Everything else is a skill in its own folder** (`skills/<name>/`): crossword, word search, pictures, weather, family messages, incident reporting and more. Every skill fills in the same manifest:
+  - **Screen:** what it shows. It plugs into Mary's one-button menu by itself.
+  - **What Mary sees:** a live description of what's on its screen right now (the M12 rule).
+  - **Actions:** what it offers her, each with a plain description and its inputs, for example `set_hint(clue, text)`.
+  - **Storage:** its own private space; no skill can read or change another's.
+  - **Needs:** internet, mic, which talk modes, and offline behavior.
+- **The AI-native part:** when a skill is plugged in, the core automatically adds its actions and descriptions to Mary's tools and instructions in every talk mode. Drop in a folder, and she knows how to use it, with no rewrite of her brain. Look at shaping the manifest like MCP tools, so a skill could also be offered to other AIs.
+- **Built-in bug protection:**
+  - **Contract tests** run on every skill automatically, and a skill that fails isn't loaded.
+  - **Errors are caught** at the skill's edge. A crashing skill is switched off, Mary says "that's not working right now", and everything else keeps going.
+  - **Every skill can be switched on or off** in settings, per resident (this also fits M11's access question).
+  - **The contract has a version number,** so old skills keep working.
+- **Open source:** write "How to make a Mary skill" (one page, plus a tiny example skill), so others can build skills. That's part of the story for people beyond nursing homes.
+- **First moves:**
+  1. Design the manifest and the core loader, with a written design for Andy in plain words.
+  2. Port one existing feature as the first skill, for example voice settings or incident saving.
+  3. Then build pictures (M12) and the games (M7) as skills from day one.
+- **Done when:** a new skill folder can be added without touching core code, passes the contract tests, and Mary uses it by voice in every mode.
+
 ### M12. Mary does things: she runs the app and shows pictures (after M4; alongside M9b)
 Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up all the games, do all the stuff… pictures from the web… show me a picture of this bird."
 - **How:** Gemini **function calling** works in Live and in Normal mode. The app gives her a list of tools; she decides when to use one, and the page carries it out:
@@ -145,6 +167,7 @@ Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up
 - **M11. Reporting portal overhaul,** the incident log screens (`web/`): a complete visual redo, with boards first. Also decide **how much of it each resident sees**: whether they get the full-screen portal at all, which parts make sense for them, and what stays behind Mary. Decide this with Andy when we get there.
 
 ## Order and dependencies
+- M13 (skills) is the groundwork: build it before M12 and M7, so pictures and games are skills from day one.
 - M1 runs now, on its own.
 - M2 decides how M4 and M5 are built, and M3 needs M2's word-timing answer.
 - M3 needs Andy's approval before M4.

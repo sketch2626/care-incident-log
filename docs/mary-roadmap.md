@@ -69,7 +69,9 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
     - One interruption was caught, and she stopped at once.
     - **No word timings:** Live sent no `startOffset`/`endOffset` on her words, so the M3/M4 captions use estimates timed to her text pieces.
   - **Gemini and offline voices:** not played on the retry yet. Their tap-to-sound numbers go here after his next plays. The `played` lines in `audition.log` hold them.
-- **Also from the retry, fixed next:** Sam's Live voices were easy to miss, all in one row with Mary's. Saving gave no clear sign it worked.
+- **Also from the retry, fixed (daac8bb, 1a06762):**
+  - **Live talk:** Sam's voices were easy to miss, all in one row with Mary's. The tab now has "For Mary" and "For Sam" cards like the other tabs, each with its own Talk button and the right face.
+  - **Saving** gave no clear sign it worked. Now each save is checked by reading the settings back. The card then shows a big green "✓ Saved — Mary will use …", a line under the title shows both saved voices on every visit, and the voice says "Got it. That's my voice now."
 
 ### M3. Mock-up boards: captions and the one-button screen (visual; worker, boards on a Design canvas first)
 - Boards for:

@@ -39,7 +39,11 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Free tier:** every one of these models is free of charge on the free tier. Google's rate-limit page lists no numbers; they show only in AI Studio for the key. **Privacy:** already decided. Free tier for Andy's own testing now, paid tier before any other resident. See "Gemini free tier and privacy" in `docs/companion-plan.md`.
   - Installer cost when bundled (Next step 5): about 22 MB of packages (`packaging/requirements.txt`) plus 115 MB of Kokoro model. `build.py` doesn't bundle or download it yet.
   - Also measure Gemini text-reply speed with his key (M8, `tools/mary_speed.py`) when he picks the pipeline.
-- **Andy's choice:** 
+- **Andy's choice:** made in the audition on 2026-10-29 and saved with its "Use for Mary/Sam" buttons (read the names from the voice settings). Live vs pipeline is still open, because Live didn't work.
+- **What Andy found (2026-10-29), to fix in M2:**
+  - **Live talk:** "could not reach Gemini". Find out why from `audition.log`, fix it, and let him retry.
+  - **The first-sound timing is wrong.** The offline male voices showed "0.8 s", but the sound took much longer. The female top card's "4 s" felt closer. Measure from the tap to the moment sound actually starts playing, including the warm-up.
+  - **Mary still had the robot voice afterwards.** That's expected: the audition only saves the picks, and M4 builds them into Mary. But see M9: she wrongly told him "I have the same friendly voice that I always have".
 
 ### M3. Mock-up boards: captions and the one-button screen (visual; worker, boards on a Design canvas first)
 - Boards for:
@@ -75,9 +79,23 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - Timings and layout at his screen size.
 - Gemini speed with his key (`tools/mary_speed.py`). Fold this into M2 if possible.
 
+### M9. The brain: who Mary and Sam are (long-running; Andy and the hub together, then workers)
+Andy (2026-10-29): "we're definitely going to have to work on the brain and how she acts… really get that right." He wants Sam interested in fishing, hunting, cars and the things men his age usually like, with it built into the brain. "I'm willing to put that work in with you."
+- **M9a, character sheets for Andy to approve first** (like the face boards). One each for Mary and Sam:
+  - Personality, humor and way of talking.
+  - Interests and real knowledge. Sam: fishing, hunting, cars and trucks, NASCAR and football, grilling, woodworking, westerns, service stories. Mary: gardening, cooking and baking, music, old movies, crafts, family. NC flavor for both.
+  - What they ask about and remember.
+  - **Honesty:** they're AI companions with real opinions and favorites, but they never claim a body or a human past (for example "I love hearing about fishing", not "I went fishing Saturday"). Confused residents must never be misled.
+  - **The resident leads:** the resident's own interests always win over the defaults.
+- **M9b, self-knowledge.** She knows her own app: her voice setting, games, what's coming soon, and her buttons. She never says false things like "same voice as always".
+- **M9c, memory of the resident:** name, family, interests, past talks, on the laptop.
+- **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
+- **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
+
 ## Order and dependencies
 - M1 runs now, on its own.
 - M2 decides how M4 and M5 are built, and M3 needs M2's word-timing answer.
 - M3 needs Andy's approval before M4.
 - M5, then M6, finishes the one-button goal.
 - M7 can start after M1, but one worker runs at a time.
+- M9a (character sheets) needs only Andy's approval, so it can come right after the M2 fixes. M9b-d follow, and the brain sessions keep going through the pilot.

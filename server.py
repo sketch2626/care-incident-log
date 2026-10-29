@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlparse
 import assist
 import mary
 import power
+import skills_core  # --- skills hook (M13) ---
 import voices
 
 # In the packaged app, web/ is unpacked next to the program (sys._MEIPASS).
@@ -327,13 +328,54 @@ def mary_write_incident(incident):
     return new_id
 
 
-def mary_talk(text, on_text=None, on_mood=None):
+# --- skills hook (M13) --- Mary's skills (docs/skills-design.md), loaded once on first use.
+SKILLS_DIR = Path(os.environ.get("TRACKER_SKILLS") or ROOT / "skills")  # a missing folder means no skills
+SKILL_UNKNOWN = "Mary doesn't know that skill."
+SKILL_SETTINGS = {"skills_off", "skills_on", "skills_locked"}  # only the skill routes change these
+_skill_host = None
+_skill_host_lock = threading.Lock()
+
+
+def _all_settings():
+    with closing(connect()) as conn:
+        return get_settings(conn)
+
+
+def _put_settings(values):
+    with closing(connect()) as conn:
+        conn.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                         [(k, str(v)) for k, v in values.items()])
+        conn.commit()
+
+
+def skill_host():
+    """The one SkillHost, loaded on first use. Offline phrases may not be emergency or yes/no words."""
+    global _skill_host
+    with _skill_host_lock:
+        if _skill_host is None:
+            host = skills_core.SkillHost(SKILLS_DIR, DATA, connect, _all_settings, _put_settings, online=lambda: True)
+            host.load(is_blocked=mary.skill_blocked)
+            _skill_host = host
+        return _skill_host
+
+
+def set_skill_host_for_tests(host):
+    """Tests swap in their own host (None: load SKILLS_DIR again on next use)."""
+    global _skill_host
+    with _skill_host_lock:
+        _skill_host = host
+# --- end skills hook ---
+
+
+def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None):
     """Mary's answer to text, for the page. Never contains the key."""
     s = mary_settings()
+    skills = skill_host()  # --- skills hook (M13) ---
     with _mary_lock:
         r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
-                       companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident)
-    return {"text": r["text"], "mood": r["mood"],
+                       companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident,
+                       skills=skills, screen=screen, on_effect=on_effect)  # --- skills hook (M13) ---
+    return {"text": r["text"], "mood": r["mood"], "effects": r["effects"],  # effects: M13
             "emergency": bool(r["emergency"] or r["gemini_alert"]),
             "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
             "offer": r["offer"], "logged": r["logged"], "error": r["error"], "needs_key": not s["key"],
@@ -593,9 +635,10 @@ class Handler(SimpleHTTPRequestHandler):
                                    "text": f"It's lovely to meet you, {name}! I'm here whenever you'd like to talk."})
             if not text:
                 raise ValueError(TALK_NO_TEXT)
+            screen = body.get("screen") if isinstance(body.get("screen"), str) else None  # --- skills hook (M13) ---
             if q("stream") == "1":
-                return self._mary_stream(text)
-            return self._send(mary_talk(text))
+                return self._mary_stream(text, screen)
+            return self._send(mary_talk(text, screen=screen))
         if method == "GET" and path == "/api/mary/voices":
             return self._send(mary_voices())
         if method == "POST" and path in ("/api/mary/voices/sample", "/api/mary/live/token"):
@@ -638,7 +681,64 @@ class Handler(SimpleHTTPRequestHandler):
             body = self._body()  # the page's numbers; only whitelisted keys are kept
             voices.log({**body, "event": "played" if body.get("event") == "played" else "live"}, DATA)
             return self._send({"ok": True})
+        if path == "/api/mary/skills" or path.startswith("/api/mary/skills/"):  # --- skills hook (M13) ---
+            return self._skills(method, path)
         return None
+
+    # --- skills hook (M13) ---
+    def _skills(self, method, path):
+        """Mary's skill routes. An unknown skill is a 404 with a plain sentence."""
+        host = skill_host()
+        if method == "GET" and path == "/api/mary/skills":
+            out = host.list_skills()
+            for s in out:
+                folder = host.skills[s["name"]].folder
+                s["script"], s["style"] = ((f"/skills/{s['name']}/{f}" if (folder / f).is_file() else None)
+                                           for f in ("screen.js", "screen.css"))
+            return self._send({"skills": out})
+        if method == "POST" and path == "/api/mary/skills/call":  # Live mode's tool calls
+            body = self._body()
+            return self._send(host.call(str(body.get("name") or ""), body.get("args")))
+        m = re.fullmatch(r"/api/mary/skills/([^/]+)(/event|/broken|/view|/lock)?", path)
+        if not m:
+            return None
+        name, action = m.group(1), m.group(2) or ""
+        if name not in host.skills:
+            return self._send({"error": SKILL_UNKNOWN}, 404)
+        if method == "POST" and action == "/event":
+            return self._send(host.on_event(name, self._body().get("event")))
+        if method == "POST" and action == "/broken":
+            return self._send(host.broken(name))
+        if method == "GET" and action == "/view":
+            return self._send({"text": host.view(name) or ""})
+        if method == "PUT" and action == "":
+            on = self._body().get("on")
+            if not isinstance(on, bool):
+                raise ValueError(BAD_REQUEST)
+            return self._send(host.set_skill(name, on, by="resident"))
+        if method == "PUT" and action == "/lock":  # the helper's lock, from My info
+            state = self._body().get("state")
+            if state not in ("on", "off", None):
+                raise ValueError(BAD_REQUEST)
+            return self._send({"ok": True, "locked": host.lock(name, state).get(name), "on": host.enabled(name)})
+        return None
+
+    def _skill_file(self, method):
+        """GET /skills/<name>/screen.js|screen.css: only a loaded skill's two page files, nothing else."""
+        if method != "GET":
+            return self.send_error(405)
+        m = re.fullmatch(r"/skills/([a-z][a-z0-9_]{1,30})/(screen\.js|screen\.css)", urlparse(self.path).path)
+        try:
+            host = skill_host()
+            path = host.skills[m.group(1)].folder / m.group(2) if m and m.group(1) in host.skills else None
+            data = path.read_bytes() if path is not None and path.is_file() else None
+        except OSError:
+            data = None
+        if data is None:
+            return self._send({"error": SKILL_UNKNOWN}, 404)
+        ctype = "text/javascript; charset=utf-8" if m.group(2).endswith(".js") else "text/css; charset=utf-8"
+        return self._send(data, 200, ctype)
+    # --- end skills hook ---
 
     def _voice_stream(self, voice_id, key, offline, text=voices.LINE):
         """One voice sample as raw 16-bit PCM, sent as it is made so the page can play it at once. Nothing is
@@ -675,8 +775,8 @@ class Handler(SimpleHTTPRequestHandler):
             gen.close()  # a stopped sample is logged and never saved
         return True
 
-    def _mary_stream(self, text):
-        """Mary's answer as it happens: one JSON line per event (mood, text pieces, then done).
+    def _mary_stream(self, text, screen=None):
+        """Mary's answer as it happens: one JSON line per event (mood, text pieces, skill effects, then done).
         The connection closing ends the stream (HTTP/1.0); end_headers adds Cache-Control: no-store."""
         self.send_response(200)
         self.send_header("Content-Type", "application/x-ndjson")
@@ -695,7 +795,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         try:
             done = mary_talk(text, on_text=lambda piece: line({"text": piece}),
-                             on_mood=lambda mood: line({"mood": mood}))
+                             on_mood=lambda mood: line({"mood": mood}),
+                             screen=screen, on_effect=lambda effect: line({"effect": effect}))  # skills hook (M13)
         except Exception:
             line({"error": "Something went wrong. Please try again."})
             return True
@@ -799,6 +900,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send({"ok": True})
             if method == "PUT" and path == "/api/settings":
                 for k, v in self._body().items():
+                    if k in SKILL_SETTINGS:
+                        continue  # --- skills hook (M13) --- only the skill routes change these
                     if k == "gemini_key" and not str(v).strip():
                         continue  # a blank key box means "keep the saved key"
                     if k == "companion":
@@ -858,6 +961,8 @@ class Handler(SimpleHTTPRequestHandler):
         mutating = method not in ("GET", "HEAD")
         if not self._allowed(mutating):
             return
+        if self.path.startswith("/skills/"):  # --- skills hook (M13) --- a skill's page files
+            return self._skill_file(method)
         if not self.path.startswith("/api/") and urlparse(self.path).path.rstrip("/") != "/report":
             if method == "GET":
                 return super().do_GET()

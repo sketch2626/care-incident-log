@@ -1,6 +1,6 @@
 # Handoff essentials for every second-account worker (read this first)
 
-You are a **worker** on Andy's second account, in your own folder (a git worktree on branch `other/<item>`). The hub in Andy's desktop app merges your branch into `main` when you're done. Your memory folder is empty, so these are the essentials.
+You are a **worker** on Andy's second account, in your own folder (a git worktree on branch `other/<item>`). The hub in Andy's desktop app merges your branch into `main` when you're done. Your memory folder is empty, so these are the essentials. **Read `docs/mission.md` first:** it's the spirit of the project, and every choice you make should fit it.
 
 ## Who and why
 - **Andy** is 43 and paralyzed, and lives in a North Carolina nursing home with poor care. He builds this Care Incident Log mostly by voice. Everything a resident does must work by voice or one big tap, **never key combos**. He pays for every token.

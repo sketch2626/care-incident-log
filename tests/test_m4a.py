@@ -4,15 +4,18 @@ from tests import helpers  # noqa: F401  (must be first: points the data folders
 the pace/speed plumbing and the /api/mary/say checks. No network: voices._open is faked."""
 import shutil
 import tempfile
+import time
 import json
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import mary
 import server
 import voices
-from tests.test_voices import KEY, Net, Resp
+from tests.test_voices import KEY, PCM, Net, Resp, http_error
 
 REAL = Path(__file__).resolve().parent.parent / "skills"
 
@@ -70,9 +73,9 @@ class LiveStartBody(M4aCase):
 
     def test_slow_pace_sentence_only_when_slow(self):
         slow = self.start(voice_rate="0.7")["systemInstruction"]["parts"][0]["text"]
-        self.assertIn("speak slowly and clearly", slow)
+        self.assertIn("somewhat slower pace", slow)
         normal = self.start(voice_rate="1.0")["systemInstruction"]["parts"][0]["text"]
-        self.assertNotIn("unhurried pace", normal)
+        self.assertNotIn("somewhat slower pace", normal)
         fast = self.start(voice_rate="1.3")["systemInstruction"]["parts"][0]["text"]
         self.assertIn("brisker pace", fast)
 
@@ -220,7 +223,7 @@ class LiveBrain(M4aCase):
     def test_memory_tools_even_with_no_skills(self):
         setup = self.token_setup(self.memory())
         names = {d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])}
-        self.assertEqual(names, {"remember_fact", "set_their_name", "tell_story"})
+        self.assertEqual(names, {"remember_fact", "set_their_name", "tell_story", "story_more", "end_talk"})
         self.assertFalse(any("__" in n for n in names))
         self.assertIn(voices.LIVE_TOOLS_NOTE, setup["systemInstruction"]["parts"][0]["text"])
 
@@ -310,7 +313,7 @@ class NameCases(unittest.TestCase):
 
 
 class StoryAndTalkOnOpen(M4aCase):  # M4a: Live's tell_story tool, "Start talking when Mary opens", Normal's room
-    STORY = ("[mood: happy] " + " ".join(["Once upon a time in Boone there lived a man named Earl."] * 6)
+    STORY = ("[mood: happy] " + " ".join(["Once upon a time in Boone there lived a man named Earl."] * 12)
              + " [remember: Likes stories.]")
     FELL = "I fell and I can't get up"
 
@@ -352,7 +355,7 @@ class StoryAndTalkOnOpen(M4aCase):  # M4a: Live's tell_story tool, "Start talkin
             self.assertNotIn(bad, story)
         body, key, deadline = seen[0]
         self.assertEqual((key, deadline), (KEY, mary.STORY_DEADLINE_S))
-        self.assertEqual(body["generationConfig"]["maxOutputTokens"], 1500)
+        self.assertEqual(body["generationConfig"]["maxOutputTokens"], 6000)
         self.assertIn(mary.STORY_PROMPT, body["systemInstruction"]["parts"][0]["text"])
         self.assertIn("a funny one about Boone", body["contents"][0]["parts"][0]["text"])
         self.fake([self.STORY, " And then he went down to the"])  # cut off by the deadline mid-sentence
@@ -394,7 +397,369 @@ class StoryAndTalkOnOpen(M4aCase):  # M4a: Live's tell_story tool, "Start talkin
 
     def test_normal_has_room_for_a_story(self):
         body = mary._body("tell me a story", mary.Memory(server.DATA / "mary" / "memory.json"), None)
-        self.assertEqual(body["generationConfig"]["maxOutputTokens"], 1200)
+        self.assertEqual(body["generationConfig"]["maxOutputTokens"], 4000)
+
+
+# --- M4a: the Gemini voice's daily limit, story writing, Live's language hint, garbled lines ---
+DAILY = json.dumps({"error": {"status": "RESOURCE_EXHAUSTED", "message": (
+    "You exceeded your current quota. " + "More words Google sends first. " * 5
+    + "gemini-3.8-flash-tts (limit: 10 requests per day on Free Tier)")}}).encode()  # past the 120-character detail
+MINUTE = b'{"error":{"status":"RESOURCE_EXHAUSTED","message":"limit: 3 requests per minute on Free Tier"}}'
+KOKORO_PCM = b"\x01\x00" * 4
+
+
+def clear_spent():
+    voices._spent_until, voices._spent_path = 0.0, None
+    (server.DATA / "mary" / "tts_spent.json").unlink(missing_ok=True)
+
+
+def restart():
+    """What a restart does: the module forgets, the file stays."""
+    voices._spent_until, voices._spent_path = 0.0, None
+
+
+class DailyVoiceLimit(M4aCase):
+    def setUp(self):
+        super().setUp()
+        clear_spent()
+        self.addCleanup(clear_spent)
+        self.file = server.DATA / "mary" / "tts_spent.json"
+
+    def spend(self):
+        self.net(http_error(429, DAILY))
+        with self.assertRaises(voices.VoiceError):
+            voices.tts_sample("gemini:Sulafat", KEY, server.DATA)
+
+    def kokoro(self):
+        seen = []
+
+        def stream(voice, data=None, summary=None, text="", speed=1.0):
+            seen.append((voice, text, speed))
+            yield {"pcm": KOKORO_PCM, "rate": 24000, "channels": 1, "cached": False, "path": "kokoro"}
+        p = mock.patch.object(voices, "kokoro_stream", stream)
+        p.start()
+        self.addCleanup(p.stop)
+        return seen
+
+    def say(self):
+        return helpers.api("POST", "/api/mary/say", {"text": "Hello there.", "mode": "normal", "rate": 0.8})
+
+    def test_daily_429_sets_spent_and_file_with_no_second_request(self):
+        for body in (DAILY, b'{"error":{"details":[{"quotaId":"GenerateRequestsPerDayPerProject-FreeTier"}]}}'):
+            clear_spent()
+            net = self.net(http_error(429, body))
+            with self.assertRaises(voices.VoiceError) as cm:
+                voices.tts_sample("gemini:Sulafat", KEY, server.DATA)
+            self.assertEqual(cm.exception.kind, "tts_spent")
+            self.assertEqual(len(net.requests), 1)
+            self.assertTrue(voices.tts_spent(server.DATA))
+            until = json.loads(self.file.read_text(encoding="utf-8"))["until"]
+            self.assertAlmostEqual(until, voices.next_midnight_pacific(), delta=2)
+
+    def test_daily_429_on_the_fallback_path_too(self):
+        net = self.net(http_error(404), http_error(429, DAILY))
+        with self.assertRaises(voices.VoiceError) as cm:
+            voices.tts_sample("gemini:Sulafat", KEY, server.DATA)
+        self.assertEqual(cm.exception.kind, "tts_spent")
+        self.assertEqual(len(net.requests), 2)
+        self.assertTrue(self.file.exists())
+
+    def test_next_call_raises_before_network_even_after_a_restart(self):
+        self.spend()
+        for _ in (1, 2):
+            net = self.net()
+            with self.assertRaises(voices.VoiceError) as cm:
+                voices.tts_sample("gemini:Sulafat", KEY, server.DATA)
+            self.assertEqual(cm.exception.kind, "tts_spent")
+            self.assertEqual(net.requests, [])
+            restart()
+
+    def test_per_minute_429_is_not_remembered(self):
+        net = self.net(http_error(429, MINUTE))
+        with self.assertRaises(voices.VoiceError) as cm:
+            voices.tts_sample("gemini:Sulafat", KEY, server.DATA)
+        self.assertEqual(cm.exception.kind, "no_gemini")
+        self.assertEqual(len(net.requests), 1)
+        self.assertFalse(voices.tts_spent(server.DATA))
+        self.assertFalse(self.file.exists())
+
+    def test_saved_copy_still_plays_while_spent(self):
+        wav, meta = voices._cache_files("gemini:Sulafat", "Sulafat", server.DATA, voices.LINE)
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.write_bytes(voices._wav(PCM, 24000))
+        self.addCleanup(wav.unlink, missing_ok=True)
+        voices._spent_until, voices._spent_path = voices.next_midnight_pacific(), self.file
+        net = self.net()
+        self.assertTrue(voices.tts_sample("gemini:Sulafat", KEY, server.DATA)["cached"])
+        self.assertEqual(net.requests, [])
+
+    def test_spent_expires(self):
+        self.file.parent.mkdir(parents=True, exist_ok=True)
+        self.file.write_text(json.dumps({"until": time.time() - 5}), encoding="utf-8")
+        restart()
+        self.assertFalse(voices.tts_spent(server.DATA))
+        voices._spent_until = time.time() + 60
+        self.assertTrue(voices.tts_spent(server.DATA))
+        voices._spent_until = time.time() - 1
+        self.assertFalse(voices.tts_spent(server.DATA))
+
+    def test_corrupt_or_silly_file_is_not_spent(self):
+        self.file.parent.mkdir(parents=True, exist_ok=True)
+        for text in ("not json", "[]", "{}", '{"until": "soon"}', '{"until": true}', '{"until": 1e300}',
+                     '{"until": Infinity}'):
+            self.file.write_text(text, encoding="utf-8")
+            restart()
+            self.assertFalse(voices.tts_spent(server.DATA), text)
+
+    def test_next_midnight_pacific(self):
+        def utc(*a):
+            return datetime(*a, tzinfo=timezone.utc).timestamp()
+        self.assertEqual(voices.next_midnight_pacific(utc(2026, 7, 1, 15, 0)), utc(2026, 7, 2, 8, 0))
+        self.assertEqual(voices.next_midnight_pacific(utc(2026, 1, 1, 7, 59, 59)), utc(2026, 1, 1, 8, 0))
+        self.assertEqual(voices.next_midnight_pacific(utc(2026, 1, 1, 8, 0)), utc(2026, 1, 2, 8, 0))
+        self.assertEqual(voices.next_midnight_pacific(utc(2026, 12, 31, 9, 0)), utc(2027, 1, 1, 8, 0))
+
+    def test_say_swaps_to_kokoro_on_the_first_429_and_after(self):
+        self.put(gemini_key=KEY)
+        seen = self.kokoro()
+        net = self.net(http_error(429, DAILY))
+        status, raw, headers = self.say()
+        self.assertEqual((status, raw), (200, KOKORO_PCM))
+        self.assertEqual(headers["Content-Type"], "audio/L16")
+        self.assertEqual(headers["X-Rate"], "24000")
+        self.assertEqual(len(net.requests), 1)
+        voice, text, speed = seen[0]
+        self.assertTrue(voice.startswith("kokoro:"), voice)
+        self.assertEqual((text, speed), ("Hello there.", 0.8))
+        net = self.net()
+        status, raw, _ = self.say()
+        self.assertEqual((status, raw), (200, KOKORO_PCM))
+        self.assertEqual(net.requests, [])
+        self.assertEqual(len(seen), 2)
+        self.assertIn("using Kokoro", (server.DATA / "mary" / "audition.log").read_text(encoding="utf-8"))
+        self.assertIs(helpers.api("GET", "/api/mary/status")[1]["tts_spent"], True)
+
+    def test_say_with_no_kokoro_is_a_plain_failure(self):
+        self.put(gemini_key=KEY)
+        with mock.patch.object(voices, "kokoro_ready", lambda: False):
+            self.net(http_error(429, DAILY))
+            status, got, _ = self.say()
+            self.assertEqual(status, 503)
+            self.assertTrue(got["error"])
+            net = self.net()
+            self.assertEqual(self.say()[0], 503)
+            self.assertEqual(net.requests, [])
+
+    def test_per_minute_429_on_say_does_not_swap(self):
+        self.put(gemini_key=KEY)
+        seen = self.kokoro()
+        self.net(http_error(429, MINUTE))
+        self.assertEqual(self.say()[0], 502)
+        self.assertEqual(seen, [])
+        self.assertIs(helpers.api("GET", "/api/mary/status")[1]["tts_spent"], False)
+
+    def test_tryout_gets_a_plain_sentence(self):
+        body, status = server.voice_failure("tts_spent")
+        self.assertEqual(status, 503)
+        self.assertIn("tomorrow", body["error"])
+        self.assertNotIn("429", body["error"])
+
+
+class StoryWriting(M4aCase):
+    PARA = " ".join(["Earl took his boat out past Ocracoke one morning in May."] * 10)
+
+    def setUp(self):
+        super().setUp()
+        self.memory = mary.Memory(server.DATA / "mary" / "memory.json")
+        self.now = [100.0]
+        p = mock.patch.object(mary, "time", SimpleNamespace(monotonic=lambda: self.now[0]))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def fake(self, *steps):
+        """Each step is an exception to raise, or the story to give; each call takes the next step."""
+        seen, steps = [], list(steps)
+
+        def stream(body, api_key, model="", deadline_s=None):
+            seen.append(dict(body["generationConfig"]))
+            step = steps.pop(0)
+            if isinstance(step, Exception):
+                self.now[0] += getattr(step, "took", 0)
+                raise step
+            yield step
+        p = mock.patch.object(mary, "_gemini_stream", stream)
+        p.start()
+        self.addCleanup(p.stop)
+        return seen
+
+    def test_first_try_asks_for_low_thinking_and_room(self):
+        seen = self.fake(self.PARA)
+        info = {}
+        self.assertTrue(mary.tell_story("any", self.memory, KEY, report=info))
+        self.assertEqual(seen[0]["maxOutputTokens"], 6000)
+        self.assertEqual(seen[0]["thinkingConfig"], {"thinkingLevel": "low"})
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(info, {"path": "thinking_low", "words": 110})
+
+    def test_fast_failure_retries_without_thinking(self):
+        seen = self.fake(OSError("400"), self.PARA)
+        info = {}
+        self.assertTrue(mary.tell_story("any", self.memory, KEY, report=info))
+        self.assertEqual(len(seen), 2)
+        self.assertIn("thinkingConfig", seen[0])
+        self.assertNotIn("thinkingConfig", seen[1])
+        self.assertEqual(seen[1]["maxOutputTokens"], 6000)
+        self.assertEqual(info["path"], "no_thinking")
+        self.assertNotIn("error", info)
+
+    def test_slow_failure_or_timeout_never_retries(self):
+        slow = OSError("late")
+        slow.took = 5
+        for err in (slow, TimeoutError("timed out")):
+            seen = self.fake(err, self.PARA)
+            info = {}
+            self.assertEqual(mary.tell_story("any", self.memory, KEY, report=info), "")
+            self.assertEqual(len(seen), 1)
+            self.assertEqual(info["path"], "thinking_low")
+            self.assertTrue(info["error"])
+
+    def test_only_one_retry(self):
+        seen = self.fake(OSError("400"), OSError("400 again"), self.PARA)
+        self.assertEqual(mary.tell_story("any", self.memory, KEY), "")
+        self.assertEqual(len(seen), 2)
+
+    def test_min_words_and_paragraphs(self):
+        word_story = " ".join(["word"] * (mary.STORY_MIN_WORDS - 1)) + "."
+        self.assertEqual(mary.STORY_MIN_WORDS, 100)
+        self.fake(word_story)
+        self.assertEqual(mary.tell_story("any", self.memory, KEY), "")
+        self.fake(self.PARA + " \n \n" + self.PARA)
+        story = mary.tell_story("any", self.memory, KEY)
+        self.assertEqual(story.split("\n\n"), [self.PARA, self.PARA])
+
+    def test_every_story_is_logged(self):
+        self.put(gemini_key=KEY)
+        log = server.DATA / "mary" / "audition.log"
+        log.unlink(missing_ok=True)
+        self.fake(self.PARA + " " + self.PARA, TimeoutError("x"))
+        call = {"name": "tell_story", "args": {"request": "any"}}
+        self.assertIn("story", helpers.api("POST", "/api/mary/skills/call", call)[1]["response"])
+        self.assertEqual(helpers.api("POST", "/api/mary/skills/call", call)[1]["response"]["error"], "no_story")
+        lines = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
+        stories = [x for x in lines if x.get("event") == "story"]
+        self.assertEqual([(x["ok"], x["words"], x["path"]) for x in stories],
+                         [(True, 220, "thinking_low"), (False, 0, "thinking_low")])
+        self.assertEqual(stories[1]["error"], "TimeoutError")
+
+
+class LiveLanguageHint(M4aCase):
+    BAD = b'{"error":{"status":"INVALID_ARGUMENT","message":"Invalid value at languageCodes"}}'
+
+    def start(self, *queue, **body):
+        self.put(gemini_key=KEY)
+        net = self.net(*queue)
+        return net, helpers.api("POST", "/api/mary/live/start", body)
+
+    def heard(self, net, i=0):
+        return net.body(i)["bidiGenerateContentSetup"]["inputAudioTranscription"]
+
+    def test_hint_sent_and_plain_drops_it(self):
+        net, (status, _, _) = self.start(Resp({"name": "auth_tokens/abc"}))
+        self.assertEqual(status, 200)
+        self.assertEqual(self.heard(net), {"languageCodes": ["en-US"]})
+        setup = net.body()["bidiGenerateContentSetup"]
+        self.assertNotIn("languageCode", setup["generationConfig"]["speechConfig"])
+        self.assertEqual(setup["outputAudioTranscription"], {})
+        net, (status, _, _) = self.start(Resp({"name": "auth_tokens/abc"}), plain=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.heard(net), {})
+
+    def test_400_retries_once_plain(self):
+        net, (status, got, _) = self.start(http_error(400, self.BAD), Resp({"name": "auth_tokens/abc"}))
+        self.assertEqual(status, 200, got)
+        self.assertEqual(self.heard(net, 0), {"languageCodes": ["en-US"]})
+        self.assertEqual(self.heard(net, 1), {})
+        self.assertEqual(len(net.requests), 2)
+
+    def test_second_400_or_plain_400_gives_up(self):
+        net, (status, _, _) = self.start(http_error(400, self.BAD), http_error(400, self.BAD))
+        self.assertEqual((status, len(net.requests)), (502, 2))
+        net, (status, _, _) = self.start(http_error(400, self.BAD), plain=True)
+        self.assertEqual((status, len(net.requests)), (502, 1))
+
+    def test_key_refusal_never_retries(self):
+        bad_key = b'{"error":{"message":"API key not valid."}}'
+        net, (status, got, _) = self.start(http_error(400, bad_key))
+        self.assertEqual((status, len(net.requests)), (400, 1))
+        self.assertTrue(got["bad_key"])
+
+    def test_unknown_name_tries_every_version_before_going_plain(self):
+        unknown = b'{"error":{"message":"Unknown name languageCodes"}}'
+        net, (status, got, _) = self.start(http_error(400, unknown), http_error(400, unknown),
+                                           Resp({"name": "auth_tokens/abc"}))
+        self.assertEqual(status, 200, got)
+        self.assertEqual([self.heard(net, i) for i in range(3)],
+                         [{"languageCodes": ["en-US"]}, {"languageCodes": ["en-US"]}, {}])
+
+    def test_unknown_name_still_tries_the_next_api_version(self):
+        unknown = b'{"error":{"message":"Unknown name liveConnectConstraints"}}'
+        net, (status, got, _) = self.start(http_error(400, unknown), Resp({"name": "auth_tokens/abc"}), plain=True)
+        self.assertEqual(status, 200, got)
+        self.assertIn(voices.TOKEN_VERSIONS[1], net.requests[1].full_url)
+
+
+class PageTools(M4aCase):
+    def test_answered_by_the_page_not_the_server(self):
+        for name in ("story_more", "end_talk"):
+            got = helpers.api("POST", "/api/mary/skills/call", {"name": name, "args": {}})[1]
+            self.assertEqual(got, {"response": {"error": "not_here"}, "effects": [], "say": None})
+
+    def test_no_empty_parameters(self):
+        for decl in mary.LIVE_PAGE_TOOLS:
+            self.assertNotIn("parameters", decl)  # Gemini refuses an OBJECT with empty properties
+
+
+class GarbledLines(M4aCase):
+    CHINESE = "\u6211\u4e0d\u77e5\u9053\u4f60\u5728\u8bf4\u4ec0\u4e48"
+
+    def turns(self):
+        return [t["text"] for t in server.mary_memory().recent]
+
+    def test_not_english(self):
+        for text in ("", None, "123 !?", "hello there", "caf\u00e9 se\u00f1or", "hello \u4f60\u597d", "ab\u4f60\u597d",
+                     "\U0001F600\U0001F600 ok"):
+            self.assertFalse(mary.not_english(text), text)
+        for text in (self.CHINESE, "\u041f\u0440\u0438\u0432\u0435\u0442", "hi \u4f60\u597d\u5417",
+                     "\u0645\u0631\u062d\u0628\u0627"):
+            self.assertTrue(mary.not_english(text), text)
+
+    def test_heard_garbled_is_not_saved_or_learned(self):
+        before = server.mary_memory().name
+        status, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "my name is " + self.CHINESE})
+        self.assertEqual(status, 200)
+        self.assertEqual(got, {"emergency": False, "kind": "", "say": "", "garbled": True})
+        self.assertEqual(self.turns(), [])
+        self.assertEqual(server.mary_memory().name, before)
+
+    def test_emergency_in_a_garbled_line_still_fires(self):
+        text = "chest pain " + self.CHINESE * 2
+        self.assertTrue(mary.not_english(text))
+        _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": text})
+        self.assertTrue(got["emergency"])
+        self.assertTrue(got["say"])
+        self.assertNotIn("garbled", got)
+        self.assertEqual(self.turns(), [text, got["say"]])
+
+    def test_ordinary_line_has_no_garbled_field(self):
+        _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "tell me about Boone"})
+        self.assertNotIn("garbled", got)
+        self.assertEqual(self.turns(), ["tell me about Boone"])
+
+    def test_her_garbled_turn_is_not_saved(self):
+        self.assertEqual(helpers.api("POST", "/api/mary/live/said", {"text": self.CHINESE})[0], 200)
+        self.assertEqual(self.turns(), [])
+        helpers.api("POST", "/api/mary/live/said", {"text": "Well now, that's a fine story."})
+        self.assertEqual(self.turns(), ["Well now, that's a fine story."])
 
 
 if __name__ == "__main__":

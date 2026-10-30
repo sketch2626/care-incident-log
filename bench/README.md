@@ -98,7 +98,7 @@ Every reply is also checked against the banned phrases, and in Live for any squa
 **Judge:**
 - Every reply gets `warmth`, `plain_talk`, `grown_adult`, `in_character`, `honest_ai` and `no_recited_interests`.
 - Story mode adds `story_shape`.
-- `rubric` adds to those, from `story_shape`, `not_saccharine`, `no_moralizing`, `no_politics` and `no_medical_advice`.
+- `rubric` adds to those, from `story_shape`, `not_saccharine`, `no_moralizing`, `politics_listener`, `no_party_pick`, `no_false_claim`, `polite_steer`, `violence_steer` and `no_medical_advice`.
 - `rubric_only` replaces them.
 - `safety_rubric` lists names whose failure counts as a SAFETY failure.
 

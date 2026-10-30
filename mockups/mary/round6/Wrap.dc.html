@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Two lines max</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="r6.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&amp;family=Fredoka:wght@600&amp;family=Nunito:wght@900&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div class="sheet" style="height: 1250px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1>Long sentences: two lines at most</h1>
+<p class="muted">The bottom of her screen, real size. When a third line starts, the top line floats up and fades away, and the lines below slide up to take its place.</p>
+</div>
+
+<div style="display: flex; align-items: center; gap: 16px"><b style="display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 24px; background: #2b1f17; color: #fffdf8; font-size: 26px">1</b><h2>Two lines fill up</h2></div>
+<div class="scr mary" style="width: auto; height: 220px; border-radius: 22px">
+<div class="edge"></div>
+<div class="cap capA">
+<div class="line"><span class="w done" data-t="Good">Good</span><span class="w done" data-t="morning,">morning,</span><span class="w done" data-t="sunshine!">sunshine!</span><span class="w done" data-t="I">I</span><span class="w done" data-t="hope">hope</span></div>
+<div class="line"><span class="w done" data-t="you">you</span><span class="w done" data-t="slept">slept</span><span class="w done" data-t="well">well</span><span class="w done" data-t="last">last</span><span class="w on f6" data-t="night.">night.</span><span class="w" data-t="Did">Did</span></div>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 16px"><b style="display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 24px; background: #2b1f17; color: #fffdf8; font-size: 26px">2</b><h2>A third line starts: the top line floats up and fades</h2></div>
+<div class="scr mary" style="width: auto; height: 310px; border-radius: 22px">
+<div class="edge"></div>
+<div class="cap capA">
+<div class="line gone"><span class="w done" data-t="Good">Good</span><span class="w done" data-t="morning,">morning,</span><span class="w done" data-t="sunshine!">sunshine!</span><span class="w done" data-t="I">I</span><span class="w done" data-t="hope">hope</span></div>
+<div class="line"><span class="w done" data-t="you">you</span><span class="w done" data-t="slept">slept</span><span class="w done" data-t="well">well</span><span class="w done" data-t="last">last</span><span class="w done" data-t="night.">night.</span><span class="w done" data-t="Did">Did</span></div>
+<div class="line"><span class="w on f4" data-t="anyone">anyone</span><span class="w" data-t="bring">bring</span><span class="w later" data-t="your">your</span><span class="w later" data-t="coffee">coffee</span><span class="w later" data-t="yet,">yet,</span></div>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 16px"><b style="display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 24px; background: #2b1f17; color: #fffdf8; font-size: 26px">3</b><h2>A moment later: two lines again, nothing jumps</h2></div>
+<div class="scr mary" style="width: auto; height: 220px; border-radius: 22px">
+<div class="edge"></div>
+<div class="cap capA">
+<div class="line"><span class="w done" data-t="you">you</span><span class="w done" data-t="slept">slept</span><span class="w done" data-t="well">well</span><span class="w done" data-t="last">last</span><span class="w done" data-t="night.">night.</span><span class="w done" data-t="Did">Did</span></div>
+<div class="line"><span class="w done" data-t="anyone">anyone</span><span class="w done" data-t="bring">bring</span><span class="w done" data-t="your">your</span><span class="w done" data-t="coffee">coffee</span><span class="w on f6" data-t="yet,">yet,</span></div>
+</div>
+</div>
+<p class="muted">Then "or should we ask?" starts a new line the same way. Four seconds after she stops, or as soon as you start talking, the words fade out.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1250}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Listening, Sam</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="r6.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="scr sam listen">
+<div class="edge"></div>
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Sam, listening">
+<defs><radialGradient id="bls"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient></defs>
+<g transform="translate(0 -30)"><g class="face lean soft">
+<g class="lift"><g fill="none" stroke="#5a3d28" stroke-width="6.5" stroke-linecap="round"><path d="M226 128 C238 118 266 116 284 122"></path><path d="M414 128 C402 118 374 116 356 122"></path></g></g>
+<ellipse class="cheek" cx="246" cy="238" rx="36" ry="14" fill="url(#bls)"></ellipse><ellipse class="cheek" cx="394" cy="238" rx="36" ry="14" fill="url(#bls)"></ellipse>
+<g class="eye blink"><rect x="232" y="151" width="48" height="58" rx="19" fill="#3a2b22"></rect><circle cx="265" cy="166" r="8" fill="#ffffff"></circle><circle cx="246" cy="194" r="4" fill="#ffffff" opacity="0.85"></circle></g>
+<g class="eye blink"><rect x="360" y="151" width="48" height="58" rx="19" fill="#3a2b22"></rect><circle cx="393" cy="166" r="8" fill="#ffffff"></circle><circle cx="374" cy="194" r="4" fill="#ffffff" opacity="0.85"></circle></g>
+<path d="M296 262 Q320 276 344 262" fill="none" stroke="#8a3b2e" stroke-width="7" stroke-linecap="round"></path>
+</g></g>
+</svg>
+<div class="tag"><b>Listening · waiting for you</b><span>His square glow turns blue and breathes slowly. The little bars stay low until you speak, then jump with your voice.</span></div>
+<button class="menu-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>Menu</button>
+<div class="hear quiet"><span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>I'm listening</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -21,7 +21,7 @@ This is Andy's mission, not a demo.
 
 ## Desktop app (beta)
 - `desktop.py` — app entry: starts the server in a thread (port 8765, or any free port if taken) and shows it in its own pywebview/WebView2 window; if WebView2 is missing it opens the default browser instead. Closing the window quits.
-- Build: double-click `packaging\build.bat` (makes `packaging\.venv`, installs pinned `packaging\requirements.txt`, runs `packaging\build.py`). Output in `dist\`: `CareIncidentLog-Setup-<ver>.exe` (Inno Setup, per-user, no admin, Start-menu + desktop shortcuts) and `CareIncidentLog-<ver>-portable.zip`. Version = `VERSION` in `build.py`. Bundles `web/`, the voice model (`models\faster-whisper-base.en` → `_internal\models\`, where `speech.py` finds it) and speech libs (installer ~200 MB, ~400 MB installed); never `mcp_server.py`, `.mcp.json` or `mockups/`. Needs Inno Setup 6 for the installer (zip is built without it).
+- Build: double-click `packaging\build.bat` (makes `packaging\.venv`, installs pinned `packaging\requirements.txt`, runs `packaging\build.py`). Output in `dist\`: `CareIncidentLog-Setup-<ver>.exe` (Inno Setup, per-user, no admin, Start-menu + desktop shortcuts) and `CareIncidentLog-<ver>-portable.zip`. Version = `VERSION` in `build.py`. Bundles `web/` (with `web/mary/fonts/`), `mary/instructions.md`, `skills/`, vosk, and the three models under `_internal\models\`: faster-whisper base.en, Kokoro and the Vosk small English model. When `models/` is missing, `build.py` downloads each one with `tools/get_*_model.py` and a SHA-256 check. v0.3.0 (2026-10-30): installer 334 MB, zip 397 MB, about 660 MB installed. Shortcuts are "Mary" (`--mary`; the name is still for Andy to confirm) and "Care Incident Log". Never bundled: `mcp_server.py`, `.mcp.json`, `mockups/`, `docs/handoff/`, `bench/`. Needs Inno Setup 6 for the installer (zip is built without it).
 - `packaging\installer.iss` (installer), `packaging\make_icon.py` → `icon.ico`. Uninstall leaves the data folder alone.
 - Test a build without touching real data: set env `APPDATA` to a scratch folder and `TRACKER_PORT=8799`, run the exe, use the API, close, rerun. Silent install: `Setup.exe /VERYSILENT /DIR=<folder>`.
 - Not yet: code signing (unsigned exe gets a SmartScreen "More info → Run anyway" prompt).
@@ -80,9 +80,15 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
          - **M3 boards** (`mockups/mary/round6/`, canvas https://claude.ai/artifact/Mh4CpUMru2YGNSEycrJnCZ):
            - Approved: caption style A, the emergency screen, and the menu (one Menu button, top right).
            - Being revised: listening = sound-wave arcs off both "ears", with no "I'm listening" pill; thinking = bubbles rising into a thought cloud over her head.
-         - **M4a, the good voice** (`docs/handoff/M4a.md`): M5 hands-free is folded in. It waits on Andy's go. M4b, the bubble captions, comes after the boards.
-         - **M6 wake word:** Stage 1 is in progress on the second account (Vosk gate plus Whisper confirm).
-       - **Next after those:** M4a (second account), M4b captions, then M7 games as skills.
+         - **Merged into main (all built on the second account):**
+           - M4a, Live voice plus stories, greeting, starting on open, and plain talk;
+           - M4b, captions, ear waves, thinking cloud and the one top-right Menu ("looks really good", Andy);
+           - M6, "Hey Mary"/"Hey Sam", which woke for him in 1.6 s; log in `wake.log` in the data folder;
+           - installer 0.3.0.
+         - **Andy's third try** (roadmap M4): runaway pacing in long stories, "go to sleep", there's no Talk button, and a patronizing tone ("infantilizing"). M4a's fixes are on `other/M4a`.
+         - **M9d brain bench:** being built (`docs/handoff/M9d.md`). The hub does the first live run, `--key-from-app`.
+         - **M14, a better voice:** later. It's the open-source, ElevenLabs-style voice Andy found (it runs locally and can't be shut down); ask him for its name first.
+       - **Next:** M7 games as skills (boards first, on Andy's account); rebuild the installer after M4a's latest merge.
     2. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 
 ## Next steps
@@ -105,7 +111,7 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
    - Still to build: her full-screen face, the talk loop (on-device speech-to-text → Gemini → voice), the "Hey Mary" wake word, and memory on the laptop. Test speed first (reply within ~2 s on a cheap laptop), then voice.
 3. **Lid to Mary.** Windows PIN, then Mary opens full screen on her own and stays open; a locked-down kiosk needs Windows 11 Pro. Also a one-click setup tool for helpers, and a laptop spec with a price.
 4. **Before the pilot:** review, test and merge `wip/report-to-state`; it becomes Mary's speak-up skill. Then add facility-first emails ("Facility first" in `docs/backend-plan.md`).
-5. Rebuild the installer. `build.py` must download the voice model when `models/` is missing, because `models/` is gitignored.
+5. ~~Rebuild the installer~~ **Done 2026-10-30** (0.3.0, branch `other/installer`). Models download when missing, and it was smoke-tested in a scratch folder. Rebuild it after each big Mary merge.
 6. Finish the pilot/funding plan doc. The protection checklist and AI partner steps are in `private/protection-and-partners.md`, which is gitignored and never committed or quoted publicly. The 5-resident pilot checklist is in `docs/pilot-checklist.md` (revise it for the companion); the pilot needs backend phases 1-2 only.
 7. Build the backend phase by phase per `docs/backend-plan.md`. Phase 1 (encrypt the local log, app lock) needs no server and can come early. No real resident data reaches a server piece until its security review passes.
 

@@ -313,7 +313,7 @@ class TokenTests(VoicesCase):
         self.assertNotIn("likes tea", system)  # no facts list in a live chat
         self.assertIn("square brackets", system)  # her tag instructions stay, so the live note switches them off
         self.assertIn("don't use them here", system)
-        self.assertIn("one to three short sentences", system)
+        self.assertIn("menu of options", system)  # M4a: no more one-to-three-sentence cap
 
     def test_token_tries_v1alpha_when_v1beta_does_not_know_the_fields(self):
         unknown = (b'{"error":{"status":"INVALID_ARGUMENT","message":"Invalid JSON payload received. '

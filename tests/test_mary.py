@@ -902,6 +902,28 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("'instructions.md'", build)
         self.assertEqual(mary.INSTRUCTIONS.relative_to(mary.ROOT).as_posix(), "mary/instructions.md")
 
+    def test_build_list_names_every_mary_piece(self):
+        packaging = Path(__file__).resolve().parent.parent / "packaging"
+        build = (packaging / "build.py").read_text(encoding="utf-8")
+        for piece in ("ROOT / 'web'", "ROOT / 'skills'", "models/faster-whisper-base.en", "models/kokoro",
+                      "models/vosk-model-small-en-us-0.15", '"wakeword"', '"power"', '"voices"', '"skills_core"',
+                      '"vosk"', '"kokoro_onnx"', '"espeakng_loader"', "get_whisper_model.py",
+                      "get_voice_model.py", "get_wake_model.py"):
+            with self.subTest(piece):
+                self.assertIn(piece, build)
+        for never in ("mcp_server", ".mcp.json", "mockups", "handoff", ".worktrees", "bench"):
+            with self.subTest(never=never):
+                self.assertNotIn(never, build)
+        fonts = Path(__file__).resolve().parent.parent / "web" / "mary" / "fonts"
+        self.assertTrue((fonts / "OFL.txt").is_file())  # web/ goes in whole, so the licence travels with the font
+
+    def test_installer_has_a_mary_shortcut(self):
+        iss = (Path(__file__).resolve().parent.parent / "packaging" / "installer.iss").read_text(encoding="utf-8")
+        for place in ("{autoprograms}", "{autodesktop}"):
+            with self.subTest(place):
+                self.assertIn(f'Name: "{place}\\Mary"; Filename: "{{app}}\\{{#AppExe}}"; Parameters: "--mary"', iss)
+                self.assertIn(f'Name: "{place}\\Care Incident Log"', iss)
+
 
 if __name__ == "__main__":
     unittest.main()

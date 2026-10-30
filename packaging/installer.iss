@@ -42,6 +42,8 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 [Icons]
 Name: "{autoprograms}\Care Incident Log"; Filename: "{app}\{#AppExe}"
 Name: "{autodesktop}\Care Incident Log"; Filename: "{app}\{#AppExe}"
+Name: "{autoprograms}\Mary"; Filename: "{app}\{#AppExe}"; Parameters: "--mary"
+Name: "{autodesktop}\Mary"; Filename: "{app}\{#AppExe}"; Parameters: "--mary"
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Open Care Incident Log now"; Flags: nowait postinstall skipifsilent

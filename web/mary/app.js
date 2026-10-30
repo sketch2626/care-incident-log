@@ -131,7 +131,7 @@
   };
 
   var NULLFACE = { setMood: noop, setActivity: noop, setCompanion: noop, bounce: noop, destroy: noop,
-    setLoud: noop, setMenuOpen: noop, setEmergency: noop };   // M4b
+    setLoud: noop, setMenuOpen: noop, setAside: noop, setEmergency: noop };   // M4b
   var face = NULLFACE;
 
   function makeFace(companion) {
@@ -218,7 +218,7 @@
   // thinking states (mockups/mary/round6/README.md, "Notes for the builder" 1-4, 6, 8) ---
   var NULLCAP = { sentence: function () { return 0; }, setDuration: noop, retime: noop, liveAudio: noop,
     livePiece: function () { return 0; }, whole: function () { return 0; }, cut: noop, stopped: noop, clear: noop,
-    setSide: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
+    setSide: noop, setAside: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
   var cap = NULLCAP;
   // plain: the plain line showing; owner: whose words are up (a speech session or 'live');
   // liveWhole / liveTimed / emTurn: Live on the emergency screen; liveDone: her Live turn was heard to the end
@@ -2081,6 +2081,15 @@
     capCall(function () { cap.setSide(false); });            // M4b
     if (refocus && was) { try { b.focus(); } catch (e) { /* nothing */ } }
   }
+  // M4b: side by side with a skill: her face slides into the left 40% and turns toward the right 60%, her words under her.
+  // The one call a screen needs. data-aside comes first, because the caption measures its words in its new size.
+  function sideBySide(on) {
+    on = !!on;
+    var root = $('scr');
+    if (on) { root.setAttribute('data-aside', '1'); } else { root.removeAttribute('data-aside'); }
+    try { face.setAside(on); } catch (e) { log(e); }
+    capCall(function () { cap.setAside(on); });
+  }
   function onMenuKey(ev) {   // M4b: arrow keys move through the menu
     var items = menuItems(), i = items.indexOf(D.activeElement), j = -1;
     if (ev.key === 'ArrowDown') { j = (i + 1) % items.length; }
@@ -2697,6 +2706,7 @@
     addThing: addThing,                      // M4b: skills.js lists a skill's screen in "Things Mary can do"
     openMenu: openMenu,                      // M4b
     closeMenu: closeMenu,                    // M4b
+    sideBySide: sideBySide,                  // M4b: a skill's screen beside her face (skills.js does this for aside:true)
     refreshStatus: refreshStatus,
     enterMain: enterMain,
     startFirstRun: startFirstRun,

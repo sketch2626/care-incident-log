@@ -148,6 +148,12 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .mf-dim.on{opacity:.45;transition:opacity 20s linear}
 .mf-root:has(.mf-dim.on) *{animation-play-state:paused}   /* dimmed = nobody around: her face stops animating to save battery */
 
+/* Side by side (MarySkills.register(name, {aside:true})): the skill's box is the right 60% of the window, on her warm
+   background; she and her caption have the left 40%. !important beats boxFor's inline left and padding.
+   It slides in as she slides over. Reduced motion: the block below turns the slide off. */
+.skill-screen.aside{left:40vw!important;padding:0!important;background:transparent;animation:skill-in .45s ease}
+@keyframes skill-in{from{transform:translateX(100%)}to{transform:none}}
+
 @media (max-width:700px){
   .menu-btn{top:16px;right:16px}
   .menu{top:126px;right:16px}

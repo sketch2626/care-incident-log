@@ -143,6 +143,13 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
     - He said "show me a picture" without saying of what. She picked "cardinal" herself, the example in the skill's card, and showed a mascot in a cardinal outfit.
     - She said "Look right there at the beautiful bird in the center of the screen". Andy: "I can see the damn screen… That's still that childlike stuff."
     - **Layout rejected:** she shrank to a small face in the top-left corner. Andy wants her to "slide out of the way and show the pictures like she would show the game screens", the same side-by-side layout games will use (see "Games with Mary" in `docs/companion-plan.md`), like the way she slides aside for the menu.
+  - **More from Andy:**
+    - An HTML-looking label (likely the Wikimedia credit) was dragged across the picture.
+    - She talked about the mascot as if it were a normal bird, because she never sees the picture.
+    - Called out on the double greeting, she agreed, then asked a third time.
+    - Andy: a greeting the brain doesn't know about "creates a weird mismatch".
+    - **Rule:** every line she speaks goes into the brain's history. When online, the hello comes from the brain.
+    - **Pictures:** the image comes from the subject's own article, checked with one Gemini vision call that also tells her what's really shown. The credit is plain text and never covers the picture.
   - **Fixes:** the brain (hello in history, name rarely, never narrate the screen), the picture skill (ask what to show when no subject is given, prefer the real thing over mascots and logos, talk about the subject, never the screen) to M4a; the slide-aside layout for pictures and games to M4b.
   - **Rule from now on (free tier):** in Live mode, Live itself speaks everything: stories, goodbyes and all. No Gemini TTS during a Live talk. Gemini TTS is for Normal mode only. After a daily 429, go straight to Kokoro for the rest of the day, with no retry storm, and never bounce out of Live because TTS failed.
   - **Fourth-try fixes (M4a, 2026-10-30):** the third-try story-through-TTS design below is gone. Live speaks everything in a Live talk, and stories reach it in parts, each a new turn. Live says the goodbye and the session closes (also through a new `end_talk` tool, for mishearings). A daily TTS 429 is remembered until midnight Pacific and `/api/mary/say` serves Kokoro. Normal and Offline lock one voice per talk. English hint for Live's transcription; garbled heard lines aren't shown or saved. New grown-up story prompt; room for thinking tokens. A page-side pace governor was skipped (hub, 2026-10-30), so Live's speed is still only a prompt. Not yet heard on a real laptop.

@@ -242,6 +242,31 @@ class DetectorTests(unittest.TestCase):
         self.assertAlmostEqual(events[0]["audio_t"], 0.2)
         self.assertEqual(self.confirm.calls, [])
 
+    def test_candidate_and_rejected_hooks(self):
+        det = self.make("Hey man, how is it going?")
+        seen = []
+        det.on_candidate = lambda info: seen.append(("heard", dict(info), len(self.confirm.calls)))
+        det.on_rejected = lambda info: seen.append(("almost", dict(info), len(self.confirm.calls)))
+        self.assertEqual(self.feed(det, "", *["hey mary [unk]"] * 6), [])
+        self.assertEqual([k for k, _i, _n in seen], ["heard", "almost"])
+        heard, almost = seen[0][1], seen[1][1]
+        self.assertEqual(seen[0][2], 0)  # told before Whisper was asked
+        self.assertEqual((heard["name"], heard["audio_t"]), ("mary", 0.2))
+        self.assertEqual((almost["confirm_text"], almost["name"]), ("Hey man, how is it going?", "mary"))
+        self.assertIsInstance(almost["confirm_ms"], float)
+        det.on_candidate = det.on_rejected = lambda info: 1 / 0  # a broken hook never breaks feed()
+        self.confirm.text = "Hey Mary."
+        self.feed(det, *[""] * 20)
+        self.assertEqual(len(self.feed(det, *WAKE)), 1)
+
+    def test_one_name_detector_ignores_the_other(self):
+        det = self.make("Hey Mary.", names=("sam",))
+        self.assertEqual(json.loads(self.rec.grammar), ["hey sam", "[unk]"])
+        self.assertEqual(self.feed(det, *WAKE), [])
+        self.assertEqual(self.confirm.calls, [])
+        self.confirm.text = "Hey Sam."
+        self.assertEqual([e["name"] for e in self.feed(det, *["hey sam"] * 6)], ["sam"])
+
     def test_failed_check_is_no_wake_and_sets_problem(self):
         det = self.make(RuntimeError("model broke"))
         self.assertEqual(self.feed(det, *WAKE), [])
@@ -264,8 +289,10 @@ class ListenerTests(unittest.TestCase):
         wakeword.REOPEN_RETRY_S = 0.05
         self.rec = FakeRecognizer()
         self.confirm = FakeConfirm("Hey Mary.")
-        self.L = wakeword._Listener(detector_factory=lambda: wakeword.Detector(
-            recognizer_factory=lambda grammar: self.rec, confirmer=self.confirm))
+        self.grammars = []  # the grammar of each Detector the listener built
+        self.L = wakeword._Listener(detector_factory=lambda names: wakeword.Detector(
+            names=names, recognizer_factory=lambda grammar: self.grammars.append(json.loads(grammar)) or self.rec,
+            confirmer=self.confirm))
         wakeword._listener = self.L
         self.heard = []
 
@@ -319,18 +346,42 @@ class ListenerTests(unittest.TestCase):
         self.assertIsNone(self.L.wait(0, timeout=0.2))
         self.assertEqual(self.L.status()["wakes"], 0)
 
-    def test_sam_companion_and_both_names(self):
+    def test_only_the_chosen_companion_name_wakes(self):
         self.L.set_companion("him")
         self.confirm.text = "Hey Sam."
         s = self.started()
+        self.assertEqual(self.grammars, [["hey sam", "[unk]"]])
         self.say(s, *["hey sam"] * 6)
         ev = self.L.wait(0, timeout=3)
         self.assertEqual((ev["name"], ev["companion"]), ("sam", "sam"))
         self.confirm.text = "Hey Mary."
         self.say(s, *[""] * 20)  # past the 2 s after a wake
+        self.say(s, *WAKE)  # "Hey Mary" while Sam is chosen: not even a candidate
+        self.assertIsNone(self.L.wait(1, timeout=0.3))
+        self.assertEqual(len(self.confirm.calls), 1)
+        self.L.set_companion("mary")  # the worker builds a Mary detector
+        self.wait_for(lambda: len(self.grammars) == 2)
+        self.assertEqual(self.grammars[1], ["hey mary", "[unk]"])
+        self.assertTrue(self.wait_for(lambda: self.L.status()["running"]))
         self.say(s, *WAKE)
         ev = self.L.wait(1, timeout=3)
-        self.assertEqual((ev["seq"], ev["name"], ev["companion"]), (2, "mary", "sam"))
+        self.assertEqual((ev["seq"], ev["name"], ev["companion"]), (2, "mary", "mary"))
+
+    def test_heard_and_almost_notes(self):
+        notes = []
+        self.L.start(on_note=notes.append)
+        s = self.wait_for(self.sd.live_wake)
+        self.confirm.text = "Hey man, how is it going?"
+        self.say(s, *["hey mary [unk]"] * 6)
+        self.wait_for(lambda: len(notes) >= 2)
+        self.assertEqual([n["type"] for n in notes], ["heard", "almost"])
+        self.assertEqual((notes[0]["name"], notes[0]["companion"]), ("mary", "mary"))
+        self.assertEqual(notes[1]["confirm_text"], "Hey man, how is it going?")
+        self.assertIsNone(self.L.wait(0, timeout=0.1))
+        self.confirm.text = "Hey Mary."
+        self.say(s, *WAKE)
+        self.assertIsNotNone(self.L.wait(0, timeout=3))
+        self.assertEqual([n["type"] for n in notes], ["heard", "almost", "heard"])
 
     def test_pause_closes_stream_and_resume_reopens(self):
         s = self.started()
@@ -452,7 +503,7 @@ class ListenerTests(unittest.TestCase):
         self.assertIsNot(s2, s)
 
     def test_detector_that_cannot_start_sets_problem(self):
-        def broken():
+        def broken(names):
             raise RuntimeError("no model")
         self.L = wakeword._Listener(detector_factory=broken)
         wakeword._listener = self.L

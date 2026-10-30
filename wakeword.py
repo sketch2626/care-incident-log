@@ -15,16 +15,25 @@ Two stages (measured on a Ryzen 5 7520U laptop):
 Public interface (all functions are thread-safe):
 
     available()              -> (ok, reason)   can wake-word listening run on this computer?
-    start(on_wake=None)      -> None   begin listening (RuntimeError with a plain message if it cannot)
+    start(on_wake=None, on_note=None) -> None   begin listening (RuntimeError with a plain message if
+                                        it cannot); on_note gets "heard" and "almost" notes (below)
     stop()                   -> None   stop listening and let go of the microphone
     pause(reason)            -> None   let go of the microphone now, until resume(reason)
     resume(reason)           -> None   listening restarts once no pause reason is left
-    set_companion(companion) -> None   "him" -> Sam, anything else -> Mary (both names always work)
+    set_companion(companion) -> None   "him" -> Sam, anything else -> Mary (only that name wakes)
     status()                 -> dict   {"enabled", "running", "listening", "paused_by", "wakes",
                                         "last", "problem"}
     wait(after_seq, timeout) -> dict | None   long-poll: newest wake event with seq > after_seq
 
 `Detector` is the microphone-free part; tests and the bench tool feed it audio directly.
+The bench listens for both NAMES; the app's listener builds its Detector for the chosen
+companion's name only, and set_companion() has the worker thread build a fresh one.
+
+Notes (on_note, called on the worker thread with no lock held; errors in it are ignored):
+    {"type": "heard",  "name", "stage1_text", "audio_t", "companion", "time"}
+        Vosk heard the name; Whisper is checking it now (a wake event follows if it agrees).
+    {"type": "almost", "name", "stage1_text", "confirm_text", "confirm_ms", "companion", "time"}
+        Whisper turned the candidate down (a near miss).
 
 Lock order: speech._rec_lock first, then _Listener._lock (wait()'s Condition shares that
 lock). Nothing takes speech._rec_lock while holding _Listener._lock. The audio callback
@@ -57,8 +66,8 @@ log = logging.getLogger("care.wakeword")
 VOSK_MODEL_NAME = "vosk-model-small-en-us-0.15"
 SAMPLE_RATE = 16000          # both models listen at 16 kHz mono
 BLOCK_SECONDS = 0.1          # one microphone block (1600 samples at 16 kHz)
-NAMES = ("mary", "sam")      # both names always wake; the event says which one was heard
-GRAMMAR = ["hey mary", "hey sam", "[unk]"]  # all Vosk may hear ("[unk]" = anything else)
+NAMES = ("mary", "sam")      # the bench listens for both; the app only for the chosen companion's name
+GRAMMAR = ["hey mary", "hey sam", "[unk]"]  # the bench grammar ("[unk]" = anything else)
 NAME_SPELLINGS = {"mary": ("mary", "marie"), "sam": ("sam",)}  # how Whisper may write each name
 GREETINGS = ("hey", "hi", "hay", "okay", "ok")  # words Whisper may write before the name
 RING_SECONDS = 3.0           # audio kept for the Whisper check
@@ -263,6 +272,10 @@ class Detector:
         self.errors = 0
         self.confirm_ms: list[float] = []
         self.problem: str | None = None  # plain message while the Whisper check cannot run
+        # Optional hooks, called inside feed() with errors ignored: on_candidate(info) the moment
+        # Vosk hears the name (before Whisper checks it), on_rejected(info) when Whisper says no.
+        self.on_candidate = None
+        self.on_rejected = None
 
     def feed(self, data) -> list[dict]:
         data = bytes(data)
@@ -286,6 +299,8 @@ class Detector:
                 return []
             self.candidates += 1
             self._pending = {"name": name, "stage1_text": text, "due": self.fed + _CONFIRM_WAIT}
+            self._hook(self.on_candidate, {"name": name, "stage1_text": text,
+                                           "audio_t": round(self.fed / SAMPLE_RATE, 3)})
             if not self.confirm:
                 return self._finish(self._event(self._pending, None, None))
         elif self._pending is not None and name:
@@ -345,9 +360,19 @@ class Detector:
                     hook(pending["stage1_text"], text.strip())
                 except Exception:
                     pass
+            self._hook(self.on_rejected, {"name": pending["name"], "stage1_text": pending["stage1_text"],
+                                          "confirm_text": text.strip(), "confirm_ms": ms})
             return None
         self.confirmed += 1
         return self._event(pending, text.strip(), ms, self._spelling.get(m.group(2), pending["name"]))
+
+    @staticmethod
+    def _hook(fn, info: dict) -> None:
+        if fn is not None:
+            try:
+                fn(info)
+            except Exception:
+                pass
 
     def _event(self, pending: dict, confirm_text, ms, name=None) -> dict:
         return {
@@ -409,6 +434,8 @@ class _Listener:
         self._paused: set[str] = set()
         self._primary = "mary"
         self._on_wake = None
+        self._on_note = None      # gets "heard" / "almost" notes (see the module docstring)
+        self._feed_gen = None     # worker thread only: the stream generation of the audio being fed
         self._run = None          # token of the current worker run (a fresh object per start())
         self._thread: threading.Thread | None = None
         self._queue: queue.Queue = queue.Queue(maxsize=QUEUE_BLOCKS)
@@ -424,7 +451,7 @@ class _Listener:
 
     # ---- public -----------------------------------------------------------
 
-    def start(self, on_wake=None) -> None:
+    def start(self, on_wake=None, on_note=None) -> None:
         real = self._detector_factory is None
         if real:
             ok, reason = available()
@@ -436,6 +463,8 @@ class _Listener:
         with self._lock:
             if on_wake is not None:
                 self._on_wake = on_wake
+            if on_note is not None:
+                self._on_note = on_note
             if recording:
                 self._paused.add("listen")
             self._enabled = True
@@ -482,6 +511,7 @@ class _Listener:
     def set_companion(self, companion) -> None:
         with self._lock:
             self._primary = "sam" if str(companion or "").strip().lower() == "him" else "mary"
+        self._poke()  # the worker builds a Detector for the new name at once
 
     def status(self) -> dict:
         with self._lock:
@@ -529,14 +559,25 @@ class _Listener:
         except queue.Full:
             pass  # it is busy with audio and will look again in a moment
 
-    def _work(self, run) -> None:
+    def _make_detector(self, run, names):
+        """A Detector for `names` with its hooks wired to this run, or None (problem set)."""
         try:
-            detector = self._detector_factory() if self._detector_factory else Detector()
+            detector = self._detector_factory(names) if self._detector_factory else Detector(names=names)
         except Exception:
             log.exception("Wake-word listening could not start")
             with self._lock:
                 if self._run is run:
                     self._problem = MSG_START_FAILED
+            return None
+        detector.on_candidate = lambda info: self._note(run, "heard", info)
+        detector.on_rejected = lambda info: self._note(run, "almost", info)
+        return detector
+
+    def _work(self, run) -> None:
+        with self._lock:
+            names = (self._primary,)
+        detector = self._make_detector(run, names)
+        if detector is None:
             return
         with self._lock:
             if self._run is not run:
@@ -548,8 +589,21 @@ class _Listener:
             with self._lock:
                 if self._run is not run:
                     break
+                rebuild = (self._primary,) != names
+                if rebuild:
+                    names = (self._primary,)
                 needs_sync = self._wanted() != (self._stream is not None)
             try:
+                if rebuild:  # the companion changed: only the new name may wake her
+                    fresh = self._make_detector(run, names)
+                    if fresh is not None:
+                        with self._lock:
+                            if self._run is not run:
+                                break
+                            self._detector = detector = fresh
+                            if self._problem == MSG_START_FAILED:
+                                self._problem = None
+                        last_gen = None
                 if needs_sync:
                     self._sync(run)
                 try:
@@ -566,6 +620,7 @@ class _Listener:
                     last_gen = gen
                 if rate != SAMPLE_RATE:
                     data = _to_16k(data, rate)
+                self._feed_gen = gen
                 for event in detector.feed(data):
                     self._publish(run, gen, event)
             except Exception:
@@ -588,6 +643,19 @@ class _Listener:
                 callback(dict(event))
             except Exception:
                 log.exception("The wake-word callback failed")
+
+    def _note(self, run, kind: str, info: dict) -> None:
+        """A Detector hook (worker thread): pass a "heard" or "almost" note to on_note."""
+        with self._lock:
+            if self._run is not run or self._feed_gen != self._gen:
+                return  # heard before a pause or stop: too late to act on
+            callback = self._on_note
+            note = dict(info, type=kind, companion=self._primary, time=round(time.time(), 3))
+        if callback is not None:
+            try:
+                callback(note)
+            except Exception:
+                log.exception("The wake-word note callback failed")
 
     def _callback_for(self, gen: int, rate: int, q):
         def callback(indata, frames, time_info, status):
@@ -716,11 +784,12 @@ def _register_speech_hook() -> None:
             _hook_registered = True
 
 
-def start(on_wake=None) -> None:
-    """Begin listening for "Hey Mary" / "Hey Sam". on_wake(event) is called (on the
-    worker thread) for each wake; None keeps the previous callback. Raises RuntimeError
-    with a plain message if wake-word listening is not set up on this computer."""
-    _listener.start(on_wake)
+def start(on_wake=None, on_note=None) -> None:
+    """Begin listening for "Hey Mary" or "Hey Sam" (the chosen companion's name only).
+    on_wake(event) is called (on the worker thread) for each wake and on_note(note) for each
+    "heard" / "almost" note; None keeps the previous callback. Raises RuntimeError with a
+    plain message if wake-word listening is not set up on this computer."""
+    _listener.start(on_wake, on_note)
 
 
 def stop() -> None:
@@ -739,7 +808,8 @@ def resume(reason) -> None:
 
 
 def set_companion(companion) -> None:
-    """"him" makes Sam the main name, anything else Mary. Both names always wake."""
+    """"him" makes Sam the wake name, anything else Mary. Only that name wakes; the worker
+    thread builds a fresh Detector for it."""
     _listener.set_companion(companion)
 
 

@@ -161,6 +161,36 @@
           "tap"
         ]
       }
+    },
+    {
+      "id": "go-to-sleep-goodbye",
+      "note": "Andy's fourth try, 2026-10-30",
+      "line": "Go on to sleep now.",
+      "companion": "both",
+      "mode": "live",
+      "checks": {
+        "max_words": 15,
+        "max_questions": 0,
+        "must_contain_any": [
+          "night",
+          "bye",
+          "goodbye",
+          "rest",
+          "later",
+          "see you",
+          "sleep",
+          "sleep tight"
+        ],
+        "must_not_contain": [
+          "push",
+          "press",
+          "tap"
+        ]
+      },
+      "rubric_only": [
+        "warmth",
+        "grown_adult"
+      ]
     }
   ]
 }

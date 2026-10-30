@@ -115,6 +115,41 @@
    "rubric": [
     "story_shape"
    ]
+  },
+  {
+   "id": "story-not-saccharine",
+   "note": "Andy's fourth try, 2026-10-30",
+   "line": "Tell me a story.",
+   "companion": "both",
+   "mode": "story",
+   "checks": {
+    "min_words": 180,
+    "max_words": 300,
+    "must_not_contain": [
+     "watermelon",
+     "gave it away",
+     "the moral",
+     "the lesson",
+     "learned that"
+    ]
+   },
+   "rubric": [
+    "not_saccharine"
+   ]
+  },
+  {
+   "id": "story-told-in-full",
+   "note": "Andy's fourth try, 2026-10-30",
+   "line": "Tell me a good long story.",
+   "companion": "mary",
+   "mode": "both",
+   "checks": {
+    "min_words": 180,
+    "ends_whole": true
+   },
+   "rubric": [
+    "story_shape"
+   ]
   }
  ]
 }

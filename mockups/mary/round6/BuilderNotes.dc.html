@@ -14,7 +14,7 @@
 <div class="sheet" style="height: 1400px; display: flex; flex-direction: column; gap: 22px; font-size: 20px; line-height: 1.42">
 <div style="display: flex; flex-direction: column; gap: 6px">
 <h1>Notes for the builder (M4)</h1>
-<p class="muted">Build exactly the style Andy picks. Every class on these boards is in mockups/mary/round6/r6.css; the full notes are in round6/README.md.</p>
+<p class="muted">Andy picked caption style A (Coloring-in), ear waves for listening and a thought cloud for thinking (2026-10-30). Every class is in mockups/mary/round6/r6.css; full notes in round6/README.md.</p>
 </div>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 44px; align-items: start">
 <div style="display: flex; flex-direction: column; gap: 10px">
@@ -32,7 +32,7 @@
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h2>3. Showing the words</h2>
 <p>· Lay out the whole two-line chunk first, later words hidden but holding their place, so nothing jumps. Break lines by measured width, never inside a word.</p>
-<p>· The next word appears as an empty outline 150 ms early, then fills left to right. The word being said lifts 5 px (A, C) or gets her underline (B).</p>
+<p>· The next word appears as an empty outline 150 ms early, then fills left to right. The word being said lifts 5 px.</p>
 <p>· Two lines at most. When a third starts, the top line floats up 40 px and fades over 400 ms while the rest slide up.</p>
 <p>· Fade out 4 s after she stops, or as soon as the resident talks. If she is cut off (Live), stop filling, keep the said words, fade the rest in 300 ms.</p>
 </div>
@@ -40,15 +40,15 @@
 <h2>4. Emergency</h2>
 <p>Show the whole sentence at once, already filled; the word being said still lifts. Steady glow, never flashing. The two answer buttons sit above the words: the only time more than one button shows.</p>
 <h2 style="margin-top: 10px">5. Sizes and fonts</h2>
-<p>· Captions 66 px (A), 62 (B), 60 (C) on a 1280 × 800 screen; scale with the window, about clamp(48px, 5.2vw, 88px).</p>
+<p>· Captions 66 px on a 1280 × 800 screen; scale with the window, about clamp(48px, 5.2vw, 88px).</p>
 <p>· Menu button 96 px tall, menu rows 88 px, menu text 32 px. Nothing under 64 px to tap or 20 px to read.</p>
-<p>· Fredoka (A), Nunito (B), Baloo 2 (C) are all free (SIL Open Font License). Bundle only the chosen one as woff2 in web/mary/fonts/; Mary must work with no internet.</p>
+<p>· Fredoka 600 is free (SIL Open Font License). Bundle it as woff2 in web/mary/fonts/; Mary must work with no internet.</p>
 </div>
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h2>6. Listening and thinking</h2>
-<p>· The blue glow brightens with the microphone level (Live: a Web Audio analyser on the mic; Normal: GET /api/listen/level).</p>
-<p>· "Your words" come from Live's inputTranscription or the on-device speech-to-text. Plain text, smaller, never bubble letters.</p>
-<p>· Thinking runs from the end of the resident's turn to her first sound. Show the dots only after 400 ms, so quick replies don't flicker.</p>
+<p>· Listening: three arcs on each side where her ears would be, pulsing outward small to large. No words, no bar. They and the blue glow brighten with the mic level (Live: a Web Audio analyser on the mic; Normal: GET /api/listen/level).</p>
+<p>· Thinking runs from the end of the resident's turn to her first sound, shown only after 400 ms so quick replies don't flicker. Bubbles rise off her head into a cloud up and to her left; her face eases 60 px lower so it fits, and back up when she talks.</p>
+<p>· Build one face with mood classes on the screen: .listen, .listen.loud, .think.dots or .think.word. The live board works this way.</p>
 </div>
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h2>7. The one button</h2>

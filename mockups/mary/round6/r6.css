@@ -48,7 +48,7 @@
 @keyframes ss{0%,88%,100%{transform:scale(1,1)}91%{transform:scale(1.14,.1)}94%{transform:scale(.95,1.07)}97%{transform:scale(1.02,.98)}}
 @keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
 @keyframes peek{0%,55%{transform:translate(-7px,3px)}62%,88%{transform:translate(0,0) scale(1.03)}95%,100%{transform:translate(-7px,3px)}}
-@keyframes ponder{0%,100%{transform:translate(9px,-9px)}45%{transform:translate(4px,-11px)}70%{transform:translate(10px,-6px)}}
+@keyframes ponder{0%,100%{transform:translate(-9px,-9px)}45%{transform:translate(-4px,-11px)}70%{transform:translate(-10px,-6px)}}
 @keyframes twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
 @keyframes lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
@@ -76,21 +76,21 @@
 .w.done::after{clip-path:none}
 .w.later{visibility:hidden}
 
-/* A · Coloring-in: empty white bubble letters, colored in with her color; white sticker edge */
+/* A · Coloring-in (CHOSEN, Andy 2026-10-30): empty white bubble letters, colored in with her color; white sticker edge */
 .capA{font-family:"Fredoka","Segoe UI",sans-serif;font-weight:600;font-size:66px;line-height:1.2}
 .capA .w{color:#fffdf8;-webkit-text-stroke:13px #ffffff;paint-order:stroke fill;filter:drop-shadow(0 0 1.2px rgba(74,52,38,.7)) drop-shadow(0 4px 0 rgba(74,52,38,.16))}
 .capA .w::before{color:#fffdf8;-webkit-text-stroke:3px #4a3426}
 .capA .w::after{-webkit-text-stroke:3px var(--ink)}
 .capA .w.on,.capC .w.on{transform:translateY(-5px)}
 
-/* B · Bold ink: calm, like a book; dark ink with a soft cream halo, her color underlines the word she is saying */
+/* B · Bold ink (not chosen): calm, like a book; dark ink with a soft cream halo, her color underlines the word she is saying */
 .capB{font-family:"Nunito","Segoe UI",sans-serif;font-weight:900;font-size:62px;line-height:1.22}
 .capB .w{color:#fff8ec;-webkit-text-stroke:14px rgba(255,248,236,.96);paint-order:stroke fill;filter:drop-shadow(0 0 7px rgba(255,248,236,.95));text-decoration:underline 9px transparent;text-underline-offset:14px;text-decoration-skip-ink:none}
 .capB .w.on{text-decoration-color:var(--bar)}
 .capB .w::before{color:#fffaf2;-webkit-text-stroke:2.5px #8a6f5c}
 .capB .w::after{color:#2a1d15;-webkit-text-stroke:2px #2a1d15}
 
-/* C · Speech bubble: words sit in a soft white bubble with a tail up to her mouth */
+/* C · Speech bubble (not chosen): words sit in a soft white bubble with a tail up to her mouth */
 .cap.bubble{left:110px;right:110px;bottom:26px;padding:12px 36px 16px;background:#fffdf8;border:3px solid rgba(74,52,38,.4);border-radius:52px;box-shadow:0 12px 30px rgba(90,60,30,.18)}
 .cap.bubble::before{content:"";position:absolute;left:50%;top:-23px;width:40px;height:40px;margin-left:-20px;background:#fffdf8;border-left:3px solid rgba(74,52,38,.4);border-top:3px solid rgba(74,52,38,.4);border-radius:10px 0 0 0;transform:rotate(45deg)}
 .capC{font-family:"Baloo 2","Segoe UI",sans-serif;font-weight:700;font-size:60px;line-height:1.24}
@@ -98,21 +98,57 @@
 .capC .w::before{color:#f4ede3;-webkit-text-stroke:2.5px #8a7560}
 .capC .w::after{-webkit-text-stroke:2px var(--ink)}
 
-/* "Your words" while you talk: plain, smaller, a different voice from hers */
-.you{position:absolute;left:120px;right:120px;bottom:150px;text-align:center;font:600 42px/1.25 "Segoe UI",system-ui,sans-serif;color:#1c3644;text-shadow:0 0 10px #fff8ec,0 0 3px #fff8ec}
-.hear{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);display:flex;align-items:center;gap:20px;height:84px;padding:0 34px 0 28px;background:rgba(255,255,255,.9);border:3px solid rgba(31,58,74,.35);border-radius:42px;font:600 34px/1 "Segoe UI",system-ui,sans-serif;color:#1f3a4a;white-space:nowrap}
-.bars{display:flex;align-items:center;gap:7px;height:48px}
-.bars i{display:block;width:11px;height:44px;border-radius:6px;background:#2b6f96;transform-origin:center;animation:bar .9s ease-in-out infinite}
-.bars i:nth-child(2){animation-delay:.15s}.bars i:nth-child(3){animation-delay:.3s}.bars i:nth-child(4){animation-delay:.45s}.bars i:nth-child(5){animation-delay:.6s}
-.quiet .bars i{animation:barq 2.6s ease-in-out infinite}
-@keyframes bar{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
-@keyframes barq{0%,100%{transform:scaleY(.18)}50%{transform:scaleY(.34)}}
+/* Listening (Andy, 2026-10-30): sound waves where her ears would be, three arcs each side,
+   small to large, pulsing outward. No words. Brighter and faster while the resident talks (.loud). */
+.ears{display:none}
+.listen .ears{display:inline}
+.wave{fill:none;stroke:#2b6f96;stroke-linecap:round;transform-box:view-box;animation:waveq 2.6s ease-in-out infinite}
+.wave.l{transform-origin:204px 196px}
+.wave.r{transform-origin:436px 196px}
+.wave.w2{animation-delay:.25s}
+.wave.w3{animation-delay:.5s}
+.loud .wave{animation:wave 1s ease-out infinite}
+.loud .wave.w2{animation-delay:.18s}
+.loud .wave.w3{animation-delay:.36s}
+@keyframes wave{0%{opacity:.2;transform:scale(.9)}35%{opacity:1;transform:scale(1.05)}100%{opacity:.2;transform:scale(1)}}
+@keyframes waveq{0%,100%{opacity:.22}50%{opacity:.62}}
 
-/* Thinking: three bubble dots color in, one after another */
-.dots{position:absolute;left:50%;bottom:70px;transform:translateX(-50%);display:flex;gap:34px}
-.dots i{display:block;width:40px;height:40px;border-radius:50%;background:#fffdf8;border:3px solid #4a3426;box-shadow:0 0 0 7px #fff,0 5px 0 7px rgba(74,52,38,.14);animation:dot 2.1s ease-in-out infinite}
-.dots i:nth-child(2){animation-delay:.35s}.dots i:nth-child(3){animation-delay:.7s}
-@keyframes dot{0%,12%{background:#fffdf8;transform:translateY(0)}30%,62%{background:var(--ink);border-color:var(--ink);transform:translateY(-8px)}85%,100%{background:#fffdf8;transform:translateY(0)}}
+/* Thinking (Andy, 2026-10-30): little bubbles rise off the top of her head into a thought cloud.
+   Two versions: .think.dots (three dots color in) or .think.word ("Thinking…" colors in). Lavender glow stays.
+   The cloud sits up and to her left; the face settles 60 px lower while she thinks (no caption then). */
+.cloud,.cdots,.cloudword{display:none}
+.think .cloud{display:inline}
+.think.dots .cdots{display:inline}
+.think.word .cloudword{display:flex}
+.cloud{filter:drop-shadow(0 2px 0 rgba(74,52,38,.16))}
+.cloud .ol>*{fill:#fffdf8;stroke:#4a3426;stroke-width:3.4}
+.cloud .fl>*{fill:#fffdf8}
+.trail circle{fill:#fffdf8;stroke:#4a3426;stroke-width:1.7;animation:trail 2.4s ease-in-out infinite}
+.trail circle:nth-child(2){animation-delay:.3s}
+.trail circle:nth-child(3){animation-delay:.6s}
+.cdots circle{fill:#fffdf8;stroke:#4a3426;stroke-width:1.6;animation:cdot 2.1s ease-in-out infinite}
+.cdots circle:nth-child(2){animation-delay:.35s}
+.cdots circle:nth-child(3){animation-delay:.7s}
+.cloudword{position:absolute;left:244px;top:52px;width:200px;justify-content:center;font-size:34px;line-height:1.2}
+.cloudword .w{filter:none;-webkit-text-stroke-width:0}
+.cloudword .w::before{-webkit-text-stroke-width:2px}
+.w.loop::after{animation:colorin 2.6s ease-in-out infinite}
+@keyframes trail{0%,100%{opacity:.35}40%{opacity:1}}
+@keyframes cdot{0%,12%{fill:#fffdf8;stroke:#4a3426}30%,62%{fill:var(--ink);stroke:var(--ink)}85%,100%{fill:#fffdf8;stroke:#4a3426}}
+@keyframes colorin{0%,8%{clip-path:inset(-30% 100% -30% -6%);opacity:1}62%,86%{clip-path:inset(-30% 0 -30% -6%);opacity:1}100%{clip-path:inset(-30% 0 -30% -6%);opacity:0}}
+
+/* One face, mood classes on .scr (the live board; the way M4 should build it) */
+.brow,.facepos{transition:transform .45s ease}
+.think .facepos{transform:translateY(30px)}
+.listen .brow{transform:translateY(-8px)}
+.think .brow-l{transform:translateY(-7px)}
+.think .brow-r{transform:translateY(4px)}
+.listen .peek{animation:none;transform:scale(1.08)}
+.think .peek{animation:ponder 6s ease-in-out infinite}
+.listen .face{animation:lean 6s ease-in-out infinite}
+.m-smile,.m-hmm{display:none}
+.listen .m-talk,.think .m-talk{display:none}
+.listen .m-smile,.think .m-hmm{display:inline}
 
 /* The one button, top right; the menu drops down from it */
 .menu-btn{position:absolute;top:28px;right:28px;display:flex;align-items:center;gap:14px;height:96px;padding:0 36px 0 28px;font:700 34px/1 "Segoe UI",system-ui,sans-serif;color:#2b1f17;background:#fffdf8;border:4px solid #2b1f17;border-radius:48px;box-shadow:0 6px 0 rgba(43,31,23,.22);cursor:pointer}

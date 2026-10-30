@@ -33,6 +33,7 @@
 
   var RATE_MIN = 0.6, RATE_MAX = 1.4, VOL_MIN = 0.2, VOL_MAX = 1.0;
   var MIN_LISTEN_MS = 800;       // a second tap this soon after the mic opens is a double tap, not "I'm done"
+  var QUIET_END_S = 2.5;         // quiet after speech that ends a turn; 1.4 s cut Andy off mid-thought (2026-10-30)
   var SILENCE_NOISE = /^\W*(?:you|thank you|thanks|thank you for watching|thanks for watching|bye|okay|ok|so|um+|uh+)?\W*$/i;
 
   var MSG = {
@@ -611,7 +612,7 @@
           setRing(l.level);
           var elapsed = Number(l.elapsed_s) || 0;
           notRec = (l.recording === false) ? notRec + 1 : 0;
-          if (l.heard_voice && Number(l.quiet_s) >= 1.4) { finish('quiet'); return; }
+          if (l.heard_voice && Number(l.quiet_s) >= QUIET_END_S) { finish('quiet'); return; }
           if (!l.heard_voice && elapsed >= 8) { finish('silence'); return; }
           if (elapsed >= 60) { finish('cap'); return; }
           if (notRec >= 3) { finish('quiet'); return; }

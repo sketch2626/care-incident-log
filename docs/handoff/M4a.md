@@ -26,10 +26,15 @@ Read `docs/handoff/_common.md` first. Then read only these:
    - **Normal:** on-device speech-to-text → Gemini → the picked Gemini voice (`tts_stream`).
    - **Offline:** Kokoro (`kokoro_stream`).
    - **Fallback:** if Live fails (no internet, token refused), fall back to Normal, then Offline, with one kind spoken line. Never go silent.
-5. **Captions:** for now, show her words from `outputTranscription` in the existing caption area.
+5. **Hands-free in every mode, and patient listening (M5 folded in).**
+   - **Andy (2026-10-30):** "before I could finish speaking, it was cutting me off". It happened a couple of times. Normal mode ended his turn after 1.4 s of quiet. The hub raised that to 2.5 s (`QUIET_END_S` in `app.js`).
+   - **Live:** set `realtimeInputConfig.automaticActivityDetection` to be just as patient, with low end-of-speech sensitivity and about 2.5 s of silence. Check that the field names are the ones Google really accepts.
+   - **A voice command in `voice_comfort`,** in every mode: "give me more time" or "you're cutting me off" makes her wait longer (2.5 → 4 s, saved). "You can answer faster" sets it back.
+   - **Normal and Offline get the back-and-forth too.** After she finishes speaking, she listens again by herself and never while she's talking. The conversation stays open until about 15 s of quiet or "goodbye", the same as Live. Andy wants wake words plus hands-free talk in every mode, not only Live.
+6. **Captions:** for now, show her words from `outputTranscription` in the existing caption area.
    - Keep this in one function, `showCaption(...)`, because M4b replaces it with the bubble letters after Andy approves the boards.
-6. **She tells the truth about her voice.** Set `MARY_VOICE_NOW` / `MARY_TALK_MODE` in `server.py`, and update the "What you can do" / "Your screen" text in `mary/instructions.md`.
-7. **Leave a hook for the wake word.** Make one function, `startTalk()`, that the wake word (M6, being built in another worktree) will call later.
+7. **She tells the truth about her voice.** Set `MARY_VOICE_NOW` / `MARY_TALK_MODE` in `server.py`, and update the "What you can do" / "Your screen" text in `mary/instructions.md`.
+8. **Leave a hook for the wake word.** Make one function, `startTalk()`, that the wake word (M6, being built in another worktree) will call later.
    - Don't touch `speech.py` or the mic code in Python; M6 is changing them.
    - Live uses the page mic with echo cancellation, as in the audition.
 

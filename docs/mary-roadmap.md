@@ -99,7 +99,8 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - Build the approved M3 caption: each word fills as it's spoken. Use real word timings if the voice gives them, otherwise estimate from each word's length and the audio length.
 - **Done when:** the tests pass and Andy hears and sees it on his screen.
 
-### M5. Hands-free back-and-forth (worker, Sonnet)
+### M5. Hands-free back-and-forth (folded into M4a, 2026-10-30)
+- **Andy (2026-10-30):** after he tapped Talk, she cut him off before he finished, a couple of times. She ended his turn after 1.4 s of quiet. The hub raised that to 2.5 s (`QUIET_END_S` in `web/mary/app.js`). M4a adds a "give me more time" voice command and patient listening in Live too. He wants wake words plus hands-free back-and-forth in every mode, not only Live.
 - After Mary finishes speaking, she listens again by herself. Use the existing auto-stop on silence (`GET /api/listen/level`).
 - She never listens while she's talking, so she doesn't hear herself. Interrupting her mid-sentence comes later.
 - The conversation stays open until about 10 s of silence or "goodbye", then she rests and waits for her wake word.

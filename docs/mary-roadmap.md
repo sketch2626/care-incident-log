@@ -174,6 +174,21 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
 - **M9b, the brain and self-knowledge — done 2026-10-29 (39fd97c; 349 tests).** Merge notes for M13: `mary.py` lines 162-188 (`load_instructions`), 472-481 (`system_text`), 487-526 (`app_facts` hook and `_app_facts_text`); `server.py` lines 294-319. `mary/instructions.md` is version 4, written from the approved sheets: a "=== Mary ===" block, a "=== Sam ===" block and a shared "=== Both ===" block (the four safety sections word for word, plus the Veterans Crisis Line). `mary.py` `load_instructions(companion)` picks the blocks; `system_text()` adds "About your app right now" from `server.mary_app_facts()` (her real voice, picked voice, Talk mode, speed and volume). When M4 or M5 ships, change `MARY_VOICE_NOW` / `MARY_TALK_MODE` in `server.py` and the "What you can do" / "Your screen" text in the instructions. Tests: `TestBrainV4` in `tests/test_mary.py`. It originally read: She knows her own app: her voice setting, games, what's coming soon, and her buttons. She never says false things like "same voice as always".
   - **Approved safety-rule addition for M9b (Andy, 2026-10-29):** for residents who are veterans, Mary and Sam also give the Veterans Crisis Line (call 988 and press 1, or text 838255), alongside the call light, staff, 911 and 988, never instead of them. Wording is in the character sheets.
 - **M9c, memory of the resident:** name, family, interests, past talks, on the laptop.
+  - **Today:** `mary/memory.json` holds the name plus at most 40 short facts (`MAX_FACTS`, oldest dropped). The whole list goes to Gemini with every session or turn.
+  - **Andy's design (2026-10-30), her own memory core in the app:** "everything that she remembers, any personal memories, get logged… like she logs the other care lapses… and then anytime any of that information is needed… she can just pull it right up." Build it like the incident log:
+    - Dated entries in SQLite, with soft delete.
+    - No 40-fact cap and no forgetting old things.
+    - Searched by a `recall` tool when the talk needs it (the M9e retrieval pattern), not sent every time.
+  - **Always sent, small:**
+    - their name and what to call them;
+    - anything that changes safety words, such as veteran status (Veterans Crisis Line);
+    - a few things from the last talk.
+  - **The resident stays in charge:**
+    - "What do you remember about me?" and "forget that" work by voice.
+    - My info shows the list with a big Remove on each entry.
+    - Memories never leave the laptop except in the packet for one reply.
+    - They're encrypted along with the log in backend phase 1.
+  - **Order:** after M4a's current fixes land (it overlaps `mary.py`/`server.py`), and together with M9e's lean core.
 - **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
 - **M9e, a leaner brain (Andy, 2026-10-30).** Today about 3,300 words of instructions (Sam 3,500), plus 380 for Live, go to Gemini at the start of every Live session and with every Normal turn. Andy: "there's going to have to be some instructions… I do want her to have a developed personality out of the gate… I don't want it to just be the raw model."
   - Idea to test: a short core prompt that's always sent (who she is, how she talks, and the safety sections word for word, never fetched). Her deeper character, interests and how-to details live in the app, and she pulls them with a tool when the talk turns that way, the way `tell_story` and skills already work.

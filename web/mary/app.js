@@ -385,6 +385,7 @@
     $('scr').setAttribute('data-phase', p);
     updateTalkButton();
     if (p !== 'listening') { setRing(0); }
+    wakeHoldCheck();   // M6: the wake word pauses while she is busy
   }
 
   function refreshLabels() {   // M4b: the menu and panel words follow the companion's name
@@ -399,6 +400,7 @@
     set('modeTitle', 'How ' + n + ' talks');
     set('voiceTitle', n + "'s voice");
     set('waitTitle', 'How long ' + n + ' waits');
+    set('wakeTitle', 'Listen for “Hey ' + n + '”');   // M6
     set('skillTitle', 'Things ' + n + ' can do');
     set('chooseTitle', 'Choose ' + both);
     try { $('menu').setAttribute('aria-label', n + "'s menu"); } catch (e) { /* nothing */ }
@@ -1047,6 +1049,7 @@
     S.fallbackSaid = false;
     S.voiceMode = speechModeFor(mode);
     updateTalkButton();
+    wakeHoldCheck();   // M6
     if (mode === 'live') {
       startLive(c, opts.hello || liveHello());   // M4a: with the time of day
     } else if (opts.say) {   // M4a: her hello first, then she listens
@@ -1070,6 +1073,7 @@
       if (!Sp.sess && (S.phase === 'listening' || S.phase === 'speaking')) { setPhase('idle'); }
     }
     updateTalkButton();
+    wakeHoldCheck();   // M6
   }
 
   // Ends the conversation. why: 'tap' (at once, quietly), 'idle' or 'bye' (with a short goodbye).
@@ -1095,6 +1099,110 @@
     newTurn();
     say(MSG.goodbye, 'happy');
   }
+
+  // --- M6: the wake word ("Hey Mary" / "Hey Sam"), heard on this computer by the server ---
+  // The server listens only while this page polls /api/wake/wait (its lease), so one poll loop runs all the time
+  // her screen is open, talks included. While she is busy the page holds the listener (/api/wake/hold), so she
+  // never wakes herself. "heard" = the name was heard (ear waves only); "wake" = it was confirmed: she answers.
+  var WAKE_HEARD_MS = 4000;      // no "wake" this soon after "heard": back to her resting look
+  var WAKE_ERR_MS = 5000;        // a failed poll waits this long before the next one
+  var WAKE_OFF_MS = 30000;       // the setting is off on the server: ask again this rarely
+  var WAKE_POLL_MAX_MS = 30000;  // the server answers within 20 s; give up on a poll after this
+  var WAKE_HOLD_RENEW_MS = 30000;  // the server lets a hold go after 90 s
+  var WAKE_SAY = "Yes? I'm here.";
+  var WAKE_HELLO = "(They just called your name to get your attention. Answer in a few warm words, like 'Yes? I'm here.', then listen.)";
+  var W = { polling: false, inFlight: false, seq: 0, lastEv: 0, timer: null, abort: null, heardTimer: null,
+    held: false, holdAt: 0, gone: false, gen: 0 };
+
+  function wakeWanted() { return !W.gone && !!S.wakeWord && !!S.wakeReady; }
+  function wakeSync() {   // start or stop the one poll loop to match the setting and the server
+    if (wakeWanted()) {
+      if (!W.polling) { W.polling = true; W.seq = 0; W.lastEv = 0; wakeSchedule(0); }
+    } else if (W.polling) {
+      wakeStop();
+    }
+  }
+  function wakeStop() {
+    W.polling = false;
+    W.gen++;   // an answer to an older poll is ignored
+    clearTimeout(W.timer);
+    clearTimeout(W.heardTimer);
+    if (W.abort) { try { W.abort(); } catch (e) { /* nothing */ } }
+  }
+  function wakeSchedule(ms) {
+    clearTimeout(W.timer);
+    W.timer = setTimeout(wakePoll, ms);
+  }
+  function wakePoll() {
+    if (!W.polling) { return; }
+    if (W.inFlight) { wakeSchedule(500); return; }   // never two polls at once (an old one is still ending)
+    W.inFlight = true;
+    var gen = W.gen;
+    var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var guard = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) { /* nothing */ } }, WAKE_POLL_MAX_MS) : null;
+    W.abort = ctl ? function () { ctl.abort(); } : null;
+    var opts = ctl ? { signal: ctl.signal } : { ms: WAKE_POLL_MAX_MS };
+    api('GET', '/api/wake/wait?after=' + encodeURIComponent(W.seq), null, opts).then(function (j) {
+      W.inFlight = false; W.abort = null; clearTimeout(guard);
+      if (!W.polling || gen !== W.gen) { return; }
+      j = j || {};
+      if (j.seq != null && isFinite(Number(j.seq))) { W.seq = Number(j.seq); }
+      var st = j.status || {};
+      if (st.ready === false) {   // not installed or broken: stop until the status says it is ready again
+        S.wakeReady = false;
+        if (st.reason) { S.wakeReason = String(st.reason); }
+        wakeStop();
+        return;
+      }
+      if (j.event) { onWakeEvent(j.event); }
+      wakeSchedule(j.off ? WAKE_OFF_MS : 0);
+    }, function (e) {
+      W.inFlight = false; W.abort = null; clearTimeout(guard);
+      if (!W.polling || gen !== W.gen) { return; }
+      log(e);
+      wakeSchedule(WAKE_ERR_MS);
+    });
+  }
+
+  // She may answer her name only on the everyday screen, resting, with no talk, no typing box and no first run.
+  function wakeCanAnswer() {
+    return S.screen === 'everyday' && !S.firstRun && !S.convo && S.phase === 'idle' && $('typing').hidden;
+  }
+  function onWakeEvent(ev) {
+    var n = Number(ev && ev.seq) || 0;
+    if (n && n <= W.lastEv) { return; }
+    if (n) { W.lastEv = n; }
+    if (W.held || !wakeCanAnswer()) { return; }
+    if (ev.type === 'heard') {
+      try { face.setActivity('listening'); } catch (e) { log(e); }   // M4b's ear waves: "I hear you", no words
+      clearTimeout(W.heardTimer);
+      W.heardTimer = setTimeout(function () {
+        if (!S.convo && S.phase === 'idle') { faceAct(); }   // back to resting
+      }, WAKE_HEARD_MS);
+    } else if (ev.type === 'wake') {
+      clearTimeout(W.heardTimer);
+      if (menuOpen()) { closeMenu(false); }
+      if (M.panel) { closePanel(false); }
+      startTalk({ say: WAKE_SAY, mood: 'happy', hello: WAKE_HELLO }).then(function (ok) {
+        if (!ok && !S.convo && S.phase === 'idle') { faceAct(); }
+      }, log);
+    }
+  }
+
+  // Busy = a talk is open (Live included) or she is speaking, listening or thinking.
+  function wakeBusy() { return !!S.convo || S.phase !== 'idle'; }
+  function wakeHoldCheck() {
+    if (typeof W === 'undefined' || !W) { return; }
+    var busy = wakeBusy(), now = Date.now();
+    if (!W.polling && !W.held) { return; }
+    if (busy === W.held && !(busy && now - W.holdAt >= WAKE_HOLD_RENEW_MS)) { return; }
+    W.held = busy;
+    W.holdAt = now;
+    if (busy) { clearTimeout(W.heardTimer); }
+    api('POST', '/api/wake/hold', { on: busy }).catch(log);
+  }
+  setInterval(wakeHoldCheck, 1000);   // the safety check, and the hold's renewal
+  // --- end M6 ---
 
   // --- Live ---
   function startLive(c, hello) {
@@ -1831,8 +1939,25 @@
     ], function (it) { return (QUIET_END_S >= 3.5) === (it.v >= 3.5); }, function (it) {
       saveSetting({ listen_wait: it.v });
     });
+    fillWake();   // M6
     fillVoices();
     fillSkills();
+  }
+  // M6: listen for her name, On or Off; one plain line when it cannot run on this computer
+  function fillWake() {
+    var box = $('wakeList');
+    if (!box) { return; }
+    if (!S.wakeReady) {
+      infoLead(box, S.wakeReason || ('Listening for ' + (S.companion === 'him' ? 'his' : 'her') + " name isn't installed on this computer."));
+      return;
+    }
+    var n = companionName(S.companion);
+    radioRows(box, [
+      { v: true, t: 'On', h: 'Say “Hey ' + n + '” and ' + (S.companion === 'him' ? 'he' : 'she') + ' answers, while this screen is open.' },
+      { v: false, t: 'Off', h: 'Tap the menu to talk instead.' }
+    ], function (it) { return !!S.wakeWord === it.v; }, function (it) {
+      saveSetting({ wake_word: it.v ? '1' : '0' }, wakeSync);   // refreshStatus has set S.wakeWord; start or stop the loop
+    });
   }
   function infoLead(box, t) {
     box.textContent = '';
@@ -2117,6 +2242,10 @@
     if (st.listen_wait != null) { QUIET_END_S = clampNum(st.listen_wait, 1.5, 6, QUIET_END_S); }
     S.talkOnOpen = st.talk_on_open !== false;   // M4a: she says hello and listens when her screen opens
     if (!S.convo) { S.voiceMode = speechModeFor(nextMode(S.talkOrder, null)); }
+    // M6: the wake word setting and whether it can run here; the poll loop follows them
+    if (st.wake_word != null) { S.wakeWord = !!st.wake_word; }
+    if (st.wake_ready != null) { S.wakeReady = !!st.wake_ready; }
+    wakeSync();
     var c = st.companion === 'him' ? 'him' : 'mary';
     if (c !== S.companion) { setCompanion(c, { noSave: true }); } else { applyLook(c); refreshLabels(); }
   }
@@ -2225,6 +2354,8 @@
     window.addEventListener('pagehide', function () {
       try { if (S.listenAbort) { S.listenAbort(); } } catch (e) { /* nothing */ }
       spCancel();
+      W.gone = true;   // M6: the poll loop stops with the page
+      wakeStop();
     });
     window.addEventListener('unhandledrejection', function (ev) { log(ev && ev.reason); });
     if (V.ok) { whenVoices(); }
@@ -2260,6 +2391,7 @@
     startTalk: startTalk,                    // the one way in: Talk tap, and the wake word (M6)
     endTalk: function (why) { if (S.convo) { endConvo(S.convo, why || 'tap'); } },
     inTalk: function () { return !!S.convo; },
+    wakeState: function () { return { polling: W.polling, seq: W.seq, held: W.held }; },   // M6: for tests and checks
     showCaption: showCaption,                // her words; M4b replaces it with bubble letters
     nextMode: nextMode,                      // pure, for tests
     liveToolGate: liveToolGate,              // pure, for tests

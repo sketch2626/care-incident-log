@@ -79,6 +79,26 @@ def switch_companion(ctx):
     return {"companion": now, "say": say}
 
 
+def _wake(ctx, on):  # M6: turn listening for their name on or off
+    was = ctx.settings_get("wake_word", "1") != "0"  # on unless turned off
+    ctx.settings_put("wake_word", "1" if on else "0")
+    ctx.state["wake_word"] = on
+    name = "Sam" if ctx.settings_get("companion", "mary") == "him" else "Mary"
+    if on:
+        say = f"All right, I'm listening for my name again. Just say 'Hey {name}' when you want me."
+    else:
+        say = "All right. I won't listen for my name until you ask. Tap the button when you want me."
+    return {"wake_word": on, "changed": was != on, "say": say}
+
+
+def stop_wake(ctx):
+    return _wake(ctx, False)
+
+
+def start_wake(ctx):
+    return _wake(ctx, True)
+
+
 def view(state):
     """What Mary knows: the numbers last set or seen in this run (the defaults until then)."""
     name = "Sam" if state.get("companion") == "him" else "Mary"

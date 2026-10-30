@@ -3,10 +3,10 @@
   "name": "voice_comfort",
   "version": "0.1.0",
   "title": "Voice comfort",
-  "summary": "Makes Mary's voice slower, faster, quieter or louder, and switches between Mary and Sam.",
-  "instructions": "Use when they ask you to talk slower, faster, quieter or louder, or to switch between Mary and Sam. If they say you cut them off or ask for more time to finish, use more_time; if they say you can answer faster, use less_time. The resident can't use their hands well, so do these when asked by voice. Then ask if that is better.",
+  "summary": "Makes Mary's voice slower, faster, quieter or louder, switches between Mary and Sam, and turns listening for their name on or off.",
+  "instructions": "Use when they ask you to talk slower, faster, quieter or louder, or to switch between Mary and Sam. If you cut them off, use more_time; if you can answer faster, use less_time. To stop or start listening for your name (Hey Mary / Hey Sam), use stop_wake or start_wake. Do these by voice, then ask if that is better.",
   "sees": true,
-  "settings": ["voice_rate", "voice_volume", "companion", "listen_wait"],
+  "settings": ["voice_rate", "voice_volume", "companion", "listen_wait", "wake_word"],
   "actions": [
     {
       "name": "slower",
@@ -49,6 +49,20 @@
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["you can answer faster", "answer faster", "you can answer quicker"]
+    },
+    {
+      "name": "stop_wake",
+      "description": "Stop listening for their name (Hey Mary / Hey Sam) until they ask again.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["stop listening for my name", "stop listening for your name", "don't listen for your name", "stop listening for hey mary", "stop listening for hey sam"]
+    },
+    {
+      "name": "start_wake",
+      "description": "Listen for their name again.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["listen for my name again", "listen for your name again", "start listening for your name", "listen for hey mary", "listen for hey sam"]
     },
     {
       "name": "switch_companion",

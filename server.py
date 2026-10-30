@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import sys
 import threading
+import time
 import webbrowser
 from contextlib import closing
 from datetime import datetime
@@ -28,6 +29,7 @@ import mary
 import power
 import skills_core  # --- skills hook (M13) ---
 import voices
+import wakeword  # M6: "Hey Mary" (opens nothing until a Mary page asks)
 
 # In the packaged app, web/ is unpacked next to the program (sys._MEIPASS).
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -72,6 +74,7 @@ TALK_MODES = ("live", "normal", "offline")
 VOICE_LIMITS["listen_wait"] = (1.5, 6.0, 2.5)  # M4a: clamped like the other voice settings
 SETTING_KEYS |= {"talk_mode", "listen_wait"}  # M4a
 SETTING_KEYS |= {"talk_on_open"}  # M4a: '1' (default) = she says hello and listens when her screen opens; '0' = she waits
+SETTING_KEYS |= {"wake_word"}  # M6: '1' (default) = "Hey Mary" / "Hey Sam" wakes her while her screen is open; '0' = off
 NO_SPEECH = "Talking isn't set up on this computer yet. You can type instead."
 
 # A dictation or note is offered to the inbox when it starts with "Incident" (or "New incident").
@@ -289,6 +292,7 @@ def mary_settings():
     mode = str(s.get("talk_mode") or "").strip().lower()  # M4a: the saved talk mode, Live when none is saved
     out["talk_mode"] = mode if mode in TALK_MODES else "live"
     out["talk_on_open"] = str(s.get("talk_on_open", "1")).strip() != "0"  # M4a: on unless turned off
+    out["wake_word"] = str(s.get("wake_word", "1")).strip() != "0"  # M6: on unless turned off
     return out
 
 
@@ -302,7 +306,8 @@ def mary_status():
             # M4a: talk modes, the order the page tries them in, and the voice for each
             "talk_mode": s["talk_mode"], "listen_wait": s["listen_wait"], "talk_on_open": s["talk_on_open"],
             "talk_order": talk_order(s["talk_mode"], bool(s["key"]), offline_ready), "offline_ready": offline_ready,
-            "voices": companion_voices(s["companion"] or "mary")}
+            "voices": companion_voices(s["companion"] or "mary"),
+            "wake_word": s["wake_word"], "wake_ready": wakeword.available()[0]}  # M6
 
 
 # --- M4a: talk modes and the voices for each ---
@@ -365,7 +370,8 @@ def mary_app_facts(companion):
     return {"voice_now": MARY_VOICE_NOW, "talk_mode": MARY_TALK_MODE, "picked_voice": voice, "picked_about": about,
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
             "talk_choice": s["talk_mode"],  # M4a: Live, Normal or Offline, as saved
-            "talk_on_open": s["talk_on_open"]}  # M4a: she starts talking when her screen opens
+            "talk_on_open": s["talk_on_open"],  # M4a: she starts talking when her screen opens
+            "wake_word": s["wake_word"]}  # M6: "Hey Mary" / "Hey Sam" wakes her
 
 
 mary.app_facts = mary_app_facts  # M9b: Mary's live facts about her own app
@@ -425,6 +431,11 @@ def _put_settings(values):
         conn.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                          [(k, str(v)) for k, v in values.items()])
         conn.commit()
+    if "wake_word" in values or "companion" in values:  # M6: a skill turned listening for the name on/off
+        try:
+            WAKE.settings_changed()
+        except Exception as e:  # never let this fail a skill
+            wake_log("error", where="_put_settings", msg=str(e)[:120])
 
 
 def skill_host():
@@ -682,6 +693,234 @@ def _csv_safe(value):
     """Words starting with = + - @ would run as a formula when an inspector opens the file in Excel."""
     value = str(value or "")
     return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+
+
+# --- M6: "Hey Mary" / "Hey Sam" wake word -------------------------------------------------------------
+# The microphone is only used while a Mary page is open: the page long-polls GET /api/wake/wait, the first poll
+# starts the listener, and a watchdog lets go of the microphone when no poll has come for WAKE_LEASE_S.
+WAKE_WAIT_S = 20.0         # one long-poll of GET /api/wake/wait
+WAKE_LEASE_S = 45.0        # no poll for this long: the page is gone, so the microphone is let go
+WAKE_HOLD_S = 90.0         # a page hold ends by itself unless renewed (the page renews it every 30 s)
+WAKE_WOKE_S = 10.0         # after a wake she is not listening for her name (so her own greeting cannot wake her)
+WAKE_TICK_S = 0.5          # how often the watchdog looks
+WAKE_LOG_MAX = 512 * 1024  # wake.log becomes wake.log.1 (the one old copy) when bigger than this
+_wake_log_lock = threading.Lock()
+
+
+def wake_log(kind, **fields):
+    """One line in DATA/wake.log: time, kind, then the fields given (text quoted). Never audio; never raises."""
+    try:
+        parts = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), kind]
+        for k, v in fields.items():
+            if v is not None and v != "":
+                parts.append(f"{k}={json.dumps(v, ensure_ascii=False) if isinstance(v, str) else v}")
+        line = "  ".join(parts) + "\n"
+        path = DATA / "wake.log"
+        with _wake_log_lock:
+            try:
+                if path.stat().st_size > WAKE_LOG_MAX:
+                    os.replace(path, DATA / "wake.log.1")
+            except OSError:
+                pass
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line)
+    except Exception:
+        pass
+
+
+class WakeLink:
+    """Runs the wake word for the Mary page: the poll lease, the page hold, the pause after a wake and the
+    event stream the page reads ("heard" the moment Vosk hears the name, "wake" once Whisper agrees).
+
+    Locks: _ctl (one start/stop at a time) is never taken by a wakeword callback. _cond may be held while calling
+    wakeword.pause()/resume() (they never call back into here), but never around wakeword.start()/stop(): stop()
+    joins the worker thread, and the worker's callbacks take _cond."""
+
+    def __init__(self):
+        self._cond = threading.Condition()
+        self._ctl = threading.Lock()
+        self._seq = 1              # every event for the page gets the next number (from 1: a page never sends 0 twice)
+        self._event = None         # the newest event
+        self._polled = 0.0         # monotonic time a poll last started or ended
+        self._waiting = 0          # polls waiting right now (a waiting page is still there)
+        self._started = False      # this server started the listener
+        self._off = False          # the setting was turned off: waiting polls answer at once
+        self._hold_until = 0.0     # the page hold ("page" pause) ends then; 0 = no hold
+        self._woke_until = 0.0     # the pause after a wake ("woke") ends then; 0 = none
+        self._watch = None         # the watchdog thread while there is something to watch
+        self._problem = None       # the last problem written to wake.log
+
+    # ---- routes ----
+    def wait(self, after):
+        """GET /api/wake/wait?after=<seq>: the newest event with seq > after, or none after WAKE_WAIT_S.
+        after 0 (or a number this server never gave out) means "from now"."""
+        s = mary_settings()
+        if not s["wake_word"]:
+            self.stop("setting off", off=True)
+            return self._reply(None, s)
+        if not wakeword.available()[0]:
+            return self._reply(None, s)  # nothing to listen with: status.ready is false, the page stops asking
+        with self._cond:
+            self._off = False
+            self._waiting += 1
+            self._polled = time.monotonic()
+        try:
+            self._ensure_started(s["companion"])
+            deadline = time.monotonic() + WAKE_WAIT_S
+            with self._cond:
+                if after <= 0 or after > self._seq:
+                    after = self._seq
+                while self._seq <= after and not self._off:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    self._cond.wait(remaining)
+                event = dict(self._event) if self._event and self._event["seq"] > after else None
+        finally:
+            with self._cond:
+                self._waiting -= 1
+                self._polled = time.monotonic()
+        return self._reply(event, s)
+
+    def hold(self, on):
+        """POST /api/wake/hold {"on": true|false}: hold the wake word while she talks, listens or thinks, or while
+        a Live session uses the browser's microphone. Either way the pause after a wake ends now."""
+        with self._cond:
+            self._hold_until = time.monotonic() + WAKE_HOLD_S if on else 0.0
+            (wakeword.pause if on else wakeword.resume)("page")
+            if self._woke_until:
+                self._woke_until = 0.0
+                wakeword.resume("woke")
+        if on:
+            self._ensure_watch()
+        return {"ok": True, "held": bool(on), "hold_s": WAKE_HOLD_S if on else 0, "status": self.status()}
+
+    def status(self, s=None):
+        """GET /api/wake/status: wakeword.status() plus the setting, whether it can run here, and this link."""
+        s = s or mary_settings()
+        ready, reason = wakeword.available()
+        out = wakeword.status()
+        with self._cond:
+            out.update({"wake_word": s["wake_word"], "ready": ready, "reason": reason,
+                        "phrase": "Hey Sam" if s["companion"] == "him" else "Hey Mary",
+                        "page": self._started, "held": bool(self._hold_until), "woke": bool(self._woke_until)})
+        return out
+
+    def settings_changed(self):
+        """PUT /api/settings changed wake_word or companion."""
+        s = mary_settings()
+        if not s["wake_word"]:
+            self.stop("setting off", off=True)
+        else:
+            wakeword.set_companion(s["companion"])  # only the chosen companion's name wakes
+
+    def stop(self, why, off=False, lease=False):
+        """Stop listening and let go of the microphone. lease=True: only if still no poll came (watchdog)."""
+        with self._ctl:
+            with self._cond:
+                if lease and not self._lease_over():
+                    return
+                was, self._started = self._started, False
+                if off:
+                    self._off = True
+                self._cond.notify_all()
+            if was:
+                wakeword.stop()
+                wake_log("stop", why=why)
+            with self._cond:
+                if self._hold_until or self._woke_until or was:
+                    self._hold_until = self._woke_until = 0.0
+                    wakeword.resume("page")
+                    wakeword.resume("woke")
+
+    # ---- inside ----
+    def _reply(self, event, s):
+        with self._cond:
+            seq, off = self._seq, self._off or not s["wake_word"]
+        return {"seq": seq, "event": event, "off": off, "status": self.status(s)}
+
+    def _lease_over(self):
+        return self._started and self._waiting == 0 and time.monotonic() - self._polled > WAKE_LEASE_S
+
+    def _ensure_started(self, companion):
+        wakeword.set_companion(companion)
+        with self._ctl:
+            if self._started:
+                return
+            try:
+                wakeword.start(on_wake=self._on_wake, on_note=self._on_note)
+            except Exception as e:  # not set up here: a plain message for status and the log
+                self._log_problem(str(e) if isinstance(e, RuntimeError) else "could not start")
+                return
+            with self._cond:
+                self._started = True
+                self._problem = None
+            wake_log("start", name="sam" if companion == "him" else "mary")
+        self._ensure_watch()
+
+    def _publish(self, kind, ev):
+        """Caller holds _cond."""
+        self._seq += 1
+        self._event = {"type": kind, "name": ev.get("name"), "seq": self._seq, "time": ev.get("time"),
+                       "companion": ev.get("companion")}
+        self._cond.notify_all()
+
+    def _on_wake(self, ev):  # wakeword's worker thread, no wakeword lock held
+        with self._cond:
+            self._woke_until = time.monotonic() + WAKE_WOKE_S
+            wakeword.pause("woke")  # she must not wake on her own greeting
+            self._publish("wake", ev)
+        wake_log("wake", name=ev.get("name"), vosk=ev.get("stage1_text"), whisper=ev.get("confirm_text"),
+                 ms=ev.get("confirm_ms"))
+        self._ensure_watch()
+
+    def _on_note(self, note):  # wakeword's worker thread, no wakeword lock held
+        if note.get("type") == "heard":
+            with self._cond:
+                self._publish("heard", note)
+        elif note.get("type") == "almost":
+            wake_log("almost", name=note.get("name"), vosk=note.get("stage1_text"),
+                     whisper=note.get("confirm_text"), ms=note.get("confirm_ms"))
+
+    def _log_problem(self, problem):
+        with self._cond:
+            if problem == self._problem:
+                return
+            self._problem = problem
+        if problem:
+            wake_log("problem", text=problem)
+
+    def _ensure_watch(self):
+        with self._cond:
+            if self._watch is None:
+                self._watch = threading.Thread(target=self._watchdog, name="care-wake-watch", daemon=True)
+                self._watch.start()
+
+    def _watchdog(self):
+        while True:
+            time.sleep(WAKE_TICK_S)
+            try:
+                now = time.monotonic()
+                with self._cond:
+                    if self._hold_until and now >= self._hold_until:  # a page that stopped renewing its hold
+                        self._hold_until = 0.0
+                        wakeword.resume("page")
+                    if self._woke_until and now >= self._woke_until:
+                        self._woke_until = 0.0
+                        wakeword.resume("woke")
+                    lease_over, started = self._lease_over(), self._started
+                    if not (started or self._hold_until or self._woke_until):
+                        self._watch = None  # nothing left to watch; the next poll or hold starts a new one
+                        return
+                if lease_over:
+                    self.stop(f"no Mary page for {WAKE_LEASE_S:g} s", lease=True)
+                elif started:
+                    self._log_problem(wakeword.status().get("problem"))
+            except Exception:
+                time.sleep(WAKE_TICK_S)  # keep watching; never take the server down
+
+
+WAKE = WakeLink()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -1025,6 +1264,21 @@ class Handler(SimpleHTTPRequestHandler):
         line({"done": True, **done})
         return True
 
+    def _wake(self, method, path, q):
+        """M6: the wake word routes (see WakeLink)."""
+        if method == "GET" and path == "/api/wake/wait":
+            try:
+                after = int(q("after") or 0)
+            except ValueError:
+                after = 0
+            return self._send(WAKE.wait(after))
+        if method == "GET" and path == "/api/wake/status":
+            return self._send(WAKE.status())
+        if method == "POST" and path == "/api/wake/hold":
+            on = str(self._body().get("on")).strip().lower() in ("1", "true", "yes", "on")
+            return self._send(WAKE.hold(on))
+        return None
+
     def _route(self, method):
         parsed = urlparse(self.path)
         path, query = parsed.path.rstrip("/"), parse_qs(parsed.query)
@@ -1034,6 +1288,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send({"plugged_in": power.plugged_in()})
         if path.startswith("/api/mary/"):
             return self._mary(method, path, q)
+        if path.startswith("/api/wake/"):  # M6
+            return self._wake(method, path, q)
         with connect() as conn:
             self._conn = conn  # _send commits it first, so a reply never arrives before its save is on disk
             if method == "GET" and path == "/api/incidents":
@@ -1121,7 +1377,8 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._send({"error": NOT_FOUND}, 404)
                 return self._send({"ok": True})
             if method == "PUT" and path == "/api/settings":
-                for k, v in self._body().items():
+                body = self._body()
+                for k, v in body.items():
                     if k in SKILL_SETTINGS:
                         continue  # --- skills hook (M13) --- only the skill routes change these
                     if k == "gemini_key" and not str(v).strip():
@@ -1142,7 +1399,7 @@ class Handler(SimpleHTTPRequestHandler):
                         v = str(v).strip().lower()
                         if v not in TALK_MODES:
                             continue
-                    if k == "talk_on_open":  # M4a: '1' or '0'; anything else is ignored
+                    if k in ("talk_on_open", "wake_word"):  # M4a, M6: '1' or '0'; anything else is ignored
                         v = str(v).strip().lower()
                         v = "1" if v in ("1", "true", "yes", "on") else "0" if v in ("0", "false", "no", "off") else None
                         if v is None:
@@ -1152,6 +1409,9 @@ class Handler(SimpleHTTPRequestHandler):
                     if k in SETTING_KEYS:
                         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                                      (k, str(v).strip()))
+                if "wake_word" in body or "companion" in body:  # M6: turned off, or a new name to listen for
+                    conn.commit()
+                    WAKE.settings_changed()
                 return self._send(public_settings(conn))
             if method == "POST" and path == "/api/inbox/import":
                 return self._send(import_andyflow(conn))
@@ -1205,7 +1465,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if self._route(method) is None:
                 self._send({"error": "Not found"}, 404)
-            elif mutating and not self.path.startswith("/api/mary/"):
+            elif mutating and not self.path.startswith(("/api/mary/", "/api/wake/")):
                 backup_db()  # the first save of a new day makes that day's backup; otherwise a quick no-op
         except ValueError as e:
             self._send({"error": str(e)}, 400)

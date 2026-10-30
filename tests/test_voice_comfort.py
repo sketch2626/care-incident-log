@@ -81,6 +81,41 @@ class VoiceComfortTest(unittest.TestCase):
         self.assertIsNotNone(r)
         self.assertIn("voice_volume", r["response"])
 
+    def test_stop_and_start_wake(self):  # M6
+        r = self.call("stop_wake")
+        self.assertEqual(self.settings["wake_word"], "0")
+        self.assertEqual(r["effects"], [{"kind": "settings", "data": {"values": {"wake_word": "0"}}}])
+        self.assertIn("won't listen", self.call("stop_wake")["say"])
+        self.settings["companion"] = "him"
+        r = self.call("start_wake")
+        self.assertEqual(self.settings["wake_word"], "1")
+        self.assertIn("Hey Sam", r["say"])
+
+    def test_wake_offline_phrases(self):  # M6
+        r = self.host.offline_match("please stop listening for your name")
+        self.assertIsNotNone(r)
+        self.assertEqual(self.settings["wake_word"], "0")
+        self.assertIsNotNone(self.host.offline_match("listen for hey mary"))
+        self.assertEqual(self.settings["wake_word"], "1")
+
+    def test_skill_wake_change_reaches_listener(self):  # M6
+        from unittest import mock
+        helpers.reset_db()
+        with mock.patch.object(server.WAKE, "settings_changed") as m:
+            server._put_settings({"wake_word": "0"})
+            server._put_settings({"voice_rate": "1.0"})
+            self.assertEqual(m.call_count, 1)
+        with mock.patch.object(server.WAKE, "settings_changed", side_effect=RuntimeError("x")):
+            server._put_settings({"companion": "him"})  # must not raise
+        server._put_settings({"companion": "mary", "wake_word": "1"})
+
+    def test_wake_model_and_vosk_packaged(self):  # M6
+        build = (ROOT / "packaging" / "build.py").read_text(encoding="utf8")
+        self.assertIn("vosk-model-small-en-us-0.15", build)
+        self.assertIn("get_wake_model.py", build)
+        self.assertIn("wakeword", build)
+        self.assertIn("vosk==", (ROOT / "packaging" / "requirements.txt").read_text())
+
     def test_gemini_tools(self):
         text = repr(self.host.gemini_tools())
         for name in ("slower", "faster", "quieter", "louder", "switch_companion"):

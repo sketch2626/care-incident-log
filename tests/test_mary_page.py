@@ -87,6 +87,29 @@ class MaryPageTests(unittest.TestCase):
         self.assertNotIn("/api/listen/stop?raw=1', {}, { ms: 30000 }", js)
         self.assertIn("I'm still waking up my ears", js)
 
+    def test_wake_word_poll_hold_and_setting(self):
+        # M6: one long-poll loop on /api/wake/wait, a hold while she is busy (renewed), "heard" shows only her
+        # ear waves, "wake" starts a short talk, and My info has an On/Off choice for listening for her name
+        js, _ = self.get("/mary/app.js")
+        self.assertIn("'/api/wake/wait?after='", js)
+        self.assertIn("'/api/wake/hold', { on: busy }", js)
+        self.assertIn("if (W.inFlight) { wakeSchedule(500); return; }", js)
+        self.assertIn("var WAKE_HOLD_RENEW_MS = 30000;", js)
+        self.assertIn("setInterval(wakeHoldCheck, 1000);", js)
+        self.assertIn("return !!S.convo || S.phase !== 'idle';", js)
+        self.assertEqual(js.count("wakeHoldCheck();   // M6"), 3)   # setPhase, startTalk, closeConvo
+        self.assertIn("face.setActivity('listening')", js)
+        self.assertIn("var WAKE_HEARD_MS = 4000;", js)
+        self.assertIn("startTalk({ say: WAKE_SAY, mood: 'happy', hello: WAKE_HELLO })", js)
+        self.assertIn("S.screen === 'everyday' && !S.firstRun && !S.convo", js)
+        self.assertIn("wake_word: it.v ? '1' : '0'", js)
+        self.assertIn("st.wake_ready", js)
+        self.assertIn("wakeState:", js)
+        self.assertIn("set('wakeTitle', 'Listen for “Hey ' + n + '”')", js)
+        html, _ = self.get("/mary.html")
+        self.assertIn('id="wakeTitle"', html)
+        self.assertIn('id="wakeList" class="rows" role="radiogroup" aria-labelledby="wakeTitle"', html)
+
     def test_face_files_still_load(self):
         self.get("/mary/face.js")
         self.get("/mary/face.css")

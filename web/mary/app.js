@@ -11,7 +11,7 @@
    setPhase(p) also sets the face activity and the Talk button.
 
    For the first-run and greeting code (task T4b), all on window.MaryApp:
-     MaryApp.talkTo(text)        send text through the talk pipeline (shows "You said", streams, speaks); resolves when she is done
+     MaryApp.talkTo(text)        send text through the talk pipeline (never shows his words; streams, speaks); resolves when she is done
      MaryApp.say(text, mood)     show a caption, set the mood, speak it; resolves when she is done (or was interrupted)
      MaryApp.listenOnce()        listen with the Talk button UI; resolves with the heard text ('' = nothing);
                                  MaryApp.state.listenReason is 'quiet' | 'tap' | 'silence' | 'cap'; rejects with Error
@@ -1287,7 +1287,8 @@
         plain: !!c.plain,   // M4a: no language hint, after a start that failed with it
         onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
         // M4a: liveHeardPiece: the story's cut-in, the early goodbye, and garbled lines (true = don't show it)
-        onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); if (!liveHeardPiece(c, t)) { setCaption('You said: ' + t, 'said'); } } },
+        // Andy (2026-10-30): his own words are never shown; only her words go on screen
+        onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); liveHeardPiece(c, t); } },
         onHeardDone: function (t) { liveHeard(c, t); },   // M4a: even after the talk ended or restarted (never missed)
         onToolCancel: function (ids) { if (mine()) { liveToolCancelled(c, ids); } },   // M4a
         onSpeaking: function (on) { if (mine()) { liveSpeakingChanged(c, on); } },
@@ -1719,7 +1720,7 @@
   // Typed words while Live is open go into the same talk, after the emergency check.
   function liveTyped(c, text) {
     if (c.story) { c.story.paused = true; }   // M4a: typing is a cut-in too
-    setCaption('You said: ' + text, 'said');
+    setCaption('');   // Andy (2026-10-30): his own words are never shown
     c.lastAct = Date.now();
     liveHeard(c, text).then(function (j) {
       if (S.convo !== c || c.ending || (j && j.emergency)) { return; }   // M4a: c.ending: a typed goodbye
@@ -1993,7 +1994,7 @@
     var turn = newTurn();
     closeMenu();
     closeTyping(false);
-    setCaption('You said: ' + text, 'said');
+    setCaption('');   // Andy (2026-10-30): his own words are never shown
     setPhase('thinking');
 
     var T = { turn: turn, streamed: '', rest: '', mood: '', sess: null, gotLine: false, gotResponse: false, dead: false };

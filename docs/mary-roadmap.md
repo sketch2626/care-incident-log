@@ -101,6 +101,11 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **M4a, the good voice in Mary now.** Second account, Opus; brief `docs/handoff/M4a.md`. Her Live session with his picked Mary and Sam voices, which stays open hands-free. Normal and Offline are the other choices, and each falls back to the next. Skills and the emergency check work in Live, and her captions stay plain for now.
     - **Andy's try (2026-10-30, merged 312ccae): "the voice works."**
       - **The brain feels generic in Live.** He asked for a story and got "well, hello there, Andrew. I would love to tell you a story, would you like to talk about this or maybe some music history?" Likely cause: `LIVE_EXTRA` limits her to 1-3 sentences, and Live can't remember things, so it never learns "call me Andy". Sent to the M4a worker.
+      - **Second try after the brain fixes (e767016):** she remembered "Andy". Still wrong:
+        - **The story** was about 3 sentences, with no structure or point. Causes: the "Short: one to three short sentences" rule in `mary/instructions.md` line 79 and `maxOutputTokens: 256` in `mary.py`.
+        - **The opening greeting** is dry and the same every time ("hello, it's late, but I'm still here").
+        - **Starting the talk** still takes a tap.
+        - All three were sent to the M4a worker. Its fix makes Mary start talking when she opens, as a setting that's on by default, until the wake word arrives.
       - **The menu is unchanged.** That's expected, since the new menu is M4b. He found no option to switch anything: talk mode lives only in the main app's My info. He also doesn't want the big Slower/Faster/Quieter/Louder buttons in the menu. These go to M4b (brief `docs/handoff/M4b.md`).
   - **M4b, the bubble-letter captions:** M3 approved 2026-10-30, so it's ready to start. The build list is "Build list for M4b" in `mockups/mary/round6/README.md`. It covers style A captions, the ear-wave listening, the thought cloud with "Thinking…", the top-right Menu exactly as drawn and the emergency screen, with board files and `r6.css` classes.
   - **M4a built 2026-10-30 (second account, branch `other/M4a`; 443 tests), waiting for Andy's ear:**

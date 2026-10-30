@@ -143,6 +143,13 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
     - He said "show me a picture" without saying of what. She picked "cardinal" herself, the example in the skill's card, and showed a mascot in a cardinal outfit.
     - She said "Look right there at the beautiful bird in the center of the screen". Andy: "I can see the damn screen… That's still that childlike stuff."
     - **Layout rejected:** she shrank to a small face in the top-left corner. Andy wants her to "slide out of the way and show the pictures like she would show the game screens", the same side-by-side layout games will use (see "Games with Mary" in `docs/companion-plan.md`), like the way she slides aside for the menu.
+  - **More from Andy:**
+    - An HTML-looking label (likely the Wikimedia credit) was dragged across the picture.
+    - She talked about the mascot as if it were a normal bird, because she never sees the picture.
+    - Called out on the double greeting, she agreed, then asked a third time.
+    - Andy: a greeting the brain doesn't know about "creates a weird mismatch".
+    - **Rule:** every line she speaks goes into the brain's history. When online, the hello comes from the brain.
+    - **Pictures:** the image comes from the subject's own article, checked with one Gemini vision call that also tells her what's really shown. The credit is plain text and never covers the picture.
   - **Fifth-try fixes (M4a, 2026-10-30):** every line she says goes into the talk history in code (`say()` in `web/mary/app.js`). With a key, her opening hello comes from the brain (`mary.open_line`); scripted hellos are the fallback. New instruction rules: name rarely, no second greeting, no repeated or already-answered question, never narrate the screen. Pictures: no canned subjects, the real thing ranks over namesakes (checked against real Wikipedia: cardinal, eagle, bulldog), one Gemini vision check per picture gives her a `seen` line, and all credit text is plain. Vision is not yet tried against real Gemini.
   - **Fixes:** the brain (hello in history, name rarely, never narrate the screen), the picture skill (ask what to show when no subject is given, prefer the real thing over mascots and logos, talk about the subject, never the screen) to M4a; the slide-aside layout for pictures and games to M4b.
   - **Rule from now on (free tier):** in Live mode, Live itself speaks everything: stories, goodbyes and all. No Gemini TTS during a Live talk. Gemini TTS is for Normal mode only. After a daily 429, go straight to Kokoro for the rest of the day, with no retry storm, and never bounce out of Live because TTS failed.
@@ -201,6 +208,7 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
     - Memories never leave the laptop except in the packet for one reply.
     - They're encrypted along with the log in backend phase 1.
   - **Order:** queued by Andy (2026-10-30) to start right after M4a's current fixes land (it overlaps `mary.py`/`server.py`), together with M9e's lean core.
+  - **Built 2026-10-30 (83dc00d, branch `other/M9c`), waiting for Andy to try it:** `memory_core.py`, the `recall` and `forget_memory` tools in Live and Normal, and "What Mary remembers" in both My info screens. Tests: `tests/test_memory_core.py`. Not yet tried with real Gemini or in a real window.
 - **Main talk mode, being decided (Andy, 2026-10-30):** Andy leans toward Normal back-and-forth as the main mode instead of Live: the full text brain every turn, one voice for the whole talk, hands-free with the wake word and "go to sleep". Live stays an option.
   - **Facts:** Live's brain is a smaller, speed-tuned model, which is why its own stories were thin. Live is free on the free tier. Gemini TTS is capped at 10 requests a day on the free tier, so Normal on the free tier needs the laptop's own voice (Kokoro now, M14's open-source voice later) until there's a paid key. On a paid key, Live bills audio while it listens, but Normal's listening is free on the laptop.
   - **Costs of Normal:** replies come about 1-2 s slower, and cutting in mid-sentence needs echo-cancelled barge-in, which Live does well.

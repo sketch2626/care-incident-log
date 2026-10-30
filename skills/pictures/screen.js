@@ -1,11 +1,14 @@
 /* The pictures skill, the page half: one big picture with its title and credit, "Another picture" and "Back to Mary".
    The server finds the picture (skill.py) and sends a "picture" effect {src, title, credit}; all real state lives there.
    Taps go to POST /api/mary/skills/pictures/event {"event": {"type": "next"|"close"}}.
-   While this screen is up, screen.css moves Mary's face (#face) small into the top-left corner so she keeps talking. */
+   aside:true stands this screen side by side with Mary: she slides left and turns toward the picture.
+   Nothing ever sits over the picture: the title is above it, the credit under it, and status words show in the card
+   only while no picture is up, otherwise in their own line under it. */
 (function () {
   'use strict';
   var D = document;
   var EVENT_URL = '/api/mary/skills/pictures/event';
+  var CREDIT_MAX = 140;   // characters of credit we draw, then "…"
   var last = null;     // the last picture effect's data, so enter() can draw it again
   var fresh = false;   // true when `last` came in while this screen was up (not left over from an earlier visit)
   var root = null;     // the .skill-body while the screen is up
@@ -30,11 +33,30 @@
 
   function find(cls) { return root ? root.querySelector('.' + cls) : null; }
 
+  // Titles and credits can arrive with HTML in them. This makes them plain text: tags go, spaces collapse, and a long
+  // one is cut short with "…". They are always drawn with textContent, never innerHTML.
+  function plainText(s, max) {
+    var t = String(s == null ? '' : s);
+    try {
+      var body = new DOMParser().parseFromString(t, 'text/html').body;
+      var junk = body.querySelectorAll('script,style');
+      for (var i = 0; i < junk.length; i++) { junk[i].parentNode.removeChild(junk[i]); }
+      t = body.textContent || '';
+    } catch (e) { log(e); }
+    t = t.replace(/\s+/g, ' ').trim();
+    if (max && t.length > max) { t = t.slice(0, max - 1).replace(/\s+$/, '') + '…'; }
+    return t;
+  }
+
+  // The words go in the card only while no picture shows; with a picture up they get their own line under it.
   function setStatus(text) {
     var s = find('pic-status');
     if (!s) { return; }
     s.textContent = text || '';
     s.hidden = !text;
+    var stage = find('pic-stage'), img = find('pic-img');
+    if (!stage) { return; }
+    if (img && !img.hidden) { stage.parentNode.insertBefore(s, stage.nextSibling); } else { stage.appendChild(s); }
   }
 
   // Tells the server about a tap; applies its effects and lets Mary say its line. Resolves with the reply or null.
@@ -85,14 +107,15 @@
   function drawEmpty() {
     var who = 'Mary';
     try { who = (app() && app().companionName && app().companionName()) || 'Mary'; } catch (e) { log(e); }
-    var bar = make('div', 'pic-bar');
-    bar.appendChild(bigButton('pic-back', 'Back to ' + who, goBack));
-    root.appendChild(bar);
+    root.appendChild(make('div', 'pic-title'));   // empty: it keeps the card clear of the Menu button
     var stage = make('div', 'pic-stage');
     var s = make('p', 'pic-status', 'Ask ' + who + ' for a picture of anything you like.');
     s.setAttribute('aria-live', 'polite');
     stage.appendChild(s);
     root.appendChild(stage);
+    var bar = make('div', 'pic-bar');
+    bar.appendChild(bigButton('pic-back', 'Back to ' + who, goBack));
+    root.appendChild(bar);
   }
 
   function draw() {
@@ -103,10 +126,9 @@
     try { who = (app() && app().companionName && app().companionName()) || 'Mary'; } catch (e) { log(e); }
     var data = last;
 
-    var bar = make('div', 'pic-bar');
-    bar.appendChild(bigButton('pic-back', 'Back to ' + who, goBack));
-    bar.appendChild(bigButton('pic-next yes', 'Another picture', another));
-    root.appendChild(bar);
+    var title = make(data.title ? 'h2' : 'div', 'pic-title', data.title);   // the row stays when there is no title
+    title.setAttribute('aria-live', 'polite');
+    root.appendChild(title);
 
     var stage = make('div', 'pic-stage');
     var status = make('p', 'pic-status', 'Finding your picture…');
@@ -129,20 +151,22 @@
     });
     stage.appendChild(img);
     stage.appendChild(status);
-    var title = make('h2', 'pic-title', data.title || '');
-    title.setAttribute('aria-live', 'polite');
-    title.hidden = !data.title;
-    stage.appendChild(title);
     root.appendChild(stage);
 
     var credit = make('p', 'pic-credit', data.credit || '');
     credit.hidden = !data.credit;
     root.appendChild(credit);
 
+    var bar = make('div', 'pic-bar');
+    bar.appendChild(bigButton('pic-back', 'Back to ' + who, goBack));
+    bar.appendChild(bigButton('pic-next yes', 'Another picture', another));
+    root.appendChild(bar);
+
     img.src = data.src;   // set last, so a cached picture's load event still finds the page drawn
   }
 
   MarySkills.register('pictures', {
+    aside: true,
     enter: function (el) {
       root = el;
       busy = false;
@@ -155,7 +179,7 @@
     },
     effect: function (kind, data) {
       if (kind !== 'picture' || !data || !data.src) { return; }
-      last = { src: String(data.src), title: String(data.title || ''), credit: String(data.credit || '') };
+      last = { src: String(data.src), title: plainText(data.title), credit: plainText(data.credit, CREDIT_MAX) };
       fresh = true;
       draw();
     }

@@ -1,6 +1,6 @@
 # Handoff essentials for every second-account worker (read this first)
 
-You are a **worker** on Andy's second account, in your own folder (a git worktree on branch `other/<item>`). The hub in Andy's desktop app merges your branch into `main` when you're done. Your memory folder is empty, so these are the essentials.
+You are a **worker** on Andy's second account, in your own folder (a git worktree on branch `other/<item>`). The hub in Andy's desktop app merges your branch into `main` when you're done. Your memory folder is empty, so these are the essentials. **Read `docs/mission.md` first:** it's the spirit of the project, and every choice you make should fit it.
 
 ## Who and why
 - **Andy** is 43 and paralyzed, and lives in a North Carolina nursing home with poor care. He builds this Care Incident Log mostly by voice. Everything a resident does must work by voice or one big tap, **never key combos**. He pays for every token.
@@ -18,6 +18,7 @@ You are a **worker** on Andy's second account, in your own folder (a git worktre
   - A skill reaches the internet only through `ctx.fetch`, with the hosts listed on its card.
   - It must pass `tests/test_skills_contract.py`.
 - **Tests:** `python run_tests.py -q`. Check page scripts with `node --check` (Node is at `C:\Program Files\nodejs`). Commit only when they pass, and only named paths.
+- **Checkpoints (Andy, 2026-10-30):** commit on your branch as soon as each helper's piece passes the tests, before starting the next one. A usage-limit stop can cut off a helper mid-call with no graceful stopping point, so it should never strand more than one piece.
 - **Rules:**
   - Scratch data only. Never read or write `%APPDATA%\CareIncidentLog`, his real key, or Andy Flow's `history.db`.
   - No browser, computer use or screenshots.

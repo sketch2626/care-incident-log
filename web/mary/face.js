@@ -11,11 +11,13 @@
      face.setCompanion(c)  'mary' | 'him' (a clean cut: new face, new background, new glow)
      face.setLoud(on)      while listening: the resident is talking (bright, fast ear waves and glow)
      face.setMenuOpen(on)  the menu is open: she moves left (translate -105 -30), looks at it, closed smile
+     face.setAside(on)     side by side with a skill: she slides into the left 40% of the window and turns toward
+                           the right 60%, still big and alive, and glances between it and the person (face.css)
      face.setEmergency(on) emergency: the calm concerned face, a little higher (translate 0 -50),
                            a steady rose glow (never flashing). It wins over every mood and activity.
      face.bounce()         one happy hop
      face.destroy()
-     face.getState()       { companion, mood, activity, shown, listening, loud, thinking, cloud, menuOpen, emergency }
+     face.getState()       { companion, mood, activity, shown, listening, loud, thinking, cloud, menuOpen, aside, emergency }
    Options: { companion, cloudDelay }  cloudDelay = ms in thinking before the thought cloud shows (400).
 
    Which face shows: emergency first, then activity 'listening' or 'thinking', otherwise the mood's face.
@@ -25,7 +27,7 @@
      thinking   the face eases 60 px lower (of 800), eyes drift up-left, lavender glow, then after
                 cloudDelay a thought cloud up-left with "Thinking…" coloring in, over and over
    The states are classes on the root (face.el) for the page to read:
-     mf-listen, mf-loud, mf-think, mf-cloud, mf-menu, mf-sos
+     mf-listen, mf-loud, mf-think, mf-cloud, mf-menu, mf-aside, mf-sos
 
    COMPANIONS: each entry has the same shape (COMPANIONS.him is the second example, drawn from
    mockups/mary/round4/R4His*.dc.html; Andy named him Sam):
@@ -482,7 +484,7 @@
 
     let companion = 'mary', data = COMPANIONS.mary;
     let mood = 'resting', activity = 'resting';
-    let loud = false, menuOpen = false, emergency = false, cloud = false, cloudT = 0;
+    let loud = false, menuOpen = false, aside = false, emergency = false, cloud = false, cloudT = 0;
     const cloudDelay = opts.cloudDelay >= 0 ? +opts.cloudDelay : 400;
     let faces = {}, shown = null;
     let glowNow = -1, glowSig = '';
@@ -607,6 +609,7 @@
       root.classList.toggle('mf-loud', isLoud);
       root.classList.toggle('mf-think', key === 'thinking');
       root.classList.toggle('mf-menu', menuOpen);
+      root.classList.toggle('mf-aside', aside);
       root.classList.toggle('mf-sos', emergency);
       // the thought cloud comes only after a short wait, so a quick answer never flickers it
       if (key !== 'thinking') {
@@ -684,6 +687,11 @@
       menuOpen = !!on;
       render();
     }
+    function setAside(on) {
+      if (gone) return;
+      aside = !!on;
+      render();
+    }
     function setEmergency(on) {
       if (gone) return;
       emergency = !!on;
@@ -742,13 +750,14 @@
       setCompanion: setCompanion,
       setLoud: setLoud,
       setMenuOpen: setMenuOpen,
+      setAside: setAside,
       setEmergency: setEmergency,
       bounce: bounce,
       destroy: destroy,
       getState: function () {
         return { companion: companion, mood: mood, activity: activity, shown: shown,
           listening: shown === 'listening', loud: loud && shown === 'listening', thinking: shown === 'thinking',
-          cloud: cloud, menuOpen: menuOpen, emergency: emergency };
+          cloud: cloud, menuOpen: menuOpen, aside: aside, emergency: emergency };
       }
     };
   }

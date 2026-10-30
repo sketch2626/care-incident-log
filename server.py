@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlparse
 
 import assist
 import mary
+import memory_core  # M9c
 import power
 import skills_core  # --- skills hook (M13) ---
 import voices
@@ -160,6 +161,7 @@ def init_db():
     migrate_legacy_data()
     with connect() as conn:
         conn.executescript(SCHEMA)
+        conn.executescript(memory_core.MEMORIES_SCHEMA)  # M9c
         if "formal_summary" not in {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}:
             conn.execute("ALTER TABLE incidents ADD COLUMN formal_summary TEXT NOT NULL DEFAULT ''")
         # The Andy Flow link is the resident's choice and starts off. A log that already holds entries
@@ -167,6 +169,7 @@ def init_db():
         if "andyflow_enabled" not in get_settings(conn) and conn.execute(
                 "SELECT 1 FROM incidents WHERE source LIKE 'andyflow-%' LIMIT 1").fetchone():
             conn.execute("INSERT INTO settings (key, value) VALUES ('andyflow_enabled', '1')")
+        memory_core.migrate_json(DATA / "mary" / "memory.json", conn)  # M9c: once only, by settings key memories_moved
     backup_db()
 
 
@@ -275,7 +278,9 @@ TALK_NO_TEXT = "I didn't catch anything. Could you say that again?"
 
 
 def mary_memory():
-    return mary.Memory(DATA / "mary" / "memory.json")
+    memory = mary.Memory(DATA / "mary" / "memory.json")
+    memory.store = memory_core.MemoryStore(connect)  # M9c
+    return memory
 
 
 def mary_settings():
@@ -466,9 +471,13 @@ def mary_live_skill_setup(screen=None):
 # --- end skills hook ---
 
 
-def mary_live_memory_call(name, args):  # M4a: Live's remember_fact and set_their_name tools
-    """Saves what one of Live's memory tools asked for. The same shape as a skill call's result."""
+def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact and set_their_name tools; M9c: recall too
+    """Saves what one of Live's memory tools asked for, or runs recall or forget_memory (M9c). The same shape as a skill
+    call's result. heard is what Live heard, which says whether they asked her to remember (M9c)."""
     args = args if isinstance(args, dict) else {}
+    if name in mary.MEMORY_TOOL_NAMES:  # M9c
+        with _mary_lock:
+            return mary.memory_tool(mary_memory(), name, args)
     if name == "set_their_name":
         value = mary.clean_name(args.get("name"))
         error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
@@ -479,13 +488,13 @@ def mary_live_memory_call(name, args):  # M4a: Live's remember_fact and set_thei
         return {"response": {"ok": False, "error": error}, "effects": [], "say": None}
     with _mary_lock:
         memory = mary_memory()
-        if name == "set_their_name":
-            memory.name = value
-        else:
-            memory.add_fact(value)
         try:
+            if name == "set_their_name":
+                memory.name = value
+            else:
+                memory.add_fact(value, str(args.get("kind") or ""), mary.fact_source(heard))  # M9c
             memory.save()
-        except OSError:
+        except (OSError, sqlite3.Error):  # M9c: the store writes to the database
             return {"response": {"ok": False, "error": "It could not be saved just now."}, "effects": [], "say": None}
     return {"response": {"ok": True}, "effects": [], "say": None}
 
@@ -533,14 +542,14 @@ def mary_see_image(image_bytes, mime, question):
 # --- end M4a ---
 
 
-def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None):
+def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typed=False):  # M9c: typed
     """Mary's answer to text, for the page. Never contains the key."""
     s = mary_settings()
     skills = skill_host()  # --- skills hook (M13) ---
     with _mary_lock:
         r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
                        companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident,
-                       skills=skills, screen=screen, on_effect=on_effect)  # --- skills hook (M13) ---
+                       skills=skills, screen=screen, on_effect=on_effect, typed=typed)  # --- skills hook (M13) --- M9c: typed
     return {"text": r["text"], "mood": r["mood"], "effects": r["effects"],  # effects: M13
             "emergency": bool(r["emergency"] or r["gemini_alert"]),
             "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
@@ -1032,9 +1041,10 @@ class Handler(SimpleHTTPRequestHandler):
             if not text:
                 raise ValueError(TALK_NO_TEXT)
             screen = body.get("screen") if isinstance(body.get("screen"), str) else None  # --- skills hook (M13) ---
+            typed = body.get("typed") is True  # M9c
             if q("stream") == "1":
-                return self._mary_stream(text, screen)
-            return self._send(mary_talk(text, screen=screen))
+                return self._mary_stream(text, screen, typed)
+            return self._send(mary_talk(text, screen=screen, typed=typed))
         if method == "GET" and path == "/api/mary/voices":
             return self._send(mary_voices())
         if method == "POST" and path in ("/api/mary/voices/sample", "/api/mary/live/token"):
@@ -1163,6 +1173,14 @@ class Handler(SimpleHTTPRequestHandler):
             return self._voice_stream(cv["tts"], s["key"], False, text, cache=False, pace=rate,  # replies never pile up on disk
                                       spent_voice=offline_voice)  # M4a: the request that hits the limit swaps too
         # --- end M4a ---
+        if method == "GET" and path == "/api/mary/memories":  # M9c: the page's list; no lock, each store call stands alone
+            found = memory_core.MemoryStore(connect).active()
+            return self._send({"memories": [memory_core.public(m) for m in found], "count": len(found)})
+        m = re.fullmatch(r"/api/mary/memories/(\d+)", path)  # M9c
+        if m and method == "DELETE":
+            if not memory_core.MemoryStore(connect).remove(m.group(1)):
+                return self._send({"error": "That memory isn't here."}, 404)
+            return self._send({"ok": True})
         if path == "/api/mary/skills" or path.startswith("/api/mary/skills/"):  # --- skills hook (M13) ---
             return self._skills(method, path)
         return None
@@ -1185,8 +1203,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send({"response": {"error": "emergency"}, "effects": [], "say": "",
                                    "ok": False, "emergency": True})
             name = str(body.get("name") or "")
-            if name in ("remember_fact", "set_their_name"):  # M4a: Live's own memory tools, not a skill
-                return self._send(mary_live_memory_call(name, body.get("args")))
+            if name in ("remember_fact", "set_their_name") + mary.MEMORY_TOOL_NAMES:  # M4a: Live's own memory tools, not a skill
+                return self._send(mary_live_memory_call(name, body.get("args"),  # M9c: recall stays below the emergency gate
+                                                        heard[:2000] if isinstance(heard, str) else ""))
             if name in ("story_more", "end_talk"):  # M4a: the page answers these two; they should never reach here
                 return self._send({"response": {"error": "not_here"}, "effects": [], "say": None})
             if name == "tell_story":  # M4a: Live's story tool, after the emergency gate above
@@ -1290,7 +1309,7 @@ class Handler(SimpleHTTPRequestHandler):
             gen.close()  # a stopped sample is logged and never saved
         return True
 
-    def _mary_stream(self, text, screen=None):
+    def _mary_stream(self, text, screen=None, typed=False):  # M9c: typed
         """Mary's answer as it happens: one JSON line per event (mood, text pieces, skill effects, then done).
         The connection closing ends the stream (HTTP/1.0); end_headers adds Cache-Control: no-store."""
         self.send_response(200)
@@ -1311,7 +1330,8 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             done = mary_talk(text, on_text=lambda piece: line({"text": piece}),
                              on_mood=lambda mood: line({"mood": mood}),
-                             screen=screen, on_effect=lambda effect: line({"effect": effect}))  # skills hook (M13)
+                             screen=screen, on_effect=lambda effect: line({"effect": effect}),  # skills hook (M13)
+                             typed=typed)  # M9c
         except Exception:
             line({"error": "Something went wrong. Please try again."})
             return True

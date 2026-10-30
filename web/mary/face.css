@@ -92,7 +92,7 @@
 
 /* ---------- round 6 states (mockups/mary/round6, r6.css): classes on .mf-root ----------
    mf-listen (ear waves), mf-loud (the resident is talking), mf-think (+ mf-cloud after a short wait),
-   mf-menu (menu open), mf-sos (emergency). Drawing units: 1 of the 640x400 drawing = 2 px on a 1280x800 screen. */
+   mf-menu (menu open), mf-aside (side by side with a skill), mf-sos (emergency). Drawing units: 1 of the 640x400 drawing = 2 px on a 1280x800 screen. */
 
 /* the face moves as one: 60 px lower while thinking (30 of 400 = 7.5%), 105 left while the menu is open (of 640) */
 .mf-stage{transition:transform .45s ease}
@@ -107,6 +107,27 @@
 .mf-mouth-menu{opacity:0;transition:opacity .25s ease}
 .mf-menu .mf-has-smile:not(.mf-talking) .mf-mouth-menu{opacity:1}
 .mf-menu .mf-has-smile:not(.mf-talking) .mf-mouth-rest{opacity:0}
+
+/* side by side with a skill (face.setAside, mf-aside): the same .45s move as the menu, but she also shrinks a little and
+   turns, her right side going back into the screen, so she faces what the skill shows. #face stays full-window, so her warm
+   background and glow stay. These rules come after the menu and thinking rules so they win; with the menu open too she stays
+   aside (no second shift) and looks at the menu.
+   The numbers: her widest part is the ear waves, x 152-488 of 640, here scaled .7 and turned 16deg about the stage center.
+     1280x800 (16:10): x 14 to 501 px, center 257, in the left column of 512 px (40%), so centered on 20%
+     1366x768 (16:9):  x 43 to 511 px, center 277, in the left column of 546 px (40%), so centered on 20%
+   The slide is in cqw (of the window), since the stage is narrower than the window at 16:9; % is the fallback.
+   perspective is in vw (1408 px at 1280) so the turn looks the same at every window size.
+   The thought cloud (x 108-230 of 640) is left of her head, and the same slide would push it off the window by 57 px at 1280.
+   Its layer turns and shrinks with her but slides 5.5cqw less: its left edge is 18 px in, and the trail ends over her forehead. */
+.mf-fit{perspective:110vw}
+.mf-root{--mf-aside-x:-29%;--mf-aside-cloud:-23.5%}
+@supports (width:1cqw){.mf-root{--mf-aside-x:-29cqw;--mf-aside-cloud:-23.5cqw}}
+.mf-aside .mf-stage{transform:translate(var(--mf-aside-x),0) scale(.7) rotateY(16deg)}
+.mf-aside.mf-think .mf-stage{transform:translate(var(--mf-aside-x),7.5%) scale(.7) rotateY(16deg)}
+.mf-aside .mf-over,.mf-aside.mf-think .mf-over{transform:translate(var(--mf-aside-cloud),0) scale(.7) rotateY(16deg)}
+/* she glances slowly toward the skill and back to the person */
+.mf-aside .mf-eyes{animation:mf-glance 7s ease-in-out infinite}
+.mf-aside.mf-menu .mf-eyes{animation:none;transform:translate(12px,2px)}
 
 /* listening: sound waves where her ears would be, small to large; brighter and faster while you talk */
 .mf-wave{fill:none;stroke:#2b6f96;stroke-linecap:round;transform-box:view-box;animation:mf-waveq 2.6s ease-in-out infinite}
@@ -154,6 +175,7 @@
 @keyframes mf-waveq{0%,100%{opacity:.22}50%{opacity:.62}}
 @keyframes mf-voice{0%,100%{opacity:.7}30%{opacity:1}55%{opacity:.82}80%{opacity:.95}}
 @keyframes mf-ponder{0%,100%{transform:translate(-9px,-9px)}45%{transform:translate(-4px,-11px)}70%{transform:translate(-10px,-6px)}}
+@keyframes mf-glance{0%,30%{transform:translate(0,0)}45%,85%{transform:translate(12px,2px)}100%{transform:translate(0,0)}}
 @keyframes mf-trail{0%,100%{opacity:.35}40%{opacity:1}}
 @keyframes mf-colorin{0%,8%{clip-path:inset(-30% 100% -30% -6%);opacity:1}62%,86%{clip-path:inset(-30% 0 -30% -6%);opacity:1}100%{clip-path:inset(-30% 0 -30% -6%);opacity:0}}
 
@@ -171,6 +193,7 @@
   .mf-stage,.mf-eyes,.mf-mouth-menu{transition-duration:.15s!important}
   .mf-over,.mf-cloud .mf-over{transition-duration:.15s,0s,.15s}
   .mf-ponder{transform:translate(-9px,-9px)}
+  .mf-aside .mf-eyes{transform:translate(12px,2px)}   /* no glance: her eyes rest on the skill */
   .mf-wave{opacity:.45}
   .mf-loud .mf-wave{opacity:1}
   .mf-cloud .mf-w::after{animation:mf-colorin 5s linear infinite!important}

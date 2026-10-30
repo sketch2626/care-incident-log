@@ -299,4 +299,19 @@ check('Menu open: lines are laid out again for the narrower caption; plain lines
   cap.destroy();
 });
 
+check('Side by side: the caption is measured again and keeps every word', () => {
+  T = 0;
+  const cap = C.create(host, { liveRegion: region, clock });
+  cap.sentence('Good morning, sunshine! I hope you slept well.', { at: 0, dur: 3 });
+  cap.setAside(true);
+  assert.ok(capEl().classList.contains('aside'));
+  assert.strictEqual(spans().map((s) => s.getAttribute('data-t')).join(' '), 'Good morning, sunshine! I hope you slept well.');
+  cap.setSide(true);
+  assert.ok(capEl().classList.contains('aside'), 'the menu does not undo it');
+  cap.setSide(false);
+  cap.setAside(false);
+  assert.ok(!capEl().classList.contains('aside'));
+  cap.destroy();
+});
+
 console.log('OK ' + count);

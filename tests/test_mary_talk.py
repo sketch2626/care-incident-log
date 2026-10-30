@@ -445,7 +445,7 @@ class TestRoutes(TalkCase):
     def test_talk_remembers_without_mood_tags(self):
         self.talk(text="I like tea", chunks=["[mood: happy] Tea is lovely.\n[remember: She likes tea]"])
         saved = json.loads(self.memory_file.read_text(encoding="utf-8"))
-        self.assertEqual(saved["facts"], ["She likes tea"])
+        self.assertEqual([m["text"] for m in server.mary_memory().store.active()], ["She likes tea"])  # M9c: in the store
         self.assertEqual([t["text"] for t in saved["recent"]], ["I like tea", "Tea is lovely."])
         self.assertNotIn("mood", self.memory_file.read_text(encoding="utf-8"))
 

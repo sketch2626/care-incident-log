@@ -1,6 +1,7 @@
 /* Mary's skills, the page half (docs/skills-design.md sections 3 and 10).
    window.MarySkills = {
      register(name, handlers)   a skill's screen.js calls this: handlers = {enter(el, opts), leave(el), effect(kind, data)}
+                                plus aside:true to stand side by side with Mary: she slides left, the box is the right 60%
      apply(effect)              one effect from the server: settings, show_screen, leave_screen or a skill's own
      call(name, args)           POST /api/mary/skills/call ("<skill>__<action>"); applies its effects; resolves with the result
      handleLiveToolCall(tc, heard)  Live mode: runs each functionCall, resolves with a toolResponse {functionResponses: [...]}
@@ -66,6 +67,8 @@
       app().registerScreen(name, {
         enter: function (opts) {
           var el = boxFor(name);
+          el.classList.toggle('aside', !!handlers[name].aside);
+          if (handlers[name].aside && app() && app().sideBySide) { app().sideBySide(true); }
           el.hidden = false;
           guard(name, function () { if (handlers[name].enter) { handlers[name].enter(el.firstChild, opts || {}); } });
         },
@@ -73,6 +76,7 @@
           var el = boxFor(name);
           guard(name, function () { if (handlers[name].leave) { handlers[name].leave(el.firstChild); } });
           el.hidden = true;
+          if (handlers[name].aside && app() && app().sideBySide) { app().sideBySide(false); }
         }
       });
     }

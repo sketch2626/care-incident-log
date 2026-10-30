@@ -125,7 +125,8 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Pacing runs away in long talk (top fix).** During the story she got faster and faster, until it would soon have been too fast to understand. "Slow down" worked and she agreed to keep it steady, but it took off again. Live's speed is a prompt instruction, not page playback, so the native-audio model drifts on long monologues. To M4a.
   - **"Go to sleep" took about 10 s,** then she said "just push the Talk button", but there is no Talk button anymore. Causes: "go to sleep" isn't a goodbye phrase; `LIVE_BYE`, `MSG.tapToTalk` and `mary/instructions.md` lines 154-156 still describe the Talk button and say the wake word is "coming soon". To M4a.
   - **Voice tone: "patronizing, like somebody talking to a child".** It has too much uptick and emphasis on the ends of words. All the free voices do it, and Andy will wait for paid voices. First try a cheap fix: a tone instruction for Live and the Gemini TTS style (a grown-up friend, relaxed and even, no sing-song). To M4a.
-  - **Paid voices later:** use only legitimate APIs (ElevenLabs' own API, Gemini paid tier). Never a reverse-engineered free copy, which breaks the provider's terms, can vanish any day, and would send residents' words through a stranger's server.
+  - **Better voices later (Andy, 2026-10-30):** paid voices (Gemini paid tier, ElevenLabs' API), or the open-source, free voice Andy found that reproduces how ElevenLabs works. It's open source, so nobody can shut it down. Check whether it runs on the laptop, which would keep residents' words private. To look into (M14 below). The hub first wrongly took it for a free proxy service, and Andy corrected that.
+  - **"We might be infantilizing them a little bit too much"** (Andy, 2026-10-30): the way she speaks, not only the voice. Residents are grown adults with a lifetime behind them. To M4a, and a standing rule for the brain bench (M9d).
   - Games aren't wired in yet (M7, as expected).
 - Wire the voice chosen in M2 into `web/mary/app.js` and the server, with the offline fallback.
 - Build the approved M3 caption: each word fills as it's spoken. Use real word timings if the voice gives them, otherwise estimate from each word's length and the audio length.
@@ -219,6 +220,11 @@ Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up
   - It offers general actions she can improvise with, for example `set_hint`, `reveal_letter`, `check_answer` and `new_puzzle`, not just one fixed action per button.
   - She can only see what a screen tells her, and only do the actions it offers. So every new screen ships with both.
 - **Done when:** in each mode, "show me a cardinal" puts up a real cardinal photo, and "let's play word search" opens the game once M7 exists.
+
+### M14. A better voice (later; Andy, 2026-10-30)
+- The free Gemini voices sound patronizing, with uptick and emphasis on word endings.
+- Look into the open-source, free voice Andy found, which reproduces how ElevenLabs works. Ask Andy for its name or link first. Check whether it runs on the laptop (privacy, offline) and what it needs, then audition it for Andy by ear as in M2.
+- Paid options (Gemini paid tier, ElevenLabs' API) are the other route.
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
 - **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.

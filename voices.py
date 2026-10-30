@@ -358,12 +358,13 @@ def _line_tag(text):
     return {} if text == LINE else {"line": next((k for k, v in LINES.items() if v == text), "other")}
 
 
-def tts_stream(voice, api_key, data=None, summary=None, text=LINE):
+def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True):
     """One spoken sample of LINE, handed over as it arrives: yields {"pcm", "rate", "channels"} for each piece of
     audio; the first also has "cached" and "path". A saved copy comes in one piece with no network. Raises
     VoiceError before the first piece, exactly as tts_sample does. When the stream ends, `summary` (a dict, if
     given) is filled with what tts_sample returns. Every call is logged; a consumer that stops early is logged
-    as "stopped" and nothing is saved."""
+    as "stopped" and nothing is saved. cache=False (M4a): no saved copy is read or written, so Mary's spoken
+    replies never pile up on disk."""
     voice_id = str(voice or "").strip()
     event = {"event": "tts", "id": voice_id, "model": TTS_MODEL, **_line_tag(text)}
     done = False
@@ -372,7 +373,7 @@ def tts_stream(voice, api_key, data=None, summary=None, text=LINE):
         voice_id = f"gemini:{name}"
         event.update(id=voice_id, voice=name)
         wav_file, meta_file = _cache_files(voice_id, name, data, text)
-        saved = _saved_copy(wav_file, meta_file)
+        saved = _saved_copy(wav_file, meta_file) if cache else None  # M4a: cache=False never reads a copy
         if saved is not None:
             log({**event, "ok": True, "note": "saved copy", **{k: saved[k] for k in ("audio_s", "path")}}, data)
             if summary is not None:
@@ -433,13 +434,14 @@ def tts_stream(voice, api_key, data=None, summary=None, text=LINE):
         out = {"wav": wav, "first_sound_ms": first if first is not None else total, "total_ms": total,
                "audio_s": round(len(pcm) / (2 * channels * rate), 2), "path": path,
                "word_timings": bool(timing), "cached": False}
-        try:
-            wav_file.parent.mkdir(parents=True, exist_ok=True)
-            wav_file.write_bytes(wav)
-            meta_file.write_text(json.dumps({k: out[k] for k in ("first_sound_ms", "total_ms", "path", "word_timings")}),
-                                 encoding="utf-8")
-        except OSError:
-            pass  # not saving a copy only costs a second call later
+        if cache:  # M4a: cache=False never writes a copy
+            try:
+                wav_file.parent.mkdir(parents=True, exist_ok=True)
+                wav_file.write_bytes(wav)
+                meta_file.write_text(json.dumps({k: out[k] for k in ("first_sound_ms", "total_ms", "path", "word_timings")}),
+                                     encoding="utf-8")
+            except OSError:
+                pass  # not saving a copy only costs a second call later
         log({**event, "ok": True, **({"note": fell_back} if fell_back else {}),
              **{k: out[k] for k in ("first_sound_ms", "total_ms", "audio_s", "path", "word_timings")}}, data)
         done = True
@@ -598,14 +600,23 @@ def kokoro_sample(voice, data=None):
 
 # ---------------------------------------------------------------- Live chat token
 
-def live_token(voice, api_key, companion="mary", memory_name="", data=None):
+def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, skills=None, silence_ms=2500,
+               memory=None):
     """A one-use token the page uses to open a Live voice chat straight to Google (the key stays here).
-    Returns {token, model, ws, voice}. Raises VoiceError. Logged."""
+    Returns {token, model, ws, voice}. Raises VoiceError. Logged.
+    M4a: `memory` (a mary.Memory) gives Live the same brain as Normal talk (app facts, name, facts); `skills`
+    (from server.mary_live_skill_setup) adds the skills' tools and instruction; `silence_ms` of quiet ends a turn."""
     event = {"event": "token", "id": str(voice or ""), "model": LIVE_MODEL}
     try:
         name = _voice_name(voice, "live")
         event.update(id=f"live:{name}", voice=name)
-        system = mary.system_text(SimpleNamespace(name=memory_name or "", facts=[], recent=[]), companion, facts=False)
+        if memory is not None:  # M4a: Mary's own screen
+            system = mary.system_text(memory, companion, facts=True)
+        else:  # the voice tryout
+            system = mary.system_text(SimpleNamespace(name=memory_name or "", facts=[], recent=[]), companion,
+                                      facts=False)
+        if skills and skills.get("instruction"):  # M4a: before LIVE_EXTRA
+            system += "\n\n" + skills["instruction"]
         system += "\n\n" + LIVE_EXTRA
         now = datetime.now(timezone.utc)
         stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -621,7 +632,15 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None):
                         "responseModalities": ["AUDIO"],
                         "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": name}}}},
                     "systemInstruction": {"parts": [{"text": system}]},
-                    "inputAudioTranscription": {}, "outputAudioTranscription": {}}}
+                    "inputAudioTranscription": {}, "outputAudioTranscription": {},
+                    # M4a: a slow talker isn't cut off, cutting in stops her, and long chats don't hit the limit
+                    "realtimeInputConfig": {
+                        "automaticActivityDetection": {"endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
+                                                       "silenceDurationMs": int(silence_ms), "prefixPaddingMs": 300},
+                        "activityHandling": "START_OF_ACTIVITY_INTERRUPTS"},
+                    "contextWindowCompression": {"slidingWindow": {}}}}
+        if skills and skills.get("tools"):  # M4a: the skills' functionDeclarations
+            body["bidiGenerateContentSetup"]["tools"] = skills["tools"]
         token = None
         for version in TOKEN_VERSIONS:
             try:

@@ -813,7 +813,7 @@ class TestBrainV4(MaryTestCase):
     def test_self_knowledge_comes_from_settings(self):
         helpers.api("PUT", "/api/settings", {"voice_mary": "gemini:Achernar", "voice_sam": "live:Achird"})
         mine = self._system("mary")
-        for needle in (FACTS_HEAD, "Achernar", "built-in voice", "Talk button"):
+        for needle in (FACTS_HEAD, "Achernar", "the one they picked in the voice tryout", "Talk button"):  # M4a
             with self.subTest(needle):
                 self.assertIn(needle, mine)
         his = self._system("him")
@@ -857,9 +857,9 @@ class TestBrainV4(MaryTestCase):
         import server
         helpers.api("PUT", "/api/settings", {"voice_mary": "kokoro:af_heart", "voice_sam": "gemini:Algieba"})
         got = server.mary_app_facts("mary")
-        self.assertEqual((got["voice_now"], got["talk_mode"]), ("builtin", "button"))
-        self.assertEqual(got["picked_voice"], "the offline voice")
-        self.assertEqual(got["picked_about"], "Warm, American")
+        self.assertEqual((got["voice_now"], got["talk_mode"]), ("picked", "handsfree"))  # M4a
+        # M4a: in Live mode (the default) she speaks with the Live voice, Mary's default when only an offline one is picked
+        self.assertEqual((got["picked_voice"], got["picked_about"], got["talk_choice"]), ("Sulafat", "Warm", "live"))
         got = server.mary_app_facts("him")
         self.assertEqual((got["picked_voice"], got["picked_about"]), ("Algieba", "Smooth"))
         helpers.api("PUT", "/api/settings", {"voice_mary": ""})

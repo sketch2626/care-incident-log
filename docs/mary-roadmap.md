@@ -188,7 +188,11 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
     - My info shows the list with a big Remove on each entry.
     - Memories never leave the laptop except in the packet for one reply.
     - They're encrypted along with the log in backend phase 1.
-  - **Order:** after M4a's current fixes land (it overlaps `mary.py`/`server.py`), and together with M9e's lean core.
+  - **Order:** queued by Andy (2026-10-30) to start right after M4a's current fixes land (it overlaps `mary.py`/`server.py`), together with M9e's lean core.
+- **Main talk mode, being decided (Andy, 2026-10-30):** Andy leans toward Normal back-and-forth as the main mode instead of Live: the full text brain every turn, one voice for the whole talk, hands-free with the wake word and "go to sleep". Live stays an option.
+  - **Facts:** Live's brain is a smaller, speed-tuned model, which is why its own stories were thin. Live is free on the free tier. Gemini TTS is capped at 10 requests a day on the free tier, so Normal on the free tier needs the laptop's own voice (Kokoro now, M14's open-source voice later) until there's a paid key. On a paid key, Live bills audio while it listens, but Normal's listening is free on the laptop.
+  - **Costs of Normal:** replies come about 1-2 s slower, and cutting in mid-sentence needs echo-cancelled barge-in, which Live does well.
+  - **Next:** Andy hears Normal with the laptop voice (talk mode Offline) before deciding.
 - **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
 - **M9e, a leaner brain (Andy, 2026-10-30).** Today about 3,300 words of instructions (Sam 3,500), plus 380 for Live, go to Gemini at the start of every Live session and with every Normal turn. Andy: "there's going to have to be some instructions… I do want her to have a developed personality out of the gate… I don't want it to just be the raw model."
   - Idea to test: a short core prompt that's always sent (who she is, how she talks, and the safety sections word for word, never fetched). Her deeper character, interests and how-to details live in the app, and she pulls them with a tool when the talk turns that way, the way `tell_story` and skills already work.

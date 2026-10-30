@@ -1,0 +1,196 @@
+from tests import helpers  # noqa: F401  (must be first: points the data folders at a scratch folder)
+
+"""M4a: the Live token body, talk modes, the emergency check on Live, app facts, the listen-wait skill actions,
+the pace/speed plumbing and the /api/mary/say checks. No network: voices._open is faked."""
+import shutil
+import tempfile
+import json
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import mary
+import server
+import voices
+from tests.test_voices import KEY, Net, Resp
+
+REAL = Path(__file__).resolve().parent.parent / "skills"
+
+
+class M4aCase(unittest.TestCase):
+    def setUp(self):
+        helpers.reset_db()
+        (server.DATA / "mary" / "memory.json").unlink(missing_ok=True)
+        folder = Path(tempfile.mkdtemp(prefix="m4a-skills-", dir=helpers.TMP)) / "skills"
+        shutil.copytree(REAL / "voice_comfort", folder / "voice_comfort",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        p = mock.patch.object(server, "SKILLS_DIR", folder)
+        p.start()
+        self.addCleanup(p.stop)
+        server.set_skill_host_for_tests(None)
+        self.addCleanup(server.set_skill_host_for_tests, None)
+
+    def put(self, **kw):
+        return helpers.api("PUT", "/api/settings", kw)
+
+    def settings(self):
+        return server.mary_settings()
+
+    def net(self, *queue):
+        net = Net(*queue)
+        p = mock.patch.object(voices, "_open", net)
+        p.start()
+        self.addCleanup(p.stop)
+        return net
+
+
+class LiveStartBody(M4aCase):
+    def start(self, **settings):
+        self.put(gemini_key=KEY, **settings)
+        net = self.net(Resp({"name": "auth_tokens/abc"}))
+        status, got, _ = helpers.api("POST", "/api/mary/live/start", {})
+        self.assertEqual(status, 200, got)
+        return net.body()["bidiGenerateContentSetup"]
+
+    def test_body_has_tools_detection_compression_voice_and_memory(self):
+        memory = server.mary_memory()
+        memory.name = "Ruth"
+        memory.save()
+        setup = self.start(companion="him", voice_sam="live:Achird", listen_wait="4")
+        self.assertTrue(setup["tools"])
+        text = setup["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("Voice comfort", text)
+        self.assertIn("Ruth", text)
+        vad = setup["realtimeInputConfig"]["automaticActivityDetection"]
+        self.assertEqual(vad["endOfSpeechSensitivity"], "END_SENSITIVITY_LOW")
+        self.assertEqual(vad["silenceDurationMs"], 4000)
+        self.assertIn("contextWindowCompression", setup)
+        voice = setup["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"]
+        self.assertEqual(voice, "Achird")
+
+    def test_slow_pace_sentence_only_when_slow(self):
+        slow = self.start(voice_rate="0.7")["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("speak slowly and clearly", slow)
+        normal = self.start(voice_rate="1.0")["systemInstruction"]["parts"][0]["text"]
+        self.assertNotIn("unhurried pace", normal)
+        fast = self.start(voice_rate="1.3")["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("brisker pace", fast)
+
+
+class TalkModes(M4aCase):
+    def test_default_save_and_junk(self):
+        self.assertEqual(self.settings()["talk_mode"], "live")
+        self.put(talk_mode="normal")
+        self.assertEqual(self.settings()["talk_mode"], "normal")
+        self.put(talk_mode="offline")
+        self.assertEqual(self.settings()["talk_mode"], "offline")
+        self.put(talk_mode="banana")
+        self.assertEqual(self.settings()["talk_mode"], "offline")
+
+    def test_talk_order(self):
+        self.assertEqual(server.talk_order("live", True, True), ["live", "normal", "offline"])
+        self.assertEqual(server.talk_order("live", False, True), ["offline"])
+        self.assertEqual(server.talk_order("live", True, False), ["live", "normal"])
+        self.assertEqual(server.talk_order("live", False, False), [])
+        self.assertEqual(server.talk_order("offline", True, True), ["offline"])
+        self.assertEqual(server.talk_order("normal", True, True), ["normal", "offline"])
+
+
+class Heard(M4aCase):
+    def test_emergency_and_ordinary(self):
+        _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "I fell and I can't get up"})
+        self.assertTrue(got["emergency"])
+        self.assertTrue(got["say"])
+        _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "tell me a story"})
+        self.assertFalse(got["emergency"])
+
+    def test_tool_call_blocked_on_emergency_and_runs_otherwise(self):
+        self.put(voice_volume="0.5")
+        _, got, _ = helpers.api("POST", "/api/mary/skills/call", {
+            "name": "voice_comfort__louder", "args": {}, "heard": "I fell and I can't get up"})
+        self.assertTrue(got.get("emergency"))
+        self.assertEqual(self.settings()["voice_volume"], 0.5)
+        _, got, _ = helpers.api("POST", "/api/mary/skills/call", {
+            "name": "voice_comfort__louder", "args": {}, "heard": "speak up please"})
+        self.assertNotIn("error", got["response"])
+        self.assertAlmostEqual(self.settings()["voice_volume"], 0.6)
+
+
+class AppFacts(M4aCase):
+    def text(self, companion="mary"):
+        return mary._app_facts_text(companion)
+
+    def test_picked_voice_named(self):
+        self.put(voice_mary="live:Sulafat")
+        text = self.text()
+        self.assertIn("Your voice right now is Sulafat", text)
+
+    def test_talk_choice_reflects_setting(self):
+        self.assertEqual(server.mary_app_facts("mary")["talk_choice"], "live")
+        self.put(talk_mode="normal")
+        self.assertEqual(server.mary_app_facts("mary")["talk_choice"], "normal")
+        self.assertEqual(server.MARY_VOICE_NOW, "picked")
+
+    def test_offline_voice_wording(self):
+        self.put(voice_mary="kokoro:af_heart", talk_mode="offline")
+        with mock.patch.object(voices, "kokoro_ready", return_value=True):
+            text = self.text()
+        self.assertIn("the offline voice", text)
+
+
+class VoiceComfortTime(M4aCase):
+    def call(self, name):
+        return helpers.api("POST", "/api/mary/skills/call", {"name": f"voice_comfort__{name}", "args": {}})[1]
+
+    def test_more_and_less_time_by_call(self):
+        got = self.call("more_time")
+        self.assertEqual(self.settings()["listen_wait"], 4.0)
+        self.assertIn("more time", got["say"])
+        self.call("more_time")
+        self.assertEqual(self.settings()["listen_wait"], 5.0)
+        self.call("more_time")
+        self.call("more_time")
+        self.assertEqual(self.settings()["listen_wait"], 6.0)
+        self.assertIn("as long as I can", self.call("more_time")["say"])
+        self.call("less_time")
+        self.assertEqual(self.settings()["listen_wait"], 2.5)
+
+    def test_slower_faster_notes(self):
+        self.assertIn("slower", self.call("slower")["response"]["note"])
+        self.assertIn("faster", self.call("faster")["response"]["note"])
+
+    def test_offline_phrases(self):
+        host = server.skill_host()
+        host.offline_match("you keep cutting me off")
+        self.assertEqual(self.settings()["listen_wait"], 4.0)
+        rate = self.settings()["voice_rate"]
+        host.offline_match("hey you can answer faster")
+        self.assertEqual(self.settings()["listen_wait"], 2.5)
+        self.assertEqual(self.settings()["voice_rate"], rate)  # "answer faster" is not "talk faster"
+
+
+class SayChecks(M4aCase):
+    def test_bad_input(self):
+        self.assertEqual(helpers.api("POST", "/api/mary/say", {"text": "  ", "mode": "normal"})[0], 400)
+        self.assertEqual(helpers.api("POST", "/api/mary/say", {"text": "hi", "mode": "weird"})[0], 400)
+
+    def test_no_key_normal(self):
+        net = self.net()
+        status, got, _ = helpers.api("POST", "/api/mary/say", {"text": "hi", "mode": "normal", "rate": 0.8})
+        self.assertEqual(status, 400)
+        self.assertTrue(got["no_key"])
+        self.assertEqual(net.requests, [])
+
+    def test_pace_words_and_speed_plumbing(self):
+        self.assertEqual(voices.pace_style(1.0), voices.STYLE)
+        self.assertIn("slowly and clearly", voices.pace_style(0.9))
+        self.assertIn("very slowly", voices.pace_style(0.7))
+        self.assertIn("brisk", voices.pace_style(1.2))
+        self.put(gemini_key=KEY)
+        net = self.net(Resp(b""), Resp({"candidates": []}))
+        helpers.api("POST", "/api/mary/say", {"text": "hi", "mode": "normal", "rate": 0.7})
+        self.assertIn("very slowly", json.dumps(net.body(0)))
+
+
+if __name__ == "__main__":
+    unittest.main()

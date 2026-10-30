@@ -74,7 +74,7 @@ class VoiceComfortTest(unittest.TestCase):
 
     def test_view(self):
         self.assertEqual(self.host.view("voice_comfort"),
-                         "Speaking speed 0.92 (0.6-1.4), volume 1.0, companion Mary.")
+                         "Speaking speed 0.92 (0.6-1.4), volume 1.0, companion Mary, waits 2.5 s before answering.")
 
     def test_offline_phrases(self):
         r = self.host.offline_match("could you speak up")
@@ -93,6 +93,7 @@ class VoiceComfortTest(unittest.TestCase):
         spec.loader.exec_module(mod)
         self.assertEqual((mod.RATE_MIN, mod.RATE_MAX, mod.RATE_DEFAULT), server.VOICE_LIMITS["voice_rate"])
         self.assertEqual((mod.VOLUME_MIN, mod.VOLUME_MAX, mod.VOLUME_DEFAULT), server.VOICE_LIMITS["voice_volume"])
+        self.assertEqual((mod.WAIT_MIN, mod.WAIT_MAX, mod.WAIT_DEFAULT), server.VOICE_LIMITS["listen_wait"])  # M4a
 
 
 if __name__ == "__main__":

@@ -779,7 +779,8 @@ class Handler(SimpleHTTPRequestHandler):
                 memory = mary_memory()
             try:
                 got = voices.live_token(companion_voices(companion)["live"], s["key"], companion, memory.name, DATA,
-                                        skills=skills, silence_ms=round(s["listen_wait"] * 1000), memory=memory)
+                                        skills=skills, silence_ms=round(s["listen_wait"] * 1000), memory=memory,
+                                        rate=s["voice_rate"])  # M4a: rate
             except voices.VoiceError as e:
                 return self._send(*voice_failure(e.kind))
             return self._send({**got, "companion": companion})
@@ -810,14 +811,19 @@ class Handler(SimpleHTTPRequestHandler):
             if mode not in ("normal", "offline"):
                 raise ValueError(BAD_REQUEST)
             s = mary_settings()
+            lo, hi, _ = VOICE_LIMITS["voice_rate"]  # M4a: real speed without a pitch change
+            try:
+                rate = min(hi, max(lo, float(body["rate"]))) if body.get("rate") is not None else s["voice_rate"]
+            except (TypeError, ValueError):
+                rate = s["voice_rate"]
             companion = s["companion"] or "mary"
             cv = companion_voices(companion)
             if mode == "offline":
                 voice_id = cv["offline"] or f"kokoro:{_first_voice(voices.KOKORO_VOICES, companion)}"
-                return self._voice_stream(voice_id, "", True, text)
+                return self._voice_stream(voice_id, "", True, text, speed=rate)
             if not s["key"]:
                 return self._send(*voice_failure("no_key"))
-            return self._voice_stream(cv["tts"], s["key"], False, text, cache=False)  # replies never pile up on disk
+            return self._voice_stream(cv["tts"], s["key"], False, text, cache=False, pace=rate)  # replies never pile up on disk
         # --- end M4a ---
         if path == "/api/mary/skills" or path.startswith("/api/mary/skills/"):  # --- skills hook (M13) ---
             return self._skills(method, path)
@@ -893,12 +899,12 @@ class Handler(SimpleHTTPRequestHandler):
         return self._send(data, 200, ctype)
     # --- end skills hook ---
 
-    def _voice_stream(self, voice_id, key, offline, text=voices.LINE, cache=True):
+    def _voice_stream(self, voice_id, key, offline, text=voices.LINE, cache=True, speed=1.0, pace=None):  # M4a: speed, pace
         """One voice sample as raw 16-bit PCM, sent as it is made so the page can play it at once. Nothing is
         sent until the first audio is ready, so a failure is still a plain JSON answer. No Content-Length: the
         connection closing ends it (HTTP/1.0). cache=False (M4a): a Gemini reply is never saved or reused."""
-        gen = (voices.kokoro_stream(voice_id, DATA, text=text) if offline
-               else voices.tts_stream(voice_id, key, DATA, text=text, cache=cache))  # cache: M4a
+        gen = (voices.kokoro_stream(voice_id, DATA, text=text, speed=speed) if offline
+               else voices.tts_stream(voice_id, key, DATA, text=text, cache=cache, pace=pace))  # cache: M4a
         try:
             first = next(gen)
         except voices.VoiceError as e:

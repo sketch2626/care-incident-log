@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "title": "Voice comfort",
   "summary": "Makes Mary's voice slower, faster, quieter or louder, and switches between Mary and Sam.",
-  "instructions": "Use when they ask you to talk slower, faster, quieter or louder, or to switch between Mary and Sam. The resident can't use their hands well, so do these when asked by voice. Then ask if that is better.",
+  "instructions": "Use when they ask you to talk slower, faster, quieter or louder, or to switch between Mary and Sam. If they say you cut them off or ask for more time to finish, use more_time; if they say you can answer faster, use less_time. The resident can't use their hands well, so do these when asked by voice. Then ask if that is better.",
   "sees": true,
-  "settings": ["voice_rate", "voice_volume", "companion"],
+  "settings": ["voice_rate", "voice_volume", "companion", "listen_wait"],
   "actions": [
     {
       "name": "slower",
@@ -35,6 +35,20 @@
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["louder", "speak up", "turn it up", "i can't hear you"]
+    },
+    {
+      "name": "more_time",
+      "description": "Wait longer before answering, when they say you cut them off.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["give me more time", "you're cutting me off", "you keep cutting me off", "stop cutting me off", "wait for me to finish", "let me finish"]
+    },
+    {
+      "name": "less_time",
+      "description": "Answer a little quicker, when they say you can answer faster.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["you can answer faster", "answer faster", "you can answer quicker"]
     },
     {
       "name": "switch_companion",

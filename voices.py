@@ -288,12 +288,26 @@ def _iter_interactions(resp, started, flags):
         yield from found
 
 
-def _interactions(voice, api_key, started, flags, text=LINE):
+def pace_style(rate):  # M4a: the style line for a speaking speed (Gemini can't take a speed number)
+    try:
+        rate = float(rate)
+    except (TypeError, ValueError):
+        return STYLE
+    if rate <= 0.76:
+        return STYLE + ", speaking very slowly and clearly"
+    if rate < 0.97:
+        return STYLE + ", speaking slowly and clearly"
+    if rate > 1.05:
+        return STYLE + ", at a brisk, lively pace"
+    return STYLE
+
+
+def _interactions(voice, api_key, started, flags, text=LINE, style=STYLE):
     """Ask for the sample and yield its audio chunks as they arrive (nothing is yielded when Google sends none)."""
     body = {"model": TTS_MODEL,
             "input": [{"type": "user_input", "content": [
                 {"type": "text", "text": text,
-                 "annotations": [{"type": "speech_metadata", "style": STYLE}]}]}],
+                 "annotations": [{"type": "speech_metadata", "style": style}]}]}],
             "response_format": {"type": "audio"},
             "generation_config": {"speech_config": [{"voice": voice}]},
             "stream": True}
@@ -301,7 +315,9 @@ def _interactions(voice, api_key, started, flags, text=LINE):
         yield from _iter_interactions(resp, started, flags)
 
 
-def _generate_content(voice, api_key, started, text=LINE):
+def _generate_content(voice, api_key, started, text=LINE, style=STYLE):
+    if style != STYLE:  # M4a: a paced reply asks for the pace in words
+        text = f"Say this {style[len(STYLE):].lstrip(', ')}: {text}"
     body = {"contents": [{"parts": [{"text": text}]}],
             "generationConfig": {"responseModalities": ["AUDIO"],
                                  "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
@@ -358,12 +374,12 @@ def _line_tag(text):
     return {} if text == LINE else {"line": next((k for k, v in LINES.items() if v == text), "other")}
 
 
-def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True):
+def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True, pace=None):
     """One spoken sample of LINE, handed over as it arrives: yields {"pcm", "rate", "channels"} for each piece of
     audio; the first also has "cached" and "path". A saved copy comes in one piece with no network. Raises
     VoiceError before the first piece, exactly as tts_sample does. When the stream ends, `summary` (a dict, if
     given) is filled with what tts_sample returns. Every call is logged; a consumer that stops early is logged
-    as "stopped" and nothing is saved. cache=False (M4a): no saved copy is read or written, so Mary's spoken
+    as "stopped" and nothing is saved. pace (M4a): a speaking speed, asked for in the style words. cache=False (M4a): no saved copy is read or written, so Mary's spoken
     replies never pile up on disk."""
     voice_id = str(voice or "").strip()
     event = {"event": "tts", "id": voice_id, "model": TTS_MODEL, **_line_tag(text)}
@@ -387,7 +403,7 @@ def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True):
         flags = {"timing": False}
         pieces, rate, channels, first, carry = [], 0, 1, None, b""
         try:
-            for node in _interactions(name, api_key, started, flags, text):
+            for node in _interactions(name, api_key, started, flags, text, pace_style(pace) if pace else STYLE):
                 if first is None:
                     first = int((time.perf_counter() - started) * 1000)
                 chunk, r, c = _decode(node)
@@ -417,7 +433,7 @@ def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True):
         if not pieces:
             path, first = "generateContent", None
             try:
-                pcm, rate, channels, first, timing = _generate_content(name, api_key, started, text)
+                pcm, rate, channels, first, timing = _generate_content(name, api_key, started, text, pace_style(pace) if pace else STYLE)
             except urllib.error.HTTPError as e:
                 refused, detail = _http_failure(e, api_key, "generateContent")
                 raise VoiceError("bad_key" if refused else "no_gemini", _scrub(f"{fell_back} | {detail}", api_key)) from None
@@ -516,7 +532,7 @@ def _pcm16(samples):
         return out.tobytes()
 
 
-def kokoro_stream(voice, data=None, summary=None, text=LINE):
+def kokoro_stream(voice, data=None, summary=None, text=LINE, speed=1.0):  # M4a: speed
     """One spoken sample of LINE made on this computer, handed over a sentence at a time: yields
     {"pcm", "rate", "channels"}; each sentence after the first starts with the pause. The first piece also has
     "cached", "path" and "load_ms" (model load, only on the first call). Raises VoiceError("no_offline") before
@@ -549,7 +565,7 @@ def kokoro_stream(voice, data=None, summary=None, text=LINE):
             try:
                 with _kokoro_lock:  # held for one sentence only, so another play can slot in
                     t = time.perf_counter()
-                    samples, r = engine.create(sentence, voice=name, speed=1.0, lang=lang)
+                    samples, r = engine.create(sentence, voice=name, speed=speed, lang=lang)
                     took = time.perf_counter() - t
                 pcm = _pcm16(samples)
             except Exception as e:
@@ -601,7 +617,7 @@ def kokoro_sample(voice, data=None):
 # ---------------------------------------------------------------- Live chat token
 
 def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, skills=None, silence_ms=2500,
-               memory=None):
+               memory=None, rate=None):
     """A one-use token the page uses to open a Live voice chat straight to Google (the key stays here).
     Returns {token, model, ws, voice}. Raises VoiceError. Logged.
     M4a: `memory` (a mary.Memory) gives Live the same brain as Normal talk (app facts, name, facts); `skills`
@@ -618,6 +634,14 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
         if skills and skills.get("instruction"):  # M4a: before LIVE_EXTRA
             system += "\n\n" + skills["instruction"]
         system += "\n\n" + LIVE_EXTRA
+        try:  # M4a: Live can't take a speed setting, so the saved speed is asked for in words
+            r = float(rate) if rate is not None else None
+        except (TypeError, ValueError):
+            r = None
+        if r is not None and r < 0.97:
+            system += "\n\nThey like you to speak slowly and clearly; keep a slow, unhurried pace."
+        elif r is not None and r > 1.05:
+            system += "\n\nThey like a brisker pace."
         now = datetime.now(timezone.utc)
         stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
         # The wire shape Google's own SDK sends: the locked session setup sits in bidiGenerateContentSetup.

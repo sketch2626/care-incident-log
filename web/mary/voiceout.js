@@ -121,12 +121,12 @@
 
     var src = ctx.createBufferSource();
     src.buffer = buf;
-    src.playbackRate.value = j.rate;
+    src.playbackRate.value = 1;   // M4a: the server makes the speed, so the pitch stays natural
     src.connect(master);
     var now = ctx.currentTime;
     var at = Math.max(now + 0.05, j.playhead);
     src.start(at);
-    j.playhead = at + buf.duration / j.rate;
+    j.playhead = at + buf.duration;
     j.sources.push(src);
     src.onended = function () {
       var at2 = j.sources.indexOf(src);
@@ -238,7 +238,7 @@
     it.timer = setTimeout(function () {
       if (!it.answered) itemFailed(j, it, {});
     }, ANSWER_MS);
-    var init = {method: 'POST', headers: HEADERS, body: JSON.stringify({text: it.text, mode: j.mode})};
+    var init = {method: 'POST', headers: HEADERS, body: JSON.stringify({text: it.text, mode: j.mode, rate: j.rate})};
     if (it.ctrl) init.signal = it.ctrl.signal;
     fetch('/api/mary/say', init)
       .then(function (res) {

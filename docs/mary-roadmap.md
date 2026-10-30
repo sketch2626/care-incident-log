@@ -175,6 +175,9 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
   - **Approved safety-rule addition for M9b (Andy, 2026-10-29):** for residents who are veterans, Mary and Sam also give the Veterans Crisis Line (call 988 and press 1, or text 838255), alongside the call light, staff, 911 and 988, never instead of them. Wording is in the character sheets.
 - **M9c, memory of the resident:** name, family, interests, past talks, on the laptop.
 - **M9d, a brain test bench.** Scripted resident conversations run against Gemini and are graded for warmth, accuracy, safety, staying in character and short spoken replies. Every reply Andy flags as wrong becomes a new test, so the brain measurably improves.
+- **M9e, a leaner brain (Andy, 2026-10-30).** Today about 3,300 words of instructions (Sam 3,500), plus 380 for Live, go to Gemini at the start of every Live session and with every Normal turn. Andy: "there's going to have to be some instructions… I do want her to have a developed personality out of the gate… I don't want it to just be the raw model."
+  - Idea to test: a short core prompt that's always sent (who she is, how she talks, and the safety sections word for word, never fetched). Her deeper character, interests and how-to details live in the app, and she pulls them with a tool when the talk turns that way, the way `tell_story` and skills already work.
+  - Test it with the bench variants: full vs. lean vs. raw, side by side, before changing her real instructions.
 - **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
 
 ### M13. Skills: a plug-in design where Mary learns each new feature by herself (groundwork; before M12 and M7)

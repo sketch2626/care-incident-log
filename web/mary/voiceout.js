@@ -267,6 +267,14 @@
         var channels = Number(res.headers.get('X-Channels'));
         it.rate = rate > 0 ? rate : 24000;
         it.channels = channels >= 1 && channels <= 2 ? Math.floor(channels) : 1;
+        // M4a: the server swapped to Kokoro by itself (Gemini's daily limit). The rest of this job asks for Kokoro,
+        // and the talk is told once, so it stays there.
+        if (res.headers.get('X-Mary-Voice') === 'offline' && j.mode !== 'offline') {
+          j.mode = 'offline';
+          if (j.onVoice) {
+            try { j.onVoice('offline'); } catch (e) { /* the caller's problem, not the voice's */ }
+          }
+        }
         prefetch(j);
         if (res.body && res.body.getReader) {
           it.reader = res.body.getReader();
@@ -294,6 +302,7 @@
   // onSentence(i, text) when sentence i starts coming out of the speakers.
   // M4b: onSentenceAudio(i, text, at, ctx, dur) when sentence i's first sound is scheduled (at = seconds on
   // ctx.currentTime, dur = its length if already known, else null); onSentenceLength(i, dur) once it is known.
+  // M4a: onVoice('offline') once, when a 'normal' line came back in Kokoro because Gemini's daily limit is used up.
   function queue(sentences, opts) {
     cancel();
     opts = opts || {};
@@ -321,6 +330,7 @@
       onSentence: typeof opts.onSentence === 'function' ? opts.onSentence : null,
       onSentenceAudio: typeof opts.onSentenceAudio === 'function' ? opts.onSentenceAudio : null,      // M4b
       onSentenceLength: typeof opts.onSentenceLength === 'function' ? opts.onSentenceLength : null,   // M4b
+      onVoice: typeof opts.onVoice === 'function' ? opts.onVoice : null,                              // M4a
       failAt: null,
       allDone: false,
       open: !!opts.open,   // M4a: more sentences may follow with more(); end() says none are left

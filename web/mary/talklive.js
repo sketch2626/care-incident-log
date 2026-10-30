@@ -322,7 +322,7 @@
   }
 
   function onAudio(s, b64) {
-    if (s.mute || s.hushed) return;   // stopSpeaking(): the rest of this turn of hers stays quiet (M4a: or hush())
+    if (s.mute) return;   // stopSpeaking(): the rest of this turn of hers stays quiet
     var now = performance.now();
     replyStarts(s);
     var soundAt = playChunk(s, b64) || now;   // when her voice will really reach the speakers
@@ -365,7 +365,7 @@
 
     var ot = sc.outputTranscription;
     if (ot && (ot.startOffset !== undefined || ot.endOffset !== undefined)) s.offsets = true;   // word timings really do come
-    if (ot && ot.text && !s.mute && !s.hushed && alive(s)) {   // M4a: hushed
+    if (ot && ot.text && !s.mute && alive(s)) {
       replyStarts(s);
       startOfTurn(s, now, false);
       s.caption += ot.text;
@@ -413,7 +413,7 @@
     });
   }
 
-  // M4a: Live took a tool call back (usually the resident talked over it). app.js stops a story that was waiting on it.
+  // M4a: Live took a tool call back (usually the resident talked over it). app.js holds a story that came from it.
   function onToolCancel(s, ids) {
     ids = ids || [];
     s.toolGone = s.toolGone || {};
@@ -661,7 +661,8 @@
     return fetch('/api/mary/live/start', {
       method: 'POST',
       headers: HEADERS,
-      body: JSON.stringify({screen: s.opts.screen || null})
+      // M4a: plain = no language hint on what Live hears, after a start that failed with it
+      body: JSON.stringify(s.opts.plain ? {screen: s.opts.screen || null, plain: true} : {screen: s.opts.screen || null})
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (j) {
         return {ok: res.ok, status: res.status, j: j || {}};
@@ -785,15 +786,6 @@
     stopPlayback(s);
   }
 
-  // M4a: the page is telling a story in her picked voice while a tool call waits. hush(true): no new sound or words
-  // from Live (what is already playing finishes); hush(false): Live is heard again, before the tool is answered.
-  function hush(on) {
-    var s = S;
-    if (!s || s.ended) return;
-    s.hushed = !!on;
-    if (!on) clearMute(s);
-  }
-
   function isOpen() {
     return !!(S && S.ready && !S.ended && S.ws && S.ws.readyState === 1);
   }
@@ -821,7 +813,6 @@
     greet: greet,
     stop: stop,
     stopSpeaking: stopSpeaking,
-    hush: hush,   // M4a
     isOpen: isOpen,
     isSpeaking: isSpeaking,
     setVolume: setVolume

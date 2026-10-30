@@ -1240,6 +1240,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("X-Channels", str(first["channels"]))
         self.send_header("X-Cached", "1" if first.get("cached") else "0")
         self.send_header("X-Voice-Path", str(first.get("path", "")))
+        self.send_header("X-Mary-Voice", "offline" if offline else "normal")  # M4a: the page learns of a Kokoro swap
         if "load_ms" in first:
             self.send_header("X-Load-Ms", str(first["load_ms"]))
         self.end_headers()

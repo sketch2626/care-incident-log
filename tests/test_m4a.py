@@ -527,6 +527,7 @@ class DailyVoiceLimit(M4aCase):
         self.assertEqual((status, raw), (200, KOKORO_PCM))
         self.assertEqual(headers["Content-Type"], "audio/L16")
         self.assertEqual(headers["X-Rate"], "24000")
+        self.assertEqual(headers["X-Mary-Voice"], "offline")  # M4a: the page learns of the swap
         self.assertEqual(len(net.requests), 1)
         voice, text, speed = seen[0]
         self.assertTrue(voice.startswith("kokoro:"), voice)

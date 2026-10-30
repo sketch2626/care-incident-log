@@ -743,11 +743,11 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
             r = float(rate) if rate is not None else None
         except (TypeError, ValueError):
             r = None
-        # M4a: only a hint now, and only well off normal: the page holds her real speed (talklive.js pace governor).
+        # M4a: a mild hint, and none at normal speed: Live has no speed setting, and this is all it gets.
         # "Speak slowly... stay that slow" made her crawl at the start of a talk (Andy's fourth try).
-        if r is not None and r < 0.85:
+        if r is not None and r < 0.97:
             system += "\n\nThey like a somewhat slower pace than most people."
-        elif r is not None and r > 1.15:
+        elif r is not None and r > 1.05:
             system += "\n\nThey like a brisker pace."
         now = datetime.now(timezone.utc)
         stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")

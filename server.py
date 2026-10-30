@@ -733,6 +733,17 @@ class Handler(SimpleHTTPRequestHandler):
         if method == "POST" and path == "/api/mary/skills/call":  # Live mode's tool calls
             body = self._body()
             return self._send(host.call(str(body.get("name") or ""), body.get("args")))
+        m = re.fullmatch(r"/api/mary/skills/([^/]+)/image/([a-z0-9_-]{1,40}\.(jpg|png|gif|webp))", path)
+        if m and method == "GET":  # an image a skill saved in its own ctx.files (any skill, images only)
+            try:
+                data = (skills_core.SkillFiles(Path(host.data_dir) / "skills" / m.group(1)).read_bytes(m.group(2))
+                        if m.group(1) in host.skills else None)
+            except (OSError, skills_core.SkillError):
+                data = None
+            if data is None:
+                return self._send({"error": "That picture isn't here."}, 404)
+            ctype = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}[m.group(3)]
+            return self._send(data, 200, ctype, {"X-Content-Type-Options": "nosniff"})  # end_headers adds no-store
         m = re.fullmatch(r"/api/mary/skills/([^/]+)(/event|/broken|/view|/lock)?", path)
         if not m:
             return None

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mary's face</title>
+<link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="face.css">
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"Segoe UI",system-ui,sans-serif;color:#1f1b16}
@@ -27,6 +28,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"S
 <div id="bar">
   <div class="row" id="moods"><span class="lab">Mood</span></div>
   <div class="row" id="acts"><span class="lab">She is</span></div>
+  <div class="row" id="states"><span class="lab">Also</span></div>
 </div>
 <button class="btn" id="show" type="button" hidden>Show buttons</button>
 
@@ -37,6 +39,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"S
   var bar = document.getElementById('bar');
   var showBtn = document.getElementById('show');
   var moodBtns = {}, actBtns = {}, flowBtn, swBtn, flowT = 0, flowStep = 0;
+  var loudBtn, menuBtn, sosBtn;
 
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function button(row, text, onClick) {
@@ -54,6 +57,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"S
     MaryFace.MOODS.forEach(function (m) { moodBtns[m].setAttribute('aria-pressed', String(s.mood === m && s.activity !== 'listening' && s.activity !== 'thinking')); });
     MaryFace.ACTIVITIES.forEach(function (a) { actBtns[a].setAttribute('aria-pressed', String(s.activity === a)); });
     swBtn.setAttribute('aria-pressed', String(s.companion === 'him'));
+    loudBtn.setAttribute('aria-pressed', String(s.loud));
+    menuBtn.setAttribute('aria-pressed', String(s.menuOpen));
+    sosBtn.setAttribute('aria-pressed', String(s.emergency));
     flowBtn.setAttribute('aria-pressed', String(!!flowT));
     flowBtn.textContent = flowT ? 'Stop flow' : 'Mood flow';
   }
@@ -100,6 +106,21 @@ html,body{margin:0;height:100%;overflow:hidden;background:#fff0d2;font-family:"S
   swBtn = button(document.getElementById('acts'), 'Switch: ' + MaryFace.COMPANIONS.mary.name + ' / ' + MaryFace.COMPANIONS.him.name, function () {
     face.setCompanion(face.getState().companion === 'him' ? 'mary' : 'him');
     sync();
+  });
+  // round 6 states: Loud = you are talking while she listens (it starts listening too)
+  var loud = false;
+  loudBtn = button(document.getElementById('states'), 'Loud (you talk)', function () {
+    stopFlow();
+    loud = !face.getState().loud;
+    if (loud) setAct('listening');
+    face.setLoud(loud);
+    sync();
+  });
+  menuBtn = button(document.getElementById('states'), 'Menu open', function () {
+    stopFlow(); face.setMenuOpen(!face.getState().menuOpen); sync();
+  });
+  sosBtn = button(document.getElementById('states'), 'Emergency', function () {
+    stopFlow(); face.setEmergency(!face.getState().emergency); sync();
   });
   button(document.getElementById('acts'), 'Hide buttons', function () { bar.hidden = true; showBtn.hidden = false; });
   showBtn.addEventListener('click', function () { bar.hidden = false; showBtn.hidden = true; });

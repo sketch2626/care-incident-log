@@ -72,8 +72,8 @@ LIVE_EXTRA = ("You are talking out loud in a live voice conversation. "  # M4a: 
               "Talk like one grown-up friend to another: relaxed, even and natural, the way you'd talk over coffee. "  # M4a: tone
               "No sing-song, no lifting the ends of your sentences, no extra stress on word endings, and never the voice "
               "people use with a child. "
-              "Keep the same calm, easy pace from your first word to your last; never speed up as you go, "  # M4a: pace
-              "even in a long story or a long answer. "
+              "Speak at the natural speed of ordinary conversation, and keep that same speed from your first word to "  # M4a: pace
+              "your last; never speed up or slow down as you go. "
               "Never say anything in square brackets. "
               "That includes the mood, name and remember tags described above: don't use them here.")
 # M4a: only on Mary's own screen, where Live has the remember_fact and set_their_name tools
@@ -82,19 +82,24 @@ LIVE_TOOLS_NOTE = ("Instead of the name and remember lines, use your tools: when
                    "call remember_fact. Do it quietly, without mentioning it, and keep talking. "
                    # M4a: tell_story, after Andy found Live's own stories thin
                    "When they ask for a story, first say one short, warm line, like \"Oh, I've got a good one for "
-                   "you,\" then call tell_story with what they asked for and stay quiet until it answers. Usually the "
-                   "app tells the story out loud in your voice while you wait, and the answer says so: then follow its "
-                   "note and don't tell it again. If the answer gives you the story to tell, tell all of it as if it's "
-                   "your own, at one steady pace. Never mention the tool or say the story came from anywhere. If it "
-                   "gives you no story, tell a short one yourself, with a beginning, a middle and an end. Jokes, songs "
-                   "and poems you make up yourself.")
+                   "you,\" then call tell_story with what they asked for and stay quiet until it answers. It gives you the "
+                   "story one part at a time. Say each part out loud exactly as written, every word, as if it's your "
+                   "own; don't shorten it, sum it up or change it, and add nothing after it. The next part comes by "
+                   "itself when you finish. If they cut in, talk with them; if they then want the rest, call story_more. "
+                   "Never mention the tool or say the story came from anywhere. If it gives you no story, tell one "
+                   "yourself, for a grown-up: funny or surprising, with no moral. Jokes, songs and poems you make up "
+                   "yourself. "
+                   # M4a: Live says the goodbye itself and the talk closes; the page's word check can miss a mishearing
+                   "When they say goodbye, tell you to go to sleep or rest, or say they're done talking, say one short "
+                   "goodbye and call end_talk. Never call end_talk for anything else.")
 TIMING_WORDS = ("timestamp", "offset", "word_info", "alignment", "timing")
 LOG_MAX = 200_000
 
 
 class VoiceError(Exception):
     """kind is "bad_key" (Google turned the key down), "no_gemini" (couldn't get an answer), "no_offline"
-    (the offline voice isn't installed or failed) or "unknown_voice".
+    (the offline voice isn't installed or failed), "unknown_voice", or "tts_spent" (M4a: the Gemini voice's daily
+    limit is used up).
     The message is only the kind, so no key, URL or response text can leak through it."""
 
     def __init__(self, kind, detail=""):
@@ -124,6 +129,7 @@ def _http_failure(err, api_key, where):
         body = err.read(4096).decode("utf-8", "replace")
     except Exception:
         body = ""
+    err.body_text = body  # M4a: read once, and _spent_today needs what the 120-character detail would cut off
     refused = err.code in (401, 403) or (err.code == 400 and "api key" in body.lower())
     reason = ""
     try:
@@ -182,7 +188,7 @@ def _data(data):
 
 _LOG_NUMBERS = ("first_sound_ms", "total_ms", "audio_s", "reply_gap_ms", "first_audio_ms",
                 "turns", "interruptions", "seconds", "close_code", "rtf", "load_ms",
-                "tap_to_sound_ms", "gaps", "gap_ms", "greet_ms", "mic_ms")
+                "tap_to_sound_ms", "gaps", "gap_ms", "greet_ms", "mic_ms", "words")  # words: M4a, a story's length
 _LOG_BOOLS = ("word_timings", "ok", "cached")
 _LOG_STRINGS = ("event", "id", "voice", "model", "path", "error", "line")
 
@@ -365,6 +371,65 @@ def _generate_content(voice, api_key, started, text=LINE, style=STYLE):
     return pcm, rate or SAMPLE_RATE, 1, total, flags["timing"]
 
 
+# ---------------------------------------------------------------- M4a: the Gemini voice's daily limit
+
+# Google's day ends at midnight Pacific. Fixed UTC-8, not zoneinfo: at worst this is an hour late in summer.
+PACIFIC = timezone(timedelta(hours=-8))
+_PER_DAY = re.compile(r"per[ _]?day", re.I)  # "per day", "PerDay", and the metric form "..._per_day"
+_spent_lock = threading.Lock()
+_spent_until = 0.0     # epoch seconds; the voice can be used again from then
+_spent_path = None     # the file _spent_until came from; a new data folder reads its own
+
+
+def next_midnight_pacific(now=None):
+    """Epoch seconds of the next midnight Pacific after `now` (epoch seconds, default the clock)."""
+    local = datetime.fromtimestamp(time.time() if now is None else now, PACIFIC)
+    day = (local + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return day.timestamp()
+
+
+def _read_spent(path):
+    """The saved "spent until" time, or 0.0 when the file is missing, corrupt or can't be right."""
+    try:
+        until = json.loads(path.read_text(encoding="utf-8"))["until"]
+        if isinstance(until, bool) or not isinstance(until, (int, float)):
+            return 0.0
+        return float(until) if until <= time.time() + 86400 else 0.0  # never more than a day away
+    except (OSError, ValueError, KeyError, TypeError):
+        return 0.0
+
+
+def _spent_file(data):
+    return _data(data) / "mary" / "tts_spent.json"
+
+
+def tts_spent(data=None):
+    """True while the Gemini voice's daily limit is used up. A restart remembers it (mary/tts_spent.json)."""
+    global _spent_until, _spent_path
+    path = _spent_file(data)
+    with _spent_lock:
+        if _spent_path != path:
+            _spent_path, _spent_until = path, _read_spent(path)
+        return time.time() < _spent_until
+
+
+def _spent_today(err, data):
+    """True, and remembered until the next midnight Pacific, when an HTTPError already read by _http_failure is a
+    per-day 429. A per-minute 429 is not remembered: it clears by itself."""
+    global _spent_until, _spent_path
+    if err.code != 429 or not _PER_DAY.search(getattr(err, "body_text", "")):
+        return False
+    path = _spent_file(data)
+    with _spent_lock:
+        _spent_path, _spent_until = path, next_midnight_pacific()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"until": _spent_until}), encoding="utf-8")
+        except OSError:
+            pass  # still remembered until a restart
+    return True
+
+
 def _cache_files(voice_id, voice, data, text=LINE):
     # "stream": copies saved before 2026-10-29 aren't reused, so each voice's first play times Google again
     key = hashlib.sha256(f"{TTS_MODEL}|{text}|{STYLE}|{voice}|stream".encode("utf-8")).hexdigest()[:8]
@@ -423,6 +488,8 @@ def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True, p
             yield {"pcm": saved["pcm"], "rate": saved["rate"], "channels": saved["channels"],
                    "cached": True, "path": saved["path"]}
             return
+        if tts_spent(data):  # M4a: no call Google would only refuse; a saved copy above still plays
+            raise VoiceError("tts_spent")
         started = time.perf_counter()
         path, fell_back = "interactions", ""
         flags = {"timing": False}
@@ -447,6 +514,8 @@ def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True, p
             refused, detail = _http_failure(e, api_key, "interactions")
             if refused:
                 raise VoiceError("bad_key", detail) from None
+            if _spent_today(e, data):  # M4a: right away; generateContent shares the same daily limit
+                raise VoiceError("tts_spent", detail) from None
             if e.code not in (400, 404) or pieces:
                 raise VoiceError("no_gemini", detail) from None
             fell_back = detail
@@ -461,6 +530,8 @@ def tts_stream(voice, api_key, data=None, summary=None, text=LINE, cache=True, p
                 pcm, rate, channels, first, timing = _generate_content(name, api_key, started, text, pace_style(pace) if pace else STYLE)
             except urllib.error.HTTPError as e:
                 refused, detail = _http_failure(e, api_key, "generateContent")
+                if not refused and _spent_today(e, data):  # M4a
+                    raise VoiceError("tts_spent", _scrub(f"{fell_back} | {detail}", api_key)) from None
                 raise VoiceError("bad_key" if refused else "no_gemini", _scrub(f"{fell_back} | {detail}", api_key)) from None
             except VoiceError as e:
                 raise VoiceError(e.kind, _scrub(f"{fell_back} | generateContent gave no audio", api_key)) from None
@@ -642,11 +713,12 @@ def kokoro_sample(voice, data=None):
 # ---------------------------------------------------------------- Live chat token
 
 def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, skills=None, silence_ms=2500,
-               memory=None, rate=None):
+               memory=None, rate=None, plain=False):
     """A one-use token the page uses to open a Live voice chat straight to Google (the key stays here).
     Returns {token, model, ws, voice}. Raises VoiceError. Logged.
     M4a: `memory` (a mary.Memory) gives Live the same brain as Normal talk (app facts, name, facts); `skills`
-    (from server.mary_live_skill_setup) adds the skills' tools and instruction; `silence_ms` of quiet ends a turn."""
+    (from server.mary_live_skill_setup) adds the skills' tools and instruction; `silence_ms` of quiet ends a turn.
+    plain (M4a): no language hint on what Live hears. Without it the hint is sent, and a 400 asks once more plain."""
     event = {"event": "token", "id": str(voice or ""), "model": LIVE_MODEL}
     try:
         name = _voice_name(voice, "live")
@@ -671,9 +743,10 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
             r = float(rate) if rate is not None else None
         except (TypeError, ValueError):
             r = None
+        # M4a: a mild hint, and none at normal speed: Live has no speed setting, and this is all it gets.
+        # "Speak slowly... stay that slow" made her crawl at the start of a talk (Andy's fourth try).
         if r is not None and r < 0.97:
-            system += ("\n\nThey like you to speak slowly and clearly; keep a slow, unhurried pace the whole way "
-                       "through, and stay that slow in long stories too.")  # M4a: it drifted faster in a long story
+            system += "\n\nThey like a somewhat slower pace than most people."
         elif r is not None and r > 1.05:
             system += "\n\nThey like a brisker pace."
         now = datetime.now(timezone.utc)
@@ -690,7 +763,10 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
                         "responseModalities": ["AUDIO"],
                         "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": name}}}},
                     "systemInstruction": {"parts": [{"text": system}]},
-                    "inputAudioTranscription": {}, "outputAudioTranscription": {},
+                    # M4a: English hint for what she hears; empty means auto-detect, which gave Andy a Chinese-looking
+                    # line. No speechConfig.languageCode: native-audio models choose their own language.
+                    "inputAudioTranscription": {} if plain else {"languageCodes": ["en-US"]},
+                    "outputAudioTranscription": {},
                     # M4a: a slow talker isn't cut off, cutting in stops her, and long chats don't hit the limit
                     "realtimeInputConfig": {
                         "automaticActivityDetection": {"endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
@@ -708,7 +784,9 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
         if tools:
             body["bidiGenerateContentSetup"]["tools"] = tools
         token = None
-        for version in TOKEN_VERSIONS:
+        tries = list(TOKEN_VERSIONS)
+        while tries:
+            version = tries.pop(0)
             try:
                 with _post(f"{API_ROOT}/{version}/auth_tokens", body, api_key) as resp:
                     token = json.loads(resp.read().decode("utf-8", "replace")).get("name")
@@ -719,7 +797,13 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
                     raise VoiceError("bad_key", detail) from None
                 if e.code == 429:
                     raise VoiceError("busy", detail) from None
-                if (e.code != 404 and "Unknown name" not in detail) or version == TOKEN_VERSIONS[-1]:
+                if e.code == 400 and not plain and ("Unknown name" not in detail or not tries):
+                    # M4a: maybe the language hint, so ask once more without it (the next version comes first)
+                    plain, tries = True, list(TOKEN_VERSIONS)
+                    body["bidiGenerateContentSetup"]["inputAudioTranscription"] = {}
+                    event["note"] = detail
+                    continue
+                if (e.code != 404 and "Unknown name" not in detail) or not tries:
                     raise VoiceError("no_gemini", detail) from None
                 event["note"] = detail  # this version doesn't take it; try the next
             except Exception as e:

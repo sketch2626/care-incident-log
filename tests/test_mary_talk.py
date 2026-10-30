@@ -309,6 +309,7 @@ class TestRoutes(TalkCase):
                                 "offline_ready": ready,
                                 "voices": {"live": "Sulafat", "tts": "gemini:Sulafat",
                                            "offline": "kokoro:af_heart" if ready else ""},
+                                "tts_spent": False,  # M4a
                                 "wake_word": True, "wake_ready": wakeword.available()[0]})  # M6
 
     def test_status_after_setup(self):

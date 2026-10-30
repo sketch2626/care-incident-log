@@ -306,7 +306,8 @@ class TokenTests(VoicesCase):
         gen = cfg["generationConfig"]
         self.assertEqual(gen["responseModalities"], ["AUDIO"])
         self.assertEqual(gen["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"], "Achird")
-        self.assertEqual((cfg["inputAudioTranscription"], cfg["outputAudioTranscription"]), ({}, {}))
+        self.assertEqual(cfg["inputAudioTranscription"], {"languageCodes": ["en-US"]})  # M4a: English hint
+        self.assertEqual(cfg["outputAudioTranscription"], {})
         system = cfg["systemInstruction"]["parts"][0]["text"]
         self.assertIn("Mary", system)
         self.assertIn("Name: Ruth", system)

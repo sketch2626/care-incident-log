@@ -430,18 +430,33 @@ LIVE_STORY_TOOL = {
         "type": "string", "description": ("What they asked for, in a few words, for example: a funny one about "
                                           "fishing on the Outer Banks. Say 'any story' if they didn't say.")}},
         "required": ["request"]}}
-LIVE_CORE_TOOLS = LIVE_MEMORY_TOOLS + [LIVE_STORY_TOOL]  # M4a: every Live chat on her own screen gets these
+# M4a: these two are answered by the page, not the server. No "parameters": they take no arguments, and Gemini
+# refuses an OBJECT with empty properties.
+LIVE_PAGE_TOOLS = [
+    {"name": "story_more",
+     "description": "When they want the rest of a story you were telling after they cut in, call this for the next part."},
+    {"name": "end_talk",
+     "description": ("Call this right after your one short goodbye, when they say goodbye, tell you to go to sleep or "
+                     "rest, or say they're done talking.")},
+]
+LIVE_CORE_TOOLS = LIVE_MEMORY_TOOLS + [LIVE_STORY_TOOL] + LIVE_PAGE_TOOLS  # M4a: every Live chat on her own screen gets these
 STORY_DEADLINE_S = 25  # M4a: a whole story, collected before Live tells it
-STORY_MIN_WORDS = 40   # M4a: anything shorter isn't a story; she tells her own instead
-STORY_PROMPT = (  # M4a
-    "Right now, write one story for this person, for you to tell out loud. Make it a fresh story you make up now: "
-    "people who feel real, with names, a real place (North Carolina flavor unless they've told you they're from "
-    "somewhere else), something that happens, a little trouble, and a turn at the end that leaves a warm point or a "
-    "smile. It can be funny, warm, a bit of North Carolina history, or an old folk tale told your way. If they asked "
-    "for something in particular, give them that. Don't build it from your own likes and hobbies; you may lean on "
-    "what you know they like. Give it a beginning, a middle and an end, about 180 to 300 words. Write only the words "
-    "you will say: plain spoken sentences, no title, no brackets or tags, no lists, no headings, no stage directions. "
-    "Don't greet them or ask a question first; just begin the story.")
+STORY_MIN_WORDS = 100  # M4a: anything shorter isn't a story; she tells her own instead
+STORY_RETRY_WITHIN_S = 5  # M4a: a first try failing this fast is a refusal (maybe of thinkingConfig), not a timeout
+STORY_PROMPT = (  # M4a: rewritten after Andy's fourth try ("saccharine", "childish")
+    "Right now, write one story for this person, for you to tell out loud: a grown man or woman who has seen plenty "
+    "of life. Tell it the way a good porch storyteller or Southern humorist would, not a children's book. Make it a "
+    "fresh story you make up now, with real people who have names and flaws, a real place (North Carolina flavor "
+    "unless they've told you they're from somewhere else), and real stakes: money, pride, a feud, a bad decision, a "
+    "lie that got out of hand. Use concrete grown-up detail, dry humor, and at least one thing nobody saw coming. It "
+    "can be a tall tale, a funny one, a bit of North Carolina history with the rough edges left on, or an old folk "
+    "tale told your way. End on a good last line: a punchline, a twist, or something left hanging. No moral, no "
+    "lesson, nobody learning anything, no tidy feel-good ending, and nobody's kindness saving the day. Keep it clean: "
+    "no profanity and nothing crude. If they asked for something in particular, give them that. Don't build it from "
+    "your own likes and hobbies; you may lean on what you know they like. About 180 to 300 words, in 3 to 5 short "
+    "paragraphs with a blank line between them. Write only the words you will say: plain spoken sentences, no title, "
+    "no brackets or tags, no lists, no headings, no stage directions. Don't greet them or ask a question first; just "
+    "begin the story.")
 
 
 class _ReplyStream:
@@ -652,26 +667,53 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     contents = [{"role": t["role"], "parts": [{"text": t["text"]}]} for t in turns]
     contents.append({"role": "user", "parts": [{"text": text}]})
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1200}}  # M4a: room for a whole story; the brain keeps chat short
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4000}}  # M4a: room for a whole story; the brain keeps chat short
     if tools:  # --- skills hook (M13) ---
         body["tools"] = tools
     return body
 
 
-def tell_story(request, memory, api_key, model="", companion="mary"):  # M4a: Live's tell_story tool
+def not_english(text):  # M4a: Live's transcript sometimes comes back in another script
+    """True when most of the letters in text are not Latin. No letters at all is False."""
+    letters = [c for c in str(text or "") if c.isalpha()]
+    return bool(letters) and sum(ord(c) >= 0x250 for c in letters) / len(letters) > 0.5
+
+
+def tell_story(request, memory, api_key, model="", companion="mary", report=None):  # M4a: Live's tell_story tool
     """One well-made story for Live to tell aloud, written by the same brain as Normal talk (with her app facts and
-    what she knows of them). Returns the story as plain spoken text, or "" on any problem (no key, network, too short)."""
+    what she knows of them). Returns the story as plain spoken text, or "" on any problem (no key, network, too short).
+    report (a dict, if given) gets "path", "words" and any "error", for the log: voices can't be imported here."""
+    report = {} if report is None else report
+    report.update(path="", words=0)
     if not api_key:
         return ""
     ask = " ".join(str(request or "").split())[:300]
     body = {"systemInstruction": {"parts": [{"text": system_text(memory, companion) + "\n\n" + STORY_PROMPT}]},
             "contents": [{"role": "user", "parts": [{"text": "Tell me a story" + (f": {ask}" if ask else ".")}]}],
-            "generationConfig": {"temperature": 0.9, "maxOutputTokens": 1500}}
-    try:
-        text = "".join(p for p in _gemini_stream(body, api_key, model, deadline_s=STORY_DEADLINE_S)
+            "generationConfig": {"temperature": 0.9, "maxOutputTokens": 6000}}
+
+    def write():
+        return "".join(p for p in _gemini_stream(body, api_key, model, deadline_s=STORY_DEADLINE_S)
                        if isinstance(p, str))
-    except Exception:
-        return ""
+    # M4a: thinking tokens count against maxOutputTokens on Gemini 3, and the default HIGH can leave a stub
+    plain = body["generationConfig"]
+    body["generationConfig"] = {**plain, "thinkingConfig": {"thinkingLevel": "low"}}
+    report["path"] = "thinking_low"
+    started = time.monotonic()
+    try:
+        text = write()
+    except Exception as e:
+        report["error"] = type(e).__name__
+        if isinstance(e, TimeoutError) or time.monotonic() - started >= STORY_RETRY_WITHIN_S:
+            return ""
+        body["generationConfig"] = plain  # some models refuse thinkingConfig with a 400
+        report["path"] = "no_thinking"
+        try:
+            text = write()
+        except Exception as e2:
+            report["error"] = type(e2).__name__
+            return ""
+        report.pop("error", None)
     text = _TAG.sub("", _MOOD_TAG.sub("", text))
     text = re.sub(r"\[[^\]]*\]?", "", text)       # any other bracketed note, or one cut off at the end
     text = re.sub(r"[*#]+", "", text)              # markdown bold and headings are never spoken
@@ -679,7 +721,8 @@ def tell_story(request, memory, api_key, model="", companion="mary"):  # M4a: Li
     text = re.sub(r"\s*\n\s*\n\s*", "\n\n", text).strip()
     end = re.search(r"[.!?…][\"'”’)]*(?=[^.!?…]*$)", text)  # a story cut off by the deadline ends on a whole sentence
     text = text[:end.end()] if end else text
-    return text if len(text.split()) >= STORY_MIN_WORDS else ""
+    report["words"] = len(text.split())
+    return text if report["words"] >= STORY_MIN_WORDS else ""
 
 
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,

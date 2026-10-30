@@ -307,6 +307,7 @@ def mary_status():
             "talk_mode": s["talk_mode"], "listen_wait": s["listen_wait"], "talk_on_open": s["talk_on_open"],
             "talk_order": talk_order(s["talk_mode"], bool(s["key"]), offline_ready), "offline_ready": offline_ready,
             "voices": companion_voices(s["companion"] or "mary"),
+            "tts_spent": voices.tts_spent(DATA),  # M4a: for information; /api/mary/say swaps to Kokoro by itself
             "wake_word": s["wake_word"], "wake_ready": wakeword.available()[0]}  # M6
 
 
@@ -385,6 +386,7 @@ VOICE_ERRORS = {  # kind -> (plain sentence, HTTP status)
     "unknown_voice": ("I don't know that voice.", 400),
     "no_offline": ("The offline voice isn't installed on this computer yet.", 503),
     "busy": ("Gemini's free limit is used up for now. Please try again in a few minutes.", 503),
+    "tts_spent": ("The Gemini voice has used up its free turns for today. It will be back tomorrow.", 503),  # M4a
 }
 
 
@@ -498,7 +500,9 @@ def mary_live_story_call(args):  # M4a: Live's tell_story tool
     s = mary_settings()
     with _mary_lock:
         memory = mary_memory()
-    story = mary.tell_story(args.get("request"), memory, s["key"], s["model"], s["companion"] or "mary")
+    info = {}
+    story = mary.tell_story(args.get("request"), memory, s["key"], s["model"], s["companion"] or "mary", report=info)
+    voices.log({"event": "story", "ok": bool(story), **info}, DATA)  # here: voices imports mary, not the reverse
     return {"response": {"story": story} if story else dict(STORY_FAILED), "effects": [], "say": None}
 
 
@@ -1063,7 +1067,7 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 got = voices.live_token(companion_voices(companion)["live"], s["key"], companion, memory.name, DATA,
                                         skills=skills, silence_ms=round(s["listen_wait"] * 1000), memory=memory,
-                                        rate=s["voice_rate"])  # M4a: rate
+                                        rate=s["voice_rate"], plain=bool(body.get("plain")))  # M4a: rate, plain
             except voices.VoiceError as e:
                 return self._send(*voice_failure(e.kind))
             return self._send({**got, "companion": companion})
@@ -1072,6 +1076,8 @@ class Handler(SimpleHTTPRequestHandler):
             text = str(self._body().get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
             say = mary.EMERGENCY_TEXT.get(kind, "") if kind else ""
+            if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
+                return self._send({"emergency": False, "kind": "", "say": "", "garbled": True})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
                 with _mary_lock:  # as in Normal talk: the emergency cancels a waiting offer and is remembered
                     memory = mary_memory()
@@ -1089,7 +1095,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send({"emergency": bool(kind), "kind": kind, "say": say})
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
             text = " ".join(str(self._body().get("text") or "").split())[:2000]
-            if text:
+            if text and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
                 with _mary_lock:
                     memory = mary_memory()
                     memory.add_turn("model", text)
@@ -1115,12 +1121,15 @@ class Handler(SimpleHTTPRequestHandler):
                 rate = s["voice_rate"]
             companion = s["companion"] or "mary"
             cv = companion_voices(companion)
+            offline_voice = cv["offline"] or f"kokoro:{_first_voice(voices.KOKORO_VOICES, companion)}"
             if mode == "offline":
-                voice_id = cv["offline"] or f"kokoro:{_first_voice(voices.KOKORO_VOICES, companion)}"
-                return self._voice_stream(voice_id, "", True, text, speed=rate)
+                return self._voice_stream(offline_voice, "", True, text, speed=rate)
             if not s["key"]:
                 return self._send(*voice_failure("no_key"))
-            return self._voice_stream(cv["tts"], s["key"], False, text, cache=False, pace=rate)  # replies never pile up on disk
+            if voices.tts_spent(DATA):  # M4a: the Gemini voice's daily limit is used up
+                return self._kokoro_for_spent(offline_voice, text, rate)
+            return self._voice_stream(cv["tts"], s["key"], False, text, cache=False, pace=rate,  # replies never pile up on disk
+                                      spent_voice=offline_voice)  # M4a: the request that hits the limit swaps too
         # --- end M4a ---
         if path == "/api/mary/skills" or path.startswith("/api/mary/skills/"):  # --- skills hook (M13) ---
             return self._skills(method, path)
@@ -1146,6 +1155,8 @@ class Handler(SimpleHTTPRequestHandler):
             name = str(body.get("name") or "")
             if name in ("remember_fact", "set_their_name"):  # M4a: Live's own memory tools, not a skill
                 return self._send(mary_live_memory_call(name, body.get("args")))
+            if name in ("story_more", "end_talk"):  # M4a: the page answers these two; they should never reach here
+                return self._send({"response": {"error": "not_here"}, "effects": [], "say": None})
             if name == "tell_story":  # M4a: Live's story tool, after the emergency gate above
                 return self._send(mary_live_story_call(body.get("args")))
             return self._send(host.call(name, body.get("args")))
@@ -1201,15 +1212,25 @@ class Handler(SimpleHTTPRequestHandler):
         return self._send(data, 200, ctype)
     # --- end skills hook ---
 
-    def _voice_stream(self, voice_id, key, offline, text=voices.LINE, cache=True, speed=1.0, pace=None):  # M4a: speed, pace
+    def _kokoro_for_spent(self, voice_id, text, speed):  # M4a
+        """Speak in Kokoro because the Gemini voice is spent for today. If Kokoro isn't here this is the usual
+        failure, and the page falls on to the computer's voice."""
+        voices.log({"event": "say", "id": voice_id, "note": "Gemini voice spent for today, using Kokoro"}, DATA)
+        return self._voice_stream(voice_id, "", True, text, speed=speed)
+
+    def _voice_stream(self, voice_id, key, offline, text=voices.LINE, cache=True, speed=1.0, pace=None,
+                      spent_voice=None):  # M4a: speed, pace, spent_voice
         """One voice sample as raw 16-bit PCM, sent as it is made so the page can play it at once. Nothing is
         sent until the first audio is ready, so a failure is still a plain JSON answer. No Content-Length: the
-        connection closing ends it (HTTP/1.0). cache=False (M4a): a Gemini reply is never saved or reused."""
+        connection closing ends it (HTTP/1.0). cache=False (M4a): a Gemini reply is never saved or reused.
+        spent_voice (M4a): the Kokoro voice to swap to if this is the request that finds the daily limit used up."""
         gen = (voices.kokoro_stream(voice_id, DATA, text=text, speed=speed) if offline
                else voices.tts_stream(voice_id, key, DATA, text=text, cache=cache, pace=pace))  # cache: M4a
         try:
             first = next(gen)
         except voices.VoiceError as e:
+            if e.kind == "tts_spent" and spent_voice:  # M4a: nothing has been sent yet, so the page never knows
+                return self._kokoro_for_spent(spent_voice, text, pace or speed)
             return self._send(*voice_failure(e.kind))
         except StopIteration:
             return self._send(*voice_failure("no_offline" if offline else "no_gemini"))
@@ -1219,6 +1240,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("X-Channels", str(first["channels"]))
         self.send_header("X-Cached", "1" if first.get("cached") else "0")
         self.send_header("X-Voice-Path", str(first.get("path", "")))
+        self.send_header("X-Mary-Voice", "offline" if offline else "normal")  # M4a: the page learns of a Kokoro swap
         if "load_ms" in first:
             self.send_header("X-Load-Ms", str(first["load_ms"]))
         self.end_headers()

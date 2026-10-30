@@ -6,7 +6,8 @@ Boards for `docs/mary-roadmap.md` item M3, made 2026-10-30. Live canvas (private
 - Caption style: **A · Coloring-in**. B and C stay on the canvas and here, marked not chosen.
 - Listening: **sound waves where her ears would be**, three arcs each side, small to large. No "I'm listening" bar, no words.
 - Thinking: **a thought cloud** rising off the top of her head, not dots at the bottom. Still to pick: (a) three dots coloring in, or (b) the word "Thinking…".
-- Emergency: approved as is ("that'll work for now"). The Menu button stays top right.
+- Emergency: approved as is ("that'll work for now").
+- Menu: approved as is ("Yes, the menu board is good. I like it."): the top-right Menu button and the menu that drops from it. Build it exactly as drawn.
 
 ## What's here
 - `Main.dc.html`: plays by itself: the resident talks (ear waves), she thinks (cloud, dots then the word), then answers in style A, using the real timing estimate below. Mary twice, then Sam twice. Built as one face with mood classes, the way M4 should do it.

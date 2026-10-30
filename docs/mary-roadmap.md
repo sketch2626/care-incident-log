@@ -81,7 +81,7 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
     - Caption **A · Coloring-in**; B and C are marked not chosen.
     - Listening is **sound waves where her ears would be**, with no "I'm listening" bar.
     - Thinking is **a thought cloud above her head**; he still picks dots or the word "Thinking…".
-    - Emergency is approved, and the Menu button stays top right.
+    - Emergency is approved. The menu board is approved as is ("Yes, the menu board is good. I like it."), Menu button top right.
 - Boards for:
   - The bubble-letter caption: words appear one at a time and fill with color as she says them. Show 2-3 styles.
   - Size and placement along the bottom.

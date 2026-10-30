@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 import assist
+import memory_core  # M9c
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 INSTRUCTIONS = ROOT / "mary" / "instructions.md"
@@ -204,6 +205,7 @@ class Memory:
         self.facts = []
         self.recent = []
         self.pending_offer = None
+        self.store = None  # M9c: a memory_core.MemoryStore; server sets it. None keeps the old facts list.
         self._load()
 
     def _load(self):
@@ -225,8 +227,10 @@ class Memory:
         self.recent = recent[-MAX_RECENT:]
         self.pending_offer = offer if isinstance(offer, dict) else None
 
-    def add_fact(self, fact):
+    def add_fact(self, fact, kind="", source="talk"):
         """Returns True if the fact was new."""
+        if self.store is not None:  # M9c: kind and source only mean something in the store
+            return self.store.add(fact, kind, source) is not None
         fact = " ".join(str(fact).split())[:MAX_FACT_CHARS].rstrip()
         if not fact or fact.lower() in (f.lower() for f in self.facts):
             return False
@@ -407,20 +411,109 @@ def clean_name(name):  # M4a: Live's set_their_name tool
     return "" if not name or name.lower() in _NOT_NAMES else name
 
 
+# M9c: said out loud or typed, "remember that..." is the resident's own wish, so it is marked as theirs.
+_ASKS_TO_REMEMBER = re.compile(r"\b(?:remember\s+(?:that|this)|please\s+remember|don'?t\s+forget)\b", _I)
+# M9c: with no Gemini only these exact phrases reach her memory, so "I forget about my pills" and "don't forget that"
+# never do. Nothing but please or her name may stand around them.
+_ONLY_LEAD = r"(?:(?:please|mary|sam)[\s,.!]+)*"
+_ONLY_TAIL = r"(?:[\s,.!]+(?:please|mary|sam))*[\s.!?]*"
+_OFFLINE_RECALL = re.compile(rf"{_ONLY_LEAD}what do you remember about me{_ONLY_TAIL}", _I)
+_OFFLINE_FORGET = re.compile(rf"{_ONLY_LEAD}forget (?:that|about my ([^,.!?]+?)){_ONLY_TAIL}", _I)
+OFFLINE_SUMMARY_ITEMS = 5
+NOTHING_SAVED_TEXT = "I don't have anything saved about you yet."
+FORGOT_TEXT = "All right, I've forgotten that."
+NOTHING_TO_FORGET_TEXT = "I don't have anything saved about that."
+OFFER_DROPPED_TEXT = "All right, I won't write that down."
+RECALL_NOTE = "Newer dates win when two disagree. Only say what is here; never make up a memory."
+RECALL_EMPTY_NOTE = "Nothing saved about that. Say so; don't guess."
+FORGET_EMPTY_NOTE = "Nothing saved matches that. Say so kindly, in one line."
+FORGET_OFFER_NOTE = "They meant the note you just offered to write. Nothing was written and nothing was forgotten."
+MEMORY_BROKEN_NOTE = "Your memory can't be reached just now. Say so kindly; don't guess."
+MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
+    {"name": "recall",
+     "description": ("Look up what the resident has told you before. Call this when they mention a person, a place or "
+                     "a past talk, before you answer. With no words you get the newest memories."),
+     "parameters": {"type": "object", "properties": {
+         "words": {"type": "string", "description": "A few words to look for, for example: daughter Ann."},
+         "kind": {"type": "string", "enum": list(memory_core.KINDS), "description": "Only this kind of memory."}}}},
+    {"name": "forget_memory",
+     "description": ("They asked you to forget something. Give what to forget in a few of their words, or in the words "
+                     "of the memory you just told them. Give nothing only when they just said 'forget that' about "
+                     "something from this talk: it removes the last thing you saved."),
+     "parameters": {"type": "object", "properties": {"about": {
+         "type": "string", "description": "What to forget, for example: my son's job."}}}},
+]
+MEMORY_TOOL_NAMES = tuple(tool["name"] for tool in MEMORY_TOOLS)
+
+
+def fact_source(text, typed=False):  # M9c
+    """How a fact reached her: "typed", "said" when the resident asked her to remember it, otherwise "talk"."""
+    if typed:
+        return "typed"
+    return "said" if _ASKS_TO_REMEMBER.search(_plain(str(text or ""))) else "talk"
+
+
+def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall and forget_memory
+    """Runs one of her memory tools. The same shape as skills.call ({"response", "effects", "say"}), and never raises.
+    Takes no lock: reply already holds server._mary_lock. offer_waiting: a note offer is open, so a bare "forget that"
+    means the note, not her newest memory."""
+    args = args if isinstance(args, dict) else {}
+    say = None
+    try:
+        if name == "recall":
+            found = memory.store.recall(str(args.get("words") or ""), str(args.get("kind") or ""))
+            response = ({"memories": found, "total": memory.store.count(), "note": RECALL_NOTE} if found
+                        else {"memories": [], "note": RECALL_EMPTY_NOTE})
+        else:
+            about = " ".join(str(args.get("about") or "").split())
+            if about.lower().rstrip(".!") in ("that", "this", "it"):  # she passed "forget that" along word for word
+                about = ""
+            gone = [] if offer_waiting and not about else memory.store.forget(about)
+            response = {"forgotten": gone}
+            if gone:
+                say = FORGOT_TEXT  # if her next words never come, the resident still hears it was done
+            else:
+                response["note"] = FORGET_OFFER_NOTE if offer_waiting and not about else FORGET_EMPTY_NOTE
+    except Exception:
+        response = {"error": "memory_not_working", "note": MEMORY_BROKEN_NOTE}
+    return {"response": response, "effects": [], "say": say}
+
+
+def offline_memory(memory, text, offer_waiting=False):  # M9c
+    """What she says to an exact memory phrase when Gemini can't be reached, or "" when text isn't one."""
+    said = " ".join(_plain(str(text or "")).split())
+    try:
+        if _OFFLINE_RECALL.fullmatch(said):
+            found = memory.store.active(limit=OFFLINE_SUMMARY_ITEMS)
+            if not found:
+                return NOTHING_SAVED_TEXT
+            return "Here's some of what I remember: " + " ".join(m["text"].rstrip(" .") + "." for m in found)
+        hit = _OFFLINE_FORGET.fullmatch(said)
+        if not hit:
+            return ""
+        if offer_waiting and not hit.group(1):  # "forget that" to "Would you like me to write that down?"
+            return OFFER_DROPPED_TEXT
+        return FORGOT_TEXT if memory.store.forget(hit.group(1) or "") else NOTHING_TO_FORGET_TEXT
+    except Exception:
+        return ""
+
+
 # M4a: Live's own memory tools, in every Live chat. No "__" in the names, so they never look like a skill's.
 LIVE_MEMORY_TOOLS = [
     {"name": "remember_fact",
      "description": ("Save a short fact about the resident's life, in third person, following your Remembering rules "
                      "(never staff names, money or account details, or anything they asked you to forget)."),
-     "parameters": {"type": "object", "properties": {"fact": {
-         "type": "string", "description": "The fact in third person, for example: Has a daughter named Ann in Raleigh."}},
+     "parameters": {"type": "object", "properties": {
+         "fact": {"type": "string",
+                  "description": "The fact in third person, for example: Has a daughter named Ann in Raleigh."},
+         "kind": {"type": "string", "enum": list(memory_core.KINDS), "description": "What sort of fact it is."}},  # M9c
          "required": ["fact"]}},
     {"name": "set_their_name",
      "description": ("They told you what they like to be called, for example 'call me Andy'. Use the name they go by, "
                      "exactly as they said it, never a longer or formal version."),
      "parameters": {"type": "object", "properties": {"name": {
          "type": "string", "description": "The name they like to be called."}}, "required": ["name"]}},
-]
+] + MEMORY_TOOLS  # M9c
 # M4a: Live's story tool. Live's own stories came out thin, so a story is written by the same brain as Normal talk.
 LIVE_STORY_TOOL = {
     "name": "tell_story",
@@ -581,6 +674,13 @@ def system_text(memory, companion="mary", facts=True):
     if facts:
         system += _app_facts_text(companion)  # M9b
     lines = ([f"Name: {memory.name}"] if memory.name else []) + ([f"- {f}" for f in memory.facts] if facts else [])
+    store = getattr(memory, "store", None)  # M9c: the voice tryout's stand-in has no store
+    if facts and store is not None:  # M9c: only a small core; the rest is found with recall
+        try:
+            core = store.always_sent(memory.name)
+            lines = [core] if core else []
+        except Exception:  # a locked database must never stop her talking
+            lines = lines[:1] if memory.name else []
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
     if facts and not memory.name:
@@ -661,6 +761,8 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
             system += "\n\n" + extra
         tools = skills.gemini_tools()
     # --- end skills hook ---
+    if not kind and getattr(memory, "store", None) is not None:  # M9c: one functionDeclarations entry, shared with the skills
+        tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + MEMORY_TOOLS}]
     turns = list(memory.recent)
     while turns and turns[0]["role"] != "user":
         turns.pop(0)
@@ -679,6 +781,18 @@ def not_english(text):  # M4a: Live's transcript sometimes comes back in another
     return bool(letters) and sum(ord(c) >= 0x250 for c in letters) / len(letters) > 0.5
 
 
+def _story_memories(memory, ask):  # M9c
+    """What she has saved that fits the story asked for, so a story keeps what she knows of them."""
+    store = getattr(memory, "store", None)
+    if store is None:
+        return ""
+    try:
+        found = store.recall(ask, limit=6)
+    except Exception:
+        return ""
+    return "\n\nThings they've told you that may fit:\n" + "\n".join(f"- {m['text']}" for m in found) if found else ""
+
+
 def tell_story(request, memory, api_key, model="", companion="mary", report=None):  # M4a: Live's tell_story tool
     """One well-made story for Live to tell aloud, written by the same brain as Normal talk (with her app facts and
     what she knows of them). Returns the story as plain spoken text, or "" on any problem (no key, network, too short).
@@ -688,7 +802,8 @@ def tell_story(request, memory, api_key, model="", companion="mary", report=None
     if not api_key:
         return ""
     ask = " ".join(str(request or "").split())[:300]
-    body = {"systemInstruction": {"parts": [{"text": system_text(memory, companion) + "\n\n" + STORY_PROMPT}]},
+    system = system_text(memory, companion) + _story_memories(memory, ask) + "\n\n" + STORY_PROMPT  # M9c
+    body = {"systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": "Tell me a story" + (f": {ask}" if ask else ".")}]}],
             "generationConfig": {"temperature": 0.9, "maxOutputTokens": 6000}}
 
@@ -726,9 +841,10 @@ def tell_story(request, memory, api_key, model="", companion="mary", report=None
 
 
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
-          skills=None, screen=None, on_effect=None):
+          skills=None, screen=None, on_effect=None, typed=False):
     """Mary's answer to what the resident said.
 
+    typed (M9c): they typed this, so a fact from it is saved with source "typed".
     Returns {text, mood, emergency, gemini_alert, offer, logged, remembered, error, effects, first_words_s, total_s}.
     Skills (M13): skills is a skills_core.SkillHost, screen the skill now on screen. Gemini's tool calls run
     through it (at most MAX_TOOL_ROUNDS rounds); each effect goes to on_effect as it happens and into effects.
@@ -749,6 +865,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     gemini_mood_seen = gemini_alert = streamed = False
     if companion not in COMPANIONS:
         companion = "mary"
+    store = getattr(memory, "store", None)  # M9c
     # --- skills hook (M13) ---
     effects, says, rounds, gap = [], [], 0, False
 
@@ -849,13 +966,18 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                     said += chunk
                     stream.feed(chunk)
                 # --- skills hook (M13) --- run her tool calls, then ask again with their answers
-                if not calls or skills is None or kind or rounds >= MAX_TOOL_ROUNDS:
+                if not calls or (skills is None and store is None) or kind or rounds >= MAX_TOOL_ROUNDS:  # M9c: store too
                     break
                 rounds += 1
                 answers = []
                 for part in calls:
                     call = part.get("functionCall") or {}
-                    result = skills.call(call.get("name"), call.get("args"))
+                    if store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
+                        result = memory_tool(memory, call.get("name"), call.get("args"), offer_waiting=bool(prior))
+                    elif skills is not None:
+                        result = skills.call(call.get("name"), call.get("args"))
+                    else:  # M9c: she has only her memory tools here
+                        result = {"response": {"error": "unknown_tool"}, "effects": [], "say": None}
                     for effect in result["effects"]:
                         add_effect(effect)
                     if result["say"]:
@@ -878,8 +1000,11 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             error = NO_GEMINI
         for tag, value in _TAG.findall(raw):
             if tag == "remember":
-                if memory.add_fact(value):
-                    remembered.append(" ".join(value.split()))
+                try:  # M9c: a locked database must never stop her reply
+                    if memory.add_fact(value, source=fact_source(text, typed)):
+                        remembered.append(" ".join(value.split()))
+                except Exception:
+                    pass
             elif value.strip():
                 memory.name = value.strip()[:40]
         tail = stream.finish()
@@ -908,6 +1033,17 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             if not api_key:
                 error = NO_KEY
     # --- end skills hook ---
+
+    # M9c: no Gemini: a few exact phrases still reach her memory
+    if (store is not None and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
+            and not (prior and (said_yes or is_decline(text)))):
+        line = offline_memory(memory, text, offer_waiting=bool(prior))
+        if line:
+            gemini_alert = False
+            set_mood("talking")
+            emit(line)
+            if not api_key:
+                error = NO_KEY
 
     if not spoken.strip() and not kind:
         gemini_alert = False  # a bare "alert" tag with no words is not something to act on

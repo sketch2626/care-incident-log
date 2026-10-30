@@ -839,6 +839,7 @@ function fillInfo() {
   $('#backName').textContent = s.companion === 'him' ? 'Sam' : 'Mary';
   $('#backToMary').hidden = !FROM_MARY;
   loadSkills();
+  loadMemories(); // M9c
 }
 
 /* ---------- Things Mary can do ---------- */
@@ -898,6 +899,70 @@ async function skillChange(path, body) {
     await loadSkills(); // show what the server now says
   } catch (err) {
     $('#skillsMsg').textContent = "That didn't change. " + err.message;
+  }
+}
+
+/* ---------- What Mary remembers (M9c) ---------- */
+
+const MEM_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// "2026-10-30" read by its parts, so the timezone can't shift the day.
+function memDate(s) {
+  const p = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+  const mo = p && MEM_MONTHS[Number(p[2]) - 1];
+  return mo ? `${mo} ${Number(p[3])}, ${p[1]}` : '';
+}
+
+const memName = () => (state.settings.companion === 'him' ? 'Sam' : 'Mary');
+
+// Memories are untrusted text: textContent only.
+function memEmpty(box) {
+  const p = document.createElement('p');
+  p.className = 'note';
+  p.textContent = `Nothing saved yet. As you talk, ${memName()} keeps what matters here.`;
+  box.textContent = '';
+  box.append(p);
+}
+
+function memRow(mem, box) {
+  const text = String(mem.text || '');
+  const row = document.createElement('div');
+  row.className = 'skillrow';
+  const t = document.createElement('div');
+  t.className = 'skilltext';
+  const h = document.createElement('b'); h.textContent = text;
+  const p = document.createElement('p'); p.className = 'note'; p.textContent = memDate(mem.date);
+  t.append(h, p);
+  const btn = skillBtn('Remove', false, false, async () => {
+    btn.disabled = true;
+    $('#memMsg').textContent = 'Removing…';
+    try {
+      await api(`/api/mary/memories/${encodeURIComponent(mem.id)}`, { method: 'DELETE' });
+      row.remove();
+      $('#memMsg').textContent = `Removed. ${memName()} won't bring that up again.`;
+      if (!box.querySelector('.skillrow')) memEmpty(box);
+    } catch {
+      btn.disabled = false;
+      $('#memMsg').textContent = "Sorry, that didn't go through. Please try again.";
+    }
+  });
+  btn.removeAttribute('aria-pressed'); // an action, not an on/off switch
+  btn.setAttribute('aria-label', 'Remove: ' + text);
+  row.append(t, btn);
+  return row;
+}
+
+async function loadMemories() {
+  const box = $('#memList');
+  $('#memTitle').textContent = `What ${memName()} remembers`;
+  $('#memMsg').textContent = '';
+  try {
+    const list = (await api('/api/mary/memories')).memories || [];
+    if (!list.length) { memEmpty(box); return; }
+    box.textContent = '';
+    list.forEach(mem => box.append(memRow(mem, box)));
+  } catch (err) {
+    $('#memMsg').textContent = "I couldn't get the list just now. " + err.message;
   }
 }
 

@@ -28,6 +28,7 @@ SPEECH_ARGS = ["--hidden-import", "speech", "--hidden-import", "reports",
                "--hidden-import", "wakeword", "--collect-binaries", "vosk", "--collect-data", "vosk"]  # M6
 # Mary's own modules, named for the same reason, and what the Kokoro voice reads at run time.
 MARY_ARGS = ["--hidden-import", "mary", "--hidden-import", "voices", "--hidden-import", "skills_core",
+             "--hidden-import", "memory_core",  # M9c
              "--hidden-import", "power", "--hidden-import", "kokoro_onnx", "--collect-data", "kokoro_onnx",
              "--collect-all", "espeakng_loader", "--collect-data", "phonemizer"]
 ISCC_PATHS = [Path(os.environ.get("LOCALAPPDATA", ""), "Programs", "Inno Setup 6", "ISCC.exe"),

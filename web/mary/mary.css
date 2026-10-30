@@ -93,6 +93,7 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
   color:#1f1b16;background:#ffffff;border:3px solid #d9cbb8;border-radius:24px;text-align:left;text-decoration:none;cursor:pointer}
 .row .txt{display:flex;flex-direction:column;gap:4px;flex:1 1 auto;min-width:0}
 .row .say{font-size:24px;font-weight:600;color:#5a4d40}
+#memList .txt{overflow-wrap:anywhere} /* M9c: a long memory wraps */
 .row[aria-checked="true"]{border-color:#0f5560;background:#e8f3f4;box-shadow:inset 0 0 0 3px #0f5560}
 .row[aria-checked="true"] .txt::after{content:"✓ Chosen";font-size:24px;font-weight:700;color:#0b4a54}
 .row[aria-disabled="true"]{background:#f6f0e7;border-style:dashed;color:#5a4d40;cursor:default}

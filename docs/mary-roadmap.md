@@ -83,6 +83,14 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - **Done when:** Andy approves a board. Commit copies to `mockups/mary/round6/`.
 
 ### M4. Build the new voice and the word-by-word captions (worker, Sonnet then Haiku)
+- **Andy's second try (2026-10-30), with the new brain (M9b) and `voice_comfort` (M13):**
+  - She told a story about something cool that happened in North Carolina, picked by her, and "she nailed it".
+  - "Slow down" and "speed up" both worked.
+  - When he asked for a game on the screen, she said that's coming soon but offered word games. That's the right answer.
+  - What's left is the voice: "it just really depends on when we get the good voice in there".
+- **Split (2026-10-30), so the good voice doesn't wait on the boards:**
+  - **M4a, the good voice in Mary now.** Second account, Opus; brief `docs/handoff/M4a.md`. Her Live session with his picked Mary and Sam voices, which stays open hands-free. Normal and Offline are the other choices, and each falls back to the next. Skills and the emergency check work in Live, and her captions stay plain for now.
+  - **M4b, the bubble-letter captions,** after Andy approves the M3 boards.
 - Wire the voice chosen in M2 into `web/mary/app.js` and the server, with the offline fallback.
 - Build the approved M3 caption: each word fills as it's spoken. Use real word timings if the voice gives them, otherwise estimate from each word's length and the audio length.
 - **Done when:** the tests pass and Andy hears and sees it on his screen.

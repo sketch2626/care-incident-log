@@ -430,17 +430,20 @@
       try { A.getFace().bounce(); } catch (e) { /* nothing */ }
     }
     // if the webview blocks her voice before a first tap, say() still leaves the caption up and does not retry
-    A.say(g.text, g.slot === 'night' ? 'talking' : 'happy').catch(log);
+    A.openingLine(g.text).then(function (line) {   // M4a: her own words, with the scripted line behind them
+      if (line.text) { return A.say(line.text, g.slot === 'night' ? 'talking' : 'happy', undefined, line.saved); }
+    }).catch(log);
   }
 
   // M4a: "Start talking when Mary opens" (talk_on_open). She starts the talk herself: Live says its own hello
-  // (with the time of day); Normal and Offline say a scripted greeting, then listen. 15 s of quiet and she rests.
+  // (with the time of day); Normal and Offline say the brain's hello, or a scripted greeting if that fails, then
+  // listen. 15 s of quiet and she rests.
   function talkOnOpen() {
     var g = greetingText();
     if (g.slot !== 'night') {
       try { A.getFace().bounce(); } catch (e) { /* nothing */ }
     }
-    A.startTalk({ say: g.text, mood: g.slot === 'night' ? 'talking' : 'happy' }).catch(log);
+    A.startTalk({ say: g.text, brainHello: true, mood: g.slot === 'night' ? 'talking' : 'happy' }).catch(log);   // M4a
   }
   // M4a: after the first hello she carries on talking; she has just greeted them, so no second hello
   var FIRST_TALK = "Now, tell me a little about yourself. I'd love to get to know you.";

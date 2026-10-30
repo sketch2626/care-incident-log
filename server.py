@@ -451,6 +451,7 @@ def skill_host():
     with _skill_host_lock:
         if _skill_host is None:
             host = skills_core.SkillHost(SKILLS_DIR, DATA, connect, _all_settings, _put_settings, online=lambda: True)
+            host.vision = mary_see_image  # M4a: skills look through the host and never hold the key
             host.load(is_blocked=mary.skill_blocked)
             _skill_host = host
         return _skill_host
@@ -513,6 +514,32 @@ def mary_live_story_call(args):  # M4a: Live's tell_story tool
     story = mary.tell_story(args.get("request"), memory, s["key"], s["model"], s["companion"] or "mary", report=info)
     voices.log({"event": "story", "ok": bool(story), **info}, DATA)  # here: voices imports mary, not the reverse
     return {"response": {"story": story} if story else dict(STORY_FAILED), "effects": [], "say": None}
+
+
+# --- M4a: her hello from the brain, and a skill's look at a picture ---
+def mary_open(when):
+    """Her hello in her own words, saved as her turn so her next answer knows she has greeted them. {"text": ""} on
+    any problem: the page then says a scripted line. The lock is held only around her memory, never while Gemini writes."""
+    s = mary_settings()
+    with _mary_lock:
+        memory = mary_memory()
+    text = mary.open_line(memory, s["key"], s["model"], s["companion"] or "mary", when)
+    if text:
+        with _mary_lock:
+            memory = mary_memory()
+            memory.add_turn("model", text)
+            try:
+                memory.save()
+            except OSError:
+                pass
+    return {"text": text}
+
+
+def mary_see_image(image_bytes, mime, question):
+    """SkillHost.vision: what a skill's ctx.look calls. The key stays on this side."""
+    s = mary_settings()
+    return mary.see_image(image_bytes, mime, question, s["key"], s["model"])
+# --- end M4a ---
 
 
 def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typed=False):  # M9c: typed
@@ -1103,16 +1130,21 @@ class Handler(SimpleHTTPRequestHandler):
                     except OSError:
                         pass
             return self._send({"emergency": bool(kind), "kind": kind, "say": say})
+        if method == "POST" and path == "/api/mary/open":  # M4a: her hello, from the brain
+            return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
             text = " ".join(str(self._body().get("text") or "").split())[:2000]
             if text and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
                 with _mary_lock:
                     memory = mary_memory()
-                    memory.add_turn("model", text)
-                    try:
-                        memory.save()
-                    except OSError:
-                        pass
+                    last = memory.recent[-1] if memory.recent else {}
+                    # M4a: the emergency words are saved by /heard; say() of the same words must not double them
+                    if last.get("role") != "model" or " ".join(last["text"].split()) != text[:mary.MAX_TURN_CHARS].strip():
+                        memory.add_turn("model", text)
+                        try:
+                            memory.save()
+                        except OSError:
+                            pass
             return self._send({"ok": True})
         if method == "POST" and path == "/api/mary/say":
             # Mary's reply spoken in Normal (Gemini voice) or Offline (Kokoro) mode, streamed like the tryout.

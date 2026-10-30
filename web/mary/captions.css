@@ -1,0 +1,62 @@
+/* Mary's captions, style A "Coloring-in" (round 6, approved by Andy 2026-10-30). Drawn by captions.js.
+   Copied from mockups/mary/round6/r6.css (.cap, .capA, .line, .w and the word states), sized for any window:
+   66 px on a 1280x800 screen, clamp(48px, 5.2vw, 88px). Strokes are in em so the look holds at every size.
+   Word states: .later = not shown yet (keeps its space), bare .w = next word (empty outline),
+   .on.f1-.f9 = being said (filled 10-90%, lifted 5 px), .done = said. */
+
+/* Her color: Mary rose, Sam blue, emergency deep rose. On #scr (main.scr in mary.html). */
+#scr{--ink:#9b2c58}
+#scr.sam,#scr[data-companion="him"]{--ink:#1b5a8c}
+#scr:has(> #face > .mf-root[data-companion="him"]){--ink:#1b5a8c}
+#scr.urgent .cap,#scr.sos .cap{--ink:#8a1f2e}
+
+.cap{position:absolute;left:clamp(16px,4.4vw,72px);right:clamp(16px,4.4vw,72px);bottom:clamp(16px,4.25vh,48px);
+  z-index:8;height:2.4em;pointer-events:none;transition:opacity .4s ease}
+.cap.left{right:min(600px,47vw)}            /* menu open: keep clear of it */
+.cap.hidden{opacity:0}
+.cap .cap-track{position:absolute;left:0;right:0;top:0;transition:transform .4s ease}
+.cap.whole{height:auto}                      /* emergency: every line shows */
+.cap.whole .cap-track{position:static}
+.cap .cap-measure{position:absolute;left:0;top:0;visibility:hidden}
+
+.cap .line{display:flex;justify-content:center;gap:0 .3em;white-space:nowrap;height:1.2em;
+  transition:opacity .4s ease,transform .4s ease}
+.cap .line.gone{opacity:0;transform:translateY(-40px)}   /* a third line started: the top one floats up and fades */
+
+.cap .w{position:relative;display:inline-block;transition:transform .12s ease-out,opacity .3s ease}
+.cap .w::before,.cap .w::after{content:attr(data-t);position:absolute;left:0;top:0;pointer-events:none}
+.cap .w::after{color:var(--ink,#9b2c58);clip-path:inset(-30% 100% -30% -6%)}
+.cap .w.f1::after{clip-path:inset(-30% 90% -30% -6%)}
+.cap .w.f2::after{clip-path:inset(-30% 80% -30% -6%)}
+.cap .w.f3::after{clip-path:inset(-30% 70% -30% -6%)}
+.cap .w.f4::after{clip-path:inset(-30% 60% -30% -6%)}
+.cap .w.f5::after{clip-path:inset(-30% 50% -30% -6%)}
+.cap .w.f6::after{clip-path:inset(-30% 40% -30% -6%)}
+.cap .w.f7::after{clip-path:inset(-30% 30% -30% -6%)}
+.cap .w.f8::after{clip-path:inset(-30% 20% -30% -6%)}
+.cap .w.f9::after{clip-path:inset(-30% 10% -30% -6%)}
+.cap .w.done::after{clip-path:none}
+.cap .w.later{visibility:hidden}
+.cap .w.cut{opacity:0;transition:opacity .3s ease}       /* she was cut off: what she didn't say fades */
+
+/* A: empty white bubble letters with a white sticker edge, colored in with her color */
+.capA{font-family:"Fredoka","Segoe UI",sans-serif;font-weight:600;font-size:clamp(48px,5.2vw,88px);line-height:1.2}
+.capA .w{color:#fffdf8;-webkit-text-stroke:.197em #ffffff;paint-order:stroke fill;
+  filter:drop-shadow(0 0 1.2px rgba(74,52,38,.7)) drop-shadow(0 4px 0 rgba(74,52,38,.16))}
+.capA .w::before{color:#fffdf8;-webkit-text-stroke:.045em #4a3426}
+.capA .w::after{-webkit-text-stroke:.045em var(--ink,#9b2c58)}
+.capA .w.on{transform:translateY(-5px)}
+
+/* A plain line (not her voice), e.g. "You said: ..." */
+.cap.plain{height:auto}
+.cap-plain{max-width:100%;margin:0 auto;width:fit-content;padding:14px 28px;
+  font:600 clamp(28px,2.8vw,40px)/1.3 "Segoe UI",system-ui,sans-serif;color:#1f1b16;
+  background:rgba(255,254,250,.95);border:3px solid #62574a;border-radius:20px;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
+
+@media (prefers-reduced-motion:reduce){
+  /* no float or lift; words still fill */
+  .capA .w.on{transform:none}
+  .cap .line.gone{transform:none}
+  .cap .cap-track,.cap .line,.cap .w{transition:none}
+}

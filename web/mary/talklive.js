@@ -155,7 +155,9 @@
     if (!alive(s)) return;
     var sum = 0;
     for (var i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
-    if (Math.sqrt(sum / f32.length) > VOICE_LEVEL) {
+    var rms = f32.length ? Math.sqrt(sum / f32.length) : 0;   // M4b
+    emit(s, 'onMicLevel', rms, rms > VOICE_LEVEL);            // M4b: the ear waves on her face (app.js)
+    if (rms > VOICE_LEVEL) {
       var now = performance.now();
       s.lastVoiceAt = now;
       s.voiceSince = true;
@@ -231,6 +233,7 @@
   function onDrained(s) {
     if (!alive(s) || s.sources.length) return;
     setSpeaking(s, false);
+    if (s.newTurn) emit(s, 'onAudioDone');   // M4b: her turn is over and all of it was heard
     if (s.goAway) endSession(s, 'closed', {goAway: true, code: s.closeCode, note: s.serverNote});
   }
 
@@ -260,6 +263,7 @@
       s.greetMs = Math.max(0, Math.round(soundAt - (fromMic ? s.micAt : s.tapAt)));
     }
     s.sources.push(src);
+    emit(s, 'onAudioChunk', at + (ctx.outputLatency || ctx.baseLatency || 0), buf.duration, ctx);   // M4b: caption timing
     src.onended = function () {
       var at2 = s.sources.indexOf(src);
       if (at2 >= 0) s.sources.splice(at2, 1);
@@ -334,6 +338,7 @@
   }
 
   function onInterrupted(s) {
+    emit(s, 'onCut');   // M4b: before stopPlayback(), so the caption is cut, not finished
     stopPlayback(s);
     s.interruptions++;
     s.turnOpen = false;
@@ -366,6 +371,7 @@
       s.caption += ot.text;
       emit(s, 'onActivity');
       emit(s, 'onCaption', s.caption);
+      emit(s, 'onCaptionPiece', ot.text);   // M4b: just the new piece (captions.js livePiece)
     }
 
     var it = sc.inputTranscription;
@@ -379,6 +385,7 @@
       clearMute(s);
       fireHeard(s);
       emit(s, 'onTurnComplete');
+      if (!s.sources.length) emit(s, 'onAudioDone');   // M4b: her sound had already finished
     }
   }
 

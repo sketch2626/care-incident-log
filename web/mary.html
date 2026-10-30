@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mary</title>
 <link rel="icon" href="data:,">
+<link rel="stylesheet" href="/mary/fonts/fonts.css">
 <link rel="stylesheet" href="/mary/face.css">
 <link rel="stylesheet" href="/mary/mary.css">
+<link rel="stylesheet" href="/mary/captions.css">
 </head>
 <body>
 <main id="scr" class="scr" data-screen="everyday" data-phase="idle">
@@ -14,55 +16,68 @@
   <!-- Her face fills the whole window. face.js draws into this box. -->
   <div id="face"></div>
 
-  <button id="moreBtn" class="more" type="button" aria-haspopup="dialog">More</button>
+  <!-- M4b: the one button, top right (boards Menu-Mary / Menu-Sam). app.js swaps the icon and the words when it opens. -->
+  <button id="menuBtn" class="menu-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menu"><svg class="ic-menu" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg><svg class="ic-hide" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"></path></svg><span id="menuBtnLbl">Menu</span></button>
 
-  <div class="dock">
-    <div class="row">
-
-      <!-- Emergency screen: shown by [data-screen="emergency"] -->
-      <div id="ask" class="ask" role="group" aria-label="Get help now">
-        <p class="alert">Get help now</p>
-        <div class="btns col">
-          <button id="lightBtn" class="btn yes" type="button">I pressed my call light</button>
-          <button id="okBtn" class="btn" type="button">I'm OK now</button>
-        </div>
-      </div>
-
-      <!-- No-key screen: shown by [data-screen="nokey"] -->
-      <div id="nokeyBox" class="nokeybox">
-        <button id="infoBtn" class="btn yes big" type="button">Open My info</button>
-      </div>
-
-      <button id="talkBtn" class="talk" type="button" data-state="idle" data-ic="mic">
-        <span class="ring" id="ring" aria-hidden="true"></span>
-        <svg class="ic ic-mic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
-        <svg class="ic ic-done" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
-        <svg class="ic ic-type" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"></rect><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"></path></svg>
-        <svg class="ic ic-wait" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="2.3"></circle><circle cx="12" cy="12" r="2.3"></circle><circle cx="19" cy="12" r="2.3"></circle></svg>
-        <span id="talkLbl">Talk to Mary</span>
-      </button>
-    </div>
-
-    <div id="chip" class="chip" role="status" hidden>Saved in My notes &#10003;</div>
-    <div id="caption" class="caption" aria-live="polite" hidden></div>
+  <!-- M4b: the menu drops down from the button -->
+  <div id="menu" class="menu" role="menu" aria-label="Mary's menu" hidden>
+    <button id="miTalk" class="mi talk" type="button" role="menuitem" data-act="talk"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg><span id="miTalkLbl">Talk to Mary</span></button>
+    <button id="miCan" class="mi" type="button" role="menuitem" data-act="can"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"></path><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"></path></svg><span id="miCanLbl">Things Mary can do</span></button>
+    <button id="miInfo" class="mi" type="button" role="menuitem" data-act="info"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>My info</button>
+    <button id="miChoose" class="mi" type="button" role="menuitem" data-act="choose"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="12" r="5"></circle><rect x="12.5" y="7" width="10" height="10" rx="3"></rect><path d="M5.3 11.2h.01M8.7 11.2h.01M15.6 11.2h.01M19.4 11.2h.01" stroke-width="2.4"></path></svg><span id="miChooseLbl">Choose Mary or Sam</span></button>
+    <button id="miGames" class="mi soon" type="button" role="menuitem" aria-disabled="true" data-act="games"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"></rect><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01" stroke-width="3"></path></svg>Games<span class="chip">Coming soon</span></button>
+    <button id="closeBtn" class="mi quit" type="button" role="menuitem" data-act="close" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"></path><path d="M6.3 6.8a8 8 0 1 0 11.4 0"></path></svg><span id="closeLbl">Close Mary</span></button>
   </div>
 
-  <!-- More menu -->
-  <div id="menu" class="overlay menu" hidden>
-    <div class="panel" role="dialog" aria-label="More">
-      <div class="grid2">
-        <button class="btn" type="button" data-act="slower">Slower</button>
-        <button class="btn" type="button" data-act="faster">Faster</button>
-      </div>
-      <div class="grid2">
-        <button class="btn" type="button" data-act="quieter">Quieter</button>
-        <button class="btn" type="button" data-act="louder">Louder</button>
-      </div>
-      <button id="switchBtn" class="btn" type="button" data-act="switch">Switch to Sam</button>
-      <button id="typeMenuBtn" class="btn" type="button" data-act="type">Type to Mary</button>
-      <button class="btn" type="button" data-act="notes">My notes</button>
-      <button id="closeBtn" class="btn" type="button" data-act="close" hidden>Close</button>
-      <button class="btn yes" type="button" data-act="done">Done</button>
+  <!-- Emergency screen: shown by [data-screen="emergency"]; the only time more than one button shows -->
+  <div id="ask" class="answers" role="group" aria-label="Get help now">
+    <button id="lightBtn" class="ans yes" type="button">I pressed my call light</button>
+    <button id="okBtn" class="ans" type="button">I'm OK now</button>
+  </div>
+
+  <!-- No-key screen: shown by [data-screen="nokey"] -->
+  <div id="nokeyBox" class="answers nokeybox">
+    <button id="infoBtn" class="ans yes" type="button">Open My info</button>
+  </div>
+
+  <div id="chip" class="chip saved" role="status" hidden>Saved in My notes &#10003;</div>
+  <!-- M4b: her words show as style A captions (captions.js, aria-hidden); each finished sentence is read out here once -->
+  <div id="capLive" class="vh" aria-live="polite"></div>
+
+  <!-- M4b: Things Mary can do (app.js fills the list; skills.js adds the skills that have a screen) -->
+  <div id="canPanel" class="overlay sheet" hidden>
+    <div class="sheetcard" role="dialog" aria-modal="true" aria-labelledby="canTitle">
+      <button class="back" type="button" data-back><span aria-hidden="true">&#8592;</span> <span class="backLbl">Back to Mary</span></button>
+      <h2 id="canTitle">Things Mary can do</h2>
+      <p class="lead" id="canLead">You can say these to Mary, or tap one.</p>
+      <div id="canList" class="rows"></div>
+    </div>
+  </div>
+
+  <!-- M4b: My info, in her screen -->
+  <div id="infoPanel" class="overlay sheet" hidden>
+    <div class="sheetcard" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+      <button class="back" type="button" data-back><span aria-hidden="true">&#8592;</span> <span class="backLbl">Back to Mary</span></button>
+      <h2 id="infoTitle">My info</h2>
+      <p id="infoSaved" class="saved-note" role="status" aria-live="polite"></p>
+      <h3 id="modeTitle">How Mary talks</h3>
+      <div id="modeList" class="rows" role="radiogroup" aria-labelledby="modeTitle"></div>
+      <h3 id="voiceTitle">Mary's voice</h3>
+      <div id="voiceList" class="rows" role="radiogroup" aria-labelledby="voiceTitle"></div>
+      <h3 id="waitTitle">How long Mary waits</h3>
+      <div id="waitList" class="rows" role="radiogroup" aria-labelledby="waitTitle"></div>
+      <h3 id="skillTitle">Things Mary can do</h3>
+      <div id="skillList" class="rows"></div>
+      <a id="moreSettings" class="row link" href="/?from=mary#info">More settings</a>
+    </div>
+  </div>
+
+  <!-- M4b: Choose Mary or Sam -->
+  <div id="choosePanel" class="overlay sheet" hidden>
+    <div class="sheetcard" role="dialog" aria-modal="true" aria-labelledby="chooseTitle">
+      <button class="back" type="button" data-back><span aria-hidden="true">&#8592;</span> <span class="backLbl">Back to Mary</span></button>
+      <h2 id="chooseTitle">Choose Mary or Sam</h2>
+      <div id="chooseList" class="pick2"></div>
     </div>
   </div>
 
@@ -84,6 +99,7 @@
 <script src="/mary/face.js"></script>
 <script src="/mary/talklive.js"></script>
 <script src="/mary/voiceout.js"></script>
+<script src="/mary/captions.js"></script>
 <script src="/mary/app.js"></script>
 <script src="/mary/skills.js"></script>
 <script src="/mary/firstrun.js"></script>

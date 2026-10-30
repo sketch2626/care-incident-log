@@ -135,13 +135,16 @@ _ASKS = re.compile(
     r"|\b(?:(?:would|do)\s+you\s+(?:like|want)\s+me\s+to|(?:want|like)\s+me\s+to|shall\s+i|should\s+i|can\s+i|could\s+i|may\s+i|i\s+can|i\s+could)\s+"
     r"(?:write|note|jot|put|record|log)\s+(?:that|it|this|these|those|what|all|down|a\s+note)\b", _I)
 # "call me" only counts at the start of a sentence or after "you can" and the like: "the aides call me honey" is not a name.
+# M4a: also after "but", "and", "so" or a comma, and "everybody calls me X"; learn_name() lets a "call me" name win.
 _NAME = re.compile(
     r"(?:\bmy name is"
-    r"|(?:^\s*|[.!?]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be)\s+)call me)"
+    r"|(?:^\s*|[.!?,]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be|but|and|so)\s+)call me"
+    r"|\b(?:everybody|everyone|folks|my friends|my family)\s+calls?\s+me)"
     r"\s+([A-Z][a-z]+)", _I)
 _NOT_NAMES = {"back", "when", "if", "later", "please", "crazy", "maybe", "sometime", "tomorrow", "tonight", "today", "again", "not", "a", "an", "the",
               "names", "on", "for", "about", "anything", "whatever", "anytime",
-              "at", "in", "to", "by", "after", "before", "now", "soon"}
+              "at", "in", "to", "by", "after", "before", "now", "soon",
+              "honey", "sugar", "sweetie", "sweetheart", "darling", "dear", "hon"}  # M4a: a pet name isn't their name
 _TAG = re.compile(r"\[(remember|name):\s*([^\]]+)\]")
 _MOOD_TAG = re.compile(r"\[\s*mood\s*:\s*([^\[\]]*?)\s*\]", _I)
 # A "[" so far that may still turn into a mood tag, so the stream waits for more before deciding.
@@ -363,7 +366,13 @@ def _name_case(word):
 
 def name_from(text):
     """The name in the resident's answer to 'What would you like me to call you?', or '' if there isn't one."""
-    text = _NAME_FILLER.sub(" ", _plain(str(text or "")))
+    text = _plain(str(text or ""))
+    calls = list(re.finditer(r"\bcalls?\s+me\b", text, _I))  # M4a: "Andrew, but call me Andy" is Andy
+    if calls:
+        nick = name_from(text[calls[-1].end():])
+        if nick and nick.lower() not in _NOT_NAMES:
+            return nick
+    text = _NAME_FILLER.sub(" ", text)
     text = re.sub(r"[^\w'\-]+|[\d_]+", " ", text)
     words = []
     for w in text.split():
@@ -375,6 +384,64 @@ def name_from(text):
         words.append(w)
     name = " ".join(_name_case(w) for w in words[:3])
     return name if len(name) <= 40 else ""
+
+
+def learn_name(memory, text):  # M4a: Normal talk and Live (/api/mary/heard) both learn a name this way
+    """Sets memory.name from "my name is X" or "call me X" in what the resident said. A "call me" name wins over
+    "my name is" ("my name is Andrew but call me Andy" is Andy). Returns the name, or "" when there was none."""
+    found = ""
+    for m in _NAME.finditer(_plain(str(text or ""))):
+        word = m.group(1)
+        if word.lower() in _NOT_NAMES:
+            continue
+        if not found or "call" in m.group(0)[:m.start(1) - m.start(0)].lower():
+            found = word.capitalize()
+    if found:
+        memory.name = found
+    return found
+
+
+def clean_name(name):  # M4a: Live's set_their_name tool
+    """The name Live passed to set_their_name, cleaned like a spoken name, or "" if it isn't a name."""
+    name = name_from(str(name or "").strip()[:80])
+    return "" if not name or name.lower() in _NOT_NAMES else name
+
+
+# M4a: Live's own memory tools, in every Live chat. No "__" in the names, so they never look like a skill's.
+LIVE_MEMORY_TOOLS = [
+    {"name": "remember_fact",
+     "description": ("Save a short fact about the resident's life, in third person, following your Remembering rules "
+                     "(never staff names, money or account details, or anything they asked you to forget)."),
+     "parameters": {"type": "object", "properties": {"fact": {
+         "type": "string", "description": "The fact in third person, for example: Has a daughter named Ann in Raleigh."}},
+         "required": ["fact"]}},
+    {"name": "set_their_name",
+     "description": ("They told you what they like to be called, for example 'call me Andy'. Use the name they go by, "
+                     "exactly as they said it, never a longer or formal version."),
+     "parameters": {"type": "object", "properties": {"name": {
+         "type": "string", "description": "The name they like to be called."}}, "required": ["name"]}},
+]
+# M4a: Live's story tool. Live's own stories came out thin, so a story is written by the same brain as Normal talk.
+LIVE_STORY_TOOL = {
+    "name": "tell_story",
+    "description": ("When they ask for a story, call this with what they asked for; it gives you a well-made story "
+                    "to tell."),
+    "parameters": {"type": "object", "properties": {"request": {
+        "type": "string", "description": ("What they asked for, in a few words, for example: a funny one about "
+                                          "fishing on the Outer Banks. Say 'any story' if they didn't say.")}},
+        "required": ["request"]}}
+LIVE_CORE_TOOLS = LIVE_MEMORY_TOOLS + [LIVE_STORY_TOOL]  # M4a: every Live chat on her own screen gets these
+STORY_DEADLINE_S = 25  # M4a: a whole story, collected before Live tells it
+STORY_MIN_WORDS = 40   # M4a: anything shorter isn't a story; she tells her own instead
+STORY_PROMPT = (  # M4a
+    "Right now, write one story for this person, for you to tell out loud. Make it a fresh story you make up now: "
+    "people who feel real, with names, a real place (North Carolina flavor unless they've told you they're from "
+    "somewhere else), something that happens, a little trouble, and a turn at the end that leaves a warm point or a "
+    "smile. It can be funny, warm, a bit of North Carolina history, or an old folk tale told your way. If they asked "
+    "for something in particular, give them that. Don't build it from your own likes and hobbies; you may lean on "
+    "what you know they like. Give it a beginning, a middle and an end, about 250 to 450 words. Write only the words "
+    "you will say: plain spoken sentences, no title, no brackets or tags, no lists, no headings, no stage directions. "
+    "Don't greet them or ask a question first; just begin the story.")
 
 
 class _ReplyStream:
@@ -452,15 +519,15 @@ def skill_blocked(text):
 # --- end skills hook ---
 
 
-def _gemini_stream(body, api_key, model=""):
+def _gemini_stream(body, api_key, model="", deadline_s=None):
     """Yields the text pieces of Gemini's streamed answer. Raises on any network or API problem.
-    Stops yielding after GEMINI_DEADLINE_S, so a slow trickle ends with what was said.
+    Stops yielding after GEMINI_DEADLINE_S (or deadline_s, M4a), so a slow trickle ends with what was said.
     A functionCall part is yielded as a ToolCall (skills, M13)."""
     url = assist.ENDPOINT.replace(":generateContent", ":streamGenerateContent").format(model=model or assist.DEFAULT_MODEL) + "?alt=sse"
     req = urllib.request.Request(
         url, data=json.dumps(body).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key})
-    deadline = time.monotonic() + GEMINI_DEADLINE_S
+    deadline = time.monotonic() + (deadline_s or GEMINI_DEADLINE_S)
     with urllib.request.urlopen(req, timeout=10) as resp:
         for line in resp:
             if time.monotonic() > deadline:
@@ -503,7 +570,8 @@ def system_text(memory, companion="mary", facts=True):
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
     if facts and not memory.name:
         system += ("\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called; "
-                   "when they tell you, add the line [name: First name].")
+                   "when they tell you, add the line [name: First name], using the name they go by, "
+                   "exactly as they say it.")  # M4a
     return system
 
 
@@ -536,7 +604,17 @@ def _app_facts_text(companion):  # M9b
             out.append("- They press the Talk button each time they want to say something, and you answer out loud. "
                        "Talking back and forth without the button, and waking you by saying your name, are coming soon.")
         elif mode == "handsfree":
-            out.append("- You and they talk back and forth without pressing a button.")
+            out.append("- One tap on Talk starts a conversation; then you and they talk back and forth without pressing "
+                       "a button, until about 15 seconds of quiet or a goodbye.")
+            choice = f.get("talk_choice")  # M4a: the talk mode chosen in My info
+            if choice in ("live", "normal", "offline"):
+                plain = {"live": "Live, your most natural voice, where they can cut in any time",
+                         "normal": "Normal, where this computer turns their words into text and you answer in your voice",
+                         "offline": "Offline, where your voice is made on this computer"}[choice]
+                out.append(f"- Talk mode in My info: {plain}. If one way isn't working you switch to the next by yourself.")
+            if f.get("talk_on_open"):  # M4a
+                out.append("- When your screen opens, you start talking by yourself: you say hello and listen, so they "
+                           "don't need to tap Talk.")
         rate, volume = f.get("voice_rate"), f.get("voice_volume")
         if rate is not None and volume is not None:
             speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"
@@ -567,10 +645,34 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     contents = [{"role": t["role"], "parts": [{"text": t["text"]}]} for t in turns]
     contents.append({"role": "user", "parts": [{"text": text}]})
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 256}}
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1200}}  # M4a: room for a whole story; the brain keeps chat short
     if tools:  # --- skills hook (M13) ---
         body["tools"] = tools
     return body
+
+
+def tell_story(request, memory, api_key, model="", companion="mary"):  # M4a: Live's tell_story tool
+    """One well-made story for Live to tell aloud, written by the same brain as Normal talk (with her app facts and
+    what she knows of them). Returns the story as plain spoken text, or "" on any problem (no key, network, too short)."""
+    if not api_key:
+        return ""
+    ask = " ".join(str(request or "").split())[:300]
+    body = {"systemInstruction": {"parts": [{"text": system_text(memory, companion) + "\n\n" + STORY_PROMPT}]},
+            "contents": [{"role": "user", "parts": [{"text": "Tell me a story" + (f": {ask}" if ask else ".")}]}],
+            "generationConfig": {"temperature": 0.9, "maxOutputTokens": 1500}}
+    try:
+        text = "".join(p for p in _gemini_stream(body, api_key, model, deadline_s=STORY_DEADLINE_S)
+                       if isinstance(p, str))
+    except Exception:
+        return ""
+    text = _TAG.sub("", _MOOD_TAG.sub("", text))
+    text = re.sub(r"\[[^\]]*\]?", "", text)       # any other bracketed note, or one cut off at the end
+    text = re.sub(r"[*#]+", "", text)              # markdown bold and headings are never spoken
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s*\n\s*\n\s*", "\n\n", text).strip()
+    end = re.search(r"[.!?…][\"'”’)]*(?=[^.!?…]*$)", text)  # a story cut off by the deadline ends on a whole sentence
+    text = text[:end.end()] if end else text
+    return text if len(text.split()) >= STORY_MIN_WORDS else ""
 
 
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
@@ -667,9 +769,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         offer = None if kind == "self_harm" else lapse_offer(text)
         if offer:
             memory.pending_offer = offer
-    m = _NAME.search(_plain(text))
-    if m and m.group(1).lower() not in _NOT_NAMES:
-        memory.name = m.group(1).capitalize()
+    learn_name(memory, text)  # M4a: shared with Live's /api/mary/heard
 
     error = ""
     remembered = []

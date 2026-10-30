@@ -13,37 +13,14 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
   user-select:none;-webkit-user-select:none}
 #face{position:absolute;inset:0;z-index:0}
 
-/* the dock: Talk button, caption, chip */
-.dock{position:absolute;left:24px;right:24px;bottom:24px;z-index:10;display:flex;flex-direction:column;gap:16px;pointer-events:none}
-/* No scrolling here: on a very short window the Talk button must stay in view. More sits above the dock (z-index 20), so it can always be tapped. */
-.dock > *{pointer-events:auto}
-.row{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
 
-.talk{position:relative;display:flex;align-items:center;justify-content:center;gap:18px;
-  min-width:340px;min-height:104px;margin-left:auto;padding:0 32px;
-  font-size:36px;font-weight:700;background:#1f1b16;color:#fff;border:0;border-radius:24px;
-  box-shadow:0 7px 0 rgba(0,0,0,.28)}
-.talk:active{transform:translateY(4px);box-shadow:0 3px 0 rgba(0,0,0,.28)}
-.talk:disabled{background:#4a4338;cursor:default;transform:none;box-shadow:0 7px 0 rgba(0,0,0,.2)}
-.talk .ic{display:none;width:52px;height:52px;flex:none}
-.talk[data-ic="mic"] .ic-mic,
-.talk[data-ic="done"] .ic-done,
-.talk[data-ic="type"] .ic-type,
-.talk[data-ic="wait"] .ic-wait{display:block}
-.talk .ring{position:absolute;inset:-12px;border:6px solid rgba(217,140,69,.95);border-radius:36px;
-  opacity:0;pointer-events:none;will-change:transform,opacity;display:none}
-.talk[data-state="listening"] .ring{display:block;opacity:.3}
-.talk[data-state="listening"]{background:#0f5560}
+/* M4b: her captions are in captions.css; this is the polite live region they are read out from (screen readers only) */
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 
-.caption{max-height:182px;overflow-y:auto;overscroll-behavior:contain;
-  background:rgba(31,27,22,.9);color:#fff;font-size:36px;font-weight:600;line-height:1.3;
-  padding:18px 28px;border-radius:20px;user-select:text;-webkit-user-select:text}
-.caption.said{background:rgba(255,254,250,.94);color:#1f1b16;font-weight:500;border:3px solid #62574a}
-.urgent .caption{background:#7a1212}
-.urgent .caption.said{background:rgba(255,254,250,.94);color:#1f1b16}
-
-.chip{align-self:flex-start;background:#fffefa;color:#0b4a54;border:3px solid #0f5560;border-radius:16px;
-  padding:8px 20px;font-size:26px;font-weight:700;line-height:1.3}
+/* M4b: "Saved in My notes", top left, clear of the Menu button */
+.chip.saved{position:absolute;top:28px;left:28px;z-index:15;max-width:calc(100vw - 420px);background:#fffefa;color:#0b4a54;
+  border:3px solid #0f5560;border-radius:16px;padding:8px 20px;font-size:26px;font-weight:700;line-height:1.3}
 
 /* buttons */
 .btn{min-height:72px;padding:0 24px;font-size:26px;font-weight:700;border-radius:18px;
@@ -54,42 +31,91 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .btns{display:flex;gap:12px;flex-wrap:wrap}
 .btns.col{flex-direction:column}
 
-/* emergency card: only on the emergency screen */
-.ask{display:none;width:440px;max-width:100%;background:rgba(255,254,250,.94);border:3px solid #62574a;border-radius:22px;padding:18px 22px}
-.ask p{margin:0 0 12px;font-size:30px;font-weight:700;line-height:1.25}
-.ask p.alert{color:#7a1212}
-[data-screen="emergency"] .ask{display:block}
-.ask .btn.done{background:#0f5560;border-color:#0f5560;color:#fff}
+/* M4b: emergency answers (boards SOS-Mary / SOS-Sam, r6.css .answers/.ans): the only time more than one button shows.
+   The no-key screen's one button uses the same look. */
+.answers{position:absolute;left:16px;right:16px;bottom:clamp(150px,26.75vh,320px);z-index:10;display:none;
+  justify-content:center;flex-wrap:wrap;gap:24px}
+[data-screen="emergency"] #ask{display:flex}
+[data-screen="nokey"] .nokeybox{display:flex}
+.ans{min-height:92px;padding:0 38px;font:700 32px/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fffdf8;
+  border:4px solid #2b1f17;border-radius:26px;box-shadow:0 6px 0 rgba(43,31,23,.22);cursor:pointer}
+.ans.yes{background:#0f5560;border-color:#0f5560;color:#ffffff}
+.ans:active{transform:translateY(3px);box-shadow:0 3px 0 rgba(43,31,23,.22)}
 
-/* no-key box: only on the no-key screen */
-.nokeybox{display:none}
-[data-screen="nokey"] .nokeybox{display:block}
-
-/* More button, top right */
-.more{position:absolute;top:24px;right:24px;z-index:20;min-width:64px;min-height:64px;padding:0 24px;
-  background:#fffefa;color:#1f1b16;border:3px solid #1f1b16;border-radius:24px;font-size:24px;font-weight:700}
+/* M4b: the one button, top right; the menu drops down from it (r6.css .menu-btn, .menu, .mi; boards Menu-Mary / Menu-Sam) */
+.menu-btn{position:absolute;top:28px;right:28px;z-index:20;display:flex;align-items:center;gap:14px;height:96px;padding:0 36px 0 28px;
+  font:700 34px/1 "Segoe UI",system-ui,sans-serif;color:#2b1f17;background:#fffdf8;border:4px solid #2b1f17;border-radius:48px;
+  box-shadow:0 6px 0 rgba(43,31,23,.22);cursor:pointer}
+.menu-btn svg{width:44px;height:44px;flex:none}
+.menu-btn .ic-hide,.menu-btn.open .ic-menu{display:none}
+.menu-btn.open .ic-hide{display:block}
+.menu-btn.open{background:#2b1f17;color:#fffdf8;box-shadow:none;transform:translateY(4px)}
+.menu{position:absolute;top:146px;right:28px;z-index:30;width:560px;max-width:calc(100vw - 32px);max-height:calc(100vh - 160px);
+  overflow-y:auto;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:10px;background:#fffdf8;
+  border:4px solid #2b1f17;border-radius:36px;box-shadow:0 22px 50px rgba(70,45,20,.28)}
+.menu[hidden]{display:none}
+.menu::before{content:"";position:absolute;top:-17px;right:92px;width:28px;height:28px;background:#fffdf8;border-left:4px solid #2b1f17;
+  border-top:4px solid #2b1f17;border-radius:6px 0 0 0;transform:rotate(45deg)}
+.mi{display:flex;flex:none;align-items:center;gap:22px;min-height:88px;padding:0 26px;font:600 32px/1.15 "Segoe UI",system-ui,sans-serif;
+  color:#1f1b16;background:#ffffff;border:3px solid #d9cbb8;border-radius:24px;text-align:left;cursor:pointer}
+.mi svg{width:46px;height:46px;flex:none}
+.mi.talk{background:#0f5560;border-color:#0f5560;color:#ffffff}
+.mi.talk[aria-disabled="true"]{background:#4a6f74;border-color:#4a6f74;cursor:default}
+.mi.soon{background:#f6f0e7;border-style:dashed;color:#5a4d40;cursor:default}
+.mi .chip{margin-left:auto;padding:6px 16px;border-radius:999px;background:#ece2d3;color:#4a3d31;font-size:22px;font-weight:700}
+.mi.quit{margin-top:6px;border-color:#2b1f17}
 
 /* menu and typing */
 .overlay{position:fixed;inset:0;z-index:50;display:flex;justify-content:center;align-items:flex-start;
   padding:24px;background:rgba(31,27,22,.5);overflow-y:auto}
-.overlay.menu{justify-content:flex-end}
 .panel{width:min(520px,100%);background:#fffefa;border:3px solid #62574a;border-radius:24px;padding:20px;
   display:flex;flex-direction:column;gap:12px;user-select:none;-webkit-user-select:none}
 .panel .btn{width:100%}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .panel.typing{width:min(760px,100%);margin-top:4vh}
 .panel.typing label{font-size:28px;font-weight:700;line-height:1.3}
 .panel.typing textarea{width:100%;min-height:150px;resize:vertical;font-size:30px;line-height:1.35;padding:14px 16px;
   color:#1f1b16;background:#fff;border:3px solid #1f1b16;border-radius:16px;user-select:text;-webkit-user-select:text}
 .panel.typing .btns .btn{flex:1 1 200px;width:auto}
 
+/* M4b: in-screen panels (Things Mary can do, My info, Choose Mary or Sam): the menu's look, big and warm */
+.overlay.sheet{z-index:40;justify-content:center;align-items:flex-start;padding:24px 16px;background:rgba(43,31,23,.45)}
+.sheetcard{width:min(860px,100%);margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:14px;background:#fffdf8;
+  border:4px solid #2b1f17;border-radius:36px;box-shadow:0 22px 50px rgba(70,45,20,.28);user-select:none;-webkit-user-select:none}
+.sheetcard h2{margin:6px 0 0;font-size:40px;line-height:1.2}
+.sheetcard h3{margin:18px 0 0;font-size:32px;line-height:1.2}
+.sheetcard .lead,.sheetcard .saved-note{margin:0;font-size:26px;line-height:1.35;color:#453d34}
+.sheetcard .saved-note{color:#0b4a54;font-weight:700}
+.sheetcard .saved-note:empty{display:none}
+.back{align-self:flex-start;display:flex;align-items:center;gap:14px;min-height:96px;padding:0 36px;font:700 34px/1 "Segoe UI",system-ui,sans-serif;
+  color:#fffdf8;background:#2b1f17;border:4px solid #2b1f17;border-radius:48px;cursor:pointer}
+.rows{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:center;gap:18px;min-height:88px;padding:12px 26px;font:600 30px/1.2 "Segoe UI",system-ui,sans-serif;
+  color:#1f1b16;background:#ffffff;border:3px solid #d9cbb8;border-radius:24px;text-align:left;text-decoration:none;cursor:pointer}
+.row .txt{display:flex;flex-direction:column;gap:4px;flex:1 1 auto;min-width:0}
+.row .say{font-size:24px;font-weight:600;color:#5a4d40}
+.row[aria-checked="true"]{border-color:#0f5560;background:#e8f3f4;box-shadow:inset 0 0 0 3px #0f5560}
+.row[aria-checked="true"] .txt::after{content:"✓ Chosen";font-size:24px;font-weight:700;color:#0b4a54}
+.row[aria-disabled="true"]{background:#f6f0e7;border-style:dashed;color:#5a4d40;cursor:default}
+.row > .main{flex:1 1 auto;display:flex;align-items:center;min-height:72px;padding:0;font:inherit;color:inherit;background:none;
+  border:0;text-align:left;cursor:pointer}
+.row:has(> .main[aria-checked="true"]){border-color:#0f5560;background:#e8f3f4;box-shadow:inset 0 0 0 3px #0f5560}
+.row > .main[aria-checked="true"] .txt::after{content:"✓ Chosen";font-size:24px;font-weight:700;color:#0b4a54}
+.row > .main[aria-disabled="true"]{color:#5a4d40;cursor:default}
+.row.link{justify-content:center;border-color:#2b1f17;font-weight:700}
+.row .side{flex:none;min-width:150px;min-height:72px;padding:0 22px;font:700 28px/1 "Segoe UI",system-ui,sans-serif;border-radius:20px;
+  border:3px solid #2b1f17;background:#fffdf8;color:#1f1b16;cursor:pointer}
+.row .side[aria-pressed="true"]{background:#0f5560;border-color:#0f5560;color:#fff}
+.row .side[aria-disabled="true"]{background:#ece2d3;border-color:#ece2d3;color:#4a3d31;cursor:default}
+.pick2{display:flex;flex-wrap:wrap;gap:20px}
+.pick2 .row{flex:1 1 300px;justify-content:center;min-height:160px;font-size:44px;font-weight:700}
+.pick2 .row .txt{align-items:center;flex:none}
+.mi:active:not([aria-disabled="true"]),.row:active:not([aria-disabled="true"]),.back:active{transform:translateY(2px)}
+
 /* first run: Choose your companion (board R4Choose) and First hello (R4FirstHello). firstrun.js builds the cards.
-   The talk button is hidden on both; it comes back while she is listening for your name. More stays, so there is always a way out,
-   but on these two screens its menu offers only Close (when this is her own window) and Done: the other items would derail the first run. */
-[data-screen="choose"] .menu .panel > :not(#closeBtn):not([data-act="done"]),
-[data-screen="hello"] .menu .panel > :not(#closeBtn):not([data-act="done"]){display:none}
-[data-screen="choose"] .talk{display:none}
-[data-screen="hello"]:not([data-phase="listening"]) .talk{display:none}
+   The Menu button stays, so there is always a way out, but on these two screens the menu offers only Close Mary
+   (when this is her own window): the other items would derail the first run. "Hide menu" closes it. */
+[data-screen="choose"] .menu > :not(#closeBtn),
+[data-screen="hello"] .menu > :not(#closeBtn){display:none}
 
 .choose{position:absolute;inset:0;z-index:5;opacity:1;transition:opacity .5s ease;
   --fw:max(220px,min(520px,40vw,calc(50vw - 230px),calc((100vh - 330px) * 1.6)));
@@ -122,15 +148,12 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .mf-dim.on{opacity:.45;transition:opacity 20s linear}
 .mf-root:has(.mf-dim.on) *{animation-play-state:paused}   /* dimmed = nobody around: her face stops animating to save battery */
 
-@media (max-width:900px){
-  .row{flex-wrap:wrap;justify-content:flex-end}
-  .ask{width:100%}
-}
-@media (max-height:700px){
-  .caption{max-height:172px;font-size:34px}
-  .talk{min-height:96px}
+@media (max-width:700px){
+  .menu-btn{top:16px;right:16px}
+  .menu{top:126px;right:16px}
 }
 @media (prefers-reduced-motion:reduce){
+  .menu-btn.open,.mi:active,.row:active,.back:active,.ans:active{transform:none!important}   /* M4b */
   *{animation:none!important;transition:none!important}
   .mf-dim,.mf-dim.on{transition:opacity .4s ease!important}        /* reduced motion: a quick fade, not a slow one */
 }

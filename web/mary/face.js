@@ -9,11 +9,23 @@
      face.setMood(m)       one of MaryFace.MOODS (unknown -> 'talking')
      face.setActivity(a)   'resting' | 'listening' | 'thinking' | 'talking'
      face.setCompanion(c)  'mary' | 'him' (a clean cut: new face, new background, new glow)
+     face.setLoud(on)      while listening: the resident is talking (bright, fast ear waves and glow)
+     face.setMenuOpen(on)  the menu is open: she moves left (translate -105 -30), looks at it, closed smile
+     face.setEmergency(on) emergency: the calm concerned face, a little higher (translate 0 -50),
+                           a steady rose glow (never flashing). It wins over every mood and activity.
      face.bounce()         one happy hop
      face.destroy()
+     face.getState()       { companion, mood, activity, shown, listening, loud, thinking, cloud, menuOpen, emergency }
+   Options: { companion, cloudDelay }  cloudDelay = ms in thinking before the thought cloud shows (400).
 
-   Which face shows: activity 'listening' or 'thinking' shows that face, otherwise the mood's face.
+   Which face shows: emergency first, then activity 'listening' or 'thinking', otherwise the mood's face.
    Activity 'talking' (or the mood 'talking') swaps the resting mouth for an open, moving mouth.
+   Round 6 boards (mockups/mary/round6/, Listen-*, Think-*-Word, Menu-*, SOS-*):
+     listening  ear waves on both sides, sky-blue glow, slight lean (setLoud brightens and speeds them)
+     thinking   the face eases 60 px lower (of 800), eyes drift up-left, lavender glow, then after
+                cloudDelay a thought cloud up-left with "Thinking…" coloring in, over and over
+   The states are classes on the root (face.el) for the page to read:
+     mf-listen, mf-loud, mf-think, mf-cloud, mf-menu, mf-sos
 
    COMPANIONS: each entry has the same shape (COMPANIONS.him is the second example, drawn from
    mockups/mary/round4/R4His*.dc.html; Andy named him Sam):
@@ -125,11 +137,38 @@
   const LAUGH_LINES = `<g fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.6">` +
     `<path d="${G.eyeL('M210 150 L198 142')}"/><path d="${G.eyeL('M208 166 L194 166')}"/>` +
     `<path d="${G.eyeR('M430 150 L442 142')}"/><path d="${G.eyeR('M432 166 L446 166')}"/></g>`;
-  const DOTS = '<g fill="#8b76c6"><circle class="mf-dot" cx="468" cy="109" r="8"/><circle class="mf-dot" cx="494" cy="89" r="9"/><circle class="mf-dot" cx="522" cy="71" r="10"/></g>';
   const SKY = '<path d="M118 62 A34 34 0 1 0 156 116 A27 27 0 1 1 118 62 Z" fill="#8e8fc7" opacity="0.75"/>' +
     '<g fill="#8e8fc7"><circle class="mf-twinkle" cx="190" cy="60" r="4"/><circle class="mf-twinkle" cx="84" cy="128" r="3"/><circle class="mf-twinkle" cx="214" cy="104" r="3"/></g>';
   const ZZ = '<g fill="#5d5f9e" font-family="Segoe UI, sans-serif" font-weight="700">' +
     '<text class="mf-zz" x="452" y="135" font-size="30">z</text><text class="mf-zz" x="478" y="109" font-size="36">z</text><text class="mf-zz" x="508" y="81" font-size="42">z</text></g>';
+
+  /* ---------- round 6 pieces (mockups/mary/round6/*.dc.html): final coordinates, copied from the boards ---------- */
+  // a closed line mouth in the boards' mouth colour, 7 wide
+  const mLine = d => `<path d="${d}" fill="none" stroke="${MOUTH}" stroke-width="7" stroke-linecap="round"/>`;
+  // two brows in final coordinates; lift = the gentle lift of both (listening)
+  const bPair = (l, rt, col, w, lift) => {
+    const g = `<g fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round"><path d="${l}"/><path d="${rt}"/></g>`;
+    return lift ? `<g class="mf-lift">${g}</g>` : g;
+  };
+  // an eye: its shape plus white catchlights [cx, cy, r, opacity?] (no sparkle)
+  const lights = a => a.map(c => `<circle cx="${c[0]}" cy="${c[1]}" r="${c[2]}" fill="#fff"${c[3] ? ` opacity="${c[3]}"` : ''}/>`).join('');
+  const oval = (cx, cy, rx, ry, l) => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${INK}"/>` + lights(l);
+  const box = (x, y, w, h, rx, l) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${INK}"/>` + lights(l);
+  // listening: sound waves where the ears would be, three arcs each side, small to large (Listen-Mary / Listen-Sam)
+  const EARS = '<g class="mf-ears" aria-hidden="true">' + [
+    ['mf-l mf-w1', 'M188.7 183.1 A20 20 0 0 0 188.7 208.9', 4.5], ['mf-l mf-w2', 'M176.4 172.9 A36 36 0 0 0 176.4 219.1', 5.5],
+    ['mf-l mf-w3', 'M164.2 162.6 A52 52 0 0 0 164.2 229.4', 6.5], ['mf-r mf-w1', 'M451.3 183.1 A20 20 0 0 1 451.3 208.9', 4.5],
+    ['mf-r mf-w2', 'M463.6 172.9 A36 36 0 0 1 463.6 219.1', 5.5], ['mf-r mf-w3', 'M475.8 162.6 A52 52 0 0 1 475.8 229.4', 6.5]
+  ].map(w => `<path class="mf-wave ${w[0]}" d="${w[1]}" stroke-width="${w[2]}"/>`).join('') + '</g>';
+  // thinking (b): the thought cloud up and to her left, with rising trail bubbles (Think-Mary-Word / Think-Sam-Word).
+  // It sits on its own layer in the screen's 640x400 space, so it stays put while her face eases down and leans.
+  const PUFFS = '<ellipse cx="172" cy="38" rx="58" ry="21"/><circle cx="124" cy="42" r="16"/><circle cx="142" cy="24" r="18"/>' +
+    '<circle cx="172" cy="20" r="18"/><circle cx="202" cy="24" r="18"/><circle cx="222" cy="42" r="16"/>' +
+    '<circle cx="198" cy="54" r="12"/><circle cx="170" cy="56" r="12"/><circle cx="144" cy="54" r="12"/>';
+  const CLOUD = '<svg class="mf-cloud-svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><g class="mf-puffs">' +
+    '<g class="mf-trail"><circle cx="236" cy="103" r="3.5"/><circle cx="226" cy="92" r="5"/><circle cx="214" cy="78" r="7"/></g>' +
+    `<g class="mf-ol">${PUFFS}</g><g class="mf-fl">${PUFFS}</g></g></svg>` +
+    '<div class="mf-cloudword" aria-hidden="true"><span class="mf-w" data-t="Thinking…">Thinking…</span></div>';
 
   /* ---------- his pieces (round 4, R4His*.dc.html): already in final coordinates, so no G.* mappers ---------- */
   const H_BROW = '#5a3d28';
@@ -172,21 +211,21 @@
   const H_LAUGH_LINES = `<g fill="none" stroke="${H_BROW}" stroke-width="4" stroke-linecap="round" opacity="0.6">` +
     '<path d="M222 176 L212 170"/><path d="M220 190 L208 192"/><path d="M418 176 L428 170"/><path d="M420 190 L432 192"/></g>';
   // thought dots, moon and zz: Mary's, in his slightly deeper blues and purples
-  const H_DOTS = DOTS.replace('#8b76c6', '#7a66b8');
   const H_SKY = SKY.replace(/#8e8fc7/g, '#7f81bd');
   const H_ZZ = ZZ.replace('#5d5f9e', '#52558f');
 
   // fills in the defaults for a mood
   const M = o => Object.assign({
     pulse: 'edge', motion: 'float', dusk: false, blush: 0.8,
-    blink: false, look: '', pop: false, extras: '', behind: ''
+    blink: false, look: '', pop: false, extras: '', behind: '', dy: -30, cheekY: 0
   }, o);
 
   /* ---------- companions ---------- */
   const COMPANIONS = {
     mary: {
       name: 'Mary',
-      look: { glowStyle: 'round' },   // her cream background, dusk, blush and round glow are the CSS defaults
+      look: { glowStyle: 'round',   // her cream background, dusk, blush, round glow and ink are the CSS defaults
+        menuSmile: mLine('M300 260 Q320 280 340 260') },   // Menu-Mary: the closed smile while the menu is open
       moods: {
         resting: M({
           label: 'resting', glow: [242, 183, 102],
@@ -194,17 +233,17 @@
           eyes: arcs('M226 166 Q248 180 270 166', 'M370 166 Q392 180 414 166', 8),
           mouth: line('M300 252 Q320 266 340 252', 6), talk: NEUTRAL
         }),
-        listening: M({
-          label: 'listening', glow: [120, 190, 220], pulse: 'fast', motion: 'lean', blink: true, look: 'peek',
-          brows: brows('M218 112 C222 90 258 82 276 96', 'M422 112 C418 90 382 82 364 96', 'both'),
-          eyes: opens(22, 30),
-          mouth: line('M304 254 Q320 262 336 254', 6), talk: NEUTRAL
+        listening: M({   // Listen-Mary (round 6)
+          label: 'listening', glow: [110, 185, 220], pulse: 'ear', motion: 'lean', blush: 0.45, blink: true, cheekY: 236,
+          brows: bPair('M226 130 C230 106 266 98 284 112', 'M414 130 C410 106 374 98 356 112', BROW, 5, true),
+          eyes: eyePair(oval(256, 180, 27, 36, [[265, 166, 9], [247, 193, 4, 0.85]]), oval(384, 180, 27, 36, [[393, 166, 9], [375, 193, 4, 0.85]])),
+          mouth: mLine('M304 262 Q320 274 336 262'), talk: NEUTRAL, extras: EARS
         }),
-        thinking: M({
-          label: 'thinking', glow: [176, 156, 222], blush: 0.6, blink: true, look: 'think',
-          brows: brows('M218 122 C222 100 258 92 276 106', 'M422 108 C418 86 382 78 364 92', 'right'),
-          eyes: opens(21, 28),
-          mouth: line('M302 258 Q318 252 338 260', 6), talk: NEUTRAL, extras: DOTS
+        thinking: M({   // Think-Mary-Word (round 6); the cloud is on its own layer
+          label: 'thinking', glow: [176, 156, 222], pulse: 'slow', motion: 'lean', blush: 0.45, blink: true, look: 'ponder',
+          brows: bPair('M228 134 C232 110 266 102 284 116', 'M412 142 C406 130 378 126 356 132', BROW, 5),
+          eyes: eyePair(oval(256, 182, 25, 33, [[264, 170, 8]]), oval(384, 182, 25, 33, [[392, 170, 8]])),
+          mouth: mLine('M306 268 Q322 261 337 270'), talk: NEUTRAL
         }),
         talking: M({
           label: 'talking', glow: [245, 170, 110], blink: true, look: 'peek',
@@ -262,6 +301,14 @@
           eyes: opens(21, 28),
           mouth: line('M298 260 Q320 254 342 260', 6),
           talk: say('M303 268 Q320 262 337 268 Q335 289 320 289 Q305 289 303 268 Z', 320, 282.5, 10, 4)
+        }),
+        // emergency (SOS-Mary, round 6): inner brows raised, no sparkle, face a little higher, steady rose glow
+        sos: M({
+          label: 'concerned and calm', glow: [232, 110, 120], pulse: 'steady', blush: 0.45, blink: true, dy: -50, smile: false,
+          brows: bPair('M230 136 C244 128 266 116 284 110', 'M410 136 C396 128 374 116 356 110', BROW, 5),
+          eyes: eyePair(oval(256, 182, 24, 31, [[264, 171, 7]]), oval(384, 182, 24, 31, [[392, 171, 7]])),
+          mouth: mLine('M302 270 Q320 262 338 270'),
+          talk: say('M302 268 Q320 262 338 268 Q336 288 320 288 Q304 288 302 268 Z', 320, 282, 10, 4)
         })
       }
     },
@@ -275,7 +322,9 @@
         glowStyle: 'square', alpha: 0.85,
         bg: 'radial-gradient(ellipse at 50% 42%,#fdf8ee 0%,#f6e8cc 50%,#e9cf9f 100%)',
         dusk: 'radial-gradient(ellipse at 50% 42%,#efe2c8 0%,#d4c3a6 55%,#9b95b9 100%)',
-        cheekY: 236, cheekRy: 14
+        cheekY: 236, cheekRy: 14,
+        ink: '#1b5a8c',   // his "Thinking…" colour (Mary's #9b2c58 is the CSS default)
+        menuSmile: mLine('M290 260 Q320 282 350 260')   // Menu-Sam
       },
       moods: {
         resting: M({
@@ -284,17 +333,17 @@
           eyes: hArcs('M236 186 C242 196 270 196 276 186', 7),
           mouth: hLine('M288 262 Q320 276 352 262'), talk: H_GRIN
         }),
-        listening: M({
-          label: 'listening', glow: [100, 176, 212], pulse: 'fast', motion: 'lean', blink: true, look: 'peek',
-          brows: hBrows('M226 124 C238 114 266 112 284 118', 'both'),
-          eyes: hEyes(46, 56, 18, 13, 7.5),
-          mouth: hLine('M300 265 Q320 274 340 265'), talk: H_GRIN
+        listening: M({   // Listen-Sam (round 6)
+          label: 'listening', glow: [95, 170, 215], pulse: 'ear', motion: 'lean', blush: 0.45, blink: true, cheekY: 238,
+          brows: bPair('M226 128 C238 118 266 116 284 122', 'M414 128 C402 118 374 116 356 122', H_BROW, 6.5, true),
+          eyes: eyePair(box(232, 151, 48, 58, 19, [[265, 166, 8], [246, 194, 4, 0.85]]), box(360, 151, 48, 58, 19, [[393, 166, 8], [374, 194, 4, 0.85]])),
+          mouth: mLine('M296 262 Q320 276 344 262'), talk: H_GRIN, extras: EARS
         }),
-        thinking: M({
-          label: 'thinking', glow: [152, 130, 212], blush: 0.6, blink: true, look: 'think',
-          brows: hBrows('M226 138 C238 128 266 126 284 132', 'right', 'M414 124 C402 114 374 112 356 118'),
-          eyes: hEyes(44, 52, 17, 12, 7),
-          mouth: hLine('M298 268 Q318 261 344 269'), talk: H_GRIN, extras: H_DOTS
+        thinking: M({   // Think-Sam-Word (round 6)
+          label: 'thinking', glow: [160, 140, 215], pulse: 'slow', motion: 'lean', blush: 0.45, blink: true, look: 'ponder',
+          brows: bPair('M226 128 C238 116 266 114 284 120', 'M414 140 C402 134 374 132 356 136', H_BROW, 6.5),
+          eyes: eyePair(box(234, 156, 44, 52, 17, [[264, 170, 7]]), box(362, 156, 44, 52, 17, [[392, 170, 7]])),
+          mouth: mLine('M302 268 Q322 261 342 270'), talk: H_GRIN
         }),
         talking: M({
           label: 'talking', glow: [214, 140, 50], blink: true, look: 'peek',
@@ -350,6 +399,13 @@
           eyes: hEyes(44, 52, 17, 12, 7),
           mouth: hLine('M298 268 Q320 262 342 268'),
           talk: say('M298 268 Q320 262 342 268 Q338 290 320 290 Q302 290 298 268 Z', 320, 284, 10, 3.5)
+        }),
+        sos: M({   // SOS-Sam (round 6)
+          label: 'concerned and calm', glow: [225, 105, 115], pulse: 'steady', blush: 0.45, blink: true, dy: -50, smile: false,
+          brows: bPair('M226 136 C240 130 266 120 284 114', 'M414 136 C400 130 374 120 356 114', H_BROW, 6.5),
+          eyes: eyePair(box(235, 158, 42, 50, 16, [[264, 171, 6]]), box(363, 158, 42, 50, 16, [[392, 171, 6]])),
+          mouth: mLine('M298 270 Q320 262 342 270'),
+          talk: say('M296 268 Q308 262 320 268 Q332 274 344 268 Q340 290 320 290 Q300 290 296 268 Z', 320, 284, 10, 3.5)
         })
       }
     }
@@ -384,7 +440,7 @@
   /* ---------- markup of one face ---------- */
   function faceHTML(def, id, label, look) {
     look = look || {};
-    const cy = look.cheekY || 234, cry = look.cheekRy || 15;
+    const cy = def.cheekY || look.cheekY || 234, cry = look.cheekRy || 15;
     let cheeks = '';
     if (def.blush) {
       const pulse = def.blush === 'pulse';
@@ -394,13 +450,16 @@
     }
     let eyes = def.eyes;
     if (def.pop) eyes = `<g class="mf-pop">${eyes}</g>`;
-    if (def.look) eyes = `<g class="${def.look === 'peek' ? 'mf-look' : 'mf-think'}">${eyes}</g>`;
+    if (def.look) eyes = `<g class="${def.look === 'peek' ? 'mf-look' : def.look === 'ponder' ? 'mf-ponder' : 'mf-think'}">${eyes}</g>`;
+    eyes = `<g class="mf-eyes">${eyes}</g>`;   // moves toward the menu while it is open
+    // the closed smile while the menu is open (not in an emergency)
+    const smile = look.menuSmile && def.smile !== false ? `<g class="mf-mouth-menu">${look.menuSmile}</g>` : '';
     return `<div class="mf-motion mf-${def.motion}">` +
       `<svg class="mf-svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${label}">` +
       `<defs><radialGradient id="${id}-bl"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"/>` +
       `<stop offset="1" stop-color="#f48fa6" stop-opacity="0"/></radialGradient></defs>` +
-      `<g transform="translate(0 -30)">${def.behind}${def.brows}${cheeks}${eyes}` +
-      `<g class="mf-mouth-rest">${def.mouth}</g><g class="mf-mouth-say"><g class="mf-mouth-talk">${def.talk}</g></g>` +
+      `<g transform="translate(0 ${def.dy})">${def.behind}${def.brows}${cheeks}${eyes}` +
+      `<g class="mf-mouth-rest">${def.mouth}</g>${smile}<g class="mf-mouth-say"><g class="mf-mouth-talk">${def.talk}</g></g>` +
       `${def.extras}</g></svg></div>`;
   }
 
@@ -413,7 +472,8 @@
     root.innerHTML = '<div class="mf-bg"></div><div class="mf-bg mf-dusk"></div>' +
       '<div class="mf-glow"><div class="mf-glow-in"></div></div>' +
       '<div class="mf-glow"><div class="mf-glow-in"></div></div>' +
-      '<div class="mf-fit"><div class="mf-stage"><div class="mf-sway"><div class="mf-hop"></div></div></div></div>';
+      '<div class="mf-fit"><div class="mf-stage"><div class="mf-sway"><div class="mf-hop"></div></div></div>' +
+      '<div class="mf-stage mf-over">' + CLOUD + '</div></div>';
     container.appendChild(root);
     const dusk = root.querySelector('.mf-dusk');
     const glows = root.querySelectorAll('.mf-glow');
@@ -422,12 +482,15 @@
 
     let companion = 'mary', data = COMPANIONS.mary;
     let mood = 'resting', activity = 'resting';
+    let loud = false, menuOpen = false, emergency = false, cloud = false, cloudT = 0;
+    const cloudDelay = opts.cloudDelay >= 0 ? +opts.cloudDelay : 400;
     let faces = {}, shown = null;
     let glowNow = -1, glowSig = '';
     const glowT = [0, 0];
     let reduced = !!(mql && mql.matches);
     let gone = false;
     let blinkT = 0, glanceT = 0, hopT = 0, snapT = 0;
+    const EXTRA = ['sos'];   // faces that are not moods (setEmergency)
 
     const fadeMs = () => (reduced ? 200 : 780);
 
@@ -449,12 +512,13 @@
       hop.innerHTML = '';
       faces = {};
       shown = null;
-      MOODS.forEach(key => {
+      MOODS.concat(EXTRA).forEach(key => {
         const def = data.moods[key];
         const el = document.createElement('div');
         el.className = 'mf-mood';
         el.setAttribute('data-mood', key);
         el.innerHTML = faceHTML(def, id + '-' + key, data.name + ', ' + def.label, data.look);
+        if (el.querySelector('.mf-mouth-menu')) el.classList.add('mf-has-smile');
         hop.appendChild(el);
         faces[key] = {
           el: el, def: def, hideT: 0,
@@ -469,7 +533,7 @@
     function applyLook() {
       const lk = data.look || {}, st = root.style;
       root.classList.toggle('mf-square', lk.glowStyle === 'square');
-      [['--mf-bg', lk.bg], ['--mf-dusk', lk.dusk], ['--mf-ga', lk.alpha]].forEach(p => {
+      [['--mf-bg', lk.bg], ['--mf-dusk', lk.dusk], ['--mf-ga', lk.alpha], ['--mf-ink', lk.ink]].forEach(p => {
         if (p[1]) st.setProperty(p[0], String(p[1])); else st.removeProperty(p[0]);
       });
     }
@@ -520,6 +584,9 @@
       // the neutral talking face only while she speaks; resting's closed eyes never talk
       if (key === 'talking' && activity !== 'talking') key = 'resting';
       if (key === 'resting' && activity === 'talking') key = 'talking';
+      // with the menu open she looks at it with open eyes (Menu-Mary / Menu-Sam)
+      if (key === 'resting' && menuOpen) key = 'talking';
+      if (emergency) key = 'sos';
       const talking = activity === 'talking';
       const f = faces[key];
       if (key !== shown) {
@@ -530,9 +597,25 @@
       f.el.classList.toggle('mf-talking', talking);
       f.svg.setAttribute('aria-label', data.name + ', ' + f.def.label + (talking && key !== 'talking' ? ', talking' : ''));
       // the alert glow stays on, even while she listens or thinks
-      const g = data.moods[mood === 'alert' ? 'alert' : key];
-      setGlow(g.glow, g.pulse);
+      const g = data.moods[mood === 'alert' && !emergency ? 'alert' : key];
+      const isLoud = loud && key === 'listening';
+      // the resident is talking: a brighter, faster blue (Listen-Mary's .listen.loud)
+      if (isLoud && g === data.moods.listening) setGlow(companion === 'him' ? [80, 160, 215] : [90, 175, 220], 'voice');
+      else setGlow(g.glow, g.pulse);
       dusk.classList.toggle('mf-vis', !!f.def.dusk);
+      root.classList.toggle('mf-listen', key === 'listening');
+      root.classList.toggle('mf-loud', isLoud);
+      root.classList.toggle('mf-think', key === 'thinking');
+      root.classList.toggle('mf-menu', menuOpen);
+      root.classList.toggle('mf-sos', emergency);
+      // the thought cloud comes only after a short wait, so a quick answer never flickers it
+      if (key !== 'thinking') {
+        clearTimeout(cloudT); cloudT = 0;
+        cloud = false;
+      } else if (!cloud && !cloudT) {
+        cloudT = setTimeout(() => { cloudT = 0; if (!gone && shown === 'thinking') { cloud = true; root.classList.add('mf-cloud'); } }, cloudDelay);
+      }
+      root.classList.toggle('mf-cloud', cloud);
     }
 
     /* blinks, glances and the happy hop, on random timers */
@@ -591,6 +674,21 @@
       render();
       if (activity === 'talking' && was !== 'talking') bounce();
     }
+    function setLoud(on) {
+      if (gone) return;
+      loud = !!on;
+      render();
+    }
+    function setMenuOpen(on) {
+      if (gone) return;
+      menuOpen = !!on;
+      render();
+    }
+    function setEmergency(on) {
+      if (gone) return;
+      emergency = !!on;
+      render();
+    }
     function setCompanion(c) {
       if (gone) return;
       companion = c === 'him' && COMPANIONS.him ? 'him' : 'mary';
@@ -618,6 +716,7 @@
       gone = true;
       stopSched();
       clearTimeout(snapT);
+      clearTimeout(cloudT);
       Object.keys(faces).forEach(k => clearTimeout(faces[k].hideT));
       glowT.forEach(t => clearTimeout(t));
       document.removeEventListener('visibilitychange', onVisible);
@@ -641,9 +740,16 @@
       setMood: setMood,
       setActivity: setActivity,
       setCompanion: setCompanion,
+      setLoud: setLoud,
+      setMenuOpen: setMenuOpen,
+      setEmergency: setEmergency,
       bounce: bounce,
       destroy: destroy,
-      getState: function () { return { companion: companion, mood: mood, activity: activity, shown: shown }; }
+      getState: function () {
+        return { companion: companion, mood: mood, activity: activity, shown: shown,
+          listening: shown === 'listening', loud: loud && shown === 'listening', thinking: shown === 'thinking',
+          cloud: cloud, menuOpen: menuOpen, emergency: emergency };
+      }
     };
   }
 

@@ -297,10 +297,17 @@ class TestRoutes(TalkCase):
     # status and settings
 
     def test_status_before_anything_is_set(self):
+        import voices
         status, body, _ = helpers.api("GET", "/api/mary/status")
         self.assertEqual(status, 200)
+        ready = voices.kokoro_ready()  # M4a: the offline voice may or may not be installed on this computer
         self.assertEqual(body, {"companion": "", "first_run": True, "companions": {"mary": "Mary", "him": "Sam"},
-                                "has_key": False, "name": "", "voice_rate": 0.92, "voice_volume": 1.0})
+                                "has_key": False, "name": "", "voice_rate": 0.92, "voice_volume": 1.0,
+                                "talk_mode": "live", "listen_wait": 2.5, "talk_on_open": True,  # M4a
+                                "talk_order": ["offline"] if ready else [],
+                                "offline_ready": ready,
+                                "voices": {"live": "Sulafat", "tts": "gemini:Sulafat",
+                                           "offline": "kokoro:af_heart" if ready else ""}})
 
     def test_status_after_setup(self):
         self.save(companion="him", gemini_key=KEY, voice_rate="1.1", voice_volume="0.5")

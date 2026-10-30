@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Menu open, Sam</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="r6.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&amp;family=Fredoka:wght@600&amp;family=Nunito:wght@900&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div class="scr sam">
+<div class="edge"></div>
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Sam, smiling and looking at the menu">
+<defs><radialGradient id="bls"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient></defs>
+<g transform="translate(-105 -30)"><g class="sway"><g class="face">
+<g fill="none" stroke="#5a3d28" stroke-width="6.5" stroke-linecap="round"><path d="M226 136 C238 126 266 124 284 130"></path><path d="M414 136 C402 126 374 124 356 130"></path></g>
+<ellipse class="cheek" cx="246" cy="236" rx="36" ry="14" fill="url(#bls)"></ellipse><ellipse class="cheek" cx="394" cy="236" rx="36" ry="14" fill="url(#bls)"></ellipse>
+<g transform="translate(10 4)">
+<g class="eye ss"><rect x="234" y="156" width="44" height="52" rx="17" fill="#3a2b22"></rect><circle cx="264" cy="170" r="7" fill="#ffffff"></circle><path class="spark" d="M248 188 Q249 193 254 194 Q249 195 248 200 Q247 195 242 194 Q247 193 248 188 Z" fill="#ffffff"></path></g>
+<g class="eye ss"><rect x="362" y="156" width="44" height="52" rx="17" fill="#3a2b22"></rect><circle cx="392" cy="170" r="7" fill="#ffffff"></circle><path class="spark" d="M376 188 Q377 193 382 194 Q377 195 376 200 Q375 195 370 194 Q375 193 376 188 Z" fill="#ffffff"></path></g>
+</g>
+<path d="M290 260 Q320 282 350 260" fill="none" stroke="#8a3b2e" stroke-width="7" stroke-linecap="round"></path>
+</g></g></g>
+</svg>
+<div class="tag"><b>Menu open, on Sam</b><span>Same menu; the words follow his name.</span></div>
+<button class="menu-btn open" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"></path></svg>Hide menu</button>
+<div class="menu" role="menu" aria-label="Sam's menu">
+<button class="mi talk" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Talk to Sam</button>
+<button class="mi" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"></path><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"></path></svg>Things Sam can do</button>
+<button class="mi" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>My info</button>
+<button class="mi" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="12" r="5"></circle><rect x="12.5" y="7" width="10" height="10" rx="3"></rect><path d="M5.3 11.2h.01M8.7 11.2h.01M15.6 11.2h.01M19.4 11.2h.01" stroke-width="2.4"></path></svg>Choose Mary or Sam</button>
+<button class="mi soon" type="button" role="menuitem" aria-disabled="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"></rect><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01" stroke-width="3"></path></svg>Games<span class="chip">Coming soon</span></button>
+<button class="mi quit" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"></path><path d="M6.3 6.8a8 8 0 1 0 11.4 0"></path></svg>Close Sam</button>
+</div>
+<div class="cap capA left">
+<div class="line"><span class="w done" data-t="What">What</span><span class="w done" data-t="can">can</span><span class="w done" data-t="I">I</span></div>
+<div class="line"><span class="w done" data-t="do">do</span><span class="w done" data-t="for">for</span><span class="w done" data-t="you?">you?</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

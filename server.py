@@ -67,6 +67,11 @@ SETTING_KEYS = {"resident_name", "room", "facility", "facility_address", "state"
                 "voice_mary", "voice_sam"}  # the last two: the voice the resident picked in the audition
 # Mary's voice settings: (lowest, highest, default). Saved values are clamped into range.
 VOICE_LIMITS = {"voice_rate": (0.6, 1.4, 0.92), "voice_volume": (0.2, 1.0, 1.0)}
+# M4a: how Mary's own screen talks (Live, Normal or Offline), and how many seconds of quiet end the resident's turn.
+TALK_MODES = ("live", "normal", "offline")
+VOICE_LIMITS["listen_wait"] = (1.5, 6.0, 2.5)  # M4a: clamped like the other voice settings
+SETTING_KEYS |= {"talk_mode", "listen_wait"}  # M4a
+SETTING_KEYS |= {"talk_on_open"}  # M4a: '1' (default) = she says hello and listens when her screen opens; '0' = she waits
 NO_SPEECH = "Talking isn't set up on this computer yet. You can type instead."
 
 # A dictation or note is offered to the inbox when it starts with "Incident" (or "New incident").
@@ -281,20 +286,61 @@ def mary_settings():
     for k, (_, _, default) in VOICE_LIMITS.items():
         got = clean_voice_setting(k, s.get(k))
         out[k] = float(got) if got is not None else default
+    mode = str(s.get("talk_mode") or "").strip().lower()  # M4a: the saved talk mode, Live when none is saved
+    out["talk_mode"] = mode if mode in TALK_MODES else "live"
+    out["talk_on_open"] = str(s.get("talk_on_open", "1")).strip() != "0"  # M4a: on unless turned off
     return out
 
 
 def mary_status():
     s = mary_settings()
     name = mary_memory().name
+    offline_ready = voices.kokoro_ready()  # M4a
     return {"companion": s["companion"], "first_run": not s["companion"],
             "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name,
-            "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"]}
+            "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
+            # M4a: talk modes, the order the page tries them in, and the voice for each
+            "talk_mode": s["talk_mode"], "listen_wait": s["listen_wait"], "talk_on_open": s["talk_on_open"],
+            "talk_order": talk_order(s["talk_mode"], bool(s["key"]), offline_ready), "offline_ready": offline_ready,
+            "voices": companion_voices(s["companion"] or "mary")}
+
+
+# --- M4a: talk modes and the voices for each ---
+def talk_order(mode, has_key, offline_ready):
+    """The talk modes Mary's screen tries, best first. Live and Normal need the Gemini key; Offline needs the
+    Kokoro voice installed. The page's last resort is always the computer's built-in voice, so [] is allowed."""
+    order = {"normal": ["normal", "offline"], "offline": ["offline"]}.get(mode, ["live", "normal", "offline"])
+    return [m for m in order if (offline_ready if m == "offline" else has_key)]
+
+
+def _first_voice(table, companion):
+    """The first voice of the companion's gender in GEMINI_VOICES or KOKORO_VOICES (Mary female, Sam male)."""
+    gender = "male" if companion == "him" else "female"
+    return next(n for n, g, _ in table if g == gender)
+
+
+def companion_voices(companion, saved=None):
+    """The voices Mary (or Sam) uses: {"live": <Live voice name>, "tts": "gemini:<name>", "offline": "kokoro:<name>"
+    or "" when the offline voice isn't installed}. A live:/gemini: pick sets live and tts; a kokoro: pick sets the
+    offline voice; anything not picked uses the companion's default."""
+    if saved is None:
+        saved = _all_settings()
+    picked = str(saved.get("voice_sam" if companion == "him" else "voice_mary") or "").strip()
+    kind, _, name = picked.partition(":")
+    gemini, kokoro = _first_voice(voices.GEMINI_VOICES, companion), _first_voice(voices.KOKORO_VOICES, companion)
+    if voices.valid_choice(picked):
+        if kind in ("live", "gemini"):
+            gemini = name
+        elif kind == "kokoro":
+            kokoro = name
+    return {"live": gemini, "tts": f"gemini:{gemini}",
+            "offline": f"kokoro:{kokoro}" if voices.kokoro_ready() else ""}
+# --- end M4a ---
 
 
 # M9b: what Mary and Sam are told about their own app, so they never guess about their voice or the Talk button.
-MARY_VOICE_NOW = "builtin"  # web/mary/app.js speaks with speechSynthesis, the computer's built-in voice; M4 changes this to "picked"
-MARY_TALK_MODE = "button"  # the resident presses Talk for each turn; M5 changes this to "handsfree"
+MARY_VOICE_NOW = "picked"  # M4a: her screen speaks with the voice picked in the tryout (Live, Normal or Offline)
+MARY_TALK_MODE = "handsfree"  # M4a: she and the resident talk back and forth without pressing Talk
 
 
 def mary_app_facts(companion):
@@ -302,19 +348,24 @@ def mary_app_facts(companion):
     s = mary_settings()
     with closing(connect()) as conn:
         saved = get_settings(conn)
-    picked = str(saved.get("voice_sam" if companion == "him" else "voice_mary") or "")
-    kind, _, name = picked.partition(":")
+    picked = str(saved.get("voice_sam" if companion == "him" else "voice_mary") or "").strip()
     voice = about = ""
-    if kind in ("gemini", "live"):
-        for n, _g, a in voices.GEMINI_VOICES:
-            if n == name:
-                voice, about = n, a
-    elif kind == "kokoro":
-        for n, _g, a in voices.KOKORO_VOICES:
-            if n == name:
-                voice, about = "the offline voice", a
+    if voices.valid_choice(picked):  # M4a: the voice she really uses in the saved talk mode (facts only reach
+        cv = companion_voices(companion, saved)  # Gemini, so a key is there); nothing picked: say nothing
+        order = talk_order(s["talk_mode"], True, bool(cv["offline"]))
+        if order and order[0] == "offline":
+            name = cv["offline"].partition(":")[2]
+            for n, _g, a in voices.KOKORO_VOICES:
+                if n == name:
+                    voice, about = "the offline voice", a
+        elif order:
+            for n, _g, a in voices.GEMINI_VOICES:
+                if n == cv["live"]:
+                    voice, about = n, a
     return {"voice_now": MARY_VOICE_NOW, "talk_mode": MARY_TALK_MODE, "picked_voice": voice, "picked_about": about,
-            "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"]}
+            "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
+            "talk_choice": s["talk_mode"],  # M4a: Live, Normal or Offline, as saved
+            "talk_on_open": s["talk_on_open"]}  # M4a: she starts talking when her screen opens
 
 
 mary.app_facts = mary_app_facts  # M9b: Mary's live facts about her own app
@@ -399,6 +450,45 @@ def mary_live_skill_setup(screen=None):
     Live session is built (M4)."""
     return {"tools": skill_host().gemini_tools(), "instruction": skill_host().instruction_text(screen)}
 # --- end skills hook ---
+
+
+def mary_live_memory_call(name, args):  # M4a: Live's remember_fact and set_their_name tools
+    """Saves what one of Live's memory tools asked for. The same shape as a skill call's result."""
+    args = args if isinstance(args, dict) else {}
+    if name == "set_their_name":
+        value = mary.clean_name(args.get("name"))
+        error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
+    else:
+        value = " ".join(str(args.get("fact") or "").split())
+        error = "" if value else "There was no fact to save."
+    if error:
+        return {"response": {"ok": False, "error": error}, "effects": [], "say": None}
+    with _mary_lock:
+        memory = mary_memory()
+        if name == "set_their_name":
+            memory.name = value
+        else:
+            memory.add_fact(value)
+        try:
+            memory.save()
+        except OSError:
+            return {"response": {"ok": False, "error": "It could not be saved just now."}, "effects": [], "say": None}
+    return {"response": {"ok": True}, "effects": [], "say": None}
+
+
+STORY_FAILED = {"error": "no_story",  # M4a
+                "note": "Tell a short story yourself instead, with a beginning, middle and end."}
+
+
+def mary_live_story_call(args):  # M4a: Live's tell_story tool
+    """A well-made story from the same brain as Normal talk, for Live to tell aloud. The lock is held only while
+    her memory is read, never while Gemini writes."""
+    args = args if isinstance(args, dict) else {}
+    s = mary_settings()
+    with _mary_lock:
+        memory = mary_memory()
+    story = mary.tell_story(args.get("request"), memory, s["key"], s["model"], s["companion"] or "mary")
+    return {"response": {"story": story} if story else dict(STORY_FAILED), "effects": [], "say": None}
 
 
 def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None):
@@ -595,6 +685,8 @@ def _csv_safe(value):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".woff2": "font/woff2"}  # M4b: Mary's caption font
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB), **kwargs)
 
@@ -715,6 +807,82 @@ class Handler(SimpleHTTPRequestHandler):
             body = self._body()  # the page's numbers; only whitelisted keys are kept
             voices.log({**body, "event": "played" if body.get("event") == "played" else "live"}, DATA)
             return self._send({"ok": True})
+        # --- M4a: Mary's own screen: a Live chat, the emergency check on what Live heard, and speaking her replies ---
+        if method == "POST" and path == "/api/mary/live/start":
+            body = self._body()
+            s = mary_settings()
+            if not s["key"]:
+                return self._send(*voice_failure("no_key"))
+            companion = s["companion"] or "mary"
+            screen = body.get("screen") if isinstance(body.get("screen"), str) else None
+            try:
+                skills = mary_live_skill_setup(screen)
+            except Exception:
+                skills = None  # a skills failure never stops Live
+            with _mary_lock:
+                memory = mary_memory()
+            try:
+                got = voices.live_token(companion_voices(companion)["live"], s["key"], companion, memory.name, DATA,
+                                        skills=skills, silence_ms=round(s["listen_wait"] * 1000), memory=memory,
+                                        rate=s["voice_rate"])  # M4a: rate
+            except voices.VoiceError as e:
+                return self._send(*voice_failure(e.kind))
+            return self._send({**got, "companion": companion})
+        if method == "POST" and path == "/api/mary/heard":
+            # The same emergency check as Normal talk, on Live's transcript of what the resident said.
+            text = str(self._body().get("text") or "")[:2000]
+            kind = mary.is_emergency(text) or ""
+            say = mary.EMERGENCY_TEXT.get(kind, "") if kind else ""
+            if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
+                with _mary_lock:  # as in Normal talk: the emergency cancels a waiting offer and is remembered
+                    memory = mary_memory()
+                    if kind:
+                        memory.pending_offer = None
+                    else:
+                        mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
+                    memory.add_turn("user", text.strip())
+                    if say:
+                        memory.add_turn("model", say)
+                    try:
+                        memory.save()
+                    except OSError:
+                        pass
+            return self._send({"emergency": bool(kind), "kind": kind, "say": say})
+        if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
+            text = " ".join(str(self._body().get("text") or "").split())[:2000]
+            if text:
+                with _mary_lock:
+                    memory = mary_memory()
+                    memory.add_turn("model", text)
+                    try:
+                        memory.save()
+                    except OSError:
+                        pass
+            return self._send({"ok": True})
+        if method == "POST" and path == "/api/mary/say":
+            # Mary's reply spoken in Normal (Gemini voice) or Offline (Kokoro) mode, streamed like the tryout.
+            body = self._body()
+            text = str(body.get("text") or "").strip()[:2000]
+            if not text:
+                raise ValueError(TALK_NO_TEXT)
+            mode = body.get("mode")
+            if mode not in ("normal", "offline"):
+                raise ValueError(BAD_REQUEST)
+            s = mary_settings()
+            lo, hi, _ = VOICE_LIMITS["voice_rate"]  # M4a: real speed without a pitch change
+            try:
+                rate = min(hi, max(lo, float(body["rate"]))) if body.get("rate") is not None else s["voice_rate"]
+            except (TypeError, ValueError):
+                rate = s["voice_rate"]
+            companion = s["companion"] or "mary"
+            cv = companion_voices(companion)
+            if mode == "offline":
+                voice_id = cv["offline"] or f"kokoro:{_first_voice(voices.KOKORO_VOICES, companion)}"
+                return self._voice_stream(voice_id, "", True, text, speed=rate)
+            if not s["key"]:
+                return self._send(*voice_failure("no_key"))
+            return self._voice_stream(cv["tts"], s["key"], False, text, cache=False, pace=rate)  # replies never pile up on disk
+        # --- end M4a ---
         if path == "/api/mary/skills" or path.startswith("/api/mary/skills/"):  # --- skills hook (M13) ---
             return self._skills(method, path)
         return None
@@ -732,7 +900,27 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send({"skills": out})
         if method == "POST" and path == "/api/mary/skills/call":  # Live mode's tool calls
             body = self._body()
-            return self._send(host.call(str(body.get("name") or ""), body.get("args")))
+            heard = body.get("heard")  # M4a: what Live heard; an emergency line never runs a tool
+            if isinstance(heard, str) and mary.is_emergency(heard[:2000]):
+                return self._send({"response": {"error": "emergency"}, "effects": [], "say": "",
+                                   "ok": False, "emergency": True})
+            name = str(body.get("name") or "")
+            if name in ("remember_fact", "set_their_name"):  # M4a: Live's own memory tools, not a skill
+                return self._send(mary_live_memory_call(name, body.get("args")))
+            if name == "tell_story":  # M4a: Live's story tool, after the emergency gate above
+                return self._send(mary_live_story_call(body.get("args")))
+            return self._send(host.call(name, body.get("args")))
+        m = re.fullmatch(r"/api/mary/skills/([^/]+)/image/([a-z0-9_-]{1,40}\.(jpg|png|gif|webp))", path)
+        if m and method == "GET":  # an image a skill saved in its own ctx.files (any skill, images only)
+            try:
+                data = (skills_core.SkillFiles(Path(host.data_dir) / "skills" / m.group(1)).read_bytes(m.group(2))
+                        if m.group(1) in host.skills else None)
+            except (OSError, skills_core.SkillError):
+                data = None
+            if data is None:
+                return self._send({"error": "That picture isn't here."}, 404)
+            ctype = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}[m.group(3)]
+            return self._send(data, 200, ctype, {"X-Content-Type-Options": "nosniff"})  # end_headers adds no-store
         m = re.fullmatch(r"/api/mary/skills/([^/]+)(/event|/broken|/view|/lock)?", path)
         if not m:
             return None
@@ -774,12 +962,12 @@ class Handler(SimpleHTTPRequestHandler):
         return self._send(data, 200, ctype)
     # --- end skills hook ---
 
-    def _voice_stream(self, voice_id, key, offline, text=voices.LINE):
+    def _voice_stream(self, voice_id, key, offline, text=voices.LINE, cache=True, speed=1.0, pace=None):  # M4a: speed, pace
         """One voice sample as raw 16-bit PCM, sent as it is made so the page can play it at once. Nothing is
         sent until the first audio is ready, so a failure is still a plain JSON answer. No Content-Length: the
-        connection closing ends it (HTTP/1.0)."""
-        gen = (voices.kokoro_stream(voice_id, DATA, text=text) if offline
-               else voices.tts_stream(voice_id, key, DATA, text=text))
+        connection closing ends it (HTTP/1.0). cache=False (M4a): a Gemini reply is never saved or reused."""
+        gen = (voices.kokoro_stream(voice_id, DATA, text=text, speed=speed) if offline
+               else voices.tts_stream(voice_id, key, DATA, text=text, cache=cache, pace=pace))  # cache: M4a
         try:
             first = next(gen)
         except voices.VoiceError as e:
@@ -950,6 +1138,15 @@ class Handler(SimpleHTTPRequestHandler):
                         v = str(v).strip()
                         if v and not voices.valid_choice(v):
                             continue  # a known voice id, or blank to clear
+                    if k == "talk_mode":  # M4a: live, normal or offline; anything else is ignored
+                        v = str(v).strip().lower()
+                        if v not in TALK_MODES:
+                            continue
+                    if k == "talk_on_open":  # M4a: '1' or '0'; anything else is ignored
+                        v = str(v).strip().lower()
+                        v = "1" if v in ("1", "true", "yes", "on") else "0" if v in ("0", "false", "no", "off") else None
+                        if v is None:
+                            continue
                     if k == "andyflow_enabled":
                         v = "1" if str(v).strip().lower() in ("1", "true", "yes", "on") else "0"
                     if k in SETTING_KEYS:

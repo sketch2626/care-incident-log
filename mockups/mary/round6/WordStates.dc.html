@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Word states</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="r6.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div class="sheet" style="height: 800px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1>Each word, in three steps · A · Coloring-in</h1>
+<p class="muted">Real size on a laptop. Words further ahead stay hidden. The next word shows as an empty outline a moment before she says it, then colors in while she says it.</p>
+</div>
+<div style="display: grid; grid-template-columns: 150px repeat(3, minmax(0, 1fr)); gap: 16px; align-items: center">
+<div></div>
+<h2>Not yet said</h2>
+<h2>Being said</h2>
+<h2>Said</h2>
+
+<h2>Mary</h2>
+<div class="scr mary" style="width: auto; height: 200px; border-radius: 22px; display: flex; align-items: center; justify-content: center"><div class="capA"><span class="w" data-t="Morning">Morning</span></div></div>
+<div class="scr mary" style="width: auto; height: 200px; border-radius: 22px; display: flex; align-items: center; justify-content: center"><div class="capA"><span class="w on f5" data-t="Morning">Morning</span></div></div>
+<div class="scr mary" style="width: auto; height: 200px; border-radius: 22px; display: flex; align-items: center; justify-content: center"><div class="capA"><span class="w done" data-t="Morning">Morning</span></div></div>
+
+<h2>Sam</h2>
+<div class="scr sam" style="width: auto; height: 200px; border-radius: 22px; display: flex; align-items: center; justify-content: center"><div class="capA"><span class="w" data-t="Morning">Morning</span></div></div>
+<div class="scr sam" style="width: auto; height: 200px; border-radius: 22px; display: flex; align-items: center; justify-content: center"><div class="capA"><span class="w on f5" data-t="Morning">Morning</span></div></div>
+<div class="scr sam" style="width: auto; height: 200px; border-radius: 22px; display: flex; align-items: center; justify-content: center"><div class="capA"><span class="w done" data-t="Morning">Morning</span></div></div>
+</div>
+<p class="muted">The word being said lifts a little. Mary colors in berry, Sam deep blue; in an emergency, a deep rose.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -217,6 +217,30 @@
         <label class="opt"><input type="checkbox" id="i-andyflow_enabled"><span class="box row"><span class="t">Connect Andy Flow</span><span class="hint" id="flowState">It is off.</span></span></label>
       </div>
     </div>
+    <!-- M4a: how Mary and Sam talk -->
+    <fieldset class="talkmode">
+      <legend class="smarth">How Mary talks</legend>
+      <div class="opts three">
+        <label class="opt"><input type="radio" name="talk_mode" value="live" checked><span class="box"><span class="t">Live (best)</span><span class="hint">Her natural voice. Talk back and forth, and cut in any time. Needs the internet.</span></span></label>
+        <label class="opt"><input type="radio" name="talk_mode" value="normal"><span class="box"><span class="t">Normal</span><span class="hint">This computer turns your words into text, then she answers in her voice. Needs the internet.</span></span></label>
+        <label class="opt"><input type="radio" name="talk_mode" value="offline"><span class="box"><span class="t">Offline</span><span class="hint">Her voice is made on this computer.</span></span></label>
+      </div>
+      <p class="note">If one way isn't working, she tries the next one by herself.</p>
+    </fieldset>
+    <fieldset class="talkmode">
+      <legend class="smarth">How long she waits before answering</legend>
+      <div class="opts three">
+        <label class="opt"><input type="radio" name="listen_wait" value="2.5" checked><span class="box"><span class="t">Usual</span><span class="hint">About 2 and a half seconds of quiet.</span></span></label>
+        <label class="opt"><input type="radio" name="listen_wait" value="4"><span class="box"><span class="t">More time</span><span class="hint">About 4 seconds. You can also say "give me more time".</span></span></label>
+      </div>
+    </fieldset>
+    <!-- M4a: she starts talking when her screen opens -->
+    <fieldset class="talkmode">
+      <legend class="smarth">When Mary opens</legend>
+      <div class="opts three">
+        <label class="opt"><input type="checkbox" id="i-talk_on_open" checked><span class="box row"><span class="t">Start talking when Mary opens</span><span class="hint">She says hello and listens, no tap needed.</span></span></label>
+      </div>
+    </fieldset>
     <h2 class="smarth">Smart helper (optional)</h2>
     <p class="warn"><b>When this is on, what you say is sent to Google to tidy it up. Leave it off to keep everything on this computer.</b></p>
     <div class="opts three">

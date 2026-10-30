@@ -9,10 +9,10 @@ You are a **worker** on Andy's second account, in your own folder (a git worktre
 
 ## How to work
 - Run the `token-saving` skill first and follow it as a **worker**. Read `CLAUDE.md`, then only the sections your brief names. Use targeted line ranges, never whole big files.
-- **Helpers, one at a time, from `.claude/agents/`:**
-  - `coder` (Sonnet) is the default.
-  - For tricky code written from scratch, run `coder` with `model: "opus"` and `effort: "xhigh"` (Andy approved this for this account).
-  - Haiku `quick-coder` is only for text-only edits (wording, doc pages). Keep it **under 100,000 tokens of context**: exact line ranges, at most about 150 lines per read, at most about 8 reads.
+- **Helpers, one at a time, from `.claude/agents/` (Andy, 2026-10-30: on this account, Opus writes the new code):**
+  - **All new code:** run `coder` with `model: "opus"`; add `effort: "xhigh"` for the tricky parts.
+  - Sonnet `coder` (the default model) only for small edits to existing code or extra tests.
+  - Haiku `quick-coder` only for text-only edits (wording, doc pages), **under 100,000 tokens of context**: exact line ranges, at most about 150 lines per read, at most about 8 reads.
   - Name the model in every report.
 - **Skills:** new abilities are built as **skills** (`docs/skills-design.md`, `docs/how-to-make-a-skill.md`, the example `skills/voice_comfort/`).
   - A skill reaches the internet only through `ctx.fetch`, with the hosts listed on its card.

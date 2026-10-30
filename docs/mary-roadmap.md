@@ -73,7 +73,16 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Live talk:** Sam's voices were easy to miss, all in one row with Mary's. The tab now has "For Mary" and "For Sam" cards like the other tabs, each with its own Talk button and the right face.
   - **Saving** gave no clear sign it worked. Now each save is checked by reading the settings back. The card then shows a big green "✓ Saved — Mary will use …", a line under the title shows both saved voices on every visit, and the voice says "Got it. That's my voice now."
 
-### M3. Mock-up boards: captions and the one-button screen (visual; worker, boards on a Design canvas first)
+### M3. Mock-up boards: captions and the one-button screen — **done, approved by Andy 2026-10-30 (43ebbf8, ff94376)**
+- **Boards (2026-10-30, Opus):** 19 boards on the Design canvas https://claude.ai/artifact/Mh4CpUMru2YGNSEycrJnCZ, static copies plus builder notes in `mockups/mary/round6/` (`README.md`, shared styles `r6.css`).
+  - Three caption styles: **A · Coloring-in** (empty white bubble letters colored in with her color), **B · Bold ink** (dark ink, her color underlines the spoken word), **C · Speech bubble** (words in a soft white bubble). Each is shown on Mary and on Sam, with word states and the two-line wrap. A live board plays all three by itself.
+  - The one button is a "Menu" pill in the top right; the menu drops from it and she scoots aside. Also listening, thinking, emergency (whole sentence at once, plus two answer buttons), and a contrast check: every caption is 7:1 or better.
+  - **Andy's picks (2026-10-30, boards updated ff94376):**
+    - Caption **A · Coloring-in**; B and C are marked not chosen.
+    - Listening is **sound waves where her ears would be**, with no "I'm listening" bar.
+    - Thinking is **a thought cloud above her head with the word "Thinking…"** (version b). The dots version (a) was not chosen.
+    - **Approved (Andy):** "I want to go ahead and approve the listening, the new listening. I like it. The coloring I select A for that. And I select B for the thinking."
+    - Emergency is approved. The menu board is approved as is ("Yes, the menu board is good. I like it."), Menu button top right.
 - Boards for:
   - The bubble-letter caption: words appear one at a time and fill with color as she says them. Show 2-3 styles.
   - Size and placement along the bottom.
@@ -83,11 +92,40 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - **Done when:** Andy approves a board. Commit copies to `mockups/mary/round6/`.
 
 ### M4. Build the new voice and the word-by-word captions (worker, Sonnet then Haiku)
+- **Andy's second try (2026-10-30), with the new brain (M9b) and `voice_comfort` (M13):**
+  - She told a story about something cool that happened in North Carolina, picked by her, and "she nailed it".
+  - "Slow down" and "speed up" both worked.
+  - When he asked for a game on the screen, she said that's coming soon but offered word games. That's the right answer.
+  - What's left is the voice: "it just really depends on when we get the good voice in there".
+- **Split (2026-10-30), so the good voice doesn't wait on the boards:**
+  - **M4a, the good voice in Mary now.** Second account, Opus; brief `docs/handoff/M4a.md`. Her Live session with his picked Mary and Sam voices, which stays open hands-free. Normal and Offline are the other choices, and each falls back to the next. Skills and the emergency check work in Live, and her captions stay plain for now.
+    - **Andy's try (2026-10-30, merged 312ccae): "the voice works."**
+      - **The brain feels generic in Live.** He asked for a story and got "well, hello there, Andrew. I would love to tell you a story, would you like to talk about this or maybe some music history?" Likely cause: `LIVE_EXTRA` limits her to 1-3 sentences, and Live can't remember things, so it never learns "call me Andy". Sent to the M4a worker.
+      - **Second try after the brain fixes (e767016):** she remembered "Andy". Still wrong:
+        - **The story** was about 3 sentences, with no structure or point. Causes: the "Short: one to three short sentences" rule in `mary/instructions.md` line 79 and `maxOutputTokens: 256` in `mary.py`.
+        - **The opening greeting** is dry and the same every time ("hello, it's late, but I'm still here").
+        - **Starting the talk** still takes a tap.
+        - All three were sent to the M4a worker. Its fix makes Mary start talking when she opens, as a setting that's on by default, until the wake word arrives.
+      - **The menu is unchanged.** That's expected, since the new menu is M4b. He found no option to switch anything: talk mode lives only in the main app's My info. He also doesn't want the big Slower/Faster/Quieter/Louder buttons in the menu. These go to M4b (brief `docs/handoff/M4b.md`).
+  - **M4b, the bubble-letter captions:** M3 approved 2026-10-30, so it's ready to start. The build list is "Build list for M4b" in `mockups/mary/round6/README.md`. It covers style A captions, the ear-wave listening, the thought cloud with "Thinking…", the top-right Menu exactly as drawn and the emergency screen, with board files and `r6.css` classes.
+    - **Built 2026-10-30 (second account, branch `other/M4b`; 450 tests), waiting for Andy to try:**
+      - Font (6e74f69): Fredoka 600 bundled in `web/mary/fonts/` (SIL OFL, `OFL.txt` beside it), served as `font/woff2`.
+      - Face states (aa64f32): `face.setLoud`, `setMenuOpen`, `setEmergency`; the listening and thinking faces are redrawn from the round 6 boards (ear waves, thought cloud with "Thinking…" after 400 ms).
+      - Captions (c4081e1, b2ea575): `web/mary/captions.js` (`MaryCaptions`), style A, word timing estimated on the audio playback clock. Live re-anchors at each text piece; Normal and Offline plan a sentence at a time; the computer voice uses an estimate. Node timing tests are in `tests/test_captions_js.py`.
+      - Menu (3ee7d7d): the one top-right Menu as drawn. "Things Mary can do" lists what to say (a tap does it too), plus Type, My notes and the skills. "My info" is inside her screen (talk mode, voice with "Hear it", wait time, skills on/off). "Choose Mary or Sam". The big Talk and the Slower/Faster/Quieter/Louder buttons are gone.
+      - Not yet seen in a real window. Live's "thinking" face is a guess from mic quiet, because Live sends no end-of-turn event.
+  - **M4a built 2026-10-30 (second account, branch `other/M4a`; 443 tests), waiting for Andy's ear:**
+    - Server (39dcc15): `/api/mary/live/start` (picked voice, same brain with app facts and name, skills tools and instruction, patient turn-taking `END_SENSITIVITY_LOW` + `silenceDurationMs` from `listen_wait`, `contextWindowCompression`), `/api/mary/heard` (Normal's emergency check on Live transcripts), the emergency gate on `/api/mary/skills/call`, `/api/mary/say` (her replies in the picked Gemini voice or Kokoro, never cached), settings `talk_mode` and `listen_wait`, `talk_order()`.
+    - Page (07f324e, 8dd3b61): `talklive.js` (`MaryLive`) and `voiceout.js` (`MaryVoice`), copied from the audition's proven audio code; `app.js` `startTalk()` (the M6 hook), `showCaption()` (M4b replaces it), fallback Live → Normal → Offline → computer voice with one kind line, hands-free in every mode until 15 s of quiet or goodbye.
+    - Voice commands (e232771): "give me more time" / "you're cutting me off" (2.5 → 4 s), "you can answer faster"; slower/faster now change pace without changing pitch.
+    - My info "How Mary talks" and "How long she waits" (e00413c); her instructions and facts say the truth.
+    - Not yet heard in a real window. Known small things: a Live spoken goodbye can take up to 8 s to close; a voice-set speed or wait applies to Live from the next talk.
 - Wire the voice chosen in M2 into `web/mary/app.js` and the server, with the offline fallback.
 - Build the approved M3 caption: each word fills as it's spoken. Use real word timings if the voice gives them, otherwise estimate from each word's length and the audio length.
 - **Done when:** the tests pass and Andy hears and sees it on his screen.
 
-### M5. Hands-free back-and-forth (worker, Sonnet)
+### M5. Hands-free back-and-forth (folded into M4a, 2026-10-30)
+- **Andy (2026-10-30):** after he tapped Talk, she cut him off before he finished, a couple of times. She ended his turn after 1.4 s of quiet. The hub raised that to 2.5 s (`QUIET_END_S` in `web/mary/app.js`). M4a adds a "give me more time" voice command and patient listening in Live too. He wants wake words plus hands-free back-and-forth in every mode, not only Live.
 - After Mary finishes speaking, she listens again by herself. Use the existing auto-stop on silence (`GET /api/listen/level`).
 - She never listens while she's talking, so she doesn't hear herself. Interrupting her mid-sentence comes later.
 - The conversation stays open until about 10 s of silence or "goodbye", then she rests and waits for her wake word.

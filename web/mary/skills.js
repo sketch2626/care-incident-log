@@ -3,7 +3,7 @@
      register(name, handlers)   a skill's screen.js calls this: handlers = {enter(el, opts), leave(el), effect(kind, data)}
      apply(effect)              one effect from the server: settings, show_screen, leave_screen or a skill's own
      call(name, args)           POST /api/mary/skills/call ("<skill>__<action>"); applies its effects; resolves with the result
-     handleLiveToolCall(tc)     Live mode: runs each functionCall, resolves with a toolResponse {functionResponses: [...]}
+     handleLiveToolCall(tc, heard)  Live mode: runs each functionCall, resolves with a toolResponse {functionResponses: [...]}
      list()                     the skills the server listed
      isSkillScreen(name)        true when name is a skill's screen
    Every skill handler runs in try/catch; a throw tells the server (POST /api/mary/skills/<name>/broken). */
@@ -88,7 +88,7 @@
         return;
       }
       if (kind === 'show_screen') {
-        if (a && data.screen) { a.show(data.screen); }
+        if (a && data.screen && !(a.currentScreen && a.currentScreen() === 'emergency')) { a.show(data.screen); }  // M4a: never cover the emergency screen
         return;
       }
       if (kind === 'leave_screen') {
@@ -102,21 +102,23 @@
     } catch (e) { log(e); }
   }
 
-  function call(name, args) {
-    return tell('/api/mary/skills/call', 'POST', { name: name, args: args || {} }).then(function (res) {
+  function call(name, args, heard) {
+    var body = { name: name, args: args || {} };
+    if (heard) { body.heard = String(heard); }  // M4a: the server refuses tools on an emergency line
+    return tell('/api/mary/skills/call', 'POST', body).then(function (res) {
       var effects = (res && res.effects) || [];
       for (var i = 0; i < effects.length; i++) { apply(effects[i]); }
       return res;
     });
   }
 
-  function handleLiveToolCall(tc) {
+  function handleLiveToolCall(tc, heard) {  // M4a: heard = what the resident just said, for the emergency gate
     var calls = (tc && (tc.functionCalls || tc.function_calls)) || [];
     var out = [];
     var chain = Promise.resolve();
     calls.forEach(function (fc) {
       chain = chain.then(function () {
-        return call(fc.name, fc.args).then(function (res) {
+        return call(fc.name, fc.args, heard).then(function (res) {
           out.push({ id: fc.id, name: fc.name, response: (res && res.response) || { error: 'no_answer' } });
         }, function () {
           out.push({ id: fc.id, name: fc.name, response: { error: 'not_working' } });
@@ -126,18 +128,15 @@
     return chain.then(function () { return { functionResponses: out }; });
   }
 
+  // M4b: a switched-on skill with a screen is listed in "Things Mary can do" (the old menu buttons are gone)
   function addMenuButton(s) {
-    var menu = D.getElementById('menu');
-    var before = D.getElementById('typeMenuBtn');
-    if (!menu || !before || !before.parentNode) { return; }
-    var b = D.createElement('button');
-    b.type = 'button';
-    b.className = 'btn';
-    b.setAttribute('data-act', 'skill');
-    b.setAttribute('data-skill', s.name);
-    b.textContent = s.menu.label;
-    b.addEventListener('click', function () { if (app()) { app().show(s.name); } });
-    before.parentNode.insertBefore(b, before);
+    if (!app() || typeof app().addThing !== 'function') { return; }
+    app().addThing({
+      name: s.name,
+      label: s.menu.label,
+      say: s.menu.say || '',
+      open: function () { if (app()) { app().show(s.name); } }
+    });
   }
 
   function addFile(tag, attrs) {

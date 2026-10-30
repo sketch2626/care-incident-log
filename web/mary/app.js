@@ -22,6 +22,9 @@
      MaryApp.openTyping(), MaryApp.refreshStatus(), MaryApp.getFace()
    Replace MaryApp.startFirstRun (called on load when status.first_run) and call MaryApp.enterMain() when done.
 
+   M4a: MaryApp.startTalk() opens a hands-free conversation in the first working talk mode (Live, Normal, Offline,
+   then the computer's own voice); MaryApp.endTalk(), MaryApp.inTalk(). listenReason can also be 'idle'.
+
    No ?. or ?? here, so the ES2017 syntax checker parses it. */
 (function () {
   'use strict';
@@ -33,7 +36,30 @@
 
   var RATE_MIN = 0.6, RATE_MAX = 1.4, VOL_MIN = 0.2, VOL_MAX = 1.0;
   var MIN_LISTEN_MS = 800;       // a second tap this soon after the mic opens is a double tap, not "I'm done"
+  var QUIET_END_S = 2.5;         // quiet after speech that ends a turn; 1.4 s cut Andy off mid-thought (2026-10-30)
   var SILENCE_NOISE = /^\W*(?:you|thank you|thanks|thank you for watching|thanks for watching|bye|okay|ok|so|um+|uh+)?\W*$/i;
+
+  // --- M4a: hands-free conversations and talk modes (Live, Normal, Offline; the computer's own voice last) ---
+  // QUIET_END_S above follows the saved listen_wait (status and settings effects).
+  var CONVO_IDLE_S = 15;         // a conversation ends after this much quiet: nobody talking, she isn't speaking
+  var BYE_MAX_WORDS = 6;         // a goodbye is a short turn; a long story that says "goodbye" is not one
+  var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later)\b/i;
+  var LIVE_BYE_MAX_MS = 8000;    // after the goodbye is asked for, Live closes once her turn ends, or after this
+  // M4a: {when} is the local time of day (morning, afternoon, evening or night), filled in by liveHello()
+  var LIVE_HELLO = '(The resident is ready to talk with you, and it is {when} where they are. Greet them in one or ' +
+    'two short, warm sentences, like a friend who is glad to see them: use their name if you know it and, when it ' +
+    'fits, something you remember about them or from your last talk. Use different words every time. A light ' +
+    '"good morning", "good afternoon" or "good evening" is fine, but never "good night", never comment on the hour ' +
+    'or how late it is, and never say you are still here or waiting for them. Never list what you can do.)';
+  function timeWord() {   // M4a: the same slots as the scripted greetings in firstrun.js
+    var h = new Date().getHours();
+    return (h >= 22 || h < 5) ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  }
+  function liveHello() { return LIVE_HELLO.replace('{when}', timeWord()); }   // M4a
+  var LIVE_BYE = '(The conversation is ending now. Say a short, warm goodbye in one sentence and remind them they can tap Talk any time.)';
+  var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
+  var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say this to them right now, warmly and plainly, then stay with them: ';
+  // --- end M4a ---
 
   var MSG = {
     tapToTalk: "Tap the button and talk to me any time.",
@@ -49,7 +75,9 @@
     helpAsk: "Has someone come to help you yet?",
     okNow: "I'm so glad. I'm right here if you need me.",
     better: "Is this better?",
-    loading: "I'm getting ready. Just a moment."
+    loading: "I'm getting ready. Just a moment.",
+    fallback: "My best voice isn't working right now, so I'll keep talking with you the usual way.",   // M4a
+    goodbye: "It was so nice talking with you. Tap Talk any time you want to chat again."              // M4a
   };
 
   // ---------------------------------------------------------------- state
@@ -74,10 +102,17 @@
     lightPressed: false,
     helpAsked: false,
     lightTimer: null,
-    chipTimer: null
+    chipTimer: null,
+    // M4a: talk modes and the open conversation
+    talkMode: 'live',            // the saved choice
+    talkOrder: [],               // the modes the server says will work, best first ([] = the computer's own voice)
+    voiceMode: '',               // the voice for spoken sentences now: 'normal' | 'offline' | '' (speechSynthesis)
+    fallbackSaid: false,         // the "my best voice isn't working" line, once per conversation
+    convo: null                  // the open conversation (startTalk), or null
   };
 
-  var NULLFACE = { setMood: noop, setActivity: noop, setCompanion: noop, bounce: noop, destroy: noop };
+  var NULLFACE = { setMood: noop, setActivity: noop, setCompanion: noop, bounce: noop, destroy: noop,
+    setLoud: noop, setMenuOpen: noop, setEmergency: noop };   // M4b
   var face = NULLFACE;
 
   function makeFace(companion) {
@@ -108,6 +143,7 @@
     D.documentElement.style.background = bg;
     D.body.style.background = bg;
     $('scr').style.background = bg;
+    $('scr').setAttribute('data-companion', c === 'him' ? 'him' : 'mary');   // M4b: her caption ink (captions.css)
   }
 
   // ---------------------------------------------------------------- server calls
@@ -148,14 +184,166 @@
   }
 
   // ---------------------------------------------------------------- caption, chip, button
+  // M4b: lines that are not her voice ("You said: ...", tips) as a plain caption line (captions.js plain()).
   function setCaption(text, kind) {
-    var c = $('caption');
     text = String(text == null ? '' : text);
-    c.className = 'caption' + (kind ? ' ' + kind : '');
-    c.textContent = text;
-    c.hidden = !text;
-    c.scrollTop = c.scrollHeight;
+    CapS.plain = text;
+    capCall(function () { if (text) { cap.plain(text, kind); } else { cap.clear(); } });
   }
+
+  // M4a: her own words (Live captions, her replies, say()). M4b: those now show word by word as she says them
+  // (capSay in the speech paths, capLivePiece in Live, whole() on the emergency screen), so this does nothing.
+  function showCaption(text) { /* M4b */ }
+
+  // --- M4b: her words as style A captions (captions.js) on the playback clock, and the face's listening and
+  // thinking states (mockups/mary/round6/README.md, "Notes for the builder" 1-4, 6, 8) ---
+  var NULLCAP = { sentence: function () { return 0; }, setDuration: noop, retime: noop, liveAudio: noop,
+    livePiece: function () { return 0; }, whole: function () { return 0; }, cut: noop, stopped: noop, clear: noop,
+    setSide: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
+  var cap = NULLCAP;
+  // plain: the plain line showing; owner: whose words are up (a speech session or 'live');
+  // liveWhole / liveTimed / emTurn: Live on the emergency screen; liveDone: her Live turn was heard to the end
+  // liveCut: Live cut her off; her next turn's first sound starts a fresh caption (captions.js drops pieces after cut())
+  var CapS = { plain: '', owner: null, liveWhole: '', liveTimed: false, emTurn: '', liveDone: false, liveCut: false };
+  var LOUD_HOLD_MS = 500;          // the resident counts as talking until this long after their last voice
+  var SPOKE_MS = 350;              // Live: this much voice is a real turn of theirs, not a cough (speech.py HEARD_VOICE_S)
+  var LIVE_THINK_AFTER_MS = 700;   // Live: this much quiet after they spoke = their turn is over, she is thinking
+  var LIVE_THINK_MAX_MS = 8000;    // ...and back to listening if she has not answered by then
+  var LV = { loud: false, voiceAt: 0, loudSince: 0, spoke: false, thinking: false, thinkTimer: null };
+
+  function makeCaptions() {
+    try {
+      if (typeof MaryCaptions !== 'undefined') { return MaryCaptions.create($('scr'), { liveRegion: $('capLive') }); }
+    } catch (e) { log(e); }
+    return NULLCAP;
+  }
+  function capCall(fn) { try { return fn(); } catch (e) { log(e); return 0; } }
+  function announceLive(text) { try { $('capLive').textContent = String(text || '').trim(); } catch (e) { /* nothing */ } }
+  // New words from someone else (another speech session, or Live after one): never join the caption showing.
+  // (clear, not cut: cut() would also drop the Live pieces that follow until the resident talks)
+  function capOwn(owner) {
+    if (CapS.owner === owner) { return; }
+    CapS.owner = owner;
+    if (cap.showing()) { capCall(function () { cap.clear(); }); }
+  }
+  // Emergency: all of it at once, already filled (whole). `say` goes to the live region; a re-show stays quiet.
+  function quietWhole(text, o, say) {
+    capCall(function () { cap.setLiveRegion(null); cap.whole(text, o || {}); });
+    capCall(function () { cap.setLiveRegion($('capLive')); });
+    if (say) { announceLive(say); }
+  }
+  function wholeTiming(text, o) {
+    var t = { dur: estimateMs(text) / 1000 };
+    if (o && o.ctx) { t.at = o.at; t.ctx = o.ctx; }
+    return t;
+  }
+  // One sentence of hers (her picked voice, the computer's voice, caption only), at its first sound. Returns its id.
+  function capSay(s, text, o) {
+    if (!s || Sp.sess !== s || s.finished) { return 0; }
+    if (!s.sounded) { s.sounded = true; faceAct(); }   // her first sound: thinking ends, talking starts
+    CapS.plain = '';
+    capOwn(s);
+    if (S.screen !== 'emergency') { return capCall(function () { return cap.sentence(text, o); }); }
+    if (s.capPre) {                       // say() put the words up already: now the spoken word lifts with her voice
+      if (!s.capTimed) { s.capTimed = true; quietWhole(s.capPre, wholeTiming(s.capPre, o), ''); }
+      return 0;
+    }
+    var first = !s.capWhole;
+    s.capWhole = first ? text : s.capWhole + ' ' + text;
+    quietWhole(s.capWhole, first ? wholeTiming(text, o) : {}, text);
+    return 0;
+  }
+  function capStopped() { if (S.screen !== 'emergency') { capCall(function () { cap.stopped(); }); } }   // the emergency words stay up
+  function capCut() {
+    if (S.screen === 'emergency') { return; }
+    if (CapS.owner === 'live') { CapS.liveCut = true; }   // her next Live sound starts a fresh caption
+    capCall(function () { cap.cut(); });
+  }
+  // No words while listening (round 6): a plain tip goes now; her own words fade 4 s after her or when they talk.
+  function capListening() { if (CapS.plain) { CapS.plain = ''; capCall(function () { cap.clear(); }); } }
+  // Live: each piece of her words (talklive onCaptionPiece), each audio chunk, her turn heard to the end.
+  function capLivePiece(piece) {
+    CapS.plain = '';
+    if (S.screen !== 'emergency') {
+      capOwn('live');
+      capCall(function () { return cap.livePiece(piece); });
+      if (CapS.liveDone) { capCall(function () { cap.stopped(); }); }   // a late piece after her sound ended still fades
+      return;
+    }
+    if (CapS.liveWhole) { return; }       // her safety words are up already, whole
+    CapS.emTurn += piece;
+    quietWhole(CapS.emTurn.trim(), {}, '');
+  }
+  function capLiveAudio(at, dur, ctx) {
+    CapS.liveDone = false;
+    if (CapS.liveCut) { CapS.liveCut = false; if (S.screen !== 'emergency') { capCall(function () { cap.clear(); }); } }
+    if (S.screen !== 'emergency') { capCall(function () { cap.liveAudio(at, dur, ctx); }); return; }
+    if (CapS.liveWhole && !CapS.liveTimed) {
+      CapS.liveTimed = true;
+      quietWhole(CapS.liveWhole, wholeTiming(CapS.liveWhole, { at: at, ctx: ctx }), '');
+    }
+  }
+  function capLiveDone() {
+    CapS.liveDone = true;
+    if (S.screen !== 'emergency') { capCall(function () { cap.stopped(); }); return; }
+    if (CapS.emTurn.trim()) { announceLive(CapS.emTurn); }
+    CapS.emTurn = '';
+    if (CapS.liveTimed) { CapS.liveWhole = ''; }
+  }
+  function capLiveEmergency(words) {
+    CapS.liveWhole = words;
+    CapS.liveTimed = false;
+    CapS.emTurn = '';
+    CapS.owner = 'live';
+    quietWhole(words, {}, words);
+  }
+  function capLeaveEmergency() {
+    CapS.liveWhole = '';
+    CapS.liveTimed = false;
+    CapS.emTurn = '';
+    capCall(function () { cap.stopped(); });   // her last emergency words fade gently
+  }
+
+  // The face's activity follows the phase, except that thinking runs on to her first sound (round 6 note 6),
+  // and in Live the open mic shows thinking between the end of their turn and her answer (face.js: cloud at 400 ms).
+  function faceActivity() {
+    var p = S.phase, sess = (typeof Sp !== 'undefined' && Sp) ? Sp.sess : null;
+    if (p === 'speaking') { return (sess && !sess.sounded && !liveSpeaking()) ? 'thinking' : 'talking'; }
+    if (p === 'listening') { return LV.thinking ? 'thinking' : 'listening'; }
+    return p === 'thinking' ? 'thinking' : 'resting';
+  }
+  function faceAct() { try { face.setActivity(faceActivity()); } catch (e) { log(e); } }
+  // The resident is talking (a voice on the mic now): bright, fast ear waves, and her caption fades.
+  function setLoudNow(on) {
+    on = !!on;
+    if (LV.loud === on) { return; }
+    LV.loud = on;
+    if (on) { LV.loudSince = Date.now(); }
+    try { face.setLoud(on); } catch (e) { log(e); }
+    if (on && S.screen !== 'emergency') { CapS.plain = ''; capCall(function () { cap.clear(); }); }
+  }
+  function liveThinkStop() { LV.thinking = false; LV.spoke = false; clearTimeout(LV.thinkTimer); }
+  function liveThink() {
+    liveThinkStop();
+    LV.thinking = true;
+    LV.thinkTimer = setTimeout(function () { liveThinkStop(); faceAct(); }, LIVE_THINK_MAX_MS);
+    faceAct();
+  }
+  // Live: the page's own mic level (talklive onMicLevel); voice = above talklive's talking level (VOICE_LEVEL).
+  function liveMicLevel(voice) {
+    if (S.phase !== 'listening') { return; }   // she is talking: her own voice may reach the mic
+    var now = Date.now();
+    if (voice) {
+      LV.voiceAt = now;
+      if (LV.thinking) { liveThinkStop(); faceAct(); }   // they went on talking
+      setLoudNow(true);
+      if (now - LV.loudSince >= SPOKE_MS) { LV.spoke = true; }
+    } else if (LV.loud && now - LV.voiceAt > LOUD_HOLD_MS) {
+      setLoudNow(false);
+    }
+    if (LV.spoke && !LV.loud && !LV.thinking && now - LV.voiceAt >= LIVE_THINK_AFTER_MS) { liveThink(); }
+  }
+  // --- end M4b ---
 
   function showChip() {
     var c = $('chip');
@@ -170,38 +358,52 @@
 
   function setRing(level) {
     var r = $('ring');
+    if (!r) { return; }   // M4b: the big Talk button (and its ring) is gone
     level = Math.max(0, Math.min(1, Number(level) || 0));
     r.style.opacity = String(0.3 + level * 0.7);
     r.style.transform = reduced() ? '' : 'scale(' + (1 + level * 0.1).toFixed(3) + ')';
   }
 
+  // M4b: the menu's Talk row stands in for the big Talk button (gone): "Stop talking" while she is in a talk
   function updateTalkButton() {
-    var b = $('talkBtn'), lbl = $('talkLbl'), n = companionName(S.companion);
-    var ic = 'mic', text = 'Talk to ' + n, disabled = false;
-    if (S.phase === 'listening') { ic = 'done'; text = "I'm done"; }
-    else if (S.phase === 'thinking') { ic = 'wait'; text = 'One moment…'; disabled = true; }
-    else if (S.typingOnly) { ic = 'type'; text = 'Type to ' + n; }
-    b.setAttribute('data-state', S.phase);
-    b.setAttribute('data-ic', ic);
-    b.setAttribute('aria-busy', S.phase === 'thinking' ? 'true' : 'false');
+    var b = $('miTalk'), lbl = $('miTalkLbl');
+    if (!b || !lbl) { return; }
+    var n = companionName(S.companion), text = 'Talk to ' + n, busy = false;
+    if (S.convo) { text = 'Stop talking'; }
+    else if (S.phase === 'listening') { text = "I'm done"; }
+    else if (S.phase === 'thinking') { text = 'One moment…'; busy = true; }
+    else if (S.typingOnly && !liveFirst()) { text = 'Type to ' + n; }   // M4a: Live has its own mic
     lbl.textContent = text;
-    b.disabled = disabled;
+    if (busy) { b.setAttribute('aria-disabled', 'true'); } else { b.removeAttribute('aria-disabled'); }
+    b.setAttribute('aria-busy', busy ? 'true' : 'false');
   }
 
   function setPhase(p) {
     S.phase = p;
-    var a = p === 'listening' ? 'listening' : p === 'thinking' ? 'thinking' : p === 'speaking' ? 'talking' : 'resting';
-    try { face.setActivity(a); } catch (e) { log(e); }
+    if (p !== 'listening') { setLoudNow(false); liveThinkStop(); }   // M4b
+    faceAct();   // M4b: the phase's activity, but thinking runs on to her first sound (faceActivity)
     $('scr').setAttribute('data-phase', p);
     updateTalkButton();
     if (p !== 'listening') { setRing(0); }
   }
 
-  function refreshLabels() {
+  function refreshLabels() {   // M4b: the menu and panel words follow the companion's name
     var n = companionName(S.companion);
-    var other = companionName(S.companion === 'mary' ? 'him' : 'mary');
-    $('switchBtn').textContent = 'Switch to ' + other;
-    $('typeMenuBtn').textContent = 'Type to ' + n;
+    var both = companionName('mary') + ' or ' + companionName('him');
+    function set(id, t) { var el = $(id); if (el) { el.textContent = t; } }
+    set('miCanLbl', 'Things ' + n + ' can do');
+    set('miChooseLbl', 'Choose ' + both);
+    set('closeLbl', 'Close ' + n);
+    set('canTitle', 'Things ' + n + ' can do');
+    set('canLead', 'You can say these to ' + n + ', or tap one.');
+    set('modeTitle', 'How ' + n + ' talks');
+    set('voiceTitle', n + "'s voice");
+    set('waitTitle', 'How long ' + n + ' waits');
+    set('skillTitle', 'Things ' + n + ' can do');
+    set('chooseTitle', 'Choose ' + both);
+    try { $('menu').setAttribute('aria-label', n + "'s menu"); } catch (e) { /* nothing */ }
+    var backs = D.querySelectorAll('.backLbl');
+    for (var i = 0; i < backs.length; i++) { backs[i].textContent = 'Back to ' + n; }
     $('typeLabel').textContent = 'Type what you would like to say to ' + n;
     D.title = n;
     updateTalkButton();
@@ -352,6 +554,7 @@
 
   function spCancel() {
     var s = Sp.sess;
+    var wasSaying = !!(s && !s.finished && s.sounded);   // M4b
     Sp.sess = null;
     if (s) {
       s.finished = true;
@@ -360,6 +563,8 @@
       s.timers = [];
       settle(s);
     }
+    if (wasSaying) { capCut(); }   // M4b: she was cut off: keep the words she said, fade the rest
+    try { if (window.MaryVoice) { window.MaryVoice.cancel(); } } catch (e) { log(e); }   // M4a: her picked voice too
     if (V.ok) {
       try { window.speechSynthesis.cancel(); } catch (e) { /* nothing */ }
       Sp.cancelAt = Date.now();
@@ -368,7 +573,8 @@
 
   function spStart() {
     spCancel();
-    var s = { queue: [], busy: false, ended: false, started: false, finished: false, waiters: [], timers: [] };
+    var s = { queue: [], busy: false, ended: false, started: false, finished: false, waiters: [], timers: [],
+      voice: speechVoice(), mvJob: null, mvSent: [], mvEnded: false };   // M4a: her picked voice, when it works
     Sp.sess = s;
     return s;
   }
@@ -399,12 +605,80 @@
     s.finished = true;
     for (var i = 0; i < s.timers.length; i++) { clearTimeout(s.timers[i]); }
     s.timers = [];
-    if (S.phase === 'speaking' || S.phase === 'thinking') { setPhase('idle'); }
+    if (s.sounded) { capStopped(); }   // M4b: all of it was heard: the last words finish, then fade
+    if (S.phase === 'speaking' || S.phase === 'thinking') { setPhase(restPhase()); }   // M4a: Live goes back to listening
     settle(s);
   }
 
+  // --- M4a: her picked voice (voiceout.js) for Normal and Offline; speechSynthesis stays the last resort ---
+  function speechVoice() {
+    var m = S.voiceMode;
+    var ok = window.MaryVoice && typeof window.MaryVoice.more === 'function';
+    return (ok && (m === 'normal' || m === 'offline')) ? m : '';
+  }
+  // The voice after `from` in the talk order (Live is never a voice for sentences); '' = the computer's own voice.
+  function nextVoice(from) {
+    var m = nextMode(S.talkOrder, from);
+    while (m === 'live') { m = nextMode(S.talkOrder, m); }
+    return (m === 'normal' || m === 'offline') ? m : '';
+  }
+  // One open MaryVoice job per session: each sentence is fetched as soon as it is added, so there are no gaps.
+  function mvPump(s) {
+    if (s.queue.length) {
+      var batch = s.queue.splice(0, s.queue.length);
+      if (!s.started) { s.started = true; setPhase('speaking'); }
+      if (!s.mvJob) {
+        var job = { capIds: {} }, p;   // M4b: capIds = sentence index -> caption id
+        s.mvJob = job;
+        s.mvSent = batch.slice();
+        s.mvEnded = false;
+        try {
+          p = window.MaryVoice.queue(batch, { mode: s.voice, rate: S.rate, volume: S.volume, open: true,
+            // M4b: each sentence's caption on the playback clock, corrected once its real length is known
+            onSentenceAudio: function (i, text, at, ctx, dur) { job.capIds[i] = capSay(s, text, { at: at, ctx: ctx, dur: dur }); },
+            onSentenceLength: function (i, dur) {
+              if (Sp.sess === s && job.capIds[i]) { capCall(function () { cap.setDuration(job.capIds[i], dur); }); }
+            } });
+        } catch (e) { log(e); p = null; }
+        Promise.resolve(p || { ok: false, kind: 'failed', at: 0 }).then(function (r) { mvDone(s, job, r); },
+          function (e) { log(e); mvDone(s, job, { ok: false, kind: 'failed', at: 0 }); });
+      } else {
+        for (var i = 0; i < batch.length; i++) {
+          s.mvSent.push(batch[i]);
+          try { window.MaryVoice.more(batch[i]); } catch (e) { log(e); }
+        }
+      }
+    }
+    if (s.ended && !s.mvEnded) {
+      if (!s.mvJob) { spFinish(s); return; }
+      s.mvEnded = true;
+      try { window.MaryVoice.end(); } catch (e) { log(e); }
+    }
+  }
+  // The job is over. On a failure, what was not said goes to the next voice (offline, then the computer's own),
+  // with one kind line per conversation; at 0 (no sound at all) that voice is dropped for the rest of the talk.
+  function mvDone(s, job, r) {
+    if (Sp.sess !== s || s.finished || s.mvJob !== job) { return; }
+    s.mvJob = null;
+    r = r || {};
+    if (r.ok) { spFinish(s); return; }
+    var at = Math.max(0, Math.floor(Number(r.at) || 0));
+    var rest = s.mvSent.slice(at);
+    var from = s.voice;
+    log(new Error('Her voice (' + from + ') failed at sentence ' + at + (r.bad_key ? ', bad key' : r.no_key ? ', no key' : '')));
+    s.voice = nextVoice(from);
+    if (at === 0 && S.voiceMode === from) { S.voiceMode = s.voice; }
+    if (!S.fallbackSaid) { S.fallbackSaid = true; rest.unshift(MSG.fallback); }
+    s.mvSent = [];
+    s.mvEnded = false;
+    s.queue = rest.concat(s.queue);
+    spPump(s);
+  }
+  // --- end M4a ---
+
   function spPump(s) {
     if (Sp.sess !== s || s.busy || s.finished) { return; }
+    if (s.voice) { mvPump(s); return; }   // M4a
     var t = s.queue.shift();
     if (t === undefined) {
       if (s.ended) { spFinish(s); }
@@ -422,6 +696,8 @@
   function speakOne(s, text, cb) {
     var settled = false;
     var est = estimateMs(text);
+    var shown = false;   // M4b
+    function capOnce() { if (!shown) { shown = true; capSay(s, text, { dur: est / 1000 }); } }   // M4b: performance clock
 
     function done() {
       if (settled) { return; }
@@ -430,6 +706,7 @@
     }
     function captionOnly() {
       // no voice: the mouth moves for about as long as it would take to say it
+      capOnce();   // M4b
       addTimer(s, function () { if (Sp.sess === s) { done(); } }, est);
     }
 
@@ -462,8 +739,8 @@
         captionOnly();
       }
 
-      u.onstart = function () { began = true; };
-      u.onend = function () { began = true; if (!failed) { done(); } };
+      u.onstart = function () { began = true; capOnce(); };   // M4b: her first sound
+      u.onend = function () { began = true; if (!failed) { capOnce(); done(); } };   // M4b: capOnce if it never said it started
       u.onerror = function (ev) { fail(ev && ev.error ? ev.error : 'error'); };
       addTimer(s, function () { fail('timeout'); }, est * 2 + 2000);
       var wait = Math.max(0, Sp.cancelAt + 120 - Date.now());   // Chromium drops a speak() right after cancel()
@@ -495,10 +772,17 @@
   // Shows the text as her caption, sets the mood, speaks it. Resolves when she is done (or was interrupted).
   function say(text, mood) {
     text = String(text == null ? '' : text).trim();
+    if (liveOn()) { try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); } }   // M4a: never two voices at once
     var s = spStart();
     var p = waitSess(s);
     if (mood) { setMood(mood); }
-    setCaption(text);
+    showCaption(text);   // M4a
+    if (S.screen === 'emergency') {   // M4b: the emergency words all at once, before her voice starts
+      s.capPre = text;
+      if (CapS.liveWhole !== text) { quietWhole(text, {}, text); }
+      CapS.liveWhole = '';
+      CapS.owner = s;
+    }
     var parts = splitSentences(text, true).sentences;
     for (var i = 0; i < parts.length; i++) { spAdd(s, parts[i]); }
     spEnd(s);
@@ -518,6 +802,7 @@
     var root = $('scr');
     root.setAttribute('data-screen', name);
     root.classList.toggle('urgent', name === 'emergency');
+    try { face.setEmergency(name === 'emergency'); } catch (e) { log(e); }   // M4b: the calm concerned face, steady glow
     if (screens[name] && screens[name].enter) {
       try { screens[name].enter(opts || {}, prev); } catch (e) { log(e); }
     }
@@ -528,6 +813,7 @@
   registerScreen('emergency', {
     enter: function () {
       S.emSeq++;
+      closePanel(false); closeMenu(false);   // M4b: nothing covers the answers
       S.lightPressed = false;
       S.helpAsked = false;
       clearTimeout(S.lightTimer);
@@ -536,7 +822,11 @@
       b.removeAttribute('aria-pressed');
       setMood('alert');
     },
-    leave: function () { clearTimeout(S.lightTimer); }
+    leave: function () {
+      clearTimeout(S.lightTimer);
+      capLeaveEmergency();   // M4b
+      setTimeout(convoAfterEmergency, 0);   // M4a: the paused conversation goes on
+    }
   });
 
   registerScreen('nokey', {
@@ -568,19 +858,22 @@
     if (S.ctrl) { try { S.ctrl.abort(); } catch (e) { /* nothing */ } S.ctrl = null; }
     if (S.listenAbort) { try { S.listenAbort(); } catch (e) { log(e); } }
     spCancel();
-    if (S.phase !== 'idle') { setPhase('idle'); }
+    var rest = restPhase();   // M4a: an open Live talk rests in listening
+    if (S.phase !== rest) { setPhase(rest); }
     return S.turn;
   }
 
   // ---------------------------------------------------------------- listening
-  function listenOnce() {
+  // M4a: listenOnce({convo: true}) is a conversation's listen: no voice for CONVO_IDLE_S finishes it as 'idle'.
+  function listenOnce(opts) {
+    var convo = !!(opts && opts.convo);   // M4a
     var my = S.turn;
     return new Promise(function (resolve, reject) {
       var ended = false, started = false, pending = '', t0 = Date.now();
       var timer = null, hard = null, fails = 0, notRec = 0;
       S.listenReason = '';
       setPhase('listening');
-      setCaption(MSG.listening);
+      capListening();   // M4b: no words while listening (round 6)
 
       function cleanup() {
         ended = true;
@@ -598,7 +891,7 @@
         setPhase('thinking');
         api('POST', '/api/listen/stop?raw=1', {}, { ms: 60000 }).then(function (j) {
           var heard = String((j && j.text) || '').trim();   // whatever was heard counts, even if the level never showed a voice,
-          if (reason === 'silence' && SILENCE_NOISE.test(heard)) { heard = ''; }   // except what Whisper invents in a quiet room
+          if ((reason === 'silence' || reason === 'idle') && SILENCE_NOISE.test(heard)) { heard = ''; }   // except what Whisper invents in a quiet room (M4a: idle too)
           resolve(heard);
         }).catch(function (e) { e.stage = 'stop'; reject(e); });
       }
@@ -609,10 +902,12 @@
           fails = 0;
           l = l || {};
           setRing(l.level);
+          // M4b: the ear waves brighten while the server hears a voice now (its own voice test, held LOUD_HOLD_MS)
+          setLoudNow(Number(l.elapsed_s) - Number(l.quiet_s) > 0.05 && Number(l.quiet_s) * 1000 < LOUD_HOLD_MS);
           var elapsed = Number(l.elapsed_s) || 0;
           notRec = (l.recording === false) ? notRec + 1 : 0;
-          if (l.heard_voice && Number(l.quiet_s) >= 1.4) { finish('quiet'); return; }
-          if (!l.heard_voice && elapsed >= 8) { finish('silence'); return; }
+          if (l.heard_voice && Number(l.quiet_s) >= QUIET_END_S) { finish('quiet'); return; }
+          if (!l.heard_voice && elapsed >= (convo ? CONVO_IDLE_S : 8)) { finish(convo ? 'idle' : 'silence'); return; }   // M4a
           if (elapsed >= 60) { finish('cap'); return; }
           if (notRec >= 3) { finish('quiet'); return; }
           timer = setTimeout(poll, 150);
@@ -663,19 +958,389 @@
   function onTalkTap() {
     App.onActivity();
     if (S.phase === 'thinking') { return; }
+    var c = S.convo;   // M4a: one tap starts a conversation; in one, a tap while listening is "I'm done" (Normal/Offline)
+    if (c) {
+      if (c.paused) { c.paused = false; convoListen(c, true); return; }
+      if (!c.live && S.phase === 'listening') { if (S.stopNow) { S.stopNow(); } return; }
+      if (c.ending) { if (c.live) { finishLive(c); } return; }
+      endConvo(c, 'tap');
+      return;
+    }
     if (S.phase === 'listening') { if (S.stopNow) { S.stopNow(); } return; }
-    if (S.typingOnly) { openTyping(); return; }
-    beginListening();
+    startTalk();
   }
 
-  function beginListening() {
+  // ---------------------------------------------------------------- M4a: conversations and talk modes
+  // A conversation starts with one tap (or the wake word, M6, through MaryApp.startTalk) and stays open until about
+  // CONVO_IDLE_S of quiet, a short goodbye, or a tap. Live = Gemini Live (talklive.js). Normal/Offline = the on-device
+  // mic, /api/mary/talk, and her picked voice (voiceout.js). '' = the computer's own voice, the last resort.
+
+  // The talk mode after `current` in the server's order ('' = the computer's own voice); no current = the first. Pure.
+  function nextMode(order, current) {
+    var list = [];
+    if (order && order.length) { for (var i = 0; i < order.length; i++) { if (order[i]) { list.push(String(order[i])); } } }
+    if (!current) { return list.length ? list[0] : ''; }
+    var at = list.indexOf(current);
+    if (at >= 0) { return at + 1 < list.length ? list[at + 1] : ''; }
+    var rank = ['live', 'normal', 'offline'], r = rank.indexOf(current);
+    for (var k = 0; k < list.length; k++) { if (rank.indexOf(list[k]) > r) { return list[k]; } }
+    return '';
+  }
+
+  // What to do with Live's skill call, given the emergency check of what the resident just said. Pure.
+  // M4a: also refused while the emergency screen is up, so a skill call that beat the transcript can't cover it.
+  function liveToolGate(heardResult, onEmergencyScreen) {
+    return ((heardResult && heardResult.emergency) || onEmergencyScreen) ? 'refuse' : 'run';
+  }
+
+  // A short goodbye turn ("bye now", "that's all for now"). Pure.
+  function isGoodbye(text) {
+    text = String(text == null ? '' : text).trim();
+    if (!text) { return false; }
+    return text.split(/\s+/).length <= BYE_MAX_WORDS && BYE_RE.test(text);
+  }
+
+  function liveSupported() {
+    try { return !!(window.MaryLive && window.MaryLive.supported()); } catch (e) { return false; }
+  }
+  function liveFirst() { return S.talkOrder[0] === 'live' && liveSupported(); }
+  function liveOn() {
+    var c = S.convo;
+    try { return !!(c && c.live && window.MaryLive.isOpen()); } catch (e) { return false; }
+  }
+  function liveSpeaking() {
+    try { return !!(window.MaryLive && window.MaryLive.isSpeaking()); } catch (e) { return false; }
+  }
+  function greetLive(text) {
+    try { return !!window.MaryLive.greet(text); } catch (e) { log(e); return false; }
+  }
+  function restPhase() {
+    var c = S.convo;
+    return (c && c.live && c.open && !c.ending) ? 'listening' : 'idle';
+  }
+  // The voice for spoken sentences in a mode: Live's lines outside a Live talk use Normal's (the same Gemini voice).
+  function speechModeFor(m) {
+    if (m === 'live') { m = nextMode(S.talkOrder, 'live'); }
+    return (m === 'normal' || m === 'offline') ? m : '';
+  }
+  function sayFallbackOnce() {
+    if (S.fallbackSaid) { return Promise.resolve(); }
+    S.fallbackSaid = true;
+    return say(MSG.fallback);
+  }
+
+  // The one way to start talking. Call it straight from a tap (Live opens the mic and sound there).
+  // opts.hello: what Live is asked to say first. Resolves true when a conversation started.
+  // M4a: opts.say (with opts.mood): when she starts by herself, the words Normal and Offline say before listening;
+  // with no mic it is only said, and the typing box is not opened.
+  function startTalk(opts) {
+    opts = opts || {};
+    App.onActivity();
+    if (S.convo || S.phase === 'thinking' || S.phase === 'listening') { return Promise.resolve(false); }
+    var mode = nextMode(S.talkOrder, null);
+    if (mode === 'live' && !liveSupported()) { mode = nextMode(S.talkOrder, 'live'); }
+    if (mode !== 'live' && S.typingOnly && opts.say) { say(opts.say, opts.mood || 'happy').catch(log); return Promise.resolve(false); }   // M4a
+    if (mode !== 'live' && S.typingOnly) { openTyping(); return Promise.resolve(false); }
+    var c = { mode: mode, live: false, open: false, ending: false, paused: false, seq: 0, lastAct: Date.now(),
+      heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false, misses: 0 };
+    S.convo = c;
+    S.fallbackSaid = false;
+    S.voiceMode = speechModeFor(mode);
+    updateTalkButton();
+    if (mode === 'live') {
+      startLive(c, opts.hello || liveHello());   // M4a: with the time of day
+    } else if (opts.say) {   // M4a: her hello first, then she listens
+      say(opts.say, opts.mood || 'happy').then(function () { convoListen(c, true); },
+        function (e) { log(e); convoListen(c, true); });
+    } else { convoListen(c, true); }
+    return Promise.resolve(true);
+  }
+
+  function closeConvo(c) {
+    if (!c) { return; }
+    clearInterval(c.idleTimer);
+    clearTimeout(c.byeTimer);
+    c.ending = true;
+    if (S.convo === c) { S.convo = null; }
+    if (c.live) {
+      c.live = false;
+      c.open = false;
+      try { window.MaryLive.stop('end'); } catch (e) { log(e); }
+      if (CapS.owner === 'live') { capCut(); }   // M4b: her voice stops with the talk
+      if (!Sp.sess && (S.phase === 'listening' || S.phase === 'speaking')) { setPhase('idle'); }
+    }
+    updateTalkButton();
+  }
+
+  // Ends the conversation. why: 'tap' (at once, quietly), 'idle' or 'bye' (with a short goodbye).
+  function endConvo(c, why) {
+    if (!c || S.convo !== c || c.ending) { return; }
+    if (why === 'tap') {
+      closeConvo(c);
+      newTurn();
+      setPhase('idle');
+      setCaption(S.typingOnly && !liveFirst() ? MSG.tapToType : MSG.tapToTalk);
+      return;
+    }
+    if (c.live && c.open) {
+      c.ending = true;
+      c.byeDone = false;
+      clearInterval(c.idleTimer);
+      // to a spoken goodbye she is already answering with one; on quiet she is asked for one
+      if (why === 'idle' && !greetLive(LIVE_BYE)) { finishLive(c); return; }
+      c.byeTimer = setTimeout(function () { liveByeCap(c, false); }, LIVE_BYE_MAX_MS);
+      return;
+    }
+    closeConvo(c);
+    newTurn();
+    say(MSG.goodbye, 'happy');
+  }
+
+  // --- Live ---
+  function startLive(c, hello) {
+    var seq = ++c.seq;
+    c.live = true;
+    c.open = false;
+    try { if (window.MaryVoice) { window.MaryVoice.cancel(); } } catch (e) { log(e); }
+    newTurn();
+    setPhase('thinking');
+    function mine() { return S.convo === c && c.seq === seq && c.live; }
+    var p;
+    try {
+      p = window.MaryLive.start({
+        screen: skillScreen(),
+        onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
+        onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); setCaption('You said: ' + t, 'said'); } },
+        onHeardDone: function (t) { liveHeard(c, t); },   // M4a: even after the talk ended or restarted (never missed)
+        onSpeaking: function (on) { if (mine()) { liveSpeakingChanged(c, on); } },
+        onInterrupted: function () { liveSaid(c); if (mine()) { c.lastAct = Date.now(); } },   // M4a: liveSaid
+        onTurnComplete: function () { liveSaid(c); if (mine()) { liveTurnDone(c); } },   // M4a: liveSaid
+        onToolCall: function (tc) { return liveToolCall(c, tc); },
+        onActivity: function () { if (mine()) { c.lastAct = Date.now(); } },
+        // M4b: her words on her playback clock, the ear waves, and thinking until her first sound
+        onCaptionPiece: function (t) { if (mine()) { capLivePiece(t); } },
+        onAudioChunk: function (at, dur, ctx) { if (mine()) { capLiveAudio(at, dur, ctx); } },
+        onAudioDone: function () { if (mine()) { capLiveDone(); } },
+        onCut: function () { if (mine()) { capCut(); } },
+        onMicLevel: function (rms, voice) { if (mine()) { liveMicLevel(voice); } },
+        onEnd: function (why, detail) { if (mine()) { liveDropped(c, why, detail); } }
+      });
+    } catch (e) { p = Promise.reject(e); }
+    Promise.resolve(p).then(function () {
+      if (!mine()) { return; }          // ended or restarted while it was opening
+      c.open = true;
+      c.lastAct = Date.now();
+      try { window.MaryLive.setVolume(S.volume); } catch (e) { log(e); }
+      setPhase('listening');
+      capListening();   // M4b: no words while listening (round 6)
+      greetLive(hello);
+      clearInterval(c.idleTimer);
+      c.idleTimer = setInterval(function () { liveIdleCheck(c); }, 1000);
+    }, function (err) {
+      if (mine()) { liveFailed(c, err); }
+    });
+  }
+
+  function liveFailed(c, err) {
+    var kind = (err && err.kind) || '';
+    c.live = false;
+    c.open = false;
+    if (kind === 'stopped') { closeConvo(c); setPhase('idle'); return; }
+    if (kind === 'mic_denied' || kind === 'no_mic') {   // no other mode would hear them either: say so, offer typing
+      closeConvo(c);
+      setPhase('idle');
+      openTyping();
+      say("I'm sorry. " + kindMessage(err && err.message) + ' You can type to me instead.', 'sorry');
+      return;
+    }
+    log(err);
+    liveFallback(c);
+  }
+
+  // Live would not start or dropped: the next mode in the order, with one kind line, and the talk goes on.
+  function liveFallback(c) {
+    c.live = false;
+    c.open = false;
+    clearInterval(c.idleTimer);
+    clearTimeout(c.byeTimer);
+    c.mode = nextMode(S.talkOrder, 'live');
+    S.voiceMode = speechModeFor(c.mode);
+    newTurn();
+    setPhase('idle');
+    if (c.ending) { closeConvo(c); return; }
+    sayFallbackOnce().then(function () {
+      if (S.convo !== c) { return; }
+      if (S.typingOnly) { closeConvo(c); openTyping(); return; }
+      convoNext(c);
+    });
+  }
+
+  function liveDropped(c, why, detail) {
+    log(new Error('Live ended: ' + why + (detail && detail.note ? ' (' + detail.note + ')' : '')));
+    if (c.ending) { finishLive(c); return; }
+    liveFallback(c);
+  }
+
+  function liveSpeakingChanged(c, on) {
+    c.lastAct = Date.now();
+    if (on) {
+      setPhase('speaking');
+      applyMood('talking');
+      return;
+    }
+    if (S.phase === 'speaking' && !Sp.sess) { setPhase(restPhase()); }
+    if (c.ending && c.byeDone) { finishLive(c); }
+  }
+
+  function liveTurnDone(c) {
+    c.lastAct = Date.now();
+    if (!c.ending) { return; }
+    c.byeDone = true;                       // her goodbye turn is complete: close once it has been heard
+    if (!liveSpeaking()) { finishLive(c); }
+  }
+
+  // M4a: her finished Live turn is remembered like Normal talk's, after the resident's own line and never twice.
+  function liveSaid(c) {
+    var text = String(c.saidText || '').trim();
+    c.saidText = '';
+    if (!text) { return; }
+    if (c.saidSkip) { c.saidSkip = false; return; }   // the emergency words: /api/mary/heard already saved them
+    Promise.resolve(c.heardCheck).then(function () {
+      return api('POST', '/api/mary/live/said', { text: text }, { ms: 8000 });
+    }).catch(log);
+  }
+
+  function liveByeCap(c, extended) {
+    if (S.convo !== c) { return; }
+    if (!extended && liveSpeaking()) { c.byeTimer = setTimeout(function () { liveByeCap(c, true); }, 6000); return; }
+    finishLive(c);
+  }
+
+  function finishLive(c) {
+    if (S.convo !== c) { return; }
+    closeConvo(c);
+    if (!Sp.sess && S.phase !== 'thinking') { setPhase('idle'); }
+  }
+
+  function liveIdleCheck(c) {
+    if (S.convo !== c || !c.live) { clearInterval(c.idleTimer); return; }
+    if (c.ending || !c.open) { return; }
+    var now = Date.now();
+    if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || uiOpen()) { c.lastAct = now; return; }   // M4b: or a panel
+    if (now - c.lastAct >= CONVO_IDLE_S * 1000) { endConvo(c, 'idle'); }
+  }
+
+  // Every finished thing the resident says in Live gets the same emergency check as Normal talk (never missed),
+  // then the goodbye check. The promise is kept: skills wait for it.
+  function liveHeard(c, text) {
+    text = String(text == null ? '' : text).trim();
+    c.heard = text;
+    c.lastAct = Date.now();
+    var p = api('POST', '/api/mary/heard', { text: text }, { ms: 8000 }).then(function (j) {
+      return j || {};
+    }, function (e) {
+      log(e);                               // tools still run; the server's skills gate checks again
+      return null;
+    });
+    c.heardCheck = p;
+    p.then(function (j) {
+      if (j && j.emergency) {
+        if (S.convo === c && c.live) { liveEmergency(c, j); return; }
+        newTurn();                                                // Live closed meanwhile: never miss it anyway
+        if (S.screen !== 'emergency') { show('emergency'); }
+        say((j && j.say) ? String(j.say) : MSG.emergency, 'alert');
+        return;
+      }
+      if (S.convo !== c || !c.live) { return; }
+      if (isGoodbye(text)) { endConvo(c, 'bye'); }
+    });
+    return p;
+  }
+
+  function liveEmergency(c, j) {
+    try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); }
+    var words = (j && j.say) ? String(j.say) : MSG.emergency;
+    if (c.ending) {                         // no goodbye now: she stays with them
+      c.ending = false;
+      clearTimeout(c.byeTimer);
+      clearInterval(c.idleTimer);
+      c.idleTimer = setInterval(function () { liveIdleCheck(c); }, 1000);
+    }
+    c.lastAct = Date.now();
+    if (S.screen !== 'emergency') { show('emergency'); }
+    showCaption(words);
+    capLiveEmergency(words);   // M4b: all of it at once (whole), before her voice
+    c.saidText = '';                        // M4a: /api/mary/heard saved the emergency words; not saved twice
+    c.saidSkip = true;
+    if (!greetLive(LIVE_SAFETY + words + ')')) { c.saidSkip = false; say(words, 'alert'); }
+  }
+
+  function liveToolCall(c, tc) {
+    var calls = (tc && tc.functionCalls) || [];
+    var heard = c.heard || '';
+    c.toolBusy++;
+    return Promise.resolve(c.heardCheck).then(function (j) {
+      if (liveToolGate(j, S.screen === 'emergency') === 'refuse') {
+        return { functionResponses: calls.map(function (fc) { return { id: fc.id, name: fc.name,
+          response: { error: 'emergency', note: 'Not done. Stay with them about their safety and do not mention this.' } }; }) };
+      }
+      if (!window.MarySkills) { throw new Error('skills are not loaded'); }
+      return window.MarySkills.handleLiveToolCall(tc, heard);
+    }).then(function (r) {
+      c.toolBusy--;
+      c.lastAct = Date.now();
+      return r;
+    }, function (e) {
+      c.toolBusy--;
+      c.lastAct = Date.now();
+      log(e);
+      throw e;
+    });
+  }
+
+  // Typed words while Live is open go into the same talk, after the emergency check.
+  function liveTyped(c, text) {
+    setCaption('You said: ' + text, 'said');
+    c.lastAct = Date.now();
+    liveHeard(c, text).then(function (j) {
+      if (S.convo !== c || (j && j.emergency)) { return; }
+      if (!greetLive(text)) { closeConvo(c); talkTo(text); }   // the line closed: answer the usual way
+    });
+  }
+
+  // A companion switch while Live is open: Live starts again in the new companion's own voice, once it is saved.
+  function liveRestartAfter(saved) {
+    var c = S.convo;
+    if (!c || !c.live) { return; }
+    Promise.resolve(saved).then(function () {
+      setTimeout(function () {
+        if (S.convo === c && c.live && !c.ending) { startLive(c, LIVE_SWITCHED); }
+      }, 300);
+    });
+  }
+
+  // --- Normal / Offline: listen, answer, listen again (never while she speaks) ---
+  // tapped: the resident asked (Talk tap, wake word), so it listens even on the emergency screen (M4a)
+  function convoListen(c, tapped) {
+    if (S.convo !== c || c.ending || c.live) { return; }
+    if (S.screen === 'emergency' && !tapped) { c.paused = true; setPhase('idle'); updateTalkButton(); return; }
+    c.paused = false;
     var my = newTurn();
-    return listenOnce().then(function (text) {
-      if (my !== S.turn) { return undefined; }
-      if (!text) { return say(S.listenReason === 'silence' ? MSG.silence : MSG.notCaught, 'talking'); }
-      return talkTo(text);
+    listenOnce({ convo: true }).then(function (text) {
+      if (S.convo !== c || my !== S.turn) { return undefined; }
+      if (!text) {
+        // M4a: a second miss in a row (a mic that isn't recording, a noisy room) ends the talk instead of nagging
+        if (S.listenReason === 'idle' || c.misses >= 1) { endConvo(c, 'idle'); return undefined; }
+        c.misses++;
+        return say(MSG.notCaught, 'talking').then(function () { convoNext(c); });
+      }
+      c.misses = 0;
+      if (isGoodbye(text)) { return convoBye(c, text); }
+      return talkTo(text).then(function () { convoNext(c); });
     }).catch(function (e) {
-      if ((e && e.cancelled) || my !== S.turn) { return undefined; }
+      if (S.convo !== c) { return undefined; }
+      if (e && e.cancelled) { convoNext(c); return undefined; }   // something else took the turn: go on after it
+      closeConvo(c);
       log(e);
       if (e && (e.stage === 'start' || (e.stage === 'stop' && e.serverMessage))) {
         setPhase('idle');
@@ -690,13 +1355,44 @@
     });
   }
 
+  // After her answer (or anything else that took the turn): listen again once she is quiet.
+  function convoNext(c) {
+    if (S.convo !== c || c.ending || c.live) { return; }
+    if (S.screen === 'emergency') { c.paused = true; setPhase('idle'); updateTalkButton(); return; }   // no auto-listen there
+    if ((S.screen !== 'everyday' && !skillScreen()) || uiOpen() || !$('typing').hidden) { closeConvo(c); return; }   // M4b: or a panel
+    if (S.phase !== 'idle' || Sp.sess) { setTimeout(function () { convoNext(c); }, 300); return; }
+    convoListen(c);
+  }
+
+  // A short goodbye in Normal/Offline: the emergency check first (never missed), then her fixed goodbye.
+  function convoBye(c, text) {
+    setPhase('thinking');
+    return api('POST', '/api/mary/heard', { text: text }, { ms: 8000 }).then(function (j) {
+      return j || {};
+    }, function (e) { log(e); return null; }).then(function (j) {
+      if (S.convo !== c) { return undefined; }
+      closeConvo(c);
+      if (!j || j.emergency) { return talkTo(text); }   // the full talk path: the emergency screen and her words
+      setPhase('idle');
+      return say(MSG.goodbye, 'happy');
+    });
+  }
+
+  function convoAfterEmergency() {
+    var c = S.convo;
+    if (!c || S.screen === 'emergency') { return; }
+    c.lastAct = Date.now();
+    if (c.paused && !c.live) { c.paused = false; convoNext(c); }
+  }
+  // ---------------------------------------------------------------- end M4a conversations
+
   // ---------------------------------------------------------------- the talk pipeline
   function alive(T) { return T.turn === S.turn && !T.dead; }
 
   function onPiece(piece, T) {
     T.streamed += piece;
     T.rest += piece;
-    setCaption(T.streamed.replace(/^\s+/, ''));
+    showCaption(T.streamed.replace(/^\s+/, ''));   // M4a
     var r = splitSentences(T.rest, false);
     T.rest = r.rest;
     if (r.sentences.length) {
@@ -719,10 +1415,14 @@
     if (values.voice_volume != null) { S.volume = clampNum(values.voice_volume, VOL_MIN, VOL_MAX, S.volume); }
     if (values.companion === 'mary' || values.companion === 'him') {
       if (values.companion !== S.companion) {
-        setCompanion(values.companion, { noSave: true });
+        setCompanion(values.companion, { noSave: true });   // M4a: an open Live talk starts again in the new voice
         try { face.bounce(); } catch (e) { /* nothing */ }
       }
     }
+    // M4a: the quiet that ends a turn (Live uses it from the next talk), the talk mode, and Live's loudness
+    if (values.listen_wait != null) { QUIET_END_S = clampNum(values.listen_wait, 1.5, 6, QUIET_END_S); }
+    if (values.talk_mode != null || values.listen_wait != null) { refreshStatus().catch(log); }
+    if (values.voice_volume != null && liveOn()) { try { window.MaryLive.setVolume(S.volume); } catch (e) { log(e); } }
   }
   // Runs a menu action through the voice_comfort skill; resolves true when the skill answered, false to fall back.
   async function skillMenu(action, mood) {
@@ -731,6 +1431,7 @@
       var r = await window.MarySkills.call('voice_comfort__' + action, {});
       if (!r || !r.response || r.response.error || !r.say) { return false; }
       newTurn();
+      if (action === 'switch_companion' && S.convo && S.convo.live) { return true; }   // M4a: Live restarts and greets
       say(r.say, mood);
       return true;
     } catch (e) { log(e); return false; }
@@ -851,7 +1552,7 @@
     // A key Gemini refused: her own "my key isn't working" line is the caption, not the generic sorry.
     if (d.error && !d.emergency && (d.bad_key || !d.mood)) { setMood('sorry'); }
 
-    setCaption(caption);
+    showCaption(caption);   // M4a
     var tail = splitSentences(T.rest, true).sentences;
     if (!T.sess) { T.sess = spStart(); }
     for (var i = 0; i < tail.length; i++) { spAdd(T.sess, tail[i]); }
@@ -907,18 +1608,370 @@
     }
   }
 
-  // ---------------------------------------------------------------- menu and typing
-  function openMenu() {
-    refreshLabels();
-    $('closeBtn').hidden = !(window.pywebview && window.pywebview.api && typeof window.pywebview.api.close_window === 'function');
-    $('menu').hidden = false;
-    try { $('menu').querySelector('button').focus(); } catch (e) { /* nothing */ }
+  // ---------------------------------------------------------------- M4b: the one Menu button, its menu and three panels
+  var MENU_IDLE_MS = 20000;      // M4b: the menu closes after 20 s with nothing done in it
+  var PANEL_IDLE_MS = 120000;    // M4b: a panel left alone goes back to her face after 2 minutes
+  var PANELS = ['canPanel', 'infoPanel', 'choosePanel'];
+  var M = { timer: null, panel: null, extra: [] };   // M4b: extra = the skills' rows for "Things Mary can do"
+
+  function hasWindow() {
+    return !!(window.pywebview && window.pywebview.api && typeof window.pywebview.api.close_window === 'function');
   }
-  function closeMenu() { $('menu').hidden = true; }
+  function menuOpen() { return !$('menu').hidden; }
+  function uiOpen() { return menuOpen() || !!M.panel; }   // M4b: the menu or a panel is over her face
+  function armIdle(ms) {
+    clearTimeout(M.timer);
+    M.timer = setTimeout(function () { if (M.panel) { closePanel(false); } else if (menuOpen()) { closeMenu(false); } }, ms);
+  }
+  function menuItems() {
+    return [].filter.call($('menu').querySelectorAll('.mi'), function (b) { return !b.hidden && b.offsetParent !== null; });
+  }
+
+  function openMenu() {
+    if (M.panel) { closePanel(false); }
+    refreshLabels();
+    $('closeBtn').hidden = !hasWindow();
+    if ((S.screen === 'choose' || S.screen === 'hello') && !hasWindow()) { return; }   // first run in a browser: nothing to offer
+    $('menu').hidden = false;
+    var b = $('menuBtn');
+    b.classList.add('open');
+    b.setAttribute('aria-expanded', 'true');
+    $('menuBtnLbl').textContent = 'Hide menu';
+    try { face.setMenuOpen(true); } catch (e) { log(e); }   // M4b: she moves aside and looks at it
+    capCall(function () { cap.setSide(true); });            // M4b: her words keep clear of it
+    armIdle(MENU_IDLE_MS);
+    var items = menuItems();
+    try { if (items.length) { items[0].focus(); } } catch (e) { /* nothing */ }
+  }
+  function closeMenu(refocus) {
+    var was = menuOpen();
+    $('menu').hidden = true;
+    if (!M.panel) { clearTimeout(M.timer); }
+    var b = $('menuBtn');
+    b.classList.remove('open');
+    b.setAttribute('aria-expanded', 'false');
+    $('menuBtnLbl').textContent = 'Menu';
+    try { face.setMenuOpen(false); } catch (e) { log(e); }   // M4b
+    capCall(function () { cap.setSide(false); });            // M4b
+    if (refocus && was) { try { b.focus(); } catch (e) { /* nothing */ } }
+  }
+  function onMenuKey(ev) {   // M4b: arrow keys move through the menu
+    var items = menuItems(), i = items.indexOf(D.activeElement), j = -1;
+    if (ev.key === 'ArrowDown') { j = (i + 1) % items.length; }
+    else if (ev.key === 'ArrowUp') { j = (i - 1 + items.length) % items.length; }
+    else if (ev.key === 'Home') { j = 0; }
+    else if (ev.key === 'End') { j = items.length - 1; }
+    if (j < 0 || !items.length) { return; }
+    ev.preventDefault();
+    try { items[j].focus(); } catch (e) { /* nothing */ }
+  }
+  // Any tap or key while the menu or a panel is open keeps it open; a tap on her face (off the menu) closes the menu.
+  function onUiTouch(ev) {
+    if (!uiOpen()) { return; }
+    armIdle(M.panel ? PANEL_IDLE_MS : MENU_IDLE_MS);
+    if (ev.type !== 'pointerdown' || M.panel) { return; }
+    var t = ev.target;
+    if (t && t.closest && (t.closest('#menu') || t.closest('#menuBtn'))) { return; }
+    closeMenu(false);
+  }
+  function trapTab(ev) {   // M4b: Tab stays inside an open panel (it is a dialog)
+    var card = $(M.panel).querySelector('.sheetcard');
+    var f = [].filter.call(card.querySelectorAll('button, a[href]'), function (el) { return el.offsetParent !== null; });
+    if (!f.length) { return; }
+    var first = f[0], last = f[f.length - 1];
+    if (ev.shiftKey && (D.activeElement === first || !card.contains(D.activeElement))) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && (D.activeElement === last || !card.contains(D.activeElement))) { ev.preventDefault(); first.focus(); }
+  }
+
+  function openPanel(id) {
+    if (M.panel && M.panel !== id) { $(M.panel).hidden = true; }
+    M.panel = id;
+    refreshLabels();
+    if (id === 'canPanel') { fillCan(); } else if (id === 'infoPanel') { fillInfo(); } else { fillChoose(); }
+    $(id).hidden = false;
+    $(id).scrollTop = 0;
+    armIdle(PANEL_IDLE_MS);
+    setTimeout(function () { try { $(id).querySelector('.back').focus(); } catch (e) { /* nothing */ } }, 30);
+  }
+  function closePanel(refocus) {
+    if (!M.panel) { return; }
+    $(M.panel).hidden = true;
+    M.panel = null;
+    clearTimeout(M.timer);
+    stopSample();
+    if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }
+  }
+
+  // A big row: its words, an optional second line, and what a tap does.
+  function rowBtn(text, sub, onTap, attrs) {
+    var b = D.createElement('button');
+    b.type = 'button';
+    b.className = 'row';
+    var t = D.createElement('span');
+    t.className = 'txt';
+    var m = D.createElement('span');
+    m.textContent = text;
+    t.appendChild(m);
+    if (sub) { var s2 = D.createElement('span'); s2.className = 'say'; s2.textContent = sub; t.appendChild(s2); }
+    b.appendChild(t);
+    if (attrs) { for (var k in attrs) { if (attrs.hasOwnProperty(k)) { b.setAttribute(k, attrs[k]); } } }
+    if (onTap) { b.addEventListener('click', onTap); }
+    return b;
+  }
+  function sayLine(words) { return 'Say: “' + words + '”'; }
+
+  // --- Things Mary can do: things to say; a tap does the same thing
+  var CAN = [
+    { act: 'slower', text: 'Slow down', say: 'slow down' },
+    { act: 'faster', text: 'Speed up', say: 'speed up' },
+    { act: 'quieter', text: 'Talk quieter', say: 'quieter' },
+    { act: 'louder', text: 'Talk louder', say: 'speak up' },
+    { act: 'more_time', text: 'Give me more time', say: 'give me more time' },
+    { act: 'type', text: 'Type to {n}' },
+    { act: 'notes', text: 'My notes' }
+  ];
+  function fillCan() {
+    var box = $('canList'), n = companionName(S.companion);
+    box.textContent = '';
+    CAN.forEach(function (it) {
+      box.appendChild(rowBtn(it.text.replace('{n}', n), it.say ? sayLine(it.say) : '', function () { closePanel(true); doThing(it.act); }));
+    });
+    M.extra.forEach(function (x) {   // the switched-on skills that have a screen (skills.js)
+      box.appendChild(rowBtn(x.label, x.say ? sayLine(x.say) : '', function () {
+        closePanel(true);
+        try { x.open(); } catch (e) { log(e); }
+      }));
+    });
+  }
+  function addThing(x) {   // M4b: skills.js lists a skill's screen here (the old menu buttons are gone)
+    if (!x || !x.name || !x.label || typeof x.open !== 'function') { return; }
+    M.extra = M.extra.filter(function (o) { return o.name !== x.name; });
+    M.extra.push({ name: String(x.name), label: String(x.label), say: x.say ? String(x.say) : '', open: x.open });
+    if (M.panel === 'canPanel') { fillCan(); }
+  }
+  function doThing(act) {
+    // --- skills hook (M13) --- voice_comfort does these; the old code is the fallback
+    if (act === 'slower') { skillMenu('slower').then(function (ok) { if (!ok) { adjust('rate', -0.08); } }); }
+    else if (act === 'faster') { skillMenu('faster').then(function (ok) { if (!ok) { adjust('rate', 0.08); } }); }
+    else if (act === 'quieter') { skillMenu('quieter').then(function (ok) { if (!ok) { adjust('volume', -0.1); } }); }
+    else if (act === 'louder') { skillMenu('louder').then(function (ok) { if (!ok) { adjust('volume', 0.1); } }); }
+    else if (act === 'more_time') {
+      skillMenu('more_time').then(function (ok) {
+        if (!ok) {
+          newTurn();
+          api('PUT', '/api/settings', { listen_wait: 4 }).then(function () { return refreshStatus(); }).catch(noop);
+          say("I'll wait longer for you.");
+          return;
+        }
+        refreshStatus().catch(noop);   // the longer wait applies from the next turn
+      });
+    }
+    else if (act === 'switch') { skillMenu('switch_companion', 'happy').then(function (ok) { if (!ok) { switchCompanion(); } }); }
+    // --- end skills hook ---
+    else if (act === 'type') { openTyping(); }
+    else if (act === 'notes') { window.location.href = '/?from=mary'; }
+  }
+
+  // --- Choose Mary or Sam
+  function fillChoose() {
+    var box = $('chooseList');
+    box.textContent = '';
+    box.setAttribute('role', 'radiogroup');
+    box.setAttribute('aria-labelledby', 'chooseTitle');
+    ['mary', 'him'].forEach(function (c) {
+      var now = c === S.companion;
+      box.appendChild(rowBtn(companionName(c), now ? 'Talking with you now' : '', function () {
+        closePanel(true);
+        if (c !== S.companion) { doThing('switch'); }
+      }, { role: 'radio', 'aria-checked': now ? 'true' : 'false' }));
+    });
+  }
+
+  // --- My info: how she talks, her voice, how long she waits, skills on or off, and a link to the rest
+  function infoNote(t) { $('infoSaved').textContent = t || ''; }
+  function savedNote() { return 'Saved. ' + companionName(S.companion) + ' will use this the next time you talk.'; }
+  function saveSetting(body, after) {
+    infoNote('Saving…');
+    return api('PUT', '/api/settings', body).then(function () {
+      return refreshStatus().catch(noop);   // the new setting applies from the next talk
+    }).then(function () {
+      infoNote(savedNote());
+      if (after) { after(); }
+    }, function (e) {
+      log(e);
+      infoNote("Sorry, that didn't save. Please try again.");
+    });
+  }
+  function radioRows(box, items, isOn, onPick) {
+    box.textContent = '';
+    items.forEach(function (it) {
+      var attrs = { role: 'radio', 'aria-checked': isOn(it) ? 'true' : 'false' };
+      var b = rowBtn(it.t, it.h, null, attrs);
+      b.addEventListener('click', function () {
+        if (b.getAttribute('aria-checked') === 'true') { return; }
+        [].forEach.call(box.querySelectorAll('[role="radio"]'), function (o) { o.setAttribute('aria-checked', o === b ? 'true' : 'false'); });
+        onPick(it);
+      });
+      box.appendChild(b);
+    });
+  }
+  function fillInfo() {
+    infoNote('');
+    var him = S.companion === 'him', Her = him ? 'His' : 'Her', she = him ? 'he' : 'she';
+    radioRows($('modeList'), [
+      { v: 'live', t: 'Live (best)', h: Her + ' natural voice. Talk back and forth, and cut in any time. Needs the internet.' },
+      { v: 'normal', t: 'Normal', h: 'This computer turns your words into text, then ' + she + ' answers in ' + Her.toLowerCase() + ' voice. Needs the internet.' },
+      { v: 'offline', t: 'Offline', h: Her + ' voice is made on this computer.' + (S.offlineReady === false ? ' Not set up on this computer yet.' : '') }
+    ], function (it) { return (S.talkMode || 'live') === it.v; }, function (it) {
+      saveSetting({ talk_mode: it.v }, fillVoices);   // the voice list follows the talk mode
+    });
+    radioRows($('waitList'), [
+      { v: 2.5, t: 'Usual', h: 'About 2 and a half seconds of quiet.' },
+      { v: 4, t: 'More time', h: 'About 4 seconds. You can also say “give me more time”.' }
+    ], function (it) { return (QUIET_END_S >= 3.5) === (it.v >= 3.5); }, function (it) {
+      saveSetting({ listen_wait: it.v });
+    });
+    fillVoices();
+    fillSkills();
+  }
+  function infoLead(box, t) {
+    box.textContent = '';
+    var p = D.createElement('p');
+    p.className = 'lead';
+    p.textContent = t;
+    box.appendChild(p);
+  }
+  function fillVoices() {
+    var box = $('voiceList'), c = S.companion;
+    infoLead(box, 'Getting the voices…');
+    api('GET', '/api/mary/voices').then(function (v) {
+      if (M.panel !== 'infoPanel') { return; }
+      var offline = S.talkMode === 'offline', kind = offline ? 'kokoro' : 'gemini';
+      var gender = c === 'him' ? 'male' : 'female';
+      var chosen = String((v && v.chosen && v.chosen[c]) || ''), parts = chosen.split(':');
+      var chosenKind = parts[0] || '', chosenName = parts[1] || '';
+      var mine = chosenKind === 'kokoro' ? offline : !offline && !!chosenName;   // a pick for this kind of voice
+      var list = ((v && v.candidates) || []).filter(function (x) { return x.kind === kind && x.gender === gender; });
+      if (!list.length || (offline && !list.some(function (x) { return x.ready; }))) {
+        infoLead(box, 'The offline voices are not set up on this computer yet.');
+        return;
+      }
+      box.textContent = '';
+      list.forEach(function (x, i) {
+        var on = mine ? x.voice === chosenName : i === 0;   // nothing picked: the first one is the one in use
+        var row = D.createElement('div');
+        row.className = 'row';
+        var pick = rowBtn(x.about || x.voice, '', null, { role: 'radio', 'aria-checked': on ? 'true' : 'false' });
+        pick.className = 'main';
+        if (!x.ready) { pick.setAttribute('aria-disabled', 'true'); }
+        pick.addEventListener('click', function () {
+          if (pick.getAttribute('aria-disabled') === 'true' || pick.getAttribute('aria-checked') === 'true') { return; }
+          [].forEach.call(box.querySelectorAll('[role="radio"]'), function (o) { o.setAttribute('aria-checked', o === pick ? 'true' : 'false'); });
+          var body = {};
+          body[c === 'him' ? 'voice_sam' : 'voice_mary'] = x.id;
+          saveSetting(body);
+        });
+        var hear = D.createElement('button');
+        hear.type = 'button';
+        hear.className = 'side';
+        hear.textContent = 'Hear it';
+        hear.setAttribute('aria-label', 'Hear the ' + (x.about || x.voice) + ' voice');
+        hear.addEventListener('click', function () { playSample(x.id, hear); });
+        row.appendChild(pick);
+        if (x.ready) { row.appendChild(hear); }
+        box.appendChild(row);
+      });
+    }, function (e) { log(e); infoLead(box, "Sorry, I couldn't get the voices just now."); });
+  }
+  var SMP = { audio: null, url: '' };
+  function stopSample() {
+    if (SMP.audio) { try { SMP.audio.pause(); } catch (e) { /* nothing */ } SMP.audio = null; }
+    if (SMP.url) { try { URL.revokeObjectURL(SMP.url); } catch (e) { /* nothing */ } SMP.url = ''; }
+  }
+  function playSample(id, btn) {
+    if (btn.getAttribute('aria-disabled') === 'true') { return; }
+    stopSample();
+    btn.textContent = 'Getting it…';
+    btn.setAttribute('aria-disabled', 'true');
+    function fin() { btn.textContent = 'Hear it'; btn.removeAttribute('aria-disabled'); }
+    fetch('/api/mary/voices/sample', { method: 'POST', cache: 'no-store',
+      headers: { 'X-Tracker': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) })
+      .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.blob(); })
+      .then(function (blob) {
+        if (M.panel !== 'infoPanel') { return; }
+        SMP.url = URL.createObjectURL(blob);
+        var a = new Audio(SMP.url);
+        a.volume = Math.max(0, Math.min(1, Number(S.volume) || 1));
+        SMP.audio = a;
+        a.addEventListener('ended', function () { if (SMP.audio === a) { stopSample(); } });
+        return a.play();
+      })
+      .then(fin, function (e) { log(e); fin(); infoNote("Sorry, I couldn't play that voice just now."); });
+  }
+  function fillSkills() {
+    var box = $('skillList');
+    infoLead(box, 'Getting the list…');
+    api('GET', '/api/mary/skills').then(function (r) {
+      if (M.panel !== 'infoPanel') { return; }
+      var list = (r && r.skills) || [];
+      if (!list.length) { infoLead(box, 'Nothing here yet.'); return; }
+      box.textContent = '';
+      list.forEach(function (sk) {
+        var row = D.createElement('div');
+        row.className = 'row';
+        var t = D.createElement('span');
+        t.className = 'txt';
+        var m = D.createElement('span');
+        m.textContent = sk.title || sk.name;
+        t.appendChild(m);
+        if (sk.summary) { var s2 = D.createElement('span'); s2.className = 'say'; s2.textContent = sk.summary; t.appendChild(s2); }
+        var b = D.createElement('button');
+        b.type = 'button';
+        b.className = 'side';
+        if (sk.locked) {
+          b.textContent = 'Set by your helper';
+          b.setAttribute('aria-disabled', 'true');
+        } else {
+          b.textContent = sk.on ? 'On' : 'Off';
+          b.setAttribute('aria-pressed', sk.on ? 'true' : 'false');
+        }
+        b.setAttribute('aria-label', (sk.title || sk.name) + ': ' + b.textContent);
+        b.addEventListener('click', function () {
+          if (sk.locked) { infoNote('Your helper set this one.'); return; }
+          infoNote('Saving…');
+          api('PUT', '/api/mary/skills/' + encodeURIComponent(sk.name), { on: !sk.on }).then(function () {
+            sk.on = !sk.on;
+            b.textContent = sk.on ? 'On' : 'Off';
+            b.setAttribute('aria-pressed', sk.on ? 'true' : 'false');
+            b.setAttribute('aria-label', (sk.title || sk.name) + ': ' + b.textContent);
+            infoNote(savedNote());
+          }, function (e) {
+            log(e);
+            infoNote(/locked/.test(String(e && e.message)) ? 'Your helper set this one.' : "Sorry, that didn't save. Please try again.");
+          });
+        });
+        row.appendChild(t);
+        row.appendChild(b);
+        box.appendChild(row);
+      });
+    }, function (e) { log(e); infoLead(box, "Sorry, I couldn't get the list just now."); });
+  }
+
+  // The menu's Talk row: start a talk, or "Stop talking" while she is in one (the same end path as before)
+  function onTalkRow() {
+    var c = S.convo;
+    if (c) {
+      if (c.ending) { if (c.live) { finishLive(c); } }
+      else { endConvo(c, 'tap'); }
+      return;
+    }
+    onTalkTap();
+  }
 
   function openTyping() {
     closeMenu();
-    newTurn();
+    var c = S.convo;   // M4a: Live stays open (typed words go into it); a Normal/Offline talk ends here
+    if (c && c.live) { c.lastAct = Date.now(); } else { if (c) { closeConvo(c); } newTurn(); }
     $('typing').hidden = false;
     var t = $('typeText');
     t.value = '';
@@ -926,13 +1979,14 @@
   }
   function closeTyping(refocus) {
     $('typing').hidden = true;
-    if (refocus) { try { $('talkBtn').focus(); } catch (e) { /* nothing */ } }
+    if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }   // M4b
   }
   function submitTyping() {
     var t = $('typeText');
     var v = t.value.trim();
     if (!v) { try { t.focus(); } catch (e) { /* nothing */ } return; }
     closeTyping(true);
+    if (S.convo && S.convo.live && liveOn()) { liveTyped(S.convo, v); return; }   // M4a
     talkTo(v);
   }
 
@@ -957,39 +2011,48 @@
 
   function setCompanion(c, opts) {
     if (c !== 'mary' && c !== 'him') { c = 'mary'; }
+    var changed = c !== S.companion;   // M4a
     S.companion = c;
     try { face.setCompanion(c); } catch (e) { log(e); }
     applyLook(c);
     refreshLabels();
-    if (!(opts && opts.noSave)) { api('PUT', '/api/settings', { companion: c }).catch(noop); }
+    var saved = null;
+    if (!(opts && opts.noSave)) { saved = api('PUT', '/api/settings', { companion: c }).catch(noop); }
+    if (changed) { liveRestartAfter(saved); }   // M4a: Live talks in the new companion's voice once it is saved
   }
 
   function switchCompanion() {
     var c = S.companion === 'mary' ? 'him' : 'mary';
     newTurn();
     setCompanion(c);
+    if (S.convo && S.convo.live) { try { face.bounce(); } catch (e) { /* nothing */ } return; }   // M4a: Live greets
     var n = companionName(c);
     say("Hi, I'm " + n + ". It's " + (c === 'mary' ? 'so ' : '') + 'nice to meet you.', 'happy');
     try { face.bounce(); } catch (e) { /* nothing */ }
   }
 
-  function onMenuClick(ev) {
-    var t = ev.target;
-    if (t === $('menu')) { closeMenu(); return; }
-    while (t && t !== $('menu') && !(t.getAttribute && t.getAttribute('data-act'))) { t = t.parentNode; }
-    if (!t || t === $('menu')) { return; }
+  function onMenuClick(ev) {   // M4b: the approved six items
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
+    if (!t || !$('menu').contains(t)) { return; }
     var act = t.getAttribute('data-act');
-    closeMenu();
-    // --- skills hook (M13) --- voice_comfort does these; the old code is the fallback
-    if (act === 'slower') { skillMenu('slower').then(function (ok) { if (!ok) { adjust('rate', -0.08); } }); }
-    else if (act === 'faster') { skillMenu('faster').then(function (ok) { if (!ok) { adjust('rate', 0.08); } }); }
-    else if (act === 'quieter') { skillMenu('quieter').then(function (ok) { if (!ok) { adjust('volume', -0.1); } }); }
-    else if (act === 'louder') { skillMenu('louder').then(function (ok) { if (!ok) { adjust('volume', 0.1); } }); }
-    else if (act === 'switch') { skillMenu('switch_companion', 'happy').then(function (ok) { if (!ok) { switchCompanion(); } }); }
-    // --- end skills hook ---
-    else if (act === 'type') { openTyping(); }
-    else if (act === 'notes') { window.location.href = '/?from=mary'; }
+    App.onActivity();
+    if (act === 'talk') {
+      if (t.getAttribute('aria-disabled') === 'true') { return; }
+      closeMenu(true);
+      onTalkRow();
+    }
+    else if (act === 'can') { closeMenu(false); openPanel('canPanel'); }
+    else if (act === 'info') { closeMenu(false); openPanel('infoPanel'); }
+    else if (act === 'choose') { closeMenu(false); openPanel('choosePanel'); }
+    else if (act === 'games') {   // Coming soon (M7): she says so, unless she is in a talk
+      closeMenu(true);
+      if (!S.convo && S.phase === 'idle' && S.screen === 'everyday') {
+        newTurn();
+        say("Games are coming soon. I can't wait to play with you.", 'happy');
+      }
+    }
     else if (act === 'close') {
+      closeMenu(false);
       try { window.pywebview.api.close_window(); } catch (e) { log(e); }
     }
   }
@@ -1045,6 +2108,15 @@
     S.name = st.name ? String(st.name) : '';
     S.rate = clampNum(st.voice_rate, RATE_MIN, RATE_MAX, S.rate);
     S.volume = clampNum(st.voice_volume, VOL_MIN, VOL_MAX, S.volume);
+    // M4a: the talk modes the server says will work, best first, and the quiet that ends a turn
+    if (st.talk_mode) { S.talkMode = String(st.talk_mode); }
+    if (st.offline_ready != null) { S.offlineReady = !!st.offline_ready; }   // M4b: for My info
+    if (Array.isArray(st.talk_order)) {
+      S.talkOrder = st.talk_order.filter(function (m) { return m === 'live' || m === 'normal' || m === 'offline'; });
+    }
+    if (st.listen_wait != null) { QUIET_END_S = clampNum(st.listen_wait, 1.5, 6, QUIET_END_S); }
+    S.talkOnOpen = st.talk_on_open !== false;   // M4a: she says hello and listens when her screen opens
+    if (!S.convo) { S.voiceMode = speechModeFor(nextMode(S.talkOrder, null)); }
     var c = st.companion === 'him' ? 'him' : 'mary';
     if (c !== S.companion) { setCompanion(c, { noSave: true }); } else { applyLook(c); refreshLabels(); }
   }
@@ -1069,7 +2141,7 @@
       return;
     }
     show('everyday');
-    setCaption(S.typingOnly ? MSG.tapToType : MSG.tapToTalk);
+    setCaption(S.typingOnly && !liveFirst() ? MSG.tapToType : MSG.tapToTalk);   // M4a: Live has its own mic
   }
 
   // ===== T4b: replace this stub with the first-run screens (Choose your companion, First hello).
@@ -1093,6 +2165,7 @@
 
   async function init() {
     face = makeFace('mary');
+    cap = makeCaptions();   // M4b
     applyLook('mary');
     bind();
     setPhase('idle');
@@ -1108,7 +2181,7 @@
     // The mic check can be slow on a cold laptop: wait 3 s at most, and let a late answer update the button.
     await Promise.race([pListen, new Promise(function (r) { setTimeout(r, 3000); })]);
     pListen.then(function () {
-      if (S.typingOnly && S.phase === 'idle' && $('caption').textContent === MSG.tapToTalk) { setCaption(MSG.tapToType); }
+      if (S.typingOnly && S.phase === 'idle' && CapS.plain === MSG.tapToTalk) { setCaption(MSG.tapToType); }
     });
 
     if (!st) {
@@ -1121,20 +2194,32 @@
   }
 
   function bind() {
-    $('talkBtn').addEventListener('click', onTalkTap);
-    $('moreBtn').addEventListener('click', openMenu);
+    // M4b: the one Menu button, its menu and the three panels (the big Talk button is gone; Talk is in the menu)
+    $('menuBtn').addEventListener('click', function () { App.onActivity(); if (menuOpen()) { closeMenu(true); } else { openMenu(); } });
     $('menu').addEventListener('click', onMenuClick);
+    $('menu').addEventListener('keydown', onMenuKey);
+    PANELS.forEach(function (id) {
+      $(id).addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (t === $(id) || (t && t.closest && t.closest('[data-back]'))) { closePanel(true); }   // Back, or a tap off the card
+      });
+    });
+    D.addEventListener('pointerdown', onUiTouch, true);
+    D.addEventListener('keydown', onUiTouch, true);
     $('lightBtn').addEventListener('click', onLightPressed);
     $('okBtn').addEventListener('click', onOkNow);
     $('infoBtn').addEventListener('click', function () { window.location.href = '/?from=mary#info'; });
     $('typeForm').addEventListener('submit', function (ev) { ev.preventDefault(); submitTyping(); });
     $('typeCancel').addEventListener('click', function () { closeTyping(true); });
     $('typeText').addEventListener('keydown', function (ev) {
+      if (S.convo) { S.convo.lastAct = Date.now(); }   // M4a: typing is not quiet
       if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submitTyping(); }
     });
     D.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Tab' && M.panel) { trapTab(ev); return; }   // M4b
       if (ev.key !== 'Escape') { return; }
-      if (!$('menu').hidden) { closeMenu(); }
+      if (M.panel) { closePanel(true); }                         // M4b
+      else if (menuOpen()) { closeMenu(true); }                  // M4b
       else if (!$('typing').hidden) { closeTyping(true); }
     });
     window.addEventListener('pagehide', function () {
@@ -1159,6 +2244,9 @@
     newTurn: newTurn,
     cancelSpeech: spCancel,
     openTyping: openTyping,
+    addThing: addThing,                      // M4b: skills.js lists a skill's screen in "Things Mary can do"
+    openMenu: openMenu,                      // M4b
+    closeMenu: closeMenu,                    // M4b
     refreshStatus: refreshStatus,
     enterMain: enterMain,
     startFirstRun: startFirstRun,
@@ -1167,7 +2255,15 @@
     applySettings: applySettings,            // skills hook (M13)
     currentScreen: function () { return S.screen; },
     api: api,
-    getFace: function () { return face; }
+    getFace: function () { return face; },
+    // M4a: conversations and talk modes
+    startTalk: startTalk,                    // the one way in: Talk tap, and the wake word (M6)
+    endTalk: function (why) { if (S.convo) { endConvo(S.convo, why || 'tap'); } },
+    inTalk: function () { return !!S.convo; },
+    showCaption: showCaption,                // her words; M4b replaces it with bubble letters
+    nextMode: nextMode,                      // pure, for tests
+    liveToolGate: liveToolGate,              // pure, for tests
+    isGoodbye: isGoodbye                     // pure, for tests
   };
 
   if (D.readyState === 'loading') {

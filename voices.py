@@ -60,9 +60,20 @@ _HERE = Path(__file__).resolve().parent
 SOCKET_TIMEOUT = 15  # seconds to wait on any one read
 DEADLINE = 30        # seconds for a whole sample
 SAMPLE_RATE = 24000  # Gemini's default streamed audio: 16-bit little-endian PCM, mono
-LIVE_EXTRA = ("You are talking out loud in a live voice conversation. Never say anything in square brackets. "
-              "Keep each answer to one to three short sentences, warm and natural. "
+LIVE_EXTRA = ("You are talking out loud in a live voice conversation. "  # M4a: rewritten after Andy's first Live try
+              "In everyday chat, keep it short and natural, a sentence or two, the way a friend talks. "
+              "When they ask for a story, a joke, a game, a song, a poem or an explanation, give it in full right away, "
+              "told with feeling. Pick the topic yourself from what you know about them and their part of the world "
+              "(North Carolina, unless they've told you otherwise). "
+              "Never answer a request with a menu of options or a list of choices; ask a question only when you "
+              "truly can't guess what they'd enjoy. "
+              "Greet them only once, at the start of a talk; after that, just carry on the way friends do. "
+              "Never say anything in square brackets. "
               "That includes the mood, name and remember tags described above: don't use them here.")
+# M4a: only on Mary's own screen, where Live has the remember_fact and set_their_name tools
+LIVE_TOOLS_NOTE = ("Instead of the name and remember lines, use your tools: when they tell you what they like to be "
+                   "called, call set_their_name, and when they tell you something worth remembering about their life, "
+                   "call remember_fact. Do it quietly, without mentioning it, and keep talking.")
 TIMING_WORDS = ("timestamp", "offset", "word_info", "alignment", "timing")
 LOG_MAX = 200_000
 
@@ -628,12 +639,20 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
         event.update(id=f"live:{name}", voice=name)
         if memory is not None:  # M4a: Mary's own screen
             system = mary.system_text(memory, companion, facts=True)
+            turns = [t for t in (getattr(memory, "recent", None) or [])[-8:]
+                     if isinstance(t, dict) and str(t.get("text") or "").strip()]
+            if turns:  # M4a: so her hello can pick up where they left off
+                system += "\n\nYour last talk together (most recent last):\n" + "\n".join(
+                    ("They: " if t.get("role") == "user" else "You: ") + " ".join(str(t["text"]).split())
+                    for t in turns)
         else:  # the voice tryout
             system = mary.system_text(SimpleNamespace(name=memory_name or "", facts=[], recent=[]), companion,
                                       facts=False)
         if skills and skills.get("instruction"):  # M4a: before LIVE_EXTRA
             system += "\n\n" + skills["instruction"]
         system += "\n\n" + LIVE_EXTRA
+        if memory is not None:  # M4a: her memory tools
+            system += " " + LIVE_TOOLS_NOTE
         try:  # M4a: Live can't take a speed setting, so the saved speed is asked for in words
             r = float(rate) if rate is not None else None
         except (TypeError, ValueError):
@@ -663,8 +682,16 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
                                                        "silenceDurationMs": int(silence_ms), "prefixPaddingMs": 300},
                         "activityHandling": "START_OF_ACTIVITY_INTERRUPTS"},
                     "contextWindowCompression": {"slidingWindow": {}}}}
-        if skills and skills.get("tools"):  # M4a: the skills' functionDeclarations
-            body["bidiGenerateContentSetup"]["tools"] = skills["tools"]
+        tools = [dict(t) for t in (skills.get("tools") or [])] if skills else []  # M4a: the skills' functionDeclarations
+        if memory is not None:  # M4a: Live can remember on her own screen, even with no skills
+            for t in tools:
+                if isinstance(t.get("functionDeclarations"), list):
+                    t["functionDeclarations"] = t["functionDeclarations"] + list(mary.LIVE_MEMORY_TOOLS)
+                    break
+            else:
+                tools.append({"functionDeclarations": list(mary.LIVE_MEMORY_TOOLS)})
+        if tools:
+            body["bidiGenerateContentSetup"]["tools"] = tools
         token = None
         for version in TOKEN_VERSIONS:
             try:

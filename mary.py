@@ -135,13 +135,16 @@ _ASKS = re.compile(
     r"|\b(?:(?:would|do)\s+you\s+(?:like|want)\s+me\s+to|(?:want|like)\s+me\s+to|shall\s+i|should\s+i|can\s+i|could\s+i|may\s+i|i\s+can|i\s+could)\s+"
     r"(?:write|note|jot|put|record|log)\s+(?:that|it|this|these|those|what|all|down|a\s+note)\b", _I)
 # "call me" only counts at the start of a sentence or after "you can" and the like: "the aides call me honey" is not a name.
+# M4a: also after "but", "and", "so" or a comma, and "everybody calls me X"; learn_name() lets a "call me" name win.
 _NAME = re.compile(
     r"(?:\bmy name is"
-    r"|(?:^\s*|[.!?]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be)\s+)call me)"
+    r"|(?:^\s*|[.!?,]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be|but|and|so)\s+)call me"
+    r"|\b(?:everybody|everyone|folks|my friends|my family)\s+calls?\s+me)"
     r"\s+([A-Z][a-z]+)", _I)
 _NOT_NAMES = {"back", "when", "if", "later", "please", "crazy", "maybe", "sometime", "tomorrow", "tonight", "today", "again", "not", "a", "an", "the",
               "names", "on", "for", "about", "anything", "whatever", "anytime",
-              "at", "in", "to", "by", "after", "before", "now", "soon"}
+              "at", "in", "to", "by", "after", "before", "now", "soon",
+              "honey", "sugar", "sweetie", "sweetheart", "darling", "dear", "hon"}  # M4a: a pet name isn't their name
 _TAG = re.compile(r"\[(remember|name):\s*([^\]]+)\]")
 _MOOD_TAG = re.compile(r"\[\s*mood\s*:\s*([^\[\]]*?)\s*\]", _I)
 # A "[" so far that may still turn into a mood tag, so the stream waits for more before deciding.
@@ -363,7 +366,13 @@ def _name_case(word):
 
 def name_from(text):
     """The name in the resident's answer to 'What would you like me to call you?', or '' if there isn't one."""
-    text = _NAME_FILLER.sub(" ", _plain(str(text or "")))
+    text = _plain(str(text or ""))
+    calls = list(re.finditer(r"\bcalls?\s+me\b", text, _I))  # M4a: "Andrew, but call me Andy" is Andy
+    if calls:
+        nick = name_from(text[calls[-1].end():])
+        if nick and nick.lower() not in _NOT_NAMES:
+            return nick
+    text = _NAME_FILLER.sub(" ", text)
     text = re.sub(r"[^\w'\-]+|[\d_]+", " ", text)
     words = []
     for w in text.split():
@@ -375,6 +384,43 @@ def name_from(text):
         words.append(w)
     name = " ".join(_name_case(w) for w in words[:3])
     return name if len(name) <= 40 else ""
+
+
+def learn_name(memory, text):  # M4a: Normal talk and Live (/api/mary/heard) both learn a name this way
+    """Sets memory.name from "my name is X" or "call me X" in what the resident said. A "call me" name wins over
+    "my name is" ("my name is Andrew but call me Andy" is Andy). Returns the name, or "" when there was none."""
+    found = ""
+    for m in _NAME.finditer(_plain(str(text or ""))):
+        word = m.group(1)
+        if word.lower() in _NOT_NAMES:
+            continue
+        if not found or "call" in m.group(0)[:m.start(1) - m.start(0)].lower():
+            found = word.capitalize()
+    if found:
+        memory.name = found
+    return found
+
+
+def clean_name(name):  # M4a: Live's set_their_name tool
+    """The name Live passed to set_their_name, cleaned like a spoken name, or "" if it isn't a name."""
+    name = name_from(str(name or "").strip()[:80])
+    return "" if not name or name.lower() in _NOT_NAMES else name
+
+
+# M4a: Live's own memory tools, in every Live chat. No "__" in the names, so they never look like a skill's.
+LIVE_MEMORY_TOOLS = [
+    {"name": "remember_fact",
+     "description": ("Save a short fact about the resident's life, in third person, following your Remembering rules "
+                     "(never staff names, money or account details, or anything they asked you to forget)."),
+     "parameters": {"type": "object", "properties": {"fact": {
+         "type": "string", "description": "The fact in third person, for example: Has a daughter named Ann in Raleigh."}},
+         "required": ["fact"]}},
+    {"name": "set_their_name",
+     "description": ("They told you what they like to be called, for example 'call me Andy'. Use the name they go by, "
+                     "exactly as they said it, never a longer or formal version."),
+     "parameters": {"type": "object", "properties": {"name": {
+         "type": "string", "description": "The name they like to be called."}}, "required": ["name"]}},
+]
 
 
 class _ReplyStream:
@@ -503,7 +549,8 @@ def system_text(memory, companion="mary", facts=True):
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
     if facts and not memory.name:
         system += ("\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called; "
-                   "when they tell you, add the line [name: First name].")
+                   "when they tell you, add the line [name: First name], using the name they go by, "
+                   "exactly as they say it.")  # M4a
     return system
 
 
@@ -674,9 +721,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         offer = None if kind == "self_harm" else lapse_offer(text)
         if offer:
             memory.pending_offer = offer
-    m = _NAME.search(_plain(text))
-    if m and m.group(1).lower() not in _NOT_NAMES:
-        memory.name = m.group(1).capitalize()
+    learn_name(memory, text)  # M4a: shared with Live's /api/mary/heard
 
     error = ""
     remembered = []

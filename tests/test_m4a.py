@@ -192,5 +192,122 @@ class SayChecks(M4aCase):
         self.assertIn("very slowly", json.dumps(net.body(0)))
 
 
+# --- M4a: Live's brain (talks like a friend, remembers the talk, learns the name they go by) ---
+FELL = "I fell and I can't get up"
+
+
+class LiveBrain(M4aCase):
+    def memory(self):
+        return mary.Memory(server.DATA / "mary" / "memory.json")
+
+    def token_setup(self, memory, skills=None):
+        net = self.net(Resp({"name": "auth_tokens/abc"}))
+        voices.live_token("live:Achird", KEY, "mary", "", server.DATA, skills=skills, memory=memory)
+        return net.body()["bidiGenerateContentSetup"]
+
+    def call(self, name, args, heard=None):
+        body = {"name": name, "args": args}
+        if heard is not None:
+            body["heard"] = heard
+        return helpers.api("POST", "/api/mary/skills/call", body)[1]
+
+    def test_live_extra_is_no_short_cap_and_never_a_menu(self):
+        self.assertNotIn("one to three short sentences", voices.LIVE_EXTRA)
+        self.assertIn("menu of options", voices.LIVE_EXTRA)
+        self.assertIn("North Carolina", voices.LIVE_EXTRA)
+        self.assertIn("Greet them only once", voices.LIVE_EXTRA)
+
+    def test_memory_tools_even_with_no_skills(self):
+        setup = self.token_setup(self.memory())
+        names = {d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])}
+        self.assertEqual(names, {"remember_fact", "set_their_name"})
+        self.assertFalse(any("__" in n for n in names))
+        self.assertIn(voices.LIVE_TOOLS_NOTE, setup["systemInstruction"]["parts"][0]["text"])
+
+    def test_memory_tools_join_the_skills_tools(self):
+        self.put(gemini_key=KEY)
+        net = self.net(Resp({"name": "auth_tokens/abc"}))
+        helpers.api("POST", "/api/mary/live/start", {})
+        tools = net.body()["bidiGenerateContentSetup"]["tools"]
+        self.assertEqual(len(tools), 1)
+        names = [d["name"] for d in tools[0]["functionDeclarations"]]
+        for want in ("voice_comfort__louder", "set_skill", "remember_fact", "set_their_name"):
+            self.assertIn(want, names)
+
+    def test_system_text_has_the_last_talk(self):
+        memory = self.memory()
+        memory.add_turn("user", "Tell me about Mount Airy.")
+        memory.add_turn("model", "Oh,  Mayberry itself!")
+        text = self.token_setup(memory)["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("Your last talk together (most recent last):\nThey: Tell me about Mount Airy.\n"
+                      "You: Oh, Mayberry itself!", text)
+        fresh = self.token_setup(self.memory())["systemInstruction"]["parts"][0]["text"]
+        self.assertNotIn("Your last talk together", fresh)
+
+    def test_set_their_name_and_remember_fact(self):
+        self.assertEqual(self.call("set_their_name", {"name": "Andy"})["response"], {"ok": True})
+        self.assertEqual(self.memory().name, "Andy")
+        self.assertTrue(self.call("remember_fact", {"fact": "Grew up near Boone."})["response"]["ok"])
+        self.assertIn("Grew up near Boone.", self.memory().facts)
+        self.assertFalse(self.call("set_their_name", {"name": "honey"})["response"]["ok"])  # a pet name
+        self.assertFalse(self.call("set_their_name", {"name": "  "})["response"]["ok"])
+        self.assertFalse(self.call("remember_fact", {"fact": " "})["response"]["ok"])
+        self.assertEqual(self.memory().name, "Andy")
+
+    def test_emergency_heard_refuses_memory_tools(self):
+        self.assertTrue(self.call("set_their_name", {"name": "Andy"}, heard=FELL).get("emergency"))
+        self.assertTrue(self.call("remember_fact", {"fact": "Likes tea."}, heard=FELL).get("emergency"))
+        self.assertEqual((self.memory().name, self.memory().facts), ("", []))
+
+    def test_heard_remembers_their_turn_and_learns_call_me(self):
+        helpers.api("POST", "/api/mary/heard", {"text": "My name is Andrew, but call me Andy."})
+        m = self.memory()
+        self.assertEqual(m.name, "Andy")
+        self.assertEqual([(t["role"], t["text"]) for t in m.recent], [("user", "My name is Andrew, but call me Andy.")])
+
+    def test_emergency_heard_saves_each_turn_once(self):
+        _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": FELL})
+        self.assertEqual([(t["role"], t["text"]) for t in self.memory().recent], [("user", FELL), ("model", got["say"])])
+
+    def test_live_said_records_her_turn(self):
+        status, got, _ = helpers.api("POST", "/api/mary/live/said", {"text": "Well hey there,  Andy!"})
+        self.assertEqual((status, got), (200, {"ok": True}))
+        helpers.api("POST", "/api/mary/live/said", {"text": "   "})
+        self.assertEqual([(t["role"], t["text"]) for t in self.memory().recent], [("model", "Well hey there, Andy!")])
+
+
+class NameCases(unittest.TestCase):
+    def test_learn_name_call_me_wins(self):
+        from types import SimpleNamespace
+        cases = {
+            "call me Andy": "Andy",
+            "I'm Andy, call me Andy.": "Andy",
+            "My name is Andrew but call me Andy": "Andy",
+            "My name is Andrew, but everybody calls me Andy.": "Andy",
+            "Everybody calls me andy": "Andy",
+            "You can call me Andy, my name is Andrew": "Andy",
+            "my name is Andrew": "Andrew",
+            "I'm Andy": "",                # "I'm" is too loose for a pattern; Gemini's tag or tool takes it
+            "the aides call me honey": "",
+            "call me back later": "",
+            "everybody calls me honey": "",
+        }
+        for said, want in cases.items():
+            with self.subTest(said=said):
+                memory = SimpleNamespace(name="")
+                self.assertEqual(mary.learn_name(memory, said), want)
+                self.assertEqual(memory.name, want)
+
+    def test_name_from_and_clean_name(self):
+        for said in ("I'm Andy", "call me Andy", "My name is Andrew but call me Andy",
+                     "Andrew, but everybody calls me Andy", "Andy", "andy"):
+            with self.subTest(said=said):
+                self.assertEqual(mary.name_from(said), "Andy")
+                self.assertEqual(mary.clean_name(said), "Andy")
+        for bad in ("honey", "", None, "   "):
+            with self.subTest(bad=bad):
+                self.assertEqual(mary.clean_name(bad), "")
+
+
 if __name__ == "__main__":
     unittest.main()

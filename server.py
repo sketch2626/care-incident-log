@@ -449,6 +449,30 @@ def mary_live_skill_setup(screen=None):
 # --- end skills hook ---
 
 
+def mary_live_memory_call(name, args):  # M4a: Live's remember_fact and set_their_name tools
+    """Saves what one of Live's memory tools asked for. The same shape as a skill call's result."""
+    args = args if isinstance(args, dict) else {}
+    if name == "set_their_name":
+        value = mary.clean_name(args.get("name"))
+        error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
+    else:
+        value = " ".join(str(args.get("fact") or "").split())
+        error = "" if value else "There was no fact to save."
+    if error:
+        return {"response": {"ok": False, "error": error}, "effects": [], "say": None}
+    with _mary_lock:
+        memory = mary_memory()
+        if name == "set_their_name":
+            memory.name = value
+        else:
+            memory.add_fact(value)
+        try:
+            memory.save()
+        except OSError:
+            return {"response": {"ok": False, "error": "It could not be saved just now."}, "effects": [], "say": None}
+    return {"response": {"ok": True}, "effects": [], "say": None}
+
+
 def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None):
     """Mary's answer to text, for the page. Never contains the key."""
     s = mary_settings()
@@ -789,11 +813,14 @@ class Handler(SimpleHTTPRequestHandler):
             text = str(self._body().get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
             say = mary.EMERGENCY_TEXT.get(kind, "") if kind else ""
-            if kind:
+            if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
                 with _mary_lock:  # as in Normal talk: the emergency cancels a waiting offer and is remembered
                     memory = mary_memory()
-                    memory.pending_offer = None
-                    memory.add_turn("user", text)
+                    if kind:
+                        memory.pending_offer = None
+                    else:
+                        mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
+                    memory.add_turn("user", text.strip())
                     if say:
                         memory.add_turn("model", say)
                     try:
@@ -801,6 +828,17 @@ class Handler(SimpleHTTPRequestHandler):
                     except OSError:
                         pass
             return self._send({"emergency": bool(kind), "kind": kind, "say": say})
+        if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
+            text = " ".join(str(self._body().get("text") or "").split())[:2000]
+            if text:
+                with _mary_lock:
+                    memory = mary_memory()
+                    memory.add_turn("model", text)
+                    try:
+                        memory.save()
+                    except OSError:
+                        pass
+            return self._send({"ok": True})
         if method == "POST" and path == "/api/mary/say":
             # Mary's reply spoken in Normal (Gemini voice) or Offline (Kokoro) mode, streamed like the tryout.
             body = self._body()
@@ -846,7 +884,10 @@ class Handler(SimpleHTTPRequestHandler):
             if isinstance(heard, str) and mary.is_emergency(heard[:2000]):
                 return self._send({"response": {"error": "emergency"}, "effects": [], "say": "",
                                    "ok": False, "emergency": True})
-            return self._send(host.call(str(body.get("name") or ""), body.get("args")))
+            name = str(body.get("name") or "")
+            if name in ("remember_fact", "set_their_name"):  # M4a: Live's own memory tools, not a skill
+                return self._send(mary_live_memory_call(name, body.get("args")))
+            return self._send(host.call(name, body.get("args")))
         m = re.fullmatch(r"/api/mary/skills/([^/]+)/image/([a-z0-9_-]{1,40}\.(jpg|png|gif|webp))", path)
         if m and method == "GET":  # an image a skill saved in its own ctx.files (any skill, images only)
             try:

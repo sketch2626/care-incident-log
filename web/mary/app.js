@@ -45,7 +45,9 @@
   var BYE_MAX_WORDS = 6;         // a goodbye is a short turn; a long story that says "goodbye" is not one
   var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later)\b/i;
   var LIVE_BYE_MAX_MS = 8000;    // after the goodbye is asked for, Live closes once her turn ends, or after this
-  var LIVE_HELLO = '(The resident just tapped Talk. Say a short, warm hello in one sentence, using their name if you know it.)';
+  var LIVE_HELLO = '(The resident just tapped Talk. Greet them in one or two short, warm sentences, like a friend ' +   // M4a
+    'picking up where you left off: use their name if you know it and, if it fits, something you remember about ' +
+    'them or from your last talk. Never list what you can do.)';
   var LIVE_BYE = '(The conversation is ending now. Say a short, warm goodbye in one sentence and remind them they can tap Talk any time.)';
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say this to them right now, warmly and plainly, then stay with them: ';
@@ -904,12 +906,12 @@
     try {
       p = window.MaryLive.start({
         screen: skillScreen(),
-        onCaption: function (t) { if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
+        onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
         onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); setCaption('You said: ' + t, 'said'); } },
         onHeardDone: function (t) { liveHeard(c, t); },   // M4a: even after the talk ended or restarted (never missed)
         onSpeaking: function (on) { if (mine()) { liveSpeakingChanged(c, on); } },
-        onInterrupted: function () { if (mine()) { c.lastAct = Date.now(); } },
-        onTurnComplete: function () { if (mine()) { liveTurnDone(c); } },
+        onInterrupted: function () { liveSaid(c); if (mine()) { c.lastAct = Date.now(); } },   // M4a: liveSaid
+        onTurnComplete: function () { liveSaid(c); if (mine()) { liveTurnDone(c); } },   // M4a: liveSaid
         onToolCall: function (tc) { return liveToolCall(c, tc); },
         onActivity: function () { if (mine()) { c.lastAct = Date.now(); } },
         onEnd: function (why, detail) { if (mine()) { liveDropped(c, why, detail); } }
@@ -988,6 +990,17 @@
     if (!liveSpeaking()) { finishLive(c); }
   }
 
+  // M4a: her finished Live turn is remembered like Normal talk's, after the resident's own line and never twice.
+  function liveSaid(c) {
+    var text = String(c.saidText || '').trim();
+    c.saidText = '';
+    if (!text) { return; }
+    if (c.saidSkip) { c.saidSkip = false; return; }   // the emergency words: /api/mary/heard already saved them
+    Promise.resolve(c.heardCheck).then(function () {
+      return api('POST', '/api/mary/live/said', { text: text }, { ms: 8000 });
+    }).catch(log);
+  }
+
   function liveByeCap(c, extended) {
     if (S.convo !== c) { return; }
     if (!extended && liveSpeaking()) { c.byeTimer = setTimeout(function () { liveByeCap(c, true); }, 6000); return; }
@@ -1047,7 +1060,9 @@
     c.lastAct = Date.now();
     if (S.screen !== 'emergency') { show('emergency'); }
     showCaption(words);
-    if (!greetLive(LIVE_SAFETY + words + ')')) { say(words, 'alert'); }
+    c.saidText = '';                        // M4a: /api/mary/heard saved the emergency words; not saved twice
+    c.saidSkip = true;
+    if (!greetLive(LIVE_SAFETY + words + ')')) { c.saidSkip = false; say(words, 'alert'); }
   }
 
   function liveToolCall(c, tc) {

@@ -25,6 +25,9 @@ This is Andy's mission, not a demo.
 - `packaging\installer.iss` (installer), `packaging\make_icon.py` → `icon.ico`. Uninstall leaves the data folder alone.
 - Test a build without touching real data: set env `APPDATA` to a scratch folder and `TRACKER_PORT=8799`, run the exe, use the API, close, rerun. Silent install: `Setup.exe /VERYSILENT /DIR=<folder>`.
 - Not yet: code signing (unsigned exe gets a SmartScreen "More info → Run anyway" prompt).
+- **Dev tools on this laptop (2026-10-30):** Node.js LTS v26 (`C:\Program Files
+odejs`), GitHub CLI 2.103 (`gh`, **not signed in yet**), Inno Setup 6 (per-user, `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`), Git and Python 3.12. Workers check page scripts with `node --check` and run the tests with Node on PATH. A shell opened before the install may need `C:\Program Files
+odejs` added to PATH.
 
 ## Mission
 Put this app on every eligible resident's laptop, starting with one North Carolina facility, and make serious care lapses impossible to ignore. Residents (65-95) talk naturally; the app turns it into a formal, dated record the state takes seriously. Open source (GPL-3.0): github.com/sketch2626/care-incident-log. Long term: a backend built to medical/enterprise security standards, plan in `docs/backend-plan.md`. It covers passkey sign-in; named or anonymous sending; mood check-ins; de-identified research data for universities (consent, IRB); identity kept apart from data; and showing a facility only with 5+ participating residents, keyed by CMS provider number. Also funded helpers who set up residents' laptops and optional AI keys.
@@ -70,7 +73,7 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
        - **M2:** done. Live talk works; Andy liked it (a story, and it stopped instantly when he cut in). His Mary and Sam voice picks are saved. Talk modes: Live (default), Normal, Offline, all as choices.
        - **M9a:** character sheets approved (`docs/characters/`).
        - **M9b:** done (39fd97c). Mary and Sam each have their own brain text plus live facts about their app; 349 tests pass. Not yet tried with his real key.
-       - **M13 skills core:** merged into `main` (28c8fe0), built on the second account. 407 tests pass. The first skill is `voice_comfort` (slower, faster, quieter, louder, switch to Sam, by voice and offline). How-to: `docs/how-to-make-a-skill.md`. **Still open:** (1) the one-line Live hook in `voices.py` `live_token()` (`server.mary_live_skill_setup()`) lands with M4; (2) the JS has had no syntax check (no Node); (3) remove `.worktrees/M13` and branch `other/M13` once its terminal tab is closed.
+       - **M13 skills core:** merged into `main` (28c8fe0), built on the second account. 407 tests pass. The first skill is `voice_comfort` (slower, faster, quieter, louder, switch to Sam, by voice and offline). How-to: `docs/how-to-make-a-skill.md`. **Still open:** (1) the one-line Live hook in `voices.py` `live_token()` (`server.mary_live_skill_setup()`) lands with M4; (2) ~~JS syntax~~ checked with Node on 2026-10-30: every script passes, and 407 tests pass with no skips; (3) remove `.worktrees/M13` and branch `other/M13` once its terminal tab is closed.
        - **Next after those:** M3 boards (here), then M4 and M5 (tricky, so second account), M12 pictures as a skill, and M7 games as skills.
     2. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 

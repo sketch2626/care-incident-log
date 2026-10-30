@@ -99,6 +99,12 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - **Split (2026-10-30), so the good voice doesn't wait on the boards:**
   - **M4a, the good voice in Mary now.** Second account, Opus; brief `docs/handoff/M4a.md`. Her Live session with his picked Mary and Sam voices, which stays open hands-free. Normal and Offline are the other choices, and each falls back to the next. Skills and the emergency check work in Live, and her captions stay plain for now.
   - **M4b, the bubble-letter captions,** after Andy approves the M3 boards.
+  - **M4a built 2026-10-30 (second account, branch `other/M4a`; 443 tests), waiting for Andy's ear:**
+    - Server (39dcc15): `/api/mary/live/start` (picked voice, same brain with app facts and name, skills tools and instruction, patient turn-taking `END_SENSITIVITY_LOW` + `silenceDurationMs` from `listen_wait`, `contextWindowCompression`), `/api/mary/heard` (Normal's emergency check on Live transcripts), the emergency gate on `/api/mary/skills/call`, `/api/mary/say` (her replies in the picked Gemini voice or Kokoro, never cached), settings `talk_mode` and `listen_wait`, `talk_order()`.
+    - Page (07f324e, 8dd3b61): `talklive.js` (`MaryLive`) and `voiceout.js` (`MaryVoice`), copied from the audition's proven audio code; `app.js` `startTalk()` (the M6 hook), `showCaption()` (M4b replaces it), fallback Live → Normal → Offline → computer voice with one kind line, hands-free in every mode until 15 s of quiet or goodbye.
+    - Voice commands (e232771): "give me more time" / "you're cutting me off" (2.5 → 4 s), "you can answer faster"; slower/faster now change pace without changing pitch.
+    - My info "How Mary talks" and "How long she waits" (e00413c); her instructions and facts say the truth.
+    - Not yet heard in a real window. Known small things: a Live spoken goodbye can take up to 8 s to close; a voice-set speed or wait applies to Live from the next talk.
 - Wire the voice chosen in M2 into `web/mary/app.js` and the server, with the offline fallback.
 - Build the approved M3 caption: each word fills as it's spoken. Use real word timings if the voice gives them, otherwise estimate from each word's length and the audio length.
 - **Done when:** the tests pass and Andy hears and sees it on his screen.

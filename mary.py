@@ -536,7 +536,14 @@ def _app_facts_text(companion):  # M9b
             out.append("- They press the Talk button each time they want to say something, and you answer out loud. "
                        "Talking back and forth without the button, and waking you by saying your name, are coming soon.")
         elif mode == "handsfree":
-            out.append("- You and they talk back and forth without pressing a button.")
+            out.append("- One tap on Talk starts a conversation; then you and they talk back and forth without pressing "
+                       "a button, until about 15 seconds of quiet or a goodbye.")
+            choice = f.get("talk_choice")  # M4a: the talk mode chosen in My info
+            if choice in ("live", "normal", "offline"):
+                plain = {"live": "Live, your most natural voice, where they can cut in any time",
+                         "normal": "Normal, where this computer turns their words into text and you answer in your voice",
+                         "offline": "Offline, where your voice is made on this computer"}[choice]
+                out.append(f"- Talk mode in My info: {plain}. If one way isn't working you switch to the next by yourself.")
         rate, volume = f.get("voice_rate"), f.get("voice_volume")
         if rate is not None and volume is not None:
             speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"

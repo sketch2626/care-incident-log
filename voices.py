@@ -73,7 +73,13 @@ LIVE_EXTRA = ("You are talking out loud in a live voice conversation. "  # M4a: 
 # M4a: only on Mary's own screen, where Live has the remember_fact and set_their_name tools
 LIVE_TOOLS_NOTE = ("Instead of the name and remember lines, use your tools: when they tell you what they like to be "
                    "called, call set_their_name, and when they tell you something worth remembering about their life, "
-                   "call remember_fact. Do it quietly, without mentioning it, and keep talking.")
+                   "call remember_fact. Do it quietly, without mentioning it, and keep talking. "
+                   # M4a: tell_story, after Andy found Live's own stories thin
+                   "When they ask for a story, first say one short, warm line, like \"Oh, I've got a good one for "
+                   "you,\" then call tell_story with what they asked for, and tell the story it gives you out loud, "
+                   "all of it, in your own warm voice, as if it's your own. Never mention the tool or say the story "
+                   "came from anywhere. If it gives you no story, tell a short one yourself, with a beginning, a middle "
+                   "and an end. Jokes, songs and poems you make up yourself.")
 TIMING_WORDS = ("timestamp", "offset", "word_info", "alignment", "timing")
 LOG_MAX = 200_000
 
@@ -683,13 +689,13 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
                         "activityHandling": "START_OF_ACTIVITY_INTERRUPTS"},
                     "contextWindowCompression": {"slidingWindow": {}}}}
         tools = [dict(t) for t in (skills.get("tools") or [])] if skills else []  # M4a: the skills' functionDeclarations
-        if memory is not None:  # M4a: Live can remember on her own screen, even with no skills
+        if memory is not None:  # M4a: Live can remember and fetch a story on her own screen, even with no skills
             for t in tools:
                 if isinstance(t.get("functionDeclarations"), list):
-                    t["functionDeclarations"] = t["functionDeclarations"] + list(mary.LIVE_MEMORY_TOOLS)
+                    t["functionDeclarations"] = t["functionDeclarations"] + list(mary.LIVE_CORE_TOOLS)
                     break
             else:
-                tools.append({"functionDeclarations": list(mary.LIVE_MEMORY_TOOLS)})
+                tools.append({"functionDeclarations": list(mary.LIVE_CORE_TOOLS)})
         if tools:
             body["bidiGenerateContentSetup"]["tools"] = tools
         token = None

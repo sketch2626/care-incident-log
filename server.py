@@ -71,6 +71,7 @@ VOICE_LIMITS = {"voice_rate": (0.6, 1.4, 0.92), "voice_volume": (0.2, 1.0, 1.0)}
 TALK_MODES = ("live", "normal", "offline")
 VOICE_LIMITS["listen_wait"] = (1.5, 6.0, 2.5)  # M4a: clamped like the other voice settings
 SETTING_KEYS |= {"talk_mode", "listen_wait"}  # M4a
+SETTING_KEYS |= {"talk_on_open"}  # M4a: '1' (default) = she says hello and listens when her screen opens; '0' = she waits
 NO_SPEECH = "Talking isn't set up on this computer yet. You can type instead."
 
 # A dictation or note is offered to the inbox when it starts with "Incident" (or "New incident").
@@ -287,6 +288,7 @@ def mary_settings():
         out[k] = float(got) if got is not None else default
     mode = str(s.get("talk_mode") or "").strip().lower()  # M4a: the saved talk mode, Live when none is saved
     out["talk_mode"] = mode if mode in TALK_MODES else "live"
+    out["talk_on_open"] = str(s.get("talk_on_open", "1")).strip() != "0"  # M4a: on unless turned off
     return out
 
 
@@ -298,7 +300,7 @@ def mary_status():
             "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name,
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
             # M4a: talk modes, the order the page tries them in, and the voice for each
-            "talk_mode": s["talk_mode"], "listen_wait": s["listen_wait"],
+            "talk_mode": s["talk_mode"], "listen_wait": s["listen_wait"], "talk_on_open": s["talk_on_open"],
             "talk_order": talk_order(s["talk_mode"], bool(s["key"]), offline_ready), "offline_ready": offline_ready,
             "voices": companion_voices(s["companion"] or "mary")}
 
@@ -362,7 +364,8 @@ def mary_app_facts(companion):
                     voice, about = n, a
     return {"voice_now": MARY_VOICE_NOW, "talk_mode": MARY_TALK_MODE, "picked_voice": voice, "picked_about": about,
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
-            "talk_choice": s["talk_mode"]}  # M4a: Live, Normal or Offline, as saved
+            "talk_choice": s["talk_mode"],  # M4a: Live, Normal or Offline, as saved
+            "talk_on_open": s["talk_on_open"]}  # M4a: she starts talking when her screen opens
 
 
 mary.app_facts = mary_app_facts  # M9b: Mary's live facts about her own app
@@ -471,6 +474,21 @@ def mary_live_memory_call(name, args):  # M4a: Live's remember_fact and set_thei
         except OSError:
             return {"response": {"ok": False, "error": "It could not be saved just now."}, "effects": [], "say": None}
     return {"response": {"ok": True}, "effects": [], "say": None}
+
+
+STORY_FAILED = {"error": "no_story",  # M4a
+                "note": "Tell a short story yourself instead, with a beginning, middle and end."}
+
+
+def mary_live_story_call(args):  # M4a: Live's tell_story tool
+    """A well-made story from the same brain as Normal talk, for Live to tell aloud. The lock is held only while
+    her memory is read, never while Gemini writes."""
+    args = args if isinstance(args, dict) else {}
+    s = mary_settings()
+    with _mary_lock:
+        memory = mary_memory()
+    story = mary.tell_story(args.get("request"), memory, s["key"], s["model"], s["companion"] or "mary")
+    return {"response": {"story": story} if story else dict(STORY_FAILED), "effects": [], "say": None}
 
 
 def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None):
@@ -887,6 +905,8 @@ class Handler(SimpleHTTPRequestHandler):
             name = str(body.get("name") or "")
             if name in ("remember_fact", "set_their_name"):  # M4a: Live's own memory tools, not a skill
                 return self._send(mary_live_memory_call(name, body.get("args")))
+            if name == "tell_story":  # M4a: Live's story tool, after the emergency gate above
+                return self._send(mary_live_story_call(body.get("args")))
             return self._send(host.call(name, body.get("args")))
         m = re.fullmatch(r"/api/mary/skills/([^/]+)/image/([a-z0-9_-]{1,40}\.(jpg|png|gif|webp))", path)
         if m and method == "GET":  # an image a skill saved in its own ctx.files (any skill, images only)
@@ -1119,6 +1139,11 @@ class Handler(SimpleHTTPRequestHandler):
                     if k == "talk_mode":  # M4a: live, normal or offline; anything else is ignored
                         v = str(v).strip().lower()
                         if v not in TALK_MODES:
+                            continue
+                    if k == "talk_on_open":  # M4a: '1' or '0'; anything else is ignored
+                        v = str(v).strip().lower()
+                        v = "1" if v in ("1", "true", "yes", "on") else "0" if v in ("0", "false", "no", "off") else None
+                        if v is None:
                             continue
                     if k == "andyflow_enabled":
                         v = "1" if str(v).strip().lower() in ("1", "true", "yes", "on") else "0"

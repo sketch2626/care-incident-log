@@ -834,6 +834,7 @@ function fillInfo() {
   document.querySelector(`input[name="talk_mode"][value="${mode}"]`).checked = true;
   const wait = Number(s.listen_wait) >= 3.5 ? '4' : '2.5';
   document.querySelector(`input[name="listen_wait"][value="${wait}"]`).checked = true;
+  $('#i-talk_on_open').checked = s.talk_on_open !== '0'; // M4a: on unless turned off
   $('#backName').textContent = s.companion === 'him' ? 'Sam' : 'Mary';
   $('#backToMary').hidden = !FROM_MARY;
   loadSkills();
@@ -941,6 +942,7 @@ $('#infoForm').addEventListener('submit', async e => {
   const payload = Object.fromEntries(INFO_FIELDS.map(k => [k, $(`#i-${k}`).value.trim()]));
   payload.gemini_enabled = $('#i-gemini_enabled').checked ? '1' : '0';
   payload.talk_mode = document.querySelector('input[name="talk_mode"]:checked').value; // M4a
+  payload.talk_on_open = $('#i-talk_on_open').checked ? '1' : '0'; // M4a
   const waitNow = Number(state.settings.listen_wait) || 2.5, waitPick = document.querySelector('input[name="listen_wait"]:checked').value;
   if ((waitNow >= 3.5 ? '4' : '2.5') !== waitPick) payload.listen_wait = waitPick; // M4a: keep a voice-set 5 or 6 s
   if (state.inbox.installed) payload.andyflow_enabled = $('#i-andyflow_enabled').checked ? '1' : '0';

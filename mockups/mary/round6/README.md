@@ -2,10 +2,10 @@
 
 Boards for `docs/mary-roadmap.md` item M3, made 2026-10-30. Live canvas (private to Andy's first account): https://claude.ai/artifact/Mh4CpUMru2YGNSEycrJnCZ. These files are static copies and the source of truth for a fresh hub or the M4 builder. Faces are Cute 3 from `round4/`.
 
-**Andy's picks (2026-10-30):**
+**M3 approved by Andy, 2026-10-30.** "I want to go ahead and approve the listening, the new listening. I like it. The coloring I select A for that. And I select B for the thinking."
 - Caption style: **A · Coloring-in**. B and C stay on the canvas and here, marked not chosen.
-- Listening: **sound waves where her ears would be**, three arcs each side, small to large. No "I'm listening" bar, no words.
-- Thinking: **a thought cloud** rising off the top of her head, not dots at the bottom. Still to pick: (a) three dots coloring in, or (b) the word "Thinking…".
+- Listening: **sound waves where her ears would be**, three arcs each side, small to large. No "I'm listening" bar, no words. Approved.
+- Thinking: **(b), the thought cloud with the word "Thinking…"**, rising off the top of her head. (a), the dots in the cloud, was not chosen.
 - Emergency: approved as is ("that'll work for now").
 - Menu: approved as is ("Yes, the menu board is good. I like it."): the top-right Menu button and the menu that drops from it. Build it exactly as drawn.
 
@@ -21,6 +21,35 @@ Boards for `docs/mary-roadmap.md` item M3, made 2026-10-30. Live canvas (private
 - `SOS-*`: the emergency screen: soft pinkish-red steady glow, the whole sentence already filled, two answer buttons.
 - `Contrast.dc.html`: every caption color passes 7:1 (AAA).
 - `r6.css`: every class the boards use. Start M4 from it.
+
+## Build list for M4b (approved boards only)
+Copy the look from these boards and the named `r6.css` classes. Replace `showCaption()` in `web/mary/app.js` (the hook M4a left), and add the states to the existing face (`web/mary/face.js`, `face.css`) rather than making a second face. Use one face with mood classes on the screen element, as `Main.dc.html` does. The notes below cover timing and behavior.
+
+1. **Captions: style A · Coloring-in.**
+   - Boards: `A-Mary`, `A-Sam`, `WordStates`, `Wrap`, and the live `Main`.
+   - Classes: `.cap`, `.capA`, `.line`, `.line.gone`, and `.w` with its text again in `data-t`. Word states: `.later` (hidden, holds its place), a bare `.w` (next word, empty outline), `.on.f1`…`.f9` (being said), `.done`.
+   - Colors come from `--ink` on `.scr.mary`, `.scr.sam` and `.scr.sos`. Bundle the Fredoka 600 font.
+   - The timing estimate is in `Main.dc.html` (`turns()` and `renderVals()`).
+2. **Listening: the ear waves.**
+   - Boards: `Listen-Mary` (resident talking, `.listen.loud`) and `Listen-Sam` (waiting, `.listen`).
+   - Classes: `.ears` with six `.wave` arc paths (`.l`/`.r`, `.w1`-`.w3`; copy the path data and stroke widths), plus `.listen .edge` (blue glow), `.listen .face` (lean), `.listen .brow`, `.listen .peek` (eyes a bit bigger) and `.m-smile`.
+   - Turn on `.loud` while the mic level is up. No words, no bar.
+3. **Thinking: the thought cloud with "Thinking…"** (version b).
+   - Boards: `Think-Mary-Word` and `Think-Sam-Word`.
+   - Classes: `.think.word`, `.cloud` (with `.trail`, `.ol`, `.fl`; copy the circle data), `.cloudword` holding `.w.loop` (the `colorin` keyframes), `.think .facepos` (the face eases 60 px lower), `.think .peek` (`ponder`, eyes up-left), `.think .brow-l`/`.brow-r`, `.m-hmm`, and `.think .edge` (lavender).
+   - Show it only after 400 ms.
+4. **The one Menu button, exactly as drawn.**
+   - Boards: `Menu-Mary` and `Menu-Sam` for the open menu; the closed button is on every board.
+   - Classes: `.menu-btn`, `.menu-btn.open` ("Hide menu"), `.menu` (with its `::before` notch), `.mi`, `.mi.talk`, `.mi.soon` with `.chip`, and `.mi.quit`.
+   - While the menu is open, the face is `translate(-105 -30)`, the eyes `translate(10 4)`, and she has a closed smile; any caption uses `.cap.left`.
+   - Items, with names that follow the companion: Talk to Mary, Things Mary can do, My info, Choose Mary or Sam, Games (Coming soon), Close Mary.
+5. **Emergency.**
+   - Boards: `SOS-Mary` and `SOS-Sam`.
+   - Classes: `.scr.sos` (rose `--ink`, steady pinkish-red `.edge`), `.answers`, `.ans` and `.ans.yes`.
+   - The face looks concerned: inner brows raised, no sparkle in the eyes, and the face at `translate(0 -50)`.
+   - The whole caption shows at once as `.w.done`, with the spoken word `.on`.
+
+**Leave out:** caption styles B and C (`.capB`, `.capC`, `.cap.bubble`), the dots cloud (`.think.dots`, `.cdots`, boards `Think-Mary` and `Think-Sam`), and the board-only `.tag` and `.sheet`.
 
 ## Notes for the builder (M4)
 1. **Word timing is estimated.** Gemini TTS, Live and Kokoro give no per-word times (M2, 2026-10-29: Live sent no `startOffset`/`endOffset`).

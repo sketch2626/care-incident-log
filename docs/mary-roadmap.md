@@ -73,14 +73,15 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Live talk:** Sam's voices were easy to miss, all in one row with Mary's. The tab now has "For Mary" and "For Sam" cards like the other tabs, each with its own Talk button and the right face.
   - **Saving** gave no clear sign it worked. Now each save is checked by reading the settings back. The card then shows a big green "✓ Saved — Mary will use …", a line under the title shows both saved voices on every visit, and the voice says "Got it. That's my voice now."
 
-### M3. Mock-up boards: captions and the one-button screen — **boards ready, awaiting Andy (43ebbf8)**
+### M3. Mock-up boards: captions and the one-button screen — **done, approved by Andy 2026-10-30 (43ebbf8, ff94376)**
 - **Boards (2026-10-30, Opus):** 19 boards on the Design canvas https://claude.ai/artifact/Mh4CpUMru2YGNSEycrJnCZ, static copies plus builder notes in `mockups/mary/round6/` (`README.md`, shared styles `r6.css`).
   - Three caption styles: **A · Coloring-in** (empty white bubble letters colored in with her color), **B · Bold ink** (dark ink, her color underlines the spoken word), **C · Speech bubble** (words in a soft white bubble). Each is shown on Mary and on Sam, with word states and the two-line wrap. A live board plays all three by itself.
   - The one button is a "Menu" pill in the top right; the menu drops from it and she scoots aside. Also listening, thinking, emergency (whole sentence at once, plus two answer buttons), and a contrast check: every caption is 7:1 or better.
   - **Andy's picks (2026-10-30, boards updated ff94376):**
     - Caption **A · Coloring-in**; B and C are marked not chosen.
     - Listening is **sound waves where her ears would be**, with no "I'm listening" bar.
-    - Thinking is **a thought cloud above her head**; he still picks dots or the word "Thinking…".
+    - Thinking is **a thought cloud above her head with the word "Thinking…"** (version b). The dots version (a) was not chosen.
+    - **Approved (Andy):** "I want to go ahead and approve the listening, the new listening. I like it. The coloring I select A for that. And I select B for the thinking."
     - Emergency is approved. The menu board is approved as is ("Yes, the menu board is good. I like it."), Menu button top right.
 - Boards for:
   - The bubble-letter caption: words appear one at a time and fill with color as she says them. Show 2-3 styles.
@@ -98,7 +99,7 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - What's left is the voice: "it just really depends on when we get the good voice in there".
 - **Split (2026-10-30), so the good voice doesn't wait on the boards:**
   - **M4a, the good voice in Mary now.** Second account, Opus; brief `docs/handoff/M4a.md`. Her Live session with his picked Mary and Sam voices, which stays open hands-free. Normal and Offline are the other choices, and each falls back to the next. Skills and the emergency check work in Live, and her captions stay plain for now.
-  - **M4b, the bubble-letter captions,** after Andy approves the M3 boards.
+  - **M4b, the bubble-letter captions:** M3 approved 2026-10-30, so it's ready to start. The build list is "Build list for M4b" in `mockups/mary/round6/README.md`. It covers style A captions, the ear-wave listening, the thought cloud with "Thinking…", the top-right Menu exactly as drawn and the emergency screen, with board files and `r6.css` classes.
   - **M4a built 2026-10-30 (second account, branch `other/M4a`; 443 tests), waiting for Andy's ear:**
     - Server (39dcc15): `/api/mary/live/start` (picked voice, same brain with app facts and name, skills tools and instruction, patient turn-taking `END_SENSITIVITY_LOW` + `silenceDurationMs` from `listen_wait`, `contextWindowCompression`), `/api/mary/heard` (Normal's emergency check on Live transcripts), the emergency gate on `/api/mary/skills/call`, `/api/mary/say` (her replies in the picked Gemini voice or Kokoro, never cached), settings `talk_mode` and `listen_wait`, `talk_order()`.
     - Page (07f324e, 8dd3b61): `talklive.js` (`MaryLive`) and `voiceout.js` (`MaryVoice`), copied from the audition's proven audio code; `app.js` `startTalk()` (the M6 hook), `showCaption()` (M4b replaces it), fallback Live → Normal → Offline → computer voice with one kind line, hands-free in every mode until 15 s of quiet or goodbye.

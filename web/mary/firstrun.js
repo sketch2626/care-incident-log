@@ -356,6 +356,12 @@
     await wait(300);
     await askName();                               // step 3: getting to know you
     if (tok !== flow) { return; }
+    if (S.talkOnOpen && S.hasKey) {                // M4a: she carries on talking, no tap needed
+      S.firstRun = false;
+      enterMainQuiet();
+      if (S.screen === 'everyday') { A.startTalk({ say: FIRST_TALK, hello: FIRST_TALK_LIVE }).catch(log); }
+      return;
+    }
     await A.say('Tap the button whenever you want to talk to me.', 'happy');
     if (tok !== flow) { return; }
     S.firstRun = false;
@@ -363,30 +369,44 @@
   }
 
   // ================================================================ greeting on later opens
+  // M4a: warm and varied, like a friend glad to see them; the night lines never remark on the hour
   var GREET = {
     morning: [
-      "Good morning{n}! It's lovely to see you.",
-      "Good morning{n}! I'm so glad you're here.",
-      "Good morning{n}! It's nice to see you."
+      "Good morning{n}! It's so good to see you.",
+      "Well, good morning{n}! Did you sleep all right?",
+      "Morning{n}! I was hoping you'd stop by.",
+      "Hey there{n}, good morning! What a nice way to start the day.",
+      "Good morning{n}! How are you feeling today?",
+      "Rise and shine{n}! It's good to see you this morning."
     ],
     afternoon: [
-      "Good afternoon{n}! How's your day going?",
-      "Good afternoon{n}! It's lovely to see you.",
-      "Good afternoon{n}! I'm so glad you're here."
+      "Good afternoon{n}! How's your day treating you?",
+      "Well, hey there{n}! I'm glad you came by this afternoon.",
+      "Afternoon{n}! It's real good to see you.",
+      "Hi{n}! I was just thinking about you. How's your afternoon going?",
+      "Well, look who's here! Good afternoon{n}.",
+      "Hey{n}! Come tell me how your day's going."
     ],
     evening: [
-      "Good evening{n}! It's nice to see you.",
-      "Good evening{n}! It's lovely to see you.",
-      "Good evening{n}! I'm so glad you're here."
+      "Good evening{n}! It's so nice to see you.",
+      "Well, hey there{n}! How was your day?",
+      "Evening{n}! I'm glad you stopped by.",
+      "Hi{n}! I hope supper was good tonight.",
+      "Good evening{n}! Come sit a spell and tell me about your day.",
+      "Hey{n}, good evening! It's good to see your face."
     ],
-    late: [
-      "Hello{n}. It's late, but I'm right here if you need me.",
-      "Hello{n}. It's late, and I'm still right here if you need me."
+    night: [
+      "Well, hey there{n}. Can't sleep? I'm glad for the company.",
+      "Hi{n}. It's a nice quiet night. Want to talk a little while?",
+      "Hey{n}. It's good to see you. Want some company for a bit?",
+      "Hello{n}. Nice and quiet tonight. I'm happy to keep you company.",
+      "Hey there{n}. Want to talk a while? I'd like that.",
+      "Hi{n}. A little company is nice on a quiet night."
     ]
   };
 
   function slotFor(h) {
-    if (h >= 22 || h < 5) { return 'late'; }
+    if (h >= 22 || h < 5) { return 'night'; }   // M4a: was 'late'
     if (h < 12) { return 'morning'; }
     if (h < 17) { return 'afternoon'; }
     return 'evening';
@@ -406,12 +426,26 @@
 
   function greet() {
     var g = greetingText();
-    if (g.slot !== 'late') {
+    if (g.slot !== 'night') {
       try { A.getFace().bounce(); } catch (e) { /* nothing */ }
     }
     // if the webview blocks her voice before a first tap, say() still leaves the caption up and does not retry
-    A.say(g.text, g.slot === 'late' ? 'talking' : 'happy').catch(log);
+    A.say(g.text, g.slot === 'night' ? 'talking' : 'happy').catch(log);
   }
+
+  // M4a: "Start talking when Mary opens" (talk_on_open). She starts the talk herself: Live says its own hello
+  // (with the time of day); Normal and Offline say a scripted greeting, then listen. 15 s of quiet and she rests.
+  function talkOnOpen() {
+    var g = greetingText();
+    if (g.slot !== 'night') {
+      try { A.getFace().bounce(); } catch (e) { /* nothing */ }
+    }
+    A.startTalk({ say: g.text, mood: g.slot === 'night' ? 'talking' : 'happy' }).catch(log);
+  }
+  // M4a: after the first hello she carries on talking; she has just greeted them, so no second hello
+  var FIRST_TALK = "Now, tell me a little about yourself. I'd love to get to know you.";
+  var FIRST_TALK_LIVE = "(You just met them on this screen a moment ago, so don't greet them again. In one short, " +
+    "warm sentence, ask them one easy question about themselves, then listen.)";
 
   function enterMainQuiet() {
     origEnterMain();
@@ -422,7 +456,8 @@
 
   A.enterMain = function () {
     enterMainQuiet();
-    if (S.screen === 'everyday' && S.hasKey) { greet(); }
+    if (S.screen !== 'everyday' || !S.hasKey) { return; }   // never on the emergency or no-key screens
+    if (S.talkOnOpen) { talkOnOpen(); } else { greet(); }   // M4a
   };
 
   A.startFirstRun = startFirstRun;

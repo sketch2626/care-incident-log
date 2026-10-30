@@ -421,6 +421,27 @@ LIVE_MEMORY_TOOLS = [
      "parameters": {"type": "object", "properties": {"name": {
          "type": "string", "description": "The name they like to be called."}}, "required": ["name"]}},
 ]
+# M4a: Live's story tool. Live's own stories came out thin, so a story is written by the same brain as Normal talk.
+LIVE_STORY_TOOL = {
+    "name": "tell_story",
+    "description": ("When they ask for a story, call this with what they asked for; it gives you a well-made story "
+                    "to tell."),
+    "parameters": {"type": "object", "properties": {"request": {
+        "type": "string", "description": ("What they asked for, in a few words, for example: a funny one about "
+                                          "fishing on the Outer Banks. Say 'any story' if they didn't say.")}},
+        "required": ["request"]}}
+LIVE_CORE_TOOLS = LIVE_MEMORY_TOOLS + [LIVE_STORY_TOOL]  # M4a: every Live chat on her own screen gets these
+STORY_DEADLINE_S = 25  # M4a: a whole story, collected before Live tells it
+STORY_MIN_WORDS = 40   # M4a: anything shorter isn't a story; she tells her own instead
+STORY_PROMPT = (  # M4a
+    "Right now, write one story for this person, for you to tell out loud. Make it a fresh story you make up now: "
+    "people who feel real, with names, a real place (North Carolina flavor unless they've told you they're from "
+    "somewhere else), something that happens, a little trouble, and a turn at the end that leaves a warm point or a "
+    "smile. It can be funny, warm, a bit of North Carolina history, or an old folk tale told your way. If they asked "
+    "for something in particular, give them that. Don't build it from your own likes and hobbies; you may lean on "
+    "what you know they like. Give it a beginning, a middle and an end, about 250 to 450 words. Write only the words "
+    "you will say: plain spoken sentences, no title, no brackets or tags, no lists, no headings, no stage directions. "
+    "Don't greet them or ask a question first; just begin the story.")
 
 
 class _ReplyStream:
@@ -498,15 +519,15 @@ def skill_blocked(text):
 # --- end skills hook ---
 
 
-def _gemini_stream(body, api_key, model=""):
+def _gemini_stream(body, api_key, model="", deadline_s=None):
     """Yields the text pieces of Gemini's streamed answer. Raises on any network or API problem.
-    Stops yielding after GEMINI_DEADLINE_S, so a slow trickle ends with what was said.
+    Stops yielding after GEMINI_DEADLINE_S (or deadline_s, M4a), so a slow trickle ends with what was said.
     A functionCall part is yielded as a ToolCall (skills, M13)."""
     url = assist.ENDPOINT.replace(":generateContent", ":streamGenerateContent").format(model=model or assist.DEFAULT_MODEL) + "?alt=sse"
     req = urllib.request.Request(
         url, data=json.dumps(body).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key})
-    deadline = time.monotonic() + GEMINI_DEADLINE_S
+    deadline = time.monotonic() + (deadline_s or GEMINI_DEADLINE_S)
     with urllib.request.urlopen(req, timeout=10) as resp:
         for line in resp:
             if time.monotonic() > deadline:
@@ -591,6 +612,9 @@ def _app_facts_text(companion):  # M9b
                          "normal": "Normal, where this computer turns their words into text and you answer in your voice",
                          "offline": "Offline, where your voice is made on this computer"}[choice]
                 out.append(f"- Talk mode in My info: {plain}. If one way isn't working you switch to the next by yourself.")
+            if f.get("talk_on_open"):  # M4a
+                out.append("- When your screen opens, you start talking by yourself: you say hello and listen, so they "
+                           "don't need to tap Talk.")
         rate, volume = f.get("voice_rate"), f.get("voice_volume")
         if rate is not None and volume is not None:
             speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"
@@ -621,10 +645,34 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     contents = [{"role": t["role"], "parts": [{"text": t["text"]}]} for t in turns]
     contents.append({"role": "user", "parts": [{"text": text}]})
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 256}}
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1200}}  # M4a: room for a whole story; the brain keeps chat short
     if tools:  # --- skills hook (M13) ---
         body["tools"] = tools
     return body
+
+
+def tell_story(request, memory, api_key, model="", companion="mary"):  # M4a: Live's tell_story tool
+    """One well-made story for Live to tell aloud, written by the same brain as Normal talk (with her app facts and
+    what she knows of them). Returns the story as plain spoken text, or "" on any problem (no key, network, too short)."""
+    if not api_key:
+        return ""
+    ask = " ".join(str(request or "").split())[:300]
+    body = {"systemInstruction": {"parts": [{"text": system_text(memory, companion) + "\n\n" + STORY_PROMPT}]},
+            "contents": [{"role": "user", "parts": [{"text": "Tell me a story" + (f": {ask}" if ask else ".")}]}],
+            "generationConfig": {"temperature": 0.9, "maxOutputTokens": 1500}}
+    try:
+        text = "".join(p for p in _gemini_stream(body, api_key, model, deadline_s=STORY_DEADLINE_S)
+                       if isinstance(p, str))
+    except Exception:
+        return ""
+    text = _TAG.sub("", _MOOD_TAG.sub("", text))
+    text = re.sub(r"\[[^\]]*\]?", "", text)       # any other bracketed note, or one cut off at the end
+    text = re.sub(r"[*#]+", "", text)              # markdown bold and headings are never spoken
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s*\n\s*\n\s*", "\n\n", text).strip()
+    end = re.search(r"[.!?…][\"'”’)]*(?=[^.!?…]*$)", text)  # a story cut off by the deadline ends on a whole sentence
+    text = text[:end.end()] if end else text
+    return text if len(text.split()) >= STORY_MIN_WORDS else ""
 
 
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,

@@ -220,7 +220,7 @@ class LiveBrain(M4aCase):
     def test_memory_tools_even_with_no_skills(self):
         setup = self.token_setup(self.memory())
         names = {d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])}
-        self.assertEqual(names, {"remember_fact", "set_their_name"})
+        self.assertEqual(names, {"remember_fact", "set_their_name", "tell_story"})
         self.assertFalse(any("__" in n for n in names))
         self.assertIn(voices.LIVE_TOOLS_NOTE, setup["systemInstruction"]["parts"][0]["text"])
 
@@ -307,6 +307,94 @@ class NameCases(unittest.TestCase):
         for bad in ("honey", "", None, "   "):
             with self.subTest(bad=bad):
                 self.assertEqual(mary.clean_name(bad), "")
+
+
+class StoryAndTalkOnOpen(M4aCase):  # M4a: Live's tell_story tool, "Start talking when Mary opens", Normal's room
+    STORY = ("[mood: happy] " + " ".join(["Once upon a time in Boone there lived a man named Earl."] * 6)
+             + " [remember: Likes stories.]")
+    FELL = "I fell and I can't get up"
+
+    def call(self, args, heard=None):
+        body = {"name": "tell_story", "args": args}
+        if heard is not None:
+            body["heard"] = heard
+        return helpers.api("POST", "/api/mary/skills/call", body)[1]
+
+    def fake(self, pieces=(), error=None):
+        seen = []
+
+        def stream(body, api_key, model="", deadline_s=None):
+            seen.append((body, api_key, deadline_s))
+            if error:
+                raise error
+            yield from pieces
+        p = mock.patch.object(mary, "_gemini_stream", stream)
+        p.start()
+        self.addCleanup(p.stop)
+        return seen
+
+    def test_tell_story_in_token_tools_and_note(self):
+        net = self.net(Resp({"name": "auth_tokens/abc"}))
+        voices.live_token("live:Achird", KEY, "mary", "", server.DATA,
+                          memory=mary.Memory(server.DATA / "mary" / "memory.json"))
+        setup = net.body()["bidiGenerateContentSetup"]
+        names = [d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])]
+        self.assertIn("tell_story", names)
+        self.assertIn("call tell_story", voices.LIVE_TOOLS_NOTE)
+
+    def test_story_comes_back_without_tags(self):
+        self.put(gemini_key=KEY)
+        seen = self.fake([self.STORY[:30], self.STORY[30:]])
+        got = self.call({"request": "a funny one about Boone"}, heard="tell me a story about Boone")
+        story = got["response"]["story"]
+        self.assertIn("a man named Earl.", story)
+        for bad in ("[", "]", "mood", "remember"):
+            self.assertNotIn(bad, story)
+        body, key, deadline = seen[0]
+        self.assertEqual((key, deadline), (KEY, mary.STORY_DEADLINE_S))
+        self.assertEqual(body["generationConfig"]["maxOutputTokens"], 1500)
+        self.assertIn(mary.STORY_PROMPT, body["systemInstruction"]["parts"][0]["text"])
+        self.assertIn("a funny one about Boone", body["contents"][0]["parts"][0]["text"])
+        self.fake([self.STORY, " And then he went down to the"])  # cut off by the deadline mid-sentence
+        self.assertTrue(self.call({"request": "any story"})["response"]["story"].endswith("named Earl."))
+
+    def test_emergency_heard_refuses_story(self):
+        self.put(gemini_key=KEY)
+        seen = self.fake([self.STORY])
+        self.assertTrue(self.call({"request": "any story"}, heard=self.FELL).get("emergency"))
+        self.assertEqual(seen, [])
+
+    def test_gemini_failure_or_no_key_gives_no_story(self):
+        seen = self.fake([self.STORY])
+        self.assertEqual(self.call({"request": "any story"})["response"]["error"], "no_story")  # no key saved
+        self.assertEqual(seen, [])
+        self.put(gemini_key=KEY)
+        self.fake(error=OSError("down"))
+        got = self.call({"request": "any story"})["response"]
+        self.assertEqual(got["error"], "no_story")
+        self.assertIn("beginning, middle and end", got["note"])
+        self.fake(["Once there was a man. The end."])  # too short to be a story
+        self.assertEqual(self.call({"request": "any story"})["response"]["error"], "no_story")
+
+    def test_talk_on_open_setting(self):
+        self.assertTrue(self.settings()["talk_on_open"])
+        self.assertIs(helpers.api("GET", "/api/mary/status")[1]["talk_on_open"], True)
+        self.put(talk_on_open="0")
+        self.assertFalse(self.settings()["talk_on_open"])
+        self.assertIs(helpers.api("GET", "/api/mary/status")[1]["talk_on_open"], False)
+        self.put(talk_on_open="maybe")  # not '1' or '0': ignored
+        self.assertFalse(self.settings()["talk_on_open"])
+        self.put(talk_on_open="1")
+        self.assertTrue(self.settings()["talk_on_open"])
+
+    def test_facts_mention_talk_on_open(self):
+        self.assertIn("When your screen opens, you start talking", mary._app_facts_text("mary"))
+        self.put(talk_on_open="0")
+        self.assertNotIn("When your screen opens", mary._app_facts_text("mary"))
+
+    def test_normal_has_room_for_a_story(self):
+        body = mary._body("tell me a story", mary.Memory(server.DATA / "mary" / "memory.json"), None)
+        self.assertEqual(body["generationConfig"]["maxOutputTokens"], 1200)
 
 
 if __name__ == "__main__":

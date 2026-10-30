@@ -45,9 +45,17 @@
   var BYE_MAX_WORDS = 6;         // a goodbye is a short turn; a long story that says "goodbye" is not one
   var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later)\b/i;
   var LIVE_BYE_MAX_MS = 8000;    // after the goodbye is asked for, Live closes once her turn ends, or after this
-  var LIVE_HELLO = '(The resident just tapped Talk. Greet them in one or two short, warm sentences, like a friend ' +   // M4a
-    'picking up where you left off: use their name if you know it and, if it fits, something you remember about ' +
-    'them or from your last talk. Never list what you can do.)';
+  // M4a: {when} is the local time of day (morning, afternoon, evening or night), filled in by liveHello()
+  var LIVE_HELLO = '(The resident is ready to talk with you, and it is {when} where they are. Greet them in one or ' +
+    'two short, warm sentences, like a friend who is glad to see them: use their name if you know it and, when it ' +
+    'fits, something you remember about them or from your last talk. Use different words every time. A light ' +
+    '"good morning", "good afternoon" or "good evening" is fine, but never "good night", never comment on the hour ' +
+    'or how late it is, and never say you are still here or waiting for them. Never list what you can do.)';
+  function timeWord() {   // M4a: the same slots as the scripted greetings in firstrun.js
+    var h = new Date().getHours();
+    return (h >= 22 || h < 5) ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  }
+  function liveHello() { return LIVE_HELLO.replace('{when}', timeWord()); }   // M4a
   var LIVE_BYE = '(The conversation is ending now. Say a short, warm goodbye in one sentence and remind them they can tap Talk any time.)';
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say this to them right now, warmly and plainly, then stay with them: ';
@@ -837,12 +845,15 @@
 
   // The one way to start talking. Call it straight from a tap (Live opens the mic and sound there).
   // opts.hello: what Live is asked to say first. Resolves true when a conversation started.
+  // M4a: opts.say (with opts.mood): when she starts by herself, the words Normal and Offline say before listening;
+  // with no mic it is only said, and the typing box is not opened.
   function startTalk(opts) {
     opts = opts || {};
     App.onActivity();
     if (S.convo || S.phase === 'thinking' || S.phase === 'listening') { return Promise.resolve(false); }
     var mode = nextMode(S.talkOrder, null);
     if (mode === 'live' && !liveSupported()) { mode = nextMode(S.talkOrder, 'live'); }
+    if (mode !== 'live' && S.typingOnly && opts.say) { say(opts.say, opts.mood || 'happy').catch(log); return Promise.resolve(false); }   // M4a
     if (mode !== 'live' && S.typingOnly) { openTyping(); return Promise.resolve(false); }
     var c = { mode: mode, live: false, open: false, ending: false, paused: false, seq: 0, lastAct: Date.now(),
       heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false, misses: 0 };
@@ -850,7 +861,12 @@
     S.fallbackSaid = false;
     S.voiceMode = speechModeFor(mode);
     updateTalkButton();
-    if (mode === 'live') { startLive(c, opts.hello || LIVE_HELLO); } else { convoListen(c, true); }
+    if (mode === 'live') {
+      startLive(c, opts.hello || liveHello());   // M4a: with the time of day
+    } else if (opts.say) {   // M4a: her hello first, then she listens
+      say(opts.say, opts.mood || 'happy').then(function () { convoListen(c, true); },
+        function (e) { log(e); convoListen(c, true); });
+    } else { convoListen(c, true); }
     return Promise.resolve(true);
   }
 
@@ -1548,6 +1564,7 @@
       S.talkOrder = st.talk_order.filter(function (m) { return m === 'live' || m === 'normal' || m === 'offline'; });
     }
     if (st.listen_wait != null) { QUIET_END_S = clampNum(st.listen_wait, 1.5, 6, QUIET_END_S); }
+    S.talkOnOpen = st.talk_on_open !== false;   // M4a: she says hello and listens when her screen opens
     if (!S.convo) { S.voiceMode = speechModeFor(nextMode(S.talkOrder, null)); }
     var c = st.companion === 'him' ? 'him' : 'mary';
     if (c !== S.companion) { setCompanion(c, { noSave: true }); } else { applyLook(c); refreshLabels(); }

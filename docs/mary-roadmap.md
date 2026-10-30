@@ -254,7 +254,7 @@ Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up
 
 ### M14. A better voice (later; Andy, 2026-10-30)
 - The free Gemini voices sound patronizing, with uptick and emphasis on word endings.
-- Look into the open-source, free voice Andy found, which reproduces how ElevenLabs works. Ask Andy for its name or link first. Check whether it runs on the laptop (privacy, offline) and what it needs, then audition it for Andy by ear as in M2.
+- Look into the open-source, free voice Andy found, which reproduces how ElevenLabs works. Ask Andy for its name or link first. Check whether it runs on the laptop (privacy, offline) and what it needs, then audition it for Andy by ear as in M2. Andy's laptop is new (Ryzen 5 7520U, integrated Radeon), but most residents get refurbished ones, so also check the speed on weaker hardware, or a CPU limit that imitates it.
 - Paid options (Gemini paid tier, ElevenLabs' API) are the other route.
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)

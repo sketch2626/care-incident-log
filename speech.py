@@ -11,6 +11,7 @@ Public interface (all functions are thread-safe):
     stop()                -> str    stop recording and return the transcript
     level()               -> dict   live loudness / voice-activity reading while recording
     transcribe_file(path) -> str    transcribe an existing audio file
+    add_mic_hook(fn)      -> None   fn(True) before recording opens the mic, fn(False) after it closes
 
 Error messages raised to callers are written in plain language so they can be
 shown to a resident as they are.
@@ -188,6 +189,23 @@ _rec: "_Recording | None" = None
 _sd = None
 _sd_loaded = False
 _last_rescan = 0.0
+_mic_hooks: list = []  # fn(busy) told when voice typing takes (True) / gives back (False) the mic
+
+
+def add_mic_hook(fn) -> None:
+    """Register fn(busy: bool): called with True just before voice typing opens the
+    microphone and with False after it has closed it (the wake-word listener uses this
+    to step aside). A failing hook is logged and never breaks voice typing."""
+    if fn not in _mic_hooks:
+        _mic_hooks.append(fn)
+
+
+def _call_mic_hooks(busy: bool) -> None:
+    for fn in list(_mic_hooks):
+        try:
+            fn(busy)
+        except Exception:
+            log.exception("Microphone hook failed")
 
 
 def _get_sd():
@@ -468,22 +486,27 @@ def start() -> None:
     problem = _missing_dependency()
     if problem:
         raise RuntimeError(problem)
-    with _rec_lock:
-        if _rec is not None:
-            old, _rec = _rec, None
-            old.abort()
-        sd = _get_sd()
-        if sd is None:
-            raise RuntimeError(MSG_NOT_INSTALLED)
-        try:
-            rec = _open_recording(sd)
-        except RuntimeError:
-            # The device list may be stale (microphone plugged in or changed since
-            # PortAudio started): re-scan once and try again.
-            _last_rescan = time.monotonic()
-            _rescan_devices(sd)
-            rec = _open_recording(sd)
-        _rec = rec
+    _call_mic_hooks(True)  # e.g. the wake-word listener lets go of the microphone first
+    try:
+        with _rec_lock:
+            if _rec is not None:
+                old, _rec = _rec, None
+                old.abort()
+            sd = _get_sd()
+            if sd is None:
+                raise RuntimeError(MSG_NOT_INSTALLED)
+            try:
+                rec = _open_recording(sd)
+            except RuntimeError:
+                # The device list may be stale (microphone plugged in or changed since
+                # PortAudio started): re-scan once and try again.
+                _last_rescan = time.monotonic()
+                _rescan_devices(sd)
+                rec = _open_recording(sd)
+            _rec = rec
+    except BaseException:
+        _call_mic_hooks(False)  # nothing is recording after all
+        raise
     warm_up()  # load the model while the person is speaking
 
 
@@ -498,7 +521,10 @@ def stop() -> str:
         rec, _rec = _rec, None
     if rec is None:
         return ""
-    audio = rec.finish()
+    try:
+        audio = rec.finish()
+    finally:
+        _call_mic_hooks(False)  # microphone closed: the wake-word listener may listen again
     if len(audio) < MIN_AUDIO_SECONDS * SAMPLE_RATE:
         return ""
     peak = float(np.max(np.abs(audio)))

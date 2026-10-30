@@ -13,6 +13,8 @@
 .cap{position:absolute;left:clamp(16px,4.4vw,72px);right:clamp(16px,4.4vw,72px);bottom:clamp(16px,4.25vh,48px);
   z-index:8;height:2.4em;pointer-events:none;transition:opacity .4s ease}
 .cap.left{right:min(600px,47vw)}            /* menu open: keep clear of it */
+/* side by side with a skill: under her face in the left 40%, smaller so the words fit. Beats .cap.left and .capA. */
+#scr[data-aside] .cap{left:clamp(16px,2vw,32px);right:60vw;font-size:clamp(36px,3.4vw,56px)}
 .cap.hidden{opacity:0}
 .cap .cap-track{position:absolute;left:0;right:0;top:0;transition:transform .4s ease}
 .cap.whole{height:auto}                      /* emergency: every line shows */

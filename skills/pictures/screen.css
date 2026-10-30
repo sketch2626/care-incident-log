@@ -1,39 +1,34 @@
-/* The pictures skill's screen: the picture fills the window on a dark warm backdrop, with its title over the bottom
-   edge and the credit under it. Mary's face scoots into the top-left corner; the Menu button (top right) and the
-   dock (Talk button and caption, bottom) stay above this box and are kept clear.
-   Rules for residents 65-95: text 20px or more (title 36px, credit 18px), buttons 64px or more, high contrast. */
-.skill-screen[data-skill="pictures"]{padding:0!important;overflow:hidden!important;background:#1d1712;color:#fff8ec}
+/* The pictures skill's screen, side by side with Mary (aside:true; the shared rules are .skill-screen.aside in
+   web/mary/mary.css). This box is the right 60% of the window, on her warm background. Top to bottom: the title beside
+   the Menu button, the picture on its dark card, the credit, then the two big buttons.
+   Nothing ever sits over the picture: words show in the card only while no picture is up (see setStatus in screen.js).
+   Rules for residents 65-95: text 20px or more (title 34px, credit 20px), buttons 64px or more, high contrast. */
+.skill-screen[data-skill="pictures"]{overflow:hidden!important;color:#2b1f17}
 .skill-screen[data-skill="pictures"] > .btn{display:none}   /* our "Back to Mary" replaces the small generic Back */
 .skill-screen[data-skill="pictures"] .skill-body{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;
-  padding:16px 24px 144px}   /* 144px at the bottom: room for the Talk button */
+  padding:0 28px 28px 0}
 
-/* buttons: right of Mary's small face, left of Menu */
-.skill-screen[data-skill="pictures"] .pic-bar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;flex:none;
-  min-height:88px;padding-left:calc(22vmin + 24px);padding-right:300px}
-.skill-screen[data-skill="pictures"] .pic-bar .btn{min-height:88px;font-size:32px;border-color:#fff8ec}
-.skill-screen[data-skill="pictures"] .pic-bar .btn.yes{border-color:#0f5560}
-.skill-screen[data-skill="pictures"] .pic-bar .btn:disabled{opacity:.6;cursor:default;transform:none}
+/* top row, beside the Menu button (28px from the top and right, about 240px wide, 96px tall): two lines at most */
+.skill-screen[data-skill="pictures"] .pic-title{flex:none;min-height:124px;margin:0;padding:24px 290px 0 0;
+  font-size:34px;font-weight:700;line-height:1.25;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 
-/* the picture */
-.skill-screen[data-skill="pictures"] .pic-stage{position:relative;flex:1 1 auto;min-height:0;display:flex;
+/* the picture: all the height that's left, on a dark card so a photo reads against her warm background */
+.skill-screen[data-skill="pictures"] .pic-stage{flex:1 1 auto;min-height:0;display:flex;
   align-items:center;justify-content:center;border-radius:20px;overflow:hidden;
   background:radial-gradient(circle at 50% 40%,#3a2c20 0%,#1d1712 75%)}
 .skill-screen[data-skill="pictures"] .pic-img{display:block;width:100%;height:100%;object-fit:contain}
-.skill-screen[data-skill="pictures"] .pic-status{margin:0;padding:0 24px;max-width:900px;text-align:center;
-  font-size:36px;font-weight:700;line-height:1.3;color:#fff8ec}
-.skill-screen[data-skill="pictures"] .pic-img:not([hidden]) ~ .pic-status{position:absolute;top:16px;left:50%;
-  transform:translateX(-50%);background:rgba(20,16,12,.88);padding:12px 24px;border-radius:16px}
-.skill-screen[data-skill="pictures"] .pic-title{position:absolute;left:0;right:0;bottom:0;margin:0;
-  padding:14px 28px 16px;background:rgba(20,16,12,.88);color:#fff;font-size:36px;font-weight:700;line-height:1.25;
-  text-align:center;overflow-wrap:anywhere}
-.skill-screen[data-skill="pictures"] .pic-credit{flex:none;margin:0;font-size:18px;line-height:1.4;color:#eadfcc;
+
+/* status words: in the card while no picture shows, in their own line under a picture that does */
+.skill-screen[data-skill="pictures"] .pic-status{margin:0;text-align:center;font-weight:700;line-height:1.3}
+.skill-screen[data-skill="pictures"] .pic-stage .pic-status{padding:0 24px;font-size:36px;color:#fff8ec}
+.skill-screen[data-skill="pictures"] .skill-body > .pic-status{flex:none;font-size:28px}
+
+.skill-screen[data-skill="pictures"] .pic-credit{flex:none;margin:0;font-size:20px;line-height:1.3;color:#4a3426;
   text-align:center;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
 
-/* Mary's face, small in the corner while a picture is up, so she can keep talking about it */
-#face{transition:top .5s ease,left .5s ease,right .5s ease,bottom .5s ease,border-radius .5s ease,box-shadow .5s ease}
-#scr[data-screen="pictures"] #face{z-index:7;top:16px;left:16px;right:calc(100% - 16px - 22vmin);
-  bottom:calc(100% - 16px - 22vmin);border-radius:28px;overflow:hidden;background:#fff0d2;
-  box-shadow:0 0 0 4px #fff8ec,0 8px 24px rgba(0,0,0,.5)}
-@media (prefers-reduced-motion: reduce){
-  #face{transition:none}
-}
+/* bottom row: the two big buttons share the width */
+.skill-screen[data-skill="pictures"] .pic-bar{display:flex;gap:16px;flex:none}
+.skill-screen[data-skill="pictures"] .pic-bar .btn{flex:1 1 0;min-width:0;min-height:88px;padding:0 16px;font-size:30px;
+  line-height:1.2}
+.skill-screen[data-skill="pictures"] .pic-bar .btn:disabled{opacity:.6;cursor:default;transform:none}

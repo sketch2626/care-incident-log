@@ -139,6 +139,19 @@ MarySkills.register('coin_flip', {
 - `enter` draws the box, and `leave` clears it.
 - `effect` runs when the server sends a `coin` effect.
 
+### Side by side with Mary
+
+A skill that shows something big, like a picture or a game, can stand next to Mary instead of covering her. Add `aside: true` to `register`:
+
+```js
+MarySkills.register('my_game', { aside: true, enter(el) { /* draw */ }, leave(el) { /* clear */ } });
+```
+
+- Mary slides over to the left 40% of the window and turns toward your screen. She stays big, glances back and forth, and her words sit under her.
+- Your box is the right 60% of the window. It has no padding or background, so her warm background shows through.
+- Keep clear of the Menu button at the top right. Leave about 124px at the top and 290px at the right of that row.
+- When your screen closes for any reason, even an emergency, she goes back to her full face. You don't call anything.
+
 ## 4. The rules
 
 - **Safety first.** Emergencies never reach a skill. Mary's safety checks run before any skill.

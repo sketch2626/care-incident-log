@@ -16,7 +16,7 @@
      cap.setDuration(id, seconds);                         // once that sentence's audio length is known
      cap.liveAudio(at, dur, ctx);  cap.livePiece(text);    // Live: every audio chunk, every text piece
      cap.whole(text, {at, dur, ctx});                      // emergency: all of it at once
-     cap.cut();  cap.stopped();  cap.clear();  cap.setSide(true);  cap.plain('You said: ...', 'said');
+     cap.cut();  cap.stopped();  cap.clear();  cap.setSide(true);  cap.setAside(true);  cap.plain('You said: ...', 'said');
    The caption is aria-hidden (her voice speaks it); each finished sentence goes to liveRegion once. */
 (function (root) {
   'use strict';
@@ -601,6 +601,15 @@
         if (cap.classList.contains('left') === left) return;
         cap.classList.toggle('left', left);
         layout(false);
+      },
+
+      // Side by side with a skill: #scr[data-aside] .cap (set before this call) puts the caption under her face in a
+      // smaller size, so the words are measured again. That rule beats .cap.left: the menu doesn't change the width.
+      setAside: function (on) {
+        on = !!on;
+        if (cap.classList.contains('aside') === on) return;
+        cap.classList.toggle('aside', on);
+        layout(true);
       },
 
       // A plain line for things that are not her voice, e.g. plain('You said: ...', 'said').

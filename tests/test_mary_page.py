@@ -3,6 +3,7 @@ from tests import helpers  # noqa: F401  (must be first: points the data folder 
 """Mary's screen is served: the page, its script and its style load, and the page uses the face script."""
 import re
 import unittest
+from pathlib import Path
 
 api = helpers.api
 
@@ -113,6 +114,41 @@ class MaryPageTests(unittest.TestCase):
     def test_face_files_still_load(self):
         self.get("/mary/face.js")
         self.get("/mary/face.css")
+
+    def test_skills_stand_side_by_side_with_mary(self):
+        app, _ = self.get("/mary/app.js")
+        for needle in ("function sideBySide(on)", "sideBySide: sideBySide", "data-aside", "face.setAside(on)",
+                       "cap.setAside(on)"):
+            self.assertIn(needle, app)
+        self.assertEqual(app.count("setAside: noop"), 2)   # the stand-in face and the stand-in caption
+        skills, _ = self.get("/mary/skills.js")
+        for needle in ("handlers[name].aside", "sideBySide(true)", "sideBySide(false)"):
+            self.assertIn(needle, skills)
+        face, _ = self.get("/mary/face.js")
+        for needle in ("setAside: setAside", "aside: aside", "toggle('mf-aside', aside)"):
+            self.assertIn(needle, face)
+        css, _ = self.get("/mary/face.css")
+        for needle in (".mf-aside .mf-stage", ".mf-aside.mf-think .mf-stage", ".mf-aside .mf-over",
+                       ".mf-aside.mf-menu .mf-eyes", "@keyframes mf-glance"):
+            self.assertIn(needle, css)
+        caption, _ = self.get("/mary/captions.css")
+        self.assertIn("#scr[data-aside] .cap", caption)
+        page, _ = self.get("/mary/mary.css")
+        self.assertIn(".skill-screen.aside", page)
+
+    def test_pictures_stand_aside_and_nothing_covers_the_picture(self):
+        folder = Path(__file__).resolve().parent.parent / "skills" / "pictures"
+        css = (folder / "screen.css").read_text(encoding="utf-8")
+        js = (folder / "screen.js").read_text(encoding="utf-8")
+        self.assertNotIn("#face", css)
+        self.assertNotIn("position:absolute;top:16px", css)   # the status pill that sat over the picture
+        self.assertNotIn("~ .pic-status", css)
+        self.assertIn("aside: true", js)
+        self.assertNotIn("stage.appendChild(title)", js)
+        self.assertNotIn("stage.appendChild(credit)", js)
+        self.assertIn("parseFromString(t, 'text/html')", js)
+        self.assertIn("plainText(data.credit, CREDIT_MAX)", js)
+        self.assertNotIn("innerHTML = data", js)
 
     def test_voices_page_and_files_load(self):
         html, _ = self.get("/mary/voices.html")

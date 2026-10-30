@@ -43,29 +43,46 @@
   // QUIET_END_S above follows the saved listen_wait (status and settings effects).
   var CONVO_IDLE_S = 15;         // a conversation ends after this much quiet: nobody talking, she isn't speaking
   var BYE_MAX_WORDS = 6;         // a goodbye is a short turn; a long story that says "goodbye" is not one
-  var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later)\b/i;
+  var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later|(?:go|going|get) (?:on )?(?:back )?to sleep|(?:go|get|take) (?:some |a )?(?:rest|nap)|(?:you can|go on and|time to) (?:rest|sleep)|rest now|that['’]?(?:s| will| ?ll) (?:be )?(?:all|enough) for (?:now|today|tonight))\b/i;   // M4a: and "go to sleep"
+  // M4a: "I can't get to sleep", "my chest hurts, I need rest", "why did she go to sleep?" are about something else: she must keep listening
+  var BYE_NOT = /\?|\b(?:can['’]?t|cannot|couldn['’]?t|could not|won['’]?t|wouldn['’]?t|didn['’]?t|don['’]?t|doesn['’]?t|not|never|trouble|hard|help|how|why|when|where|what|wish|want|wanted|need|needed|tried|try|trying|if|because|after|before|until|he|she|they|we|her|him|his|their)\b/i;
+  // M4a: words that don't count toward a goodbye's length: "Okay Mary, you can go to sleep now" is still short
+  var BYE_FILLER = /^(?:ok(?:ay)?|alright|all|right|well|now|so|oh|honey|dear|darling|mary|sam|then|please|thanks|thank|you)$/i;
   var LIVE_BYE_MAX_MS = 8000;    // after the goodbye is asked for, Live closes once her turn ends, or after this
   // M4a: {when} is the local time of day (morning, afternoon, evening or night), filled in by liveHello()
   var LIVE_HELLO = '(The resident is ready to talk with you, and it is {when} where they are. Greet them in one or ' +
     'two short, warm sentences, like a friend who is glad to see them: use their name if you know it and, when it ' +
-    'fits, something you remember about them or from your last talk. Use different words every time. A light ' +
+    'fits, something you remember about them or from your last talk. Talk as one grown-up to another: plain and ' +
+    'easy, no gushing and no fuss over them. Use different words every time. A light ' +
     '"good morning", "good afternoon" or "good evening" is fine, but never "good night", never comment on the hour ' +
     'or how late it is, and never say you are still here or waiting for them. Never list what you can do.)';
   function timeWord() {   // M4a: the same slots as the scripted greetings in firstrun.js
     var h = new Date().getHours();
     return (h >= 22 || h < 5) ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
   }
+  function goodbyeLine() { return MSG.goodbye + ' ' + restLine(false); }   // M4a
   function liveHello() { return LIVE_HELLO.replace('{when}', timeWord()); }   // M4a
-  var LIVE_BYE = '(The conversation is ending now. Say a short, warm goodbye in one sentence and remind them they can tap Talk any time.)';
+  // M4a: the big Talk button is gone (M4b). The way back in is her name (M6), when it can run here, or Menu.
+  function wakeOn() { return !!S.wakeWord && !!S.wakeReady; }
+  function restLine(typing) {   // the resting caption and the end of her goodbye: only ways that really work now
+    var n = companionName(S.companion);
+    if (typing) { return 'Tap Menu, then “Type to ' + n + '”, any time.'; }
+    return wakeOn() ? 'Say “Hey ' + n + '” any time you want to talk.'
+      : 'Tap Menu, then “Talk to ' + n + '”, any time you want to talk.';
+  }
+  function liveBye() {
+    var n = companionName(S.companion);
+    return '(The conversation is ending now. Say a short, warm goodbye in one sentence and remind them ' +
+      (wakeOn() ? 'they can say "Hey ' + n + '" any time to talk again.)'
+        : 'they can tap Menu, then "Talk to ' + n + '", any time to talk again.)');
+  }
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say this to them right now, warmly and plainly, then stay with them: ';
   // --- end M4a ---
 
   var MSG = {
-    tapToTalk: "Tap the button and talk to me any time.",
-    tapToType: "Tap the button and type to me any time.",
     listening: "I'm listening…",
-    silence: "I didn't hear anything. Tap the button and talk whenever you're ready.",
+    silence: "I didn't hear anything. I'm here whenever you're ready.",   // M4a: no Talk button any more
     notCaught: "I didn't quite catch that. Could you say it again?",
     waking: "I'm still waking up my ears. Please try again in a moment.",
     sorry: "I'm sorry, something went wrong. Let's try again.",
@@ -77,7 +94,7 @@
     better: "Is this better?",
     loading: "I'm getting ready. Just a moment.",
     fallback: "My best voice isn't working right now, so I'll keep talking with you the usual way.",   // M4a
-    goodbye: "It was so nice talking with you. Tap Talk any time you want to chat again."              // M4a
+    goodbye: "It was so nice talking with you."   // M4a: goodbyeLine() adds the way back in
   };
 
   // ---------------------------------------------------------------- state
@@ -999,7 +1016,8 @@
   function isGoodbye(text) {
     text = String(text == null ? '' : text).trim();
     if (!text) { return false; }
-    return text.split(/\s+/).length <= BYE_MAX_WORDS && BYE_RE.test(text);
+    var words = text.split(/\s+/).filter(function (w) { return !BYE_FILLER.test(w.replace(/[^\w']/g, '')); });   // M4a
+    return words.length <= BYE_MAX_WORDS && BYE_RE.test(text) && !BYE_NOT.test(text);
   }
 
   function liveSupported() {
@@ -1063,8 +1081,10 @@
     if (!c) { return; }
     clearInterval(c.idleTimer);
     clearTimeout(c.byeTimer);
+    clearTimeout(c.byeWait);   // M4a
     c.ending = true;
     if (S.convo === c) { S.convo = null; }
+    storyStop(c);   // M4a: a story never outlives the talk
     if (c.live) {
       c.live = false;
       c.open = false;
@@ -1072,6 +1092,7 @@
       if (CapS.owner === 'live') { capCut(); }   // M4b: her voice stops with the talk
       if (!Sp.sess && (S.phase === 'listening' || S.phase === 'speaking')) { setPhase('idle'); }
     }
+    liveByeRelease(c);   // M4a
     updateTalkButton();
     wakeHoldCheck();   // M6
   }
@@ -1083,21 +1104,22 @@
       closeConvo(c);
       newTurn();
       setPhase('idle');
-      setCaption(S.typingOnly && !liveFirst() ? MSG.tapToType : MSG.tapToTalk);
+      setCaption(restLine(S.typingOnly && !liveFirst()));
       return;
     }
     if (c.live && c.open) {
+      if (why === 'bye') { liveByeNow(c); return; }   // M4a: a spoken goodbye closes at once
       c.ending = true;
       c.byeDone = false;
       clearInterval(c.idleTimer);
-      // to a spoken goodbye she is already answering with one; on quiet she is asked for one
-      if (why === 'idle' && !greetLive(LIVE_BYE)) { finishLive(c); return; }
+      // on quiet she is asked for a goodbye
+      if (why === 'idle' && !greetLive(liveBye())) { finishLive(c); return; }
       c.byeTimer = setTimeout(function () { liveByeCap(c, false); }, LIVE_BYE_MAX_MS);
       return;
     }
     closeConvo(c);
     newTurn();
-    say(MSG.goodbye, 'happy');
+    say(goodbyeLine(), 'happy');
   }
 
   // --- M6: the wake word ("Hey Mary" / "Hey Sam"), heard on this computer by the server ---
@@ -1209,6 +1231,7 @@
     var seq = ++c.seq;
     c.live = true;
     c.open = false;
+    storyStop(c);   // M4a: a restart ends the story with its old session
     try { if (window.MaryVoice) { window.MaryVoice.cancel(); } } catch (e) { log(e); }
     newTurn();
     setPhase('thinking');
@@ -1218,8 +1241,10 @@
       p = window.MaryLive.start({
         screen: skillScreen(),
         onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
-        onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); setCaption('You said: ' + t, 'said'); } },
+        // M4a: liveHeardPiece: the story's cut-in and the early goodbye
+        onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); if (!liveHeardPiece(c, t)) { setCaption('You said: ' + t, 'said'); } } },
         onHeardDone: function (t) { liveHeard(c, t); },   // M4a: even after the talk ended or restarted (never missed)
+        onToolCancel: function (ids) { if (mine()) { liveToolCancelled(c, ids); } },   // M4a
         onSpeaking: function (on) { if (mine()) { liveSpeakingChanged(c, on); } },
         onInterrupted: function () { liveSaid(c); if (mine()) { c.lastAct = Date.now(); } },   // M4a: liveSaid
         onTurnComplete: function () { liveSaid(c); if (mine()) { liveTurnDone(c); } },   // M4a: liveSaid
@@ -1228,8 +1253,8 @@
         // M4b: her words on her playback clock, the ear waves, and thinking until her first sound
         onCaptionPiece: function (t) { if (mine()) { capLivePiece(t); } },
         onAudioChunk: function (at, dur, ctx) { if (mine()) { capLiveAudio(at, dur, ctx); } },
-        onAudioDone: function () { if (mine()) { capLiveDone(); } },
-        onCut: function () { if (mine()) { capCut(); } },
+        onAudioDone: function () { if (mine() && !c.story) { capLiveDone(); } },   // M4a: not over the story's captions
+        onCut: function () { if (mine() && !c.story) { capCut(); } },   // M4a: not over the story's captions
         onMicLevel: function (rms, voice) { if (mine()) { liveMicLevel(voice); } },
         onEnd: function (why, detail) { if (mine()) { liveDropped(c, why, detail); } }
       });
@@ -1366,6 +1391,9 @@
   }
 
   function liveEmergency(c, j) {
+    storyStop(c);   // M4a: the emergency words, never a story over them
+    clearTimeout(c.byeWait);   // M4a
+    liveByeRelease(c);   // M4a
     try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); }
     var words = (j && j.say) ? String(j.say) : MSG.emergency;
     if (c.ending) {                         // no goodbye now: she stays with them
@@ -1383,17 +1411,219 @@
     if (!greetLive(LIVE_SAFETY + words + ')')) { c.saidSkip = false; say(words, 'alert'); }
   }
 
+  // --- M4a: a story in Live is told by the page in her picked voice. Each piece is a fresh Gemini TTS request at the
+  // saved pace, so it can't speed up the way Live's own voice does. Her tool call stays pending while it plays. ---
+  var TOOL_REFUSED = { error: 'emergency', note: 'Not done. Stay with them about their safety and do not mention this.' };
+  var LIVE_BYE_QUIET_MS = 700;     // a goodbye counts once this long has gone by with no new words
+  var STORY_EARS_AFTER_MS = 1000;  // words this soon after she starts are the end of what they asked for, not a cut-in
+  var STORY_WAIT_MS = 6000;        // at most this long for Live's own lead-in ("Here's one...") to finish
+
+  // --- M4a story helpers (pure; tests/test_story_js.py runs this block with Node) ---
+  var STORY_MAX_WORDS = 40;        // one piece of a story: 1-2 sentences, up to this many words
+  var STORY_ECHO_WINDOW = 8;       // Live's heard text keeps growing: only its last words are compared
+  var STORY_ECHO_SHARE = 0.7;      // this share of them in what she is saying = her own voice came back through the mic
+  var STORY_TOLD = "The app just told this story out loud in your own voice and they heard all of it. Don't retell or summarize it. Say one short, natural line, like asking what they thought of it.";
+  var STORY_CUT = "They cut in while you were telling it. Listen and answer what they said; don't go back to the story unless they ask.";
+  var STORY_REST = "The app's voice stopped part way. Tell the rest from here at the same steady, unhurried pace; don't repeat what was told.";
+  var STORY_STEADY = 'Tell this story at one steady, unhurried pace from the first word to the last; never speed up.';
+  function storyWords(t) {
+    return String(t == null ? '' : t).toLowerCase().replace(/['’]/g, '').replace(/[^\w\s]/g, ' ').split(/\s+/).filter(Boolean);
+  }
+  // The story cut at sentence ends into pieces of 1-2 sentences. A single long sentence stays whole.
+  function storyChunks(text, maxWords) {
+    var max = maxWords || STORY_MAX_WORDS;
+    var parts = splitSentences(cleanSpeech(text), true).sentences;
+    var out = [], cur = '', words = 0, count = 0;
+    for (var i = 0; i < parts.length; i++) {
+      var w = parts[i].split(/\s+/).length;
+      if (cur && (count >= 2 || words + w > max)) { out.push(cur); cur = ''; words = 0; count = 0; }
+      cur = cur ? cur + ' ' + parts[i] : parts[i];
+      words += w;
+      count++;
+    }
+    if (cur) { out.push(cur); }
+    return out;
+  }
+  // True when what was heard is her own story coming back through the mic: most of its last words are in the piece
+  // she is saying or the one before. One word is judged the same way, since Live sends its words one at a time.
+  function storyEcho(heard, playing, before) {
+    var words = storyWords(heard).slice(-STORY_ECHO_WINDOW);
+    if (!words.length) { return true; }
+    var seen = {};
+    storyWords(playing + ' ' + before).forEach(function (w) { seen[w] = 1; });
+    var hits = words.filter(function (w) { return seen[w] === 1; }).length;
+    return hits / words.length >= STORY_ECHO_SHARE;
+  }
+  // What Live is told once the story is over. r: how MaryVoice.queue() ended; heard: pieces that reached the speakers.
+  function storyAnswer(text, parts, r, heard) {
+    r = r || {};
+    if (r.ok && !r.cut) { return { told: true, story: text, note: STORY_TOLD }; }
+    if (r.ok) { return { told: 'partly', said_so_far: parts.slice(0, heard).join(' '), note: STORY_CUT }; }
+    var at = Math.max(0, Math.floor(Number(r.at) || 0));
+    if (at === 0) { return { story: text, note: STORY_STEADY }; }   // no sound at all: Live tells it
+    return { told: 'partly', rest: parts.slice(at).join(' '), note: STORY_REST };
+  }
+  // --- end M4a story helpers ---
+
+  function storyPlaying(st) {   // the piece coming out of the speakers now; -1 before her first sound
+    var i = -1, now = st.ctx ? st.ctx.currentTime : 0;
+    for (var k = 0; k < st.at.length; k++) { if (st.at[k] <= now) { i = k; } }
+    return i;
+  }
+
+  // Live's tell_story came back with a story: tell it here, and answer Live when it is over.
+  function storyFromTool(c, r) {
+    var list = (r && r.functionResponses) || [], fr = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].name === 'tell_story' && list[i].response && list[i].response.story) { fr = list[i]; }
+    }
+    if (!fr) { return r; }
+    if (S.convo !== c || !c.live || c.ending || (c.toolGone && c.toolGone[fr.id])) { return r; }
+    if (S.screen === 'emergency') { fr.response = TOOL_REFUSED; return r; }
+    var text = String(fr.response.story);
+    var parts = storyChunks(text);
+    var mv = window.MaryVoice;
+    if (!parts.length || !mv || typeof mv.queue !== 'function') { fr.response = { story: text, note: STORY_STEADY }; return r; }
+    storyStop(c);
+    var st = { id: fr.id, text: text, parts: parts, at: [], ctx: null, began: Date.now(), s: null,
+      stopped: false, finished: false, done: null };
+    c.story = st;
+    try { window.MaryLive.hush(true); } catch (e) { log(e); }   // no sound of Live's until the tool is answered
+    return new Promise(function (done) {
+      st.done = function (resp) { fr.response = resp; done(r); };
+      storyWait(c, st, 0);
+    });
+  }
+
+  function storyWait(c, st, ms) {   // her lead-in finishes first: never two voices
+    if (st.stopped || S.convo !== c || !c.live) { storyDone(c, st, { ok: true, cut: true }); return; }
+    if (liveSpeaking() && ms < STORY_WAIT_MS) { setTimeout(function () { storyWait(c, st, ms + 100); }, 100); return; }
+    storyPlay(c, st);
+  }
+
+  // Goes through a speech session like Normal talk: captions, and anything that cancels speech cancels the story.
+  function storyPlay(c, st) {
+    var s = spStart(), capIds = {}, p;   // capIds = piece index -> caption id
+    st.s = s;
+    s.started = true;
+    setPhase('speaking');
+    applyMood('talking');
+    try {
+      p = window.MaryVoice.queue(st.parts, { mode: 'normal', rate: S.rate, volume: S.volume, open: false,
+        onSentenceAudio: function (i, text, at, ctx, dur) {
+          st.at[i] = at;
+          st.ctx = ctx;
+          capIds[i] = capSay(s, text, { at: at, ctx: ctx, dur: dur });
+        },
+        onSentenceLength: function (i, dur) {
+          if (Sp.sess === s && capIds[i]) { capCall(function () { cap.setDuration(capIds[i], dur); }); }
+        } });
+    } catch (e) { log(e); p = null; }
+    Promise.resolve(p || { ok: false, kind: 'failed', at: 0 }).then(function (x) { storyDone(c, st, x); },
+      function (e) { log(e); storyDone(c, st, { ok: false, kind: 'failed', at: 0 }); });
+  }
+
+  function storyStop(c) {
+    var st = c.story;
+    if (!st || st.stopped) { return; }
+    st.stopped = true;
+    if (st.s && Sp.sess === st.s) {
+      spCancel();   // ends MaryVoice's job, which calls storyDone
+      if (S.phase === 'speaking') { setPhase(restPhase()); }
+    }
+  }
+
+  function storyDone(c, st, r) {
+    if (st.finished) { return; }
+    st.finished = true;
+    if (c.story === st) { c.story = null; }
+    r = r || {};
+    var good = !!r.ok && !r.cut;
+    var heard = storyPlaying(st) + 1;
+    if (st.s && Sp.sess === st.s) {
+      if (good) { spFinish(st.s); } else {
+        spCancel();
+        if (S.phase === 'speaking') { setPhase(restPhase()); }
+      }
+    }
+    var saved = good ? st.text : st.parts.slice(0, r.ok ? heard : Math.floor(Number(r.at) || 0)).join(' ');
+    if (saved) {   // Live never said it, so it is remembered here, as her turn
+      Promise.resolve(c.heardCheck).then(function () {
+        return api('POST', '/api/mary/live/said', { text: saved }, { ms: 8000 });
+      }).catch(log);
+    }
+    var resp = S.screen === 'emergency' ? TOOL_REFUSED : storyAnswer(st.text, st.parts, r, heard);
+    function answer() {
+      try { window.MaryLive.hush(false); } catch (e) { log(e); }
+      st.done(resp);
+    }
+    if (c.byeHold) { c.heldTool = answer; } else { answer(); }   // no reply from Live to a goodbye still being judged
+  }
+
+  function storyIgnore(c, t) {   // the tail of what they asked, their "mm-hm", or her own story coming back
+    var st = c.story;
+    if (Date.now() - st.began < STORY_EARS_AFTER_MS) { return true; }
+    if (SILENCE_NOISE.test(t) && !isGoodbye(t)) { return true; }
+    var i = storyPlaying(st);
+    return storyEcho(t, st.parts[i] || '', st.parts[i - 1] || '');
+  }
+
+  // Live says a tool call is off (they talked over it): nothing is answered for it (talklive.js drops the answer).
+  function liveToolCancelled(c, ids) {
+    c.toolGone = c.toolGone || {};
+    for (var i = 0; i < (ids || []).length; i++) { c.toolGone[ids[i]] = true; }
+    if (c.story && c.toolGone[c.story.id]) { storyStop(c); }
+  }
+
+  // Every growing piece of what the resident is saying (Live's onHeard). True = it was her own story, not them.
+  // A real cut-in stops the story at once; a goodbye that then stays quiet ends the talk.
+  function liveHeardPiece(c, t) {
+    clearTimeout(c.byeWait);
+    if (c.story && !c.story.stopped && storyIgnore(c, t)) { return true; }
+    var bye = !c.ending && S.screen !== 'emergency' && isGoodbye(t);
+    c.byeHold = bye;
+    storyStop(c);
+    if (bye) { c.byeWait = setTimeout(function () { liveByeNow(c); }, LIVE_BYE_QUIET_MS); } else { liveByeRelease(c); }
+    return false;
+  }
+  function liveByeRelease(c) {
+    var fn = c.heldTool;
+    c.byeHold = false;
+    c.heldTool = null;
+    if (fn) { fn(); }
+  }
+
+  // A spoken goodbye: she stops now and Live closes. Closing sends any words still pending through onHeardDone ->
+  // liveHeard, once, with its emergency check; only when that comes back clear does she say her one-line goodbye.
+  function liveByeNow(c) {
+    if (S.convo !== c || c.ending || !c.live) { liveByeRelease(c); return; }
+    try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); }
+    closeConvo(c);
+    newTurn();
+    setPhase('thinking');
+    Promise.resolve(c.heardCheck).then(function (j) {
+      if ((j && j.emergency) || S.convo || S.phase !== 'thinking') { return undefined; }   // liveHeard has the emergency
+      setPhase('idle');
+      if (S.screen === 'emergency') { return undefined; }
+      if (!j && c.heard) { return talkTo(c.heard); }   // no check came back: the full talk path, like convoBye
+      if (!S.voiceMode) { S.voiceMode = 'normal'; }    // her picked voice, not the computer's
+      return say(goodbyeLine(), 'happy');
+    }).catch(log);
+  }
+  // --- end M4a ---
+
   function liveToolCall(c, tc) {
     var calls = (tc && tc.functionCalls) || [];
     var heard = c.heard || '';
     c.toolBusy++;
     return Promise.resolve(c.heardCheck).then(function (j) {
       if (liveToolGate(j, S.screen === 'emergency') === 'refuse') {
-        return { functionResponses: calls.map(function (fc) { return { id: fc.id, name: fc.name,
-          response: { error: 'emergency', note: 'Not done. Stay with them about their safety and do not mention this.' } }; }) };
+        return { functionResponses: calls.map(function (fc) { return { id: fc.id, name: fc.name, response: TOOL_REFUSED }; }) };
       }
       if (!window.MarySkills) { throw new Error('skills are not loaded'); }
       return window.MarySkills.handleLiveToolCall(tc, heard);
+    }).then(function (r) {
+      return storyFromTool(c, r);   // M4a: resolves when the story has been told
     }).then(function (r) {
       c.toolBusy--;
       c.lastAct = Date.now();
@@ -1408,6 +1638,7 @@
 
   // Typed words while Live is open go into the same talk, after the emergency check.
   function liveTyped(c, text) {
+    storyStop(c);   // M4a: typing is a cut-in too
     setCaption('You said: ' + text, 'said');
     c.lastAct = Date.now();
     liveHeard(c, text).then(function (j) {
@@ -1482,7 +1713,7 @@
       closeConvo(c);
       if (!j || j.emergency) { return talkTo(text); }   // the full talk path: the emergency screen and her words
       setPhase('idle');
-      return say(MSG.goodbye, 'happy');
+      return say(goodbyeLine(), 'happy');
     });
   }
 
@@ -2270,7 +2501,7 @@
       return;
     }
     show('everyday');
-    setCaption(S.typingOnly && !liveFirst() ? MSG.tapToType : MSG.tapToTalk);   // M4a: Live has its own mic
+    setCaption(restLine(S.typingOnly && !liveFirst()));   // M4a: Live has its own mic
   }
 
   // ===== T4b: replace this stub with the first-run screens (Choose your companion, First hello).
@@ -2310,7 +2541,7 @@
     // The mic check can be slow on a cold laptop: wait 3 s at most, and let a late answer update the button.
     await Promise.race([pListen, new Promise(function (r) { setTimeout(r, 3000); })]);
     pListen.then(function () {
-      if (S.typingOnly && S.phase === 'idle' && CapS.plain === MSG.tapToTalk) { setCaption(MSG.tapToType); }
+      if (S.typingOnly && S.phase === 'idle' && CapS.plain === restLine(false)) { setCaption(restLine(true)); }   // M4a
     });
 
     if (!st) {
@@ -2395,7 +2626,11 @@
     showCaption: showCaption,                // her words; M4b replaces it with bubble letters
     nextMode: nextMode,                      // pure, for tests
     liveToolGate: liveToolGate,              // pure, for tests
-    isGoodbye: isGoodbye                     // pure, for tests
+    restLine: restLine,                      // M4a: the resting caption (firstrun.js); typing = true for Type
+    isGoodbye: isGoodbye,                    // pure, for tests
+    storyChunks: storyChunks,                // M4a: pure, for tests
+    storyEcho: storyEcho,                    // M4a: pure, for tests
+    storyAnswer: storyAnswer                 // M4a: pure, for tests
   };
 
   if (D.readyState === 'loading') {

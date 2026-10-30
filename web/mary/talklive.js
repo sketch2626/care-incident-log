@@ -322,7 +322,7 @@
   }
 
   function onAudio(s, b64) {
-    if (s.mute) return;   // stopSpeaking(): the rest of this turn of hers stays quiet
+    if (s.mute || s.hushed) return;   // stopSpeaking(): the rest of this turn of hers stays quiet (M4a: or hush())
     var now = performance.now();
     replyStarts(s);
     var soundAt = playChunk(s, b64) || now;   // when her voice will really reach the speakers
@@ -365,7 +365,7 @@
 
     var ot = sc.outputTranscription;
     if (ot && (ot.startOffset !== undefined || ot.endOffset !== undefined)) s.offsets = true;   // word timings really do come
-    if (ot && ot.text && !s.mute && alive(s)) {
+    if (ot && ot.text && !s.mute && !s.hushed && alive(s)) {   // M4a: hushed
       replyStarts(s);
       startOfTurn(s, now, false);
       s.caption += ot.text;
@@ -404,11 +404,21 @@
       })};
     }).then(function (result) {
       if (!alive(s) || !s.ws || s.ws.readyState !== 1) return;
-      if (!result.functionResponses.length) return;
+      // M4a: a call Live took back (toolCallCancellation) gets no answer
+      var left = result.functionResponses.filter(function (r) { return !(s.toolGone && s.toolGone[r.id]); });
+      if (!left.length) return;
       try {
-        s.ws.send(JSON.stringify({toolResponse: result}));
+        s.ws.send(JSON.stringify({toolResponse: {functionResponses: left}}));
       } catch (e) { /* the close event will tell us */ }
     });
+  }
+
+  // M4a: Live took a tool call back (usually the resident talked over it). app.js stops a story that was waiting on it.
+  function onToolCancel(s, ids) {
+    ids = ids || [];
+    s.toolGone = s.toolGone || {};
+    for (var i = 0; i < ids.length; i++) s.toolGone[ids[i]] = true;
+    emit(s, 'onToolCancel', ids);
   }
 
   // Google will close this talk soon: let her finish what she is saying, then end it.
@@ -443,7 +453,7 @@
     if (!s.ready) return;
     if (msg.serverContent) onServerContent(s, msg.serverContent);
     if (msg.toolCall && alive(s)) onToolCall(s, msg.toolCall);
-    // msg.toolCallCancellation: nothing to undo, so it is ignored.
+    if (msg.toolCallCancellation && alive(s)) onToolCancel(s, msg.toolCallCancellation.ids);   // M4a
     if (msg.goAway && alive(s)) onGoAway(s);
   }
 
@@ -775,6 +785,15 @@
     stopPlayback(s);
   }
 
+  // M4a: the page is telling a story in her picked voice while a tool call waits. hush(true): no new sound or words
+  // from Live (what is already playing finishes); hush(false): Live is heard again, before the tool is answered.
+  function hush(on) {
+    var s = S;
+    if (!s || s.ended) return;
+    s.hushed = !!on;
+    if (!on) clearMute(s);
+  }
+
   function isOpen() {
     return !!(S && S.ready && !S.ended && S.ws && S.ws.readyState === 1);
   }
@@ -802,6 +821,7 @@
     greet: greet,
     stop: stop,
     stopSpeaking: stopSpeaking,
+    hush: hush,   // M4a
     isOpen: isOpen,
     isSpeaking: isSpeaking,
     setVolume: setVolume

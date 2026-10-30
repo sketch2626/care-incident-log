@@ -32,11 +32,10 @@
   var skipOn = false;           // a tap on the screen skips ahead (first hello, steps 1-2)
   var waiter = null;            // the pause that a tap can end early
 
-  var CAPTION_REST = 'Tap the button and talk to me any time.';
-  var CAPTION_REST_TYPE = 'Tap the button and type to me any time.';
-  var CAPTION_SLEEPY = 'Tap the button whenever you need me.';
+  // M4a: the big Talk button is gone (M4b): A.restLine() names only ways in that work (her name, or Menu)
+  function sleepyCaption() { return S.typingOnly ? A.restLine(true) : A.restLine(false).replace(' any time you want to talk.', ' whenever you need me.'); }
 
-  function restCaption() { return S.typingOnly ? CAPTION_REST_TYPE : CAPTION_REST; }
+  function restCaption() { return A.restLine(!!S.typingOnly); }   // M4a
 
   // A pause that a tap on the screen can end early.
   function wait(ms) {
@@ -362,44 +361,45 @@
       if (S.screen === 'everyday') { A.startTalk({ say: FIRST_TALK, hello: FIRST_TALK_LIVE }).catch(log); }
       return;
     }
-    await A.say('Tap the button whenever you want to talk to me.', 'happy');
+    await A.say(A.restLine(false), 'happy');   // M4a: no Talk button any more
     if (tok !== flow) { return; }
     S.firstRun = false;
     enterMainQuiet();
   }
 
   // ================================================================ greeting on later opens
-  // M4a: warm and varied, like a friend glad to see them; the night lines never remark on the hour
+  // M4a: warm and varied, like a friend glad to see them; the night lines never remark on the hour.
+  // Grown-up and plain (Andy: no talking down): no "rise and shine", no "how are you feeling", few exclamation marks.
   var GREET = {
     morning: [
-      "Good morning{n}! It's so good to see you.",
-      "Well, good morning{n}! Did you sleep all right?",
-      "Morning{n}! I was hoping you'd stop by.",
-      "Hey there{n}, good morning! What a nice way to start the day.",
-      "Good morning{n}! How are you feeling today?",
-      "Rise and shine{n}! It's good to see you this morning."
+      "Good morning{n}. It's good to see you.",
+      "Well, good morning{n}. Did you sleep all right?",
+      "Morning{n}. What's going on today?",
+      "Hey there{n}, good morning. What's new with you?",
+      "Good morning{n}. How's the day starting out?",
+      "Morning{n}. Good to see you. Got anything on your mind?"
     ],
     afternoon: [
-      "Good afternoon{n}! How's your day treating you?",
-      "Well, hey there{n}! I'm glad you came by this afternoon.",
-      "Afternoon{n}! It's real good to see you.",
-      "Hi{n}! I was just thinking about you. How's your afternoon going?",
-      "Well, look who's here! Good afternoon{n}.",
-      "Hey{n}! Come tell me how your day's going."
+      "Good afternoon{n}. How's your day treating you?",
+      "Well, hey there{n}. Good to see you this afternoon.",
+      "Afternoon{n}. It's real good to see you.",
+      "Hi{n}. How's your afternoon going?",
+      "Good afternoon{n}. What's been going on?",
+      "Hey{n}. Tell me how your day's going."
     ],
     evening: [
-      "Good evening{n}! It's so nice to see you.",
-      "Well, hey there{n}! How was your day?",
-      "Evening{n}! I'm glad you stopped by.",
-      "Hi{n}! I hope supper was good tonight.",
-      "Good evening{n}! Come sit a spell and tell me about your day.",
-      "Hey{n}, good evening! It's good to see your face."
+      "Good evening{n}. It's good to see you.",
+      "Well, hey there{n}. How was your day?",
+      "Evening{n}. Glad to have the company.",
+      "Hi{n}. How was supper tonight?",
+      "Good evening{n}. Sit a spell and tell me about your day.",
+      "Hey{n}, good evening. Good to see you."
     ],
     night: [
       "Well, hey there{n}. Can't sleep? I'm glad for the company.",
       "Hi{n}. It's a nice quiet night. Want to talk a little while?",
       "Hey{n}. It's good to see you. Want some company for a bit?",
-      "Hello{n}. Nice and quiet tonight. I'm happy to keep you company.",
+      "Hello{n}. Nice and quiet tonight. Good time for a talk.",
       "Hey there{n}. Want to talk a while? I'd like that.",
       "Hi{n}. A little company is nice on a quiet night."
     ]
@@ -546,7 +546,7 @@
   function sleep() {
     asleep = true;
     A.setMood('sleepy');                          // the face only; nothing is spoken
-    A.setCaption(CAPTION_SLEEPY);
+    A.setCaption(sleepyCaption());   // M4a
   }
 
   // quiet = true (a button, or a talk that is starting): the light comes back and she is just resting.

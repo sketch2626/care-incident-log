@@ -371,7 +371,7 @@ def mary_app_facts(companion):
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
             "talk_choice": s["talk_mode"],  # M4a: Live, Normal or Offline, as saved
             "talk_on_open": s["talk_on_open"],  # M4a: she starts talking when her screen opens
-            "wake_word": s["wake_word"]}  # M6: "Hey Mary" / "Hey Sam" wakes her
+            "wake_word": s["wake_word"] and wakeword.available()[0]}  # M6; M4a: only when it can really run here
 
 
 mary.app_facts = mary_app_facts  # M9b: Mary's live facts about her own app

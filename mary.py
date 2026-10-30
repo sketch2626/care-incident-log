@@ -439,7 +439,7 @@ STORY_PROMPT = (  # M4a
     "somewhere else), something that happens, a little trouble, and a turn at the end that leaves a warm point or a "
     "smile. It can be funny, warm, a bit of North Carolina history, or an old folk tale told your way. If they asked "
     "for something in particular, give them that. Don't build it from your own likes and hobbies; you may lean on "
-    "what you know they like. Give it a beginning, a middle and an end, about 250 to 450 words. Write only the words "
+    "what you know they like. Give it a beginning, a middle and an end, about 180 to 300 words. Write only the words "
     "you will say: plain spoken sentences, no title, no brackets or tags, no lists, no headings, no stage directions. "
     "Don't greet them or ask a question first; just begin the story.")
 
@@ -587,7 +587,7 @@ def _app_facts_text(companion):  # M9b
         f = app_facts(companion)
         me = COMPANIONS["him" if companion == "him" else "mary"]
         other = COMPANIONS["mary" if companion == "him" else "him"]
-        out = [f'- You are {me}. The other companion is {other}; the menu button "Switch to {other}" changes to them.']
+        out = [f'- You are {me}. The other companion is {other}; "Choose Mary or Sam" in the menu changes to them.']  # M4a
         voice_now, picked, about = f.get("voice_now"), f.get("picked_voice") or "", f.get("picked_about") or ""
         pick = picked + (f" ({about})" if about else "")
         if voice_now == "picked" and picked:
@@ -604,8 +604,15 @@ def _app_facts_text(companion):  # M9b
             out.append("- They press the Talk button each time they want to say something, and you answer out loud. "
                        "Talking back and forth without the button, and waking you by saying your name, are coming soon.")
         elif mode == "handsfree":
-            out.append("- One tap on Talk starts a conversation; then you and they talk back and forth without pressing "
-                       "a button, until about 15 seconds of quiet or a goodbye.")
+            # M4a: there is no Talk button any more (M4b); her name wakes her when M6 can run here
+            way_in = (f'saying "Hey {me}" or tapping Menu, then "Talk to {me}"' if f.get("wake_word")
+                      else f'tapping Menu, then "Talk to {me}"')
+            out.append(f"- There is no Talk button. They start a conversation by {way_in}; then you and they talk back "
+                       "and forth without pressing anything, until about 15 seconds of quiet or a goodbye such as "
+                       '"goodbye" or "go to sleep".')
+            if not f.get("wake_word"):
+                out.append(f'- Waking you by saying "Hey {me}" is off or not set up on this computer, so never tell '
+                           "them to say it; tell them about Menu instead.")
             choice = f.get("talk_choice")  # M4a: the talk mode chosen in My info
             if choice in ("live", "normal", "offline"):
                 plain = {"live": "Live, your most natural voice, where they can cut in any time",
@@ -614,13 +621,13 @@ def _app_facts_text(companion):  # M9b
                 out.append(f"- Talk mode in My info: {plain}. If one way isn't working you switch to the next by yourself.")
             if f.get("talk_on_open"):  # M4a
                 out.append("- When your screen opens, you start talking by yourself: you say hello and listen, so they "
-                           "don't need to tap Talk.")
+                           "don't need to tap anything.")  # M4a
         rate, volume = f.get("voice_rate"), f.get("voice_volume")
         if rate is not None and volume is not None:
             speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"
             loud = "soft" if volume < 0.5 else "medium" if volume < 0.85 else "full"
             out.append(f"- Your talking speed is {speed} and your volume is {loud}. "
-                       "They can change these with Slower, Faster, Quieter and Louder in the menu.")
+                       f'They can change these by asking you, or in the menu under "Things {me} can do".')  # M4a
         return "\n\nAbout your app right now (these are true today; trust them over anything else):\n" + "\n".join(out)
     except Exception:
         return ""

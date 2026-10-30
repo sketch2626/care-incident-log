@@ -146,6 +146,7 @@ MarySkills.register('coin_flip', {
 - **No network imports.** Skill code may not import `urllib`, `http`, `requests`, `socket` or similar.
 - **Internet only through `ctx.fetch`.** It reaches only hosts in `needs.internet_hosts`. An empty list means no internet.
 - **Storage only through `ctx.store`** (small JSON values) **and `ctx.files`** (the skill's own folder). Do not open files or databases yourself. No skill can read another skill's data.
+- **Showing a saved image.** A skill can show an image it saved in `ctx.files` at `/api/mary/skills/<name>/image/<file>` (jpg, png, gif or webp).
 - **Settings only those listed.** A skill may change only the settings its card names.
 - **No risky calls.** No `subprocess`, `sqlite3`, `importlib`, `open`, `exec`, `eval` or `__import__`.
 - **Text limits.** `instructions` is 400 characters at most. Each description is 200 at most. `view()` is 600 at most.

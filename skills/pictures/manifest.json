@@ -1,0 +1,39 @@
+{
+  "contract": 1,
+  "name": "pictures",
+  "version": "0.1.0",
+  "title": "Pictures",
+  "summary": "Shows a picture from Wikipedia of something the resident asks to see, like a bird or a place, so Mary can talk about it.",
+  "instructions": "When they ask to see something (\"show me a cardinal\"), show a picture of it. Then talk about it warmly, using what's on the screen. Offer another picture of it. When they're done, put the picture away.",
+  "screen": {"menu_label": "Pictures", "menu_icon": "picture", "full_screen": true},
+  "sees": true,
+  "slow": true,
+  "actions": [
+    {
+      "name": "show_picture",
+      "description": "Show a picture of something they want to see, like a bird, an animal or a place.",
+      "inputSchema": {"type": "object",
+                      "properties": {"what": {"type": "string", "maxLength": 100,
+                                              "description": "What to show, in a few plain words, like 'cardinal bird'"}},
+                      "required": ["what"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "next_picture",
+      "description": "Show another photo of the same thing.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "close_picture",
+      "description": "Put the picture away and go back to Mary.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    }
+  ],
+  "storage": false,
+  "needs": {"internet_hosts": ["en.wikipedia.org", "upload.wikimedia.org", "commons.wikimedia.org"],
+            "mic": false, "modes": ["live", "normal"]},
+  "offline": "needs_internet",
+  "default_on": true
+}

@@ -1,0 +1,1 @@
+MarySkills.register('pictures', {});

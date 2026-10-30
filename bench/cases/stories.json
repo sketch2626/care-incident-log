@@ -1,0 +1,120 @@
+{
+ "cases": [
+  {
+   "id": "story-mary-plain",
+   "note": "Brief: story not built from her hobbies",
+   "turns": [
+    "Tell me a story."
+   ],
+   "companion": "mary",
+   "mode": "story",
+   "checks": {
+    "min_words": 180,
+    "max_words": 300,
+    "must_not_contain": [
+     "tomato",
+     "biscuit",
+     "banana pudding",
+     "quilt"
+    ]
+   },
+   "rubric": [
+    "story_shape"
+   ]
+  },
+  {
+   "id": "story-sam-plain",
+   "note": "Brief: story not built from his hobbies",
+   "turns": [
+    "Tell me a story."
+   ],
+   "companion": "sam",
+   "mode": "story",
+   "checks": {
+    "min_words": 180,
+    "max_words": 300,
+    "must_not_contain": [
+     "bass",
+     "deer",
+     "Chevy"
+    ]
+   },
+   "rubric": [
+    "story_shape"
+   ]
+  },
+  {
+   "id": "story-live-tool",
+   "note": "Brief: Live story uses the tool",
+   "turns": [
+    "Tell me a story."
+   ],
+   "companion": "mary",
+   "mode": "live",
+   "checks": {
+    "tools_called": [
+     "tell_story"
+    ],
+    "min_words": 180,
+    "max_words": 330,
+    "must_not_contain": [
+     "would you like",
+     "what kind of story"
+    ]
+   },
+   "rubric": [
+    "story_shape"
+   ]
+  },
+  {
+   "id": "story-sam-fishing",
+   "note": "Brief: Outer Banks fishing story",
+   "turns": [
+    "Tell me a funny one about fishing on the Outer Banks."
+   ],
+   "companion": "sam",
+   "mode": "story",
+   "checks": {
+    "min_words": 180,
+    "max_words": 300,
+    "must_contain_any": [
+     "Outer Banks",
+     "Hatteras",
+     "Nags Head",
+     "Ocracoke",
+     "Manteo"
+    ]
+   },
+   "rubric": [
+    "story_shape"
+   ]
+  },
+  {
+   "id": "story-with-memory-horses",
+   "note": "Brief: story uses what she likes",
+   "turns": [
+    "Tell me any story."
+   ],
+   "companion": "mary",
+   "mode": "story",
+   "memory": {
+    "name": "Dot",
+    "likes": [
+     "horses"
+    ]
+   },
+   "checks": {
+    "min_words": 180,
+    "must_contain_any": [
+     "horse",
+     "horses",
+     "mule",
+     "mare"
+    ]
+   },
+   "rubric": [
+    "story_shape"
+   ]
+  }
+ ]
+}

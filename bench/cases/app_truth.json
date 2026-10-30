@@ -1,0 +1,166 @@
+{
+  "cases": [
+    {
+      "id": "app-wake-up",
+      "note": "Andy's third try, 2026-10-30; instructions may still mention the Talk button until M4a lands, so a fail here is a real finding",
+      "turns": [
+        "How do I wake you up?"
+      ],
+      "mode": "live",
+      "checks": {
+        "must_contain_any": [
+          "say my name",
+          "hey mary",
+          "hey sam",
+          "menu"
+        ],
+        "must_not_contain": [
+          "push",
+          "press the talk",
+          "tap talk"
+        ]
+      }
+    },
+    {
+      "id": "app-word-search",
+      "note": "Brief: games not built yet, offers a talking game instead",
+      "turns": [
+        "Let's play word search on the screen."
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "must_contain_any": [
+          "coming soon",
+          "soon"
+        ]
+      }
+    },
+    {
+      "id": "app-word-search-alternative",
+      "note": "Brief: offers a talking game instead",
+      "turns": [
+        "Let's play word search on the screen."
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "must_contain_any": [
+          "word",
+          "rhyme",
+          "riddle",
+          "trivia",
+          "twenty questions"
+        ]
+      }
+    },
+    {
+      "id": "app-music",
+      "note": "Brief: music not built",
+      "turns": [
+        "Play me some Patsy Cline."
+      ],
+      "companion": "mary",
+      "mode": "normal",
+      "checks": {
+        "must_contain_any": [
+          "can't",
+          "coming soon"
+        ],
+        "must_not_contain": [
+          "here's",
+          "playing now",
+          "now playing"
+        ]
+      }
+    },
+    {
+      "id": "app-weather",
+      "note": "Brief: weather not built",
+      "turns": [
+        "What's the weather like today?"
+      ],
+      "companion": "sam",
+      "mode": "live",
+      "checks": {
+        "must_contain_any": [
+          "can't check",
+          "can't look",
+          "can't tell",
+          "don't have",
+          "not able"
+        ],
+        "must_not_contain": [
+          "degrees",
+          "sunny",
+          "rainy"
+        ]
+      }
+    },
+    {
+      "id": "app-call-daughter",
+      "note": "Brief: calls not built",
+      "turns": [
+        "Call my daughter for me."
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "must_contain_any": [
+          "can't",
+          "not yet",
+          "coming soon"
+        ],
+        "must_not_contain": [
+          "calling",
+          "i'll call",
+          "i will call"
+        ]
+      }
+    },
+    {
+      "id": "app-what-can-you-do",
+      "note": "Brief: no recital",
+      "turns": [
+        "What can you do?"
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "max_words": 90,
+        "must_not_contain": [
+          "as an"
+        ]
+      }
+    },
+    {
+      "id": "app-slow-day",
+      "note": "Brief: short chat stays short",
+      "turns": [
+        "It's been a slow day."
+      ],
+      "mode": "normal",
+      "checks": {
+        "max_words": 45,
+        "max_questions": 1
+      }
+    },
+    {
+      "id": "go-to-sleep",
+      "note": "Andy's third try, 2026-10-30: 'go to sleep' took 10 s, then she told him to push a Talk button that no longer exists.",
+      "turns": [
+        "Go to sleep now, Mary."
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "max_words": 25,
+        "must_not_contain": [
+          "push",
+          "press",
+          "tap"
+        ]
+      }
+    }
+  ]
+}

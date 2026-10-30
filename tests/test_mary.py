@@ -818,7 +818,7 @@ class TestBrainV4(MaryTestCase):
                 self.assertIn(needle, mine)
         his = self._system("him")
         self.assertIn("Achird", his)
-        self.assertIn("Switch to Mary", his)
+        self.assertIn("Choose Mary or Sam", his)  # M4a: the M4b menu
         helpers.api("PUT", "/api/settings", {"voice_mary": "gemini:Vindemiatrix"})
         mine = self._system("mary")
         self.assertIn("Vindemiatrix", mine)
@@ -849,7 +849,13 @@ class TestBrainV4(MaryTestCase):
         facts.update(voice_now="picked", talk_mode="handsfree", voice_rate=1.3, voice_volume=1.0)
         text = self._system("him")
         self.assertIn("Your voice right now is Sulafat, the one they picked", text)
-        self.assertIn("without pressing a button", text)
+        self.assertIn("without pressing anything", text)  # M4a: no Talk button any more
+        self.assertIn("There is no Talk button", text)
+        self.assertIn("never tell them to say it", text)  # the wake word is off in these facts
+        facts.update(wake_word=True)
+        text = self._system("him")
+        self.assertIn('saying "Hey Sam" or tapping Menu, then "Talk to Sam"', text)
+        self.assertNotIn("never tell them to say it", text)
         self.assertNotIn("built-in voice", text)
         self.assertIn("faster than usual and your volume is full", text)
 

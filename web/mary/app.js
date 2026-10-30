@@ -43,7 +43,9 @@
   // QUIET_END_S above follows the saved listen_wait (status and settings effects).
   var CONVO_IDLE_S = 15;         // a conversation ends after this much quiet: nobody talking, she isn't speaking
   var BYE_MAX_WORDS = 6;         // a goodbye is a short turn; a long story that says "goodbye" is not one
-  var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later)\b/i;
+  var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later|(?:go|going|get) (?:on )?(?:back )?to sleep|(?:go|get|take) (?:some |a )?(?:rest|nap)|(?:you can|go on and|time to) (?:rest|sleep)|rest now|that['’]?(?:s| will| ?ll) (?:be )?(?:all|enough)(?: for (?:now|today|tonight))?|that['’]?s enough for (?:now|today|tonight))\b/i;   // M4a: and "go to sleep"
+  // M4a: words that don't count toward a goodbye's length: "Okay Mary, you can go to sleep now" is still short
+  var BYE_FILLER = /^(?:ok(?:ay)?|alright|all|right|well|now|so|oh|honey|dear|darling|mary|sam|then|please|thanks|thank|you)$/i;
   var LIVE_BYE_MAX_MS = 8000;    // after the goodbye is asked for, Live closes once her turn ends, or after this
   // M4a: {when} is the local time of day (morning, afternoon, evening or night), filled in by liveHello()
   var LIVE_HELLO = '(The resident is ready to talk with you, and it is {when} where they are. Greet them in one or ' +
@@ -55,17 +57,29 @@
     var h = new Date().getHours();
     return (h >= 22 || h < 5) ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
   }
+  function goodbyeLine() { return MSG.goodbye + ' ' + restLine(false); }   // M4a
   function liveHello() { return LIVE_HELLO.replace('{when}', timeWord()); }   // M4a
-  var LIVE_BYE = '(The conversation is ending now. Say a short, warm goodbye in one sentence and remind them they can tap Talk any time.)';
+  // M4a: the big Talk button is gone (M4b). The way back in is her name (M6), when it can run here, or Menu.
+  function wakeOn() { return !!S.wakeWord && !!S.wakeReady; }
+  function restLine(typing) {   // the resting caption and the end of her goodbye: only ways that really work now
+    var n = companionName(S.companion);
+    if (typing) { return 'Tap Menu, then “Type to ' + n + '”, any time.'; }
+    return wakeOn() ? 'Say “Hey ' + n + '” any time you want to talk.'
+      : 'Tap Menu, then “Talk to ' + n + '”, any time you want to talk.';
+  }
+  function liveBye() {
+    var n = companionName(S.companion);
+    return '(The conversation is ending now. Say a short, warm goodbye in one sentence and remind them ' +
+      (wakeOn() ? 'they can say "Hey ' + n + '" any time to talk again.)'
+        : 'they can tap Menu, then "Talk to ' + n + '", any time to talk again.)');
+  }
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say this to them right now, warmly and plainly, then stay with them: ';
   // --- end M4a ---
 
   var MSG = {
-    tapToTalk: "Tap the button and talk to me any time.",
-    tapToType: "Tap the button and type to me any time.",
     listening: "I'm listening…",
-    silence: "I didn't hear anything. Tap the button and talk whenever you're ready.",
+    silence: "I didn't hear anything. I'm here whenever you're ready.",   // M4a: no Talk button any more
     notCaught: "I didn't quite catch that. Could you say it again?",
     waking: "I'm still waking up my ears. Please try again in a moment.",
     sorry: "I'm sorry, something went wrong. Let's try again.",
@@ -77,7 +91,7 @@
     better: "Is this better?",
     loading: "I'm getting ready. Just a moment.",
     fallback: "My best voice isn't working right now, so I'll keep talking with you the usual way.",   // M4a
-    goodbye: "It was so nice talking with you. Tap Talk any time you want to chat again."              // M4a
+    goodbye: "It was so nice talking with you."   // M4a: goodbyeLine() adds the way back in
   };
 
   // ---------------------------------------------------------------- state
@@ -999,7 +1013,8 @@
   function isGoodbye(text) {
     text = String(text == null ? '' : text).trim();
     if (!text) { return false; }
-    return text.split(/\s+/).length <= BYE_MAX_WORDS && BYE_RE.test(text);
+    var words = text.split(/\s+/).filter(function (w) { return !BYE_FILLER.test(w.replace(/[^\w']/g, '')); });   // M4a
+    return words.length <= BYE_MAX_WORDS && BYE_RE.test(text);
   }
 
   function liveSupported() {
@@ -1083,7 +1098,7 @@
       closeConvo(c);
       newTurn();
       setPhase('idle');
-      setCaption(S.typingOnly && !liveFirst() ? MSG.tapToType : MSG.tapToTalk);
+      setCaption(restLine(S.typingOnly && !liveFirst()));
       return;
     }
     if (c.live && c.open) {
@@ -1091,13 +1106,13 @@
       c.byeDone = false;
       clearInterval(c.idleTimer);
       // to a spoken goodbye she is already answering with one; on quiet she is asked for one
-      if (why === 'idle' && !greetLive(LIVE_BYE)) { finishLive(c); return; }
+      if (why === 'idle' && !greetLive(liveBye())) { finishLive(c); return; }
       c.byeTimer = setTimeout(function () { liveByeCap(c, false); }, LIVE_BYE_MAX_MS);
       return;
     }
     closeConvo(c);
     newTurn();
-    say(MSG.goodbye, 'happy');
+    say(goodbyeLine(), 'happy');
   }
 
   // --- M6: the wake word ("Hey Mary" / "Hey Sam"), heard on this computer by the server ---
@@ -1482,7 +1497,7 @@
       closeConvo(c);
       if (!j || j.emergency) { return talkTo(text); }   // the full talk path: the emergency screen and her words
       setPhase('idle');
-      return say(MSG.goodbye, 'happy');
+      return say(goodbyeLine(), 'happy');
     });
   }
 
@@ -2270,7 +2285,7 @@
       return;
     }
     show('everyday');
-    setCaption(S.typingOnly && !liveFirst() ? MSG.tapToType : MSG.tapToTalk);   // M4a: Live has its own mic
+    setCaption(restLine(S.typingOnly && !liveFirst()));   // M4a: Live has its own mic
   }
 
   // ===== T4b: replace this stub with the first-run screens (Choose your companion, First hello).
@@ -2310,7 +2325,7 @@
     // The mic check can be slow on a cold laptop: wait 3 s at most, and let a late answer update the button.
     await Promise.race([pListen, new Promise(function (r) { setTimeout(r, 3000); })]);
     pListen.then(function () {
-      if (S.typingOnly && S.phase === 'idle' && CapS.plain === MSG.tapToTalk) { setCaption(MSG.tapToType); }
+      if (S.typingOnly && S.phase === 'idle' && CapS.plain === restLine(false)) { setCaption(restLine(true)); }   // M4a
     });
 
     if (!st) {
@@ -2395,6 +2410,7 @@
     showCaption: showCaption,                // her words; M4b replaces it with bubble letters
     nextMode: nextMode,                      // pure, for tests
     liveToolGate: liveToolGate,              // pure, for tests
+    restLine: restLine,                      // M4a: the resting caption (firstrun.js); typing = true for Type
     isGoodbye: isGoodbye                     // pure, for tests
   };
 

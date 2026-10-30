@@ -32,11 +32,10 @@
   var skipOn = false;           // a tap on the screen skips ahead (first hello, steps 1-2)
   var waiter = null;            // the pause that a tap can end early
 
-  var CAPTION_REST = 'Tap the button and talk to me any time.';
-  var CAPTION_REST_TYPE = 'Tap the button and type to me any time.';
-  var CAPTION_SLEEPY = 'Tap the button whenever you need me.';
+  // M4a: the big Talk button is gone (M4b): A.restLine() names only ways in that work (her name, or Menu)
+  function sleepyCaption() { return S.typingOnly ? A.restLine(true) : A.restLine(false).replace(' any time you want to talk.', ' whenever you need me.'); }
 
-  function restCaption() { return S.typingOnly ? CAPTION_REST_TYPE : CAPTION_REST; }
+  function restCaption() { return A.restLine(!!S.typingOnly); }   // M4a
 
   // A pause that a tap on the screen can end early.
   function wait(ms) {
@@ -362,7 +361,7 @@
       if (S.screen === 'everyday') { A.startTalk({ say: FIRST_TALK, hello: FIRST_TALK_LIVE }).catch(log); }
       return;
     }
-    await A.say('Tap the button whenever you want to talk to me.', 'happy');
+    await A.say(A.restLine(false), 'happy');   // M4a: no Talk button any more
     if (tok !== flow) { return; }
     S.firstRun = false;
     enterMainQuiet();
@@ -546,7 +545,7 @@
   function sleep() {
     asleep = true;
     A.setMood('sleepy');                          // the face only; nothing is spoken
-    A.setCaption(CAPTION_SLEEPY);
+    A.setCaption(sleepyCaption());   // M4a
   }
 
   // quiet = true (a button, or a talk that is starting): the light comes back and she is just resting.

@@ -36,7 +36,8 @@ TOKEN_VERSIONS = ("v1beta", "v1alpha")
 
 LINE = ("Hello there! It's so good to see you today. "
         "I'm right here whenever you'd like to talk, or just to keep you company.")
-STYLE = "warm, gentle and unhurried, like a kind friend"
+STYLE = ("relaxed, warm and natural, at an even, unhurried pace, like one grown-up talking with another grown-up "  # M4a: "patronizing" (Andy)
+         "friend; plain and easygoing, with no sing-song, no rising ends and never talking down")
 SAVED_LINE = "Got it. That's my voice now."  # said in the new voice when it is saved
 LINES = {"hello": LINE, "saved": SAVED_LINE}
 
@@ -68,6 +69,11 @@ LIVE_EXTRA = ("You are talking out loud in a live voice conversation. "  # M4a: 
               "Never answer a request with a menu of options or a list of choices; ask a question only when you "
               "truly can't guess what they'd enjoy. "
               "Greet them only once, at the start of a talk; after that, just carry on the way friends do. "
+              "Talk like one grown-up friend to another: relaxed, even and natural, the way you'd talk over coffee. "  # M4a: tone
+              "No sing-song, no lifting the ends of your sentences, no extra stress on word endings, and never the voice "
+              "people use with a child. "
+              "Keep the same calm, easy pace from your first word to your last; never speed up as you go, "  # M4a: pace
+              "even in a long story or a long answer. "
               "Never say anything in square brackets. "
               "That includes the mood, name and remember tags described above: don't use them here.")
 # M4a: only on Mary's own screen, where Live has the remember_fact and set_their_name tools
@@ -664,7 +670,8 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
         except (TypeError, ValueError):
             r = None
         if r is not None and r < 0.97:
-            system += "\n\nThey like you to speak slowly and clearly; keep a slow, unhurried pace."
+            system += ("\n\nThey like you to speak slowly and clearly; keep a slow, unhurried pace the whole way "
+                       "through, and stay that slow in long stories too.")  # M4a: it drifted faster in a long story
         elif r is not None and r > 1.05:
             system += "\n\nThey like a brisker pace."
         now = datetime.now(timezone.utc)

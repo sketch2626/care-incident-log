@@ -120,6 +120,13 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
     - Voice commands (e232771): "give me more time" / "you're cutting me off" (2.5 → 4 s), "you can answer faster"; slower/faster now change pace without changing pitch.
     - My info "How Mary talks" and "How long she waits" (e00413c); her instructions and facts say the truth.
     - Not yet heard in a real window. Known small things: a Live spoken goodbye can take up to 8 s to close; a voice-set speed or wait applies to Live from the next talk.
+- **Andy's third try (2026-10-30 afternoon, main ad5a1ed + M6 merge; Live):**
+  - **Works:** "Hey Mary" woke her from the wake word (1.6 s; `wake.log`). The menu "looks really good", and she slides out of the way when it opens. The story was a real story, "wasn't bad", though "a little verbose".
+  - **Pacing runs away in long talk (top fix).** During the story she got faster and faster, until it would soon have been too fast to understand. "Slow down" worked and she agreed to keep it steady, but it took off again. Live's speed is a prompt instruction, not page playback, so the native-audio model drifts on long monologues. To M4a.
+  - **"Go to sleep" took about 10 s,** then she said "just push the Talk button", but there is no Talk button anymore. Causes: "go to sleep" isn't a goodbye phrase; `LIVE_BYE`, `MSG.tapToTalk` and `mary/instructions.md` lines 154-156 still describe the Talk button and say the wake word is "coming soon". To M4a.
+  - **Voice tone: "patronizing, like somebody talking to a child".** It has too much uptick and emphasis on the ends of words. All the free voices do it, and Andy will wait for paid voices. First try a cheap fix: a tone instruction for Live and the Gemini TTS style (a grown-up friend, relaxed and even, no sing-song). To M4a.
+  - **Paid voices later:** use only legitimate APIs (ElevenLabs' own API, Gemini paid tier). Never a reverse-engineered free copy, which breaks the provider's terms, can vanish any day, and would send residents' words through a stranger's server.
+  - Games aren't wired in yet (M7, as expected).
 - Wire the voice chosen in M2 into `web/mary/app.js` and the server, with the offline fallback.
 - Build the approved M3 caption: each word fills as it's spoken. Use real word timings if the voice gives them, otherwise estimate from each word's length and the audio length.
 - **Done when:** the tests pass and Andy hears and sees it on his screen.

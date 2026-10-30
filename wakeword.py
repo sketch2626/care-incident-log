@@ -87,6 +87,10 @@ MSG_MIC_FAILED = (
 )
 MSG_CONFIRM_FAILED = '"Hey {name}" could not be checked just now. You can still tap Talk.'
 
+# Optional test hook (tools/wake_try.py): on_reject(stage1_text, confirm_text) is called for
+# each Vosk candidate that Whisper turns down. None in the app. Errors in it are ignored.
+on_reject = None
+
 _HERE = Path(__file__).resolve().parent
 _RING_BYTES = int(RING_SECONDS * SAMPLE_RATE) * 2
 _CONFIRM_WAIT = int(CONFIRM_WAIT_S * SAMPLE_RATE)
@@ -335,6 +339,12 @@ class Detector:
         if m is None:
             self.rejected += 1
             log.debug("Wake-word candidate rejected after %.0f ms", ms)  # no transcript in the log
+            hook = on_reject
+            if hook is not None:
+                try:
+                    hook(pending["stage1_text"], text.strip())
+                except Exception:
+                    pass
             return None
         self.confirmed += 1
         return self._event(pending, text.strip(), ms, self._spelling.get(m.group(2), pending["name"]))

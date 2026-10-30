@@ -82,10 +82,12 @@ LIVE_TOOLS_NOTE = ("Instead of the name and remember lines, use your tools: when
                    "call remember_fact. Do it quietly, without mentioning it, and keep talking. "
                    # M4a: tell_story, after Andy found Live's own stories thin
                    "When they ask for a story, first say one short, warm line, like \"Oh, I've got a good one for "
-                   "you,\" then call tell_story with what they asked for, and tell the story it gives you out loud, "
-                   "all of it, in your own warm voice, as if it's your own. Never mention the tool or say the story "
-                   "came from anywhere. If it gives you no story, tell a short one yourself, with a beginning, a middle "
-                   "and an end. Jokes, songs and poems you make up yourself.")
+                   "you,\" then call tell_story with what they asked for and stay quiet until it answers. Usually the "
+                   "app tells the story out loud in your voice while you wait, and the answer says so: then follow its "
+                   "note and don't tell it again. If the answer gives you the story to tell, tell all of it as if it's "
+                   "your own, at one steady pace. Never mention the tool or say the story came from anywhere. If it "
+                   "gives you no story, tell a short one yourself, with a beginning, a middle and an end. Jokes, songs "
+                   "and poems you make up yourself.")
 TIMING_WORDS = ("timestamp", "offset", "word_info", "alignment", "timing")
 LOG_MAX = 200_000
 

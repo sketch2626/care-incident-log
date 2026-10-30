@@ -16,11 +16,13 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 WORK, APP_DIST, OUT = HERE / "build", HERE / "dist", ROOT / "dist"
 ICON = HERE / "icon.ico"
+WAKE_MODEL = "models/vosk-model-small-en-us-0.15"  # M6: offline "Hey Mary" listener (wakeword.py looks next to itself)
 MODEL = "models/faster-whisper-base.en"  # speech.py finds it next to itself (_internal\ in the app)
 # speech and reports are imported lazily inside routes; name them so they're never missed.
 SPEECH_ARGS = ["--hidden-import", "speech", "--hidden-import", "reports",
                "--collect-data", "faster_whisper",  # silero VAD .onnx
-               "--collect-binaries", "ctranslate2", "--collect-binaries", "onnxruntime"]
+               "--collect-binaries", "ctranslate2", "--collect-binaries", "onnxruntime",
+               "--hidden-import", "wakeword", "--collect-binaries", "vosk", "--collect-data", "vosk"]  # M6
 ISCC_PATHS = [Path(os.environ.get("LOCALAPPDATA", ""), "Programs", "Inno Setup 6", "ISCC.exe"),
               Path(os.environ.get("ProgramFiles(x86)", ""), "Inno Setup 6", "ISCC.exe"),
               Path(os.environ.get("ProgramFiles", ""), "Inno Setup 6", "ISCC.exe")]
@@ -32,6 +34,9 @@ def run(*cmd):
 
 def ensure_model():
     """models/ is not in git: fetch the voice model (about 140 MB) on a fresh copy."""
+    if not (ROOT / WAKE_MODEL / "am" / "final.mdl").exists():  # M6
+        print("Downloading the wake-word model once...")
+        run(sys.executable, ROOT / "tools" / "get_wake_model.py")
     if (ROOT / MODEL / "model.bin").exists():
         return
     print("Downloading the voice model (base.en) once...")
@@ -48,7 +53,9 @@ def main():
         "--add-data", f"{ROOT / 'web'}{os.pathsep}web",
         "--add-data", f"{ROOT / 'mary' / 'instructions.md'}{os.pathsep}mary",  # Mary's instructions (mary.py reads ROOT/mary/)
         "--add-data", f"{ROOT / 'skills'}{os.pathsep}skills",  # Mary's skills (M13; server.py reads ROOT/skills/)
-        "--add-data", f"{ROOT / MODEL}{os.pathsep}{MODEL}", *SPEECH_ARGS,
+        "--add-data", f"{ROOT / MODEL}{os.pathsep}{MODEL}",
+        "--add-data", f"{ROOT / WAKE_MODEL}{os.pathsep}{WAKE_MODEL}",  # M6
+        *SPEECH_ARGS,
         "--distpath", APP_DIST, "--workpath", WORK, "--specpath", WORK,
         ROOT / "desktop.py")
     OUT.mkdir(exist_ok=True)

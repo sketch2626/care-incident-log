@@ -431,6 +431,11 @@ def _put_settings(values):
         conn.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                          [(k, str(v)) for k, v in values.items()])
         conn.commit()
+    if "wake_word" in values or "companion" in values:  # M6: a skill turned listening for the name on/off
+        try:
+            WAKE.settings_changed()
+        except Exception as e:  # never let this fail a skill
+            wake_log("error", where="_put_settings", msg=str(e)[:120])
 
 
 def skill_host():

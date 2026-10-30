@@ -76,6 +76,8 @@ class LiveStartBody(M4aCase):
         self.assertIn("somewhat slower pace", slow)
         normal = self.start(voice_rate="1.0")["systemInstruction"]["parts"][0]["text"]
         self.assertNotIn("somewhat slower pace", normal)
+        default = self.start(voice_rate="0.92")["systemInstruction"]["parts"][0]["text"]
+        self.assertNotIn("somewhat slower pace", default)
         fast = self.start(voice_rate="1.3")["systemInstruction"]["parts"][0]["text"]
         self.assertIn("brisker pace", fast)
 
@@ -186,7 +188,8 @@ class SayChecks(M4aCase):
 
     def test_pace_words_and_speed_plumbing(self):
         self.assertEqual(voices.pace_style(1.0), voices.STYLE)
-        self.assertIn("slowly and clearly", voices.pace_style(0.9))
+        self.assertEqual(voices.pace_style(0.92), voices.STYLE)  # the default speed gets no pace words
+        self.assertIn("slowly and clearly", voices.pace_style(0.85))
         self.assertIn("very slowly", voices.pace_style(0.7))
         self.assertIn("brisk", voices.pace_style(1.2))
         self.put(gemini_key=KEY)

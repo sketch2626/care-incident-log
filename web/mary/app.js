@@ -1575,6 +1575,7 @@
   }
   // The one voice for a talk. Normal is Gemini TTS unless its day is spent. Kokoro is for Offline, and for lines
   // with Live chosen and no Live open. '' is the computer's own voice: only when Kokoro isn't here.
+  function micMissGoesOn(misses) { return !(misses >= 1); }   // the second miss in a row ends the talk, as in convoListen
   function talkVoice(mode, ttsSpent, order) {
     var kokoro = (order || []).indexOf('offline') >= 0 ? 'offline' : '';
     if (mode === 'normal') { return ttsSpent ? kokoro : 'normal'; }
@@ -1758,8 +1759,13 @@
     }).catch(function (e) {
       if (S.convo !== c) { return undefined; }
       if (e && e.cancelled) { convoNext(c); return undefined; }   // something else took the turn: go on after it
-      closeConvo(c);
       log(e);
+      if (micMissGoesOn(c.misses)) {   // M4a: one failed listen is a miss, like hearing nothing: the talk goes on
+        c.misses++;
+        var waking = e && e.stage === 'stop' && e.name === 'AbortError';   // the first stop waits for the voice model
+        return say(waking ? MSG.waking : MSG.notCaught, waking ? 'sorry' : 'talking').then(function () { convoNext(c); });
+      }
+      closeConvo(c);
       if (e && (e.stage === 'start' || (e.stage === 'stop' && e.serverMessage))) {
         setPhase('idle');
         openTyping();

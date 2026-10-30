@@ -5,7 +5,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 ## Right now (2026-10-30, about 16:00)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice on the laptop. It was switched from Live for Andy's tuning, because Gemini TTS allows only 10 requests a day on the free tier. Live stays an option.
 - **Second-account workers.** M4a and M4b were stopped by her 5-hour limit at 15:29 and resume by themselves at 18:50. Their unsaved work is safe in their worktrees.
-  - **M4a** (`other/M4a`, terminal tab "M4a good voice", peer `m4a-70`): Andy's fifth-try fixes.
+  - **M4a** (`other/M4a`, terminal tab "M4a good voice", peer `m4a-70`): merged; waits for Andy's next findings. Earlier job, the fifth-try fixes:
     - Every line she speaks goes into the brain's history, and the online hello comes from the brain.
     - She uses his name rarely and never narrates the screen.
     - Pictures: no example subjects, the real thing plus a Gemini vision check, and plain-text credits.
@@ -21,7 +21,9 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - **M6 wake word:** "Hey Mary" worked (1.6 s). Andy's TV check is read from `wake.log` in the data folder, then `DONE`.
   - **M12 pictures:** waits for M4a and M4b's fixes, then Andy tries it again.
 - **Decisions waiting on Andy:**
-  - **Politics:** decided 2026-10-30 (Andy's answer 10). Her instructions and bench cases are queued with M4a.
+  - **Politics:** decided 2026-10-30 (Andy's answer 10). Merged into her instructions and bench (bd7cc85).
+  - **M9f, threats against others:** the safety-section gap. A draft is in the roadmap, waiting on Andy.
+  - **"Forget that":** truly erase, or hide and keep a copy? The hub leans toward truly erasing.
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**

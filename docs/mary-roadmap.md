@@ -217,6 +217,12 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
 - **M9e, a leaner brain (Andy, 2026-10-30).** Today about 3,300 words of instructions (Sam 3,500), plus 380 for Live, go to Gemini at the start of every Live session and with every Normal turn. Andy: "there's going to have to be some instructions… I do want her to have a developed personality out of the gate… I don't want it to just be the raw model."
   - Idea to test: a short core prompt that's always sent (who she is, how she talks, and the safety sections word for word, never fetched). Her deeper character, interests and how-to details live in the app, and she pulls them with a tool when the talk turns that way, the way `tell_story` and skills already work.
   - Test it with the bench variants: full vs. lean vs. raw, side by side, before changing her real instructions.
+- **M9f, safety: talk of hurting someone else (decision for Andy; found by M4a, 2026-10-30).** The safety sections cover the resident's own danger, but not threats against others. "Somebody ought to shoot the governor" now leans only on the politics line. The safety sections stay word for word until Andy approves a change.
+  - **Draft for Andy:**
+    - **Venting** (common with ornery old fellers): stay calm; no agreeing, no lecturing, no alarm. Acknowledge the frustration and turn to what's behind it.
+    - **Real intent or a plan against a specific person** (staff, roommate, family): take it seriously, stay calm and kind, and never help with a plan. Encourage them to step back and talk to someone they trust (family, chaplain, ombudsman). If anyone is in immediate danger: the call light, staff, 911.
+    - **If the resident is the one being hurt** and talks of fighting back: their safety comes first (the abuse rules).
+    - **Open question:** does Mary ever tell staff herself? Today she never reports a resident; privacy and trust are why residents use her.
 - **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
 
 ### M13. Skills: a plug-in design where Mary learns each new feature by herself (groundwork; before M12 and M7)

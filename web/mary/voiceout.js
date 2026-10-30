@@ -179,6 +179,7 @@
       j.cur++;
       var next = j.items[j.cur];
       if (!next) {
+        if (j.open) return;   // M4a: an open queue waits for more() or end()
         j.allDone = true;
         watchdog(j);
         checkEnd(j);
@@ -308,6 +309,7 @@
       onSentence: typeof opts.onSentence === 'function' ? opts.onSentence : null,
       failAt: null,
       allDone: false,
+      open: !!opts.open,   // M4a: more sentences may follow with more(); end() says none are left
       dead: false,
       resolve: null
     };
@@ -321,6 +323,33 @@
 
   function speak(text, opts) {
     return queue([text], opts);
+  }
+
+  // M4a: adds a sentence to an open queue() (opts.open true) while it is playing, so a streamed reply has no gaps:
+  // it is fetched as soon as there is room (the sentence playing and the next one). false if nothing is open.
+  function more(text) {
+    var j = job;
+    text = String(text === null || text === undefined ? '' : text).trim();
+    if (!j || j.dead || !j.open || j.failAt !== null || !text) return false;
+    var it = {i: j.items.length, text: text, ctrl: null, reader: null, timer: 0, started: false, answered: false,
+      rate: 24000, channels: 1, leftover: null, pending: [], bytes: 0,
+      scheduled: false, streamDone: false, failed: false, why: {}};
+    j.items.push(it);
+    if (it.i === j.cur) fetchItem(j, it.i);
+    else prefetch(j);
+    return true;
+  }
+
+  // M4a: no more sentences for the open queue(); it resolves once the last one has been heard.
+  function end() {
+    var j = job;
+    if (!j || j.dead || !j.open) return;
+    j.open = false;
+    if (j.failAt === null && j.cur >= j.items.length) {
+      j.allDone = true;
+      watchdog(j);
+      checkEnd(j);
+    }
   }
 
   // Stops her voice at once and drops any sentence still being fetched.
@@ -339,6 +368,8 @@
   window.MaryVoice = {
     speak: speak,
     queue: queue,
+    more: more,   // M4a
+    end: end,     // M4a
     cancel: cancel,
     isSpeaking: isSpeaking
   };

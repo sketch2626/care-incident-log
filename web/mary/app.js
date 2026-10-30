@@ -764,7 +764,7 @@
     if (S.phase === 'thinking') { return; }
     var c = S.convo;   // M4a: one tap starts a conversation; in one, a tap while listening is "I'm done" (Normal/Offline)
     if (c) {
-      if (c.paused) { c.paused = false; convoListen(c); return; }
+      if (c.paused) { c.paused = false; convoListen(c, true); return; }
       if (!c.live && S.phase === 'listening') { if (S.stopNow) { S.stopNow(); } return; }
       if (c.ending) { if (c.live) { finishLive(c); } return; }
       endConvo(c, 'tap');
@@ -792,8 +792,9 @@
   }
 
   // What to do with Live's skill call, given the emergency check of what the resident just said. Pure.
-  function liveToolGate(heardResult) {
-    return (heardResult && heardResult.emergency) ? 'refuse' : 'run';
+  // M4a: also refused while the emergency screen is up, so a skill call that beat the transcript can't cover it.
+  function liveToolGate(heardResult, onEmergencyScreen) {
+    return ((heardResult && heardResult.emergency) || onEmergencyScreen) ? 'refuse' : 'run';
   }
 
   // A short goodbye turn ("bye now", "that's all for now"). Pure.
@@ -842,12 +843,12 @@
     if (mode === 'live' && !liveSupported()) { mode = nextMode(S.talkOrder, 'live'); }
     if (mode !== 'live' && S.typingOnly) { openTyping(); return Promise.resolve(false); }
     var c = { mode: mode, live: false, open: false, ending: false, paused: false, seq: 0, lastAct: Date.now(),
-      heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false };
+      heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false, misses: 0 };
     S.convo = c;
     S.fallbackSaid = false;
     S.voiceMode = speechModeFor(mode);
     updateTalkButton();
-    if (mode === 'live') { startLive(c, opts.hello || LIVE_HELLO); } else { convoListen(c); }
+    if (mode === 'live') { startLive(c, opts.hello || LIVE_HELLO); } else { convoListen(c, true); }
     return Promise.resolve(true);
   }
 
@@ -905,7 +906,7 @@
         screen: skillScreen(),
         onCaption: function (t) { if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
         onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); setCaption('You said: ' + t, 'said'); } },
-        onHeardDone: function (t) { if (mine()) { liveHeard(c, t); } },
+        onHeardDone: function (t) { liveHeard(c, t); },   // M4a: even after the talk ended or restarted (never missed)
         onSpeaking: function (on) { if (mine()) { liveSpeakingChanged(c, on); } },
         onInterrupted: function () { if (mine()) { c.lastAct = Date.now(); } },
         onTurnComplete: function () { if (mine()) { liveTurnDone(c); } },
@@ -1054,8 +1055,9 @@
     var heard = c.heard || '';
     c.toolBusy++;
     return Promise.resolve(c.heardCheck).then(function (j) {
-      if (liveToolGate(j) === 'refuse') {
-        return { functionResponses: calls.map(function (fc) { return { id: fc.id, name: fc.name, response: { error: 'emergency' } }; }) };
+      if (liveToolGate(j, S.screen === 'emergency') === 'refuse') {
+        return { functionResponses: calls.map(function (fc) { return { id: fc.id, name: fc.name,
+          response: { error: 'emergency', note: 'Not done. Stay with them about their safety and do not mention this.' } }; }) };
       }
       if (!window.MarySkills) { throw new Error('skills are not loaded'); }
       return window.MarySkills.handleLiveToolCall(tc, heard);
@@ -1093,17 +1095,21 @@
   }
 
   // --- Normal / Offline: listen, answer, listen again (never while she speaks) ---
-  function convoListen(c) {
+  // tapped: the resident asked (Talk tap, wake word), so it listens even on the emergency screen (M4a)
+  function convoListen(c, tapped) {
     if (S.convo !== c || c.ending || c.live) { return; }
-    if (S.screen === 'emergency') { c.paused = true; setPhase('idle'); updateTalkButton(); return; }
+    if (S.screen === 'emergency' && !tapped) { c.paused = true; setPhase('idle'); updateTalkButton(); return; }
     c.paused = false;
     var my = newTurn();
     listenOnce({ convo: true }).then(function (text) {
       if (S.convo !== c || my !== S.turn) { return undefined; }
       if (!text) {
-        if (S.listenReason === 'idle') { endConvo(c, 'idle'); return undefined; }
+        // M4a: a second miss in a row (a mic that isn't recording, a noisy room) ends the talk instead of nagging
+        if (S.listenReason === 'idle' || c.misses >= 1) { endConvo(c, 'idle'); return undefined; }
+        c.misses++;
         return say(MSG.notCaught, 'talking').then(function () { convoNext(c); });
       }
+      c.misses = 0;
       if (isGoodbye(text)) { return convoBye(c, text); }
       return talkTo(text).then(function () { convoNext(c); });
     }).catch(function (e) {

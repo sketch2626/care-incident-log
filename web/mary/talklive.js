@@ -17,6 +17,7 @@
   var HEARD_SETTLE_MS = 400;    // the last words of what the resident said can come just after her reply starts
   var ACTIVITY_MS = 500;        // at most one onActivity() per this many ms from the microphone
   var MUTE_MAX_MS = 1200;       // after stopSpeaking() + greet(), her new words play by this time at the latest
+  var MIC_MS = 45000;           // M4a: an Allow question nobody answers ends the start, so the Talk button comes back
 
   // Plain words for a failed start (err.message). The server's own sentence is used when it sends one.
   var MESSAGES = {
@@ -560,6 +561,12 @@
   // A start still waiting is rejected (startError, or kind 'stopped'); an open talk that ends by itself gets onEnd.
   function endSession(s, why, detail, startError) {
     if (!s || s.ended) return;
+    // M4a: words the resident said before the talk ended (a drop, a stop, a restart) still get their emergency check
+    if (s.ready && (s.heardState === 'open' || s.heardState === 'settling')) {
+      var said = s.heard.trim();
+      s.heardState = said ? 'done' : 'idle';
+      if (said) emit(s, 'onHeardDone', said);
+    }
     s.ended = true;
     if (S === s) S = null;
     clearTimeout(s.connectTimer);
@@ -684,6 +691,7 @@
       return;
     }
 
+    s.connectTimer = setTimeout(function () { failStart(s, 'mic_denied'); }, MIC_MS);   // M4a
     navigator.mediaDevices.getUserMedia({audio: {
       echoCancellation: true,
       noiseSuppression: true,
@@ -694,6 +702,7 @@
         stopTracks(stream);
         return null;
       }
+      clearTimeout(s.connectTimer);   // M4a: the microphone answered; openSocket() sets the connect timer
       s.stream = stream;
       s.micAt = performance.now();
       s.micMs = Math.round(s.micAt - s.tapAt);
@@ -754,7 +763,8 @@
   function stopSpeaking() {
     var s = S;
     if (!s || s.ended) return;
-    if (s.turnOpen || s.sources.length) s.mute = true;
+    // M4a: only a turn still coming is hushed; after turnComplete the next audio is a new turn and must be heard
+    if (s.turnOpen) s.mute = true;
     stopPlayback(s);
   }
 

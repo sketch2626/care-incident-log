@@ -88,7 +88,7 @@
         return;
       }
       if (kind === 'show_screen') {
-        if (a && data.screen) { a.show(data.screen); }
+        if (a && data.screen && !(a.currentScreen && a.currentScreen() === 'emergency')) { a.show(data.screen); }  // M4a: never cover the emergency screen
         return;
       }
       if (kind === 'leave_screen') {

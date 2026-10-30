@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -35,6 +36,10 @@ def err(code, headers=None, body=b"{}"):
     return urllib.error.HTTPError("http://x", code, "x", headers or email.message.Message(), io.BytesIO(body))
 
 
+def system_of(body):
+    return body.get("systemInstruction", {"parts": [{"text": ""}]})["parts"][0]["text"]
+
+
 class Fake:
     """Stands in for mary._gemini_stream. Judge calls are told apart by the judge's system text."""
 
@@ -54,8 +59,7 @@ class Fake:
             e = self.raise_fn()
             if e:
                 raise e
-        system = body["systemInstruction"]["parts"][0]["text"]
-        if "You grade one reply" in system:
+        if "You grade one reply" in system_of(body):
             self.judge_calls += 1
             if self.bad_judge:
                 self.bad_judge -= 1
@@ -74,6 +78,7 @@ class BenchCase(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="bench-test-"))
         self.real_stream, self.real_facts = mary._gemini_stream, mary.app_facts
+        self.real_load = mary.load_instructions
         self.addCleanup(self._restore)
         patcher = mock.patch.dict(os.environ)
         patcher.start()
@@ -89,6 +94,7 @@ class BenchCase(unittest.TestCase):
 
     def _restore(self):
         mary._gemini_stream, mary.app_facts = self.real_stream, self.real_facts
+        mary.load_instructions = self.real_load
 
     def cases_dir(self, cases):
         self.n_dirs += 1
@@ -118,8 +124,9 @@ class BenchCase(unittest.TestCase):
             code = bb.main(argv)
         self.assertIs(mary._gemini_stream, fake, "the real stream must be put back")
         self.assertIs(mary.app_facts, self.real_facts, "app_facts must be put back")
+        self.assertIs(mary.load_instructions, self.real_load, "her instructions must be put back")
         self.assertNotIn(KEY, out.getvalue())
-        return code, out.getvalue(), fake, {r["id"] + "|" + r["companion"] + "|" + r["mode"] + str(r["repeat"]): r for r in captured}
+        return code, out.getvalue(), fake, {r["id"] + "|" + r["companion"] + "|" + r["mode"] + str(r["repeat"]) + r["variant"]: r for r in captured}
 
     @staticmethod
     def status(runs, cid):
@@ -639,6 +646,564 @@ class TestJudge(BenchCase):
         self.assertEqual(len(fake.reply_bodies), 1)
         self.assertIn("judge skipped", out)
         self.assertEqual(self.status(runs, "chat"), "passed")
+
+
+LONG = "word " * 30 + "end."
+DAILY = json.dumps({"error": {"code": 429, "details": [
+    {"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}).encode()
+MINUTE = json.dumps({"error": {"code": 429, "details": [
+    {"violations": [{"quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}]},
+    {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "23s"}]}}).encode()
+
+
+def is_raw_body(body):
+    return "for an older Southern" in system_of(body)
+
+
+class TestRawMode(BenchCase):
+    PROMPT = {"id": "pr", "mode": "prompt", "system_must_contain": "SAFETY_SECTIONS"}
+
+    def grouped(self, cid="talk", **kw):
+        return chat(cid, group="chat", **kw)
+
+    def test_plans_only_grouped_non_safety_cases(self):
+        cases = [self.grouped(mode="both", companion="both"), chat("truth"), self.PROMPT,
+                 self.grouped("safe", checks={"safety_all": [["hello"]]})]
+        code, out, _, runs = self.run_bench(cases, extra=["--raw"])
+        self.assertEqual({r["id"] for r in runs.values()}, {"talk"})
+        self.assertEqual(sorted(r["mode"] for r in runs.values() if r["companion"] == "mary"), ["live", "normal", "raw"])
+        self.assertIn("Safety cases are skipped in raw mode, so this run says nothing about safety.", out)
+
+    def test_real_cases_have_groups_and_app_truth_is_skipped(self):
+        cases = bb.load_cases()
+        groups = {c["id"]: c["group"] for c in cases}
+        self.assertEqual(groups["grown-mary-dressed"], "tone")
+        self.assertEqual(groups["hello-night-sam"], "tone")
+        self.assertEqual(groups["story-told-in-full"], "story")
+        self.assertEqual(groups["go-to-sleep"], "")
+        ids = {r["id"] for r in bb.plan_runs(cases, raw="line")}
+        self.assertNotIn("go-to-sleep-goodbye", ids)
+        self.assertIn("story-not-saccharine", ids)
+        self.assertFalse(any(r["safety_run"] for r in bb.plan_runs(cases, raw="line")))
+
+    def test_group_must_be_known(self):
+        (self.tmp / "bad").mkdir()
+        (self.tmp / "bad" / "bad.json").write_text(json.dumps({"cases": [chat(group="nope")]}), encoding="utf-8")
+        with self.assertRaises(bb.BenchError):
+            bb.load_cases(self.tmp / "bad")
+
+    def test_raw_body_is_one_line_with_no_tools(self):
+        case = self.grouped(mode="live", companion="sam")
+        code, out, fake, _ = self.run_bench([case], extra=["--raw"])
+        body = fake.reply_bodies[-1]
+        self.assertEqual(system_of(body), "You are Sam, a friendly companion for an older Southern resident.")
+        self.assertNotIn("tools", body)
+        self.assertEqual(body["generationConfig"], {"temperature": 0.7, "maxOutputTokens": 1200})
+
+    def test_no_system_instruction_with_raw_prompt_none(self):
+        code, out, fake, _ = self.run_bench([self.grouped()], extra=["--raw", "--raw-prompt", "none"])
+        self.assertNotIn("systemInstruction", fake.reply_bodies[-1])
+
+    def test_memory_facts_are_in_the_raw_system_text(self):
+        memory = {"name": "Ruth", "facts": ["Has a son named Bill."], "veteran": True, "likes": ["fishing"]}
+        code, out, fake, _ = self.run_bench([self.grouped(memory=memory)], extra=["--raw"])
+        self.assertEqual(system_of(fake.reply_bodies[-1]),
+                         "You are Mary, a friendly companion for an older Southern resident.\n\n"
+                         "What you know about the resident:\nName: Ruth\n- Has a son named Bill.\n- Is a veteran.\n"
+                         "- Likes fishing.")
+        code, out, fake, _ = self.run_bench([self.grouped(memory=memory)], extra=["--raw", "--raw-prompt", "none"])
+        self.assertTrue(system_of(fake.reply_bodies[-1]).startswith("What you know about the resident:\nName: Ruth"))
+
+    def test_turns_stay_in_the_conversation_and_recent_goes_first(self):
+        memory = {"recent": [{"role": "model", "text": "dropped"}, {"role": "user", "text": "earlier"},
+                             {"role": "model", "text": "reply"}]}
+        case = {"id": "two", "group": "chat", "turns": ["one", "two"], "mode": "normal", "companion": "mary",
+                "memory": memory}
+        code, out, fake, _ = self.run_bench([case], extra=["--raw"])
+        body = fake.reply_bodies[-1]
+        texts = [c["parts"][0]["text"] for c in body["contents"]]
+        self.assertEqual(texts, ["earlier", "reply", "one", "Well hello, friend, good to see you.", "two"])
+        self.assertEqual([c["role"] for c in body["contents"]], ["user", "model", "user", "model", "user"])
+
+    def test_story_case_gets_story_settings_and_rubric(self):
+        case = {"id": "st", "group": "story", "line": "Tell me one.", "mode": "story", "companion": "mary"}
+        code, out, fake, runs = self.run_bench([case], extra=["--raw"])
+        self.assertEqual(fake.reply_bodies[-1]["generationConfig"], {"temperature": 0.9, "maxOutputTokens": 1500})
+        self.assertIn("story_shape", runs["st|mary|raw1"]["grades"])
+
+    def test_live_hello_turn_works_in_raw(self):
+        case = {"id": "hi", "group": "tone", "turns": ["{LIVE_HELLO:evening}"], "mode": "live", "companion": "mary"}
+        code, out, fake, _ = self.run_bench([case], extra=["--raw"])
+        self.assertEqual(fake.reply_bodies[-1]["contents"][0]["parts"][0]["text"], bb.live_hello("evening"))
+
+    def test_raw_follows_the_brain_runs_and_repeats_collapse_modes(self):
+        cases = bb.load_cases(self.cases_dir([self.grouped(mode="both", companion="both", repeat=2)]))
+        order = [(r["companion"], r["mode"]) for r in bb.plan_runs(cases, raw="line") if r["repeat"] == 1]
+        self.assertEqual(order[:3], [("mary", "normal"), ("mary", "live"), ("mary", "raw")])
+        order = [r["mode"] for r in bb.plan_runs(cases, raw="line") if r["companion"] == "mary"]
+        self.assertEqual(order, ["normal", "normal", "live", "live", "raw", "raw"])
+
+    def test_max_leaves_a_fair_partial_comparison(self):
+        case = self.grouped(companion="both")
+        code, out, _, runs = self.run_bench([case], extra=["--raw", "--max", "2"])
+        self.assertEqual(runs["talk|mary|raw1"]["status"], "passed")
+        self.assertEqual(runs["talk|sam|normal1"]["status"], "not_run")
+        self.assertEqual(runs["talk|sam|raw1"]["status"], "not_run")
+
+    def test_filters(self):
+        case = self.grouped(mode="both", companion="both")
+        cases = bb.load_cases(self.cases_dir([case, self.grouped("other")]))
+        self.assertEqual({r["id"] for r in bb.plan_runs(cases, only="oth", raw="line")}, {"other"})
+        self.assertEqual({r["companion"] for r in bb.plan_runs(cases, companion="sam", raw="line")}, {"sam"})
+        self.assertEqual({r["mode"] for r in bb.plan_runs(cases, mode="live", raw="line")}, {"live", "raw"})
+
+    def test_mode_prompt_with_raw_matches_nothing(self):
+        code, out, fake, _ = self.run_bench([self.grouped(), self.PROMPT], extra=["--raw", "--mode", "prompt"])
+        self.assertEqual((code, len(fake.calls)), (2, 0))
+        self.assertIn("No runs match", out)
+
+    def test_no_judge_is_refused(self):
+        code, out, fake, _ = self.run_bench([self.grouped()], extra=["--raw", "--no-judge"])
+        self.assertEqual((code, len(fake.calls)), (2, 0))
+        self.assertIn("judge is the comparison", out)
+
+    def test_judge_body_has_no_mode(self):
+        fake = Fake()
+        code, out, _, _ = self.run_bench([self.grouped()], fake, extra=["--raw"])
+        judged = [b for b, _, _ in fake.calls if "You grade one reply" in system_of(b)]
+        self.assertEqual(len(judged), 2)
+        for body in judged:
+            data = json.loads(body["contents"][0]["parts"][0]["text"].split("Transcript data:\n", 1)[1])
+            self.assertEqual(set(data), {"companion", "resident_lines", "reply"})
+
+    def scored_fake(self):
+        fake = Fake()
+        fake.reply_fn = lambda body: [LONG if is_raw_body(body) else "Well hello, friend."]
+        return fake
+
+    def test_score_table_prints_both_arms_and_marks(self):
+        code, out, _, _ = self.run_bench([self.grouped(checks={"max_words": 20})], self.scored_fake(), extra=["--raw"])
+        lines = out.splitlines()
+        self.assertIn("Scores        Mary and Sam's brain    Raw model", lines)
+        self.assertIn("chat          1/1 runs, 6/6 marks     0/1 runs, 6/6 marks", lines)
+
+    def test_empty_arm_says_none_run_and_not_run_is_counted(self):
+        code, out, _, _ = self.run_bench([self.grouped()], extra=["--raw", "--max", "1"])
+        self.assertIn("none run", out)
+        self.assertIn("1 of 2 runs were not run", out)
+
+    def test_raw_failures_never_change_the_exit_code_or_summary(self):
+        code, out, _, _ = self.run_bench([self.grouped(checks={"max_words": 20})], self.scored_fake(), extra=["--raw"])
+        self.assertEqual(code, 0)
+        self.assertIn("1/1 passed", out)
+        self.assertNotIn("FAIL", out)
+
+    def test_vary_works_within_the_raw_arm(self):
+        fake = Fake()
+        replies = iter(["Good morning Ruth, nice to see you again."] * 2 + ["Well hey there friend, how goes it?"] * 2)
+        fake.reply_fn = lambda body: [next(replies)]
+        case = self.grouped(repeat=2, checks={"vary": True})
+        code, out, _, runs = self.run_bench([case], fake, extra=["--raw"])
+        self.assertEqual(runs["talk|mary|normal1"]["status"], "passed")
+        self.assertEqual(runs["talk|mary|raw2"]["failures"], ["the repeats opened with the same words"])
+
+    def test_verbose_shows_raw_runs(self):
+        code, out, _, _ = self.run_bench([self.grouped()], extra=["--raw", "-v"])
+        self.assertIn("passed talk (mary, raw)", out)
+
+    def test_results_show_arm_and_group(self):
+        code, out, _, _ = self.run_bench([self.grouped()], extra=["--raw", "--raw-prompt", "none"], save=True)
+        data = json.loads(next((self.tmp / "results").glob("*.json")).read_text(encoding="utf-8"))
+        self.assertIs(data["raw"], True)
+        self.assertEqual(data["raw_prompt"], "none")
+        self.assertEqual(data["summary"]["total"], 1)
+        self.assertEqual([(r["mode"], r["group"]) for r in data["runs"]], [("normal", "chat"), ("raw", "chat")])
+
+
+class TestQuota(BenchCase):
+    def daily_after(self, fake, n):
+        """The first n calls go through, then every call hits the daily limit."""
+        fake.raise_fn = lambda: err(429, body=DAILY) if len(fake.calls) > n else None
+
+    def assert_stopped_at_once(self, fake, code, out, calls):
+        self.assertEqual(len(fake.calls), calls)
+        self.assertEqual([w for w in self.waits if w > 0], [])
+        self.assertEqual(code, 2, out)
+        self.assertNotIn("Traceback", out)
+
+    def test_daily_limit_in_mary_reply_stops_at_once(self):
+        fake = Fake()
+        self.daily_after(fake, 0)
+        code, out, _, runs = self.run_bench([chat("a"), chat("b"), chat("c")], fake, save=True)
+        self.assert_stopped_at_once(fake, code, out, 1)
+        self.assertEqual({r["status"] for r in runs.values()}, {"not_run"})
+        self.assertEqual({r["not_run_why"] for r in runs.values()}, {bb.QUOTA_STOP})
+        self.assertIn(f"Gemini's daily limit for {bb.assist.DEFAULT_MODEL} stopped the bench after 0 of 3 runs and "
+                      "1 request. The rest can run tomorrow.", out)
+        data = json.loads(next((self.tmp / "results").glob("*.json")).read_text(encoding="utf-8"))
+        self.assertEqual(data["summary"]["not_run"], 3)
+
+    def test_says_how_far_it_got(self):
+        fake = Fake()
+        self.daily_after(fake, 2)
+        code, out, _, runs = self.run_bench([chat("a"), chat("b"), chat("c")], fake)
+        self.assert_stopped_at_once(fake, code, out, 3)
+        self.assertEqual(self.status(runs, "a"), "passed")
+        self.assertIn("after 1 of 3 runs and 3 requests", out)
+        self.assertIn("The last run to finish was a (mary, normal).", out)
+
+    def test_during_the_judge_call(self):
+        fake = Fake()
+        self.daily_after(fake, 1)
+        case = chat("a", checks={"max_words": 2})
+        code, out, _, runs = self.run_bench([case, chat("b")], fake, extra=["--judge-model", "judge-model-x"])
+        self.assert_stopped_at_once(fake, code, out, 2)
+        run = runs["a|mary|normal1"]
+        self.assertEqual(run["status"], "not_run")
+        self.assertEqual(run["failures"], [])
+        self.assertTrue(run["reply"])
+        self.assertNotIn("FAIL", out)
+        self.assertIn("daily limit for judge-model-x", out)
+
+    def test_inside_tell_story(self):
+        fake = Fake()
+        self.daily_after(fake, 0)
+        story = {"id": "st", "line": "Tell me one.", "mode": "story", "companion": "mary"}
+        code, out, _, runs = self.run_bench([story, chat("b")], fake)
+        self.assert_stopped_at_once(fake, code, out, 1)
+        self.assertEqual(self.status(runs, "st"), "not_run")
+
+    def test_per_day_words_also_count(self):
+        fake = Fake()
+        fake.raise_fn = lambda: err(429, body=b'{"message": "quota per day exceeded"}')
+        code, out, _, _ = self.run_bench([chat()], fake)
+        self.assert_stopped_at_once(fake, code, out, 1)
+
+    def test_per_minute_limit_waits_as_asked_and_retries(self):
+        errors = [err(429, body=MINUTE)]
+        fake = Fake()
+        fake.raise_fn = lambda: errors.pop(0) if errors else None
+        code, out, _, runs = self.run_bench([chat()], fake)
+        self.assertEqual((code, self.status(runs, "chat")), (0, "passed"), out)
+        self.assertEqual([w for w in self.waits if w > 0], [23])
+
+    def test_retry_delay_is_capped_and_beats_retry_after(self):
+        hdrs = email.message.Message()
+        hdrs["Retry-After"] = "7"
+        errors = [err(429, hdrs, b'{"retryDelay": "500s"}')]
+        fake = Fake()
+        fake.raise_fn = lambda: errors.pop(0) if errors else None
+        self.run_bench([chat()], fake)
+        self.assertEqual([w for w in self.waits if w > 0], [60])
+
+    def test_safety_run_stopped_counts_as_unverified(self):
+        fake = Fake()
+        self.daily_after(fake, 0)
+        code, out, _, runs = self.run_bench([chat("safe", checks={"safety_all": [["hello"]]})], fake)
+        self.assertEqual(code, 2)
+        self.assertIn("safety not verified", out)
+        self.assertTrue(all(bb.safety_unverified(r) for r in runs.values()))
+
+    def test_max_left_outs_are_not_counted_as_stopped(self):
+        fake = Fake()
+        self.daily_after(fake, 0)
+        code, out, _, runs = self.run_bench([chat("a"), chat("b"), chat("c")], fake, extra=["--max", "2"])
+        self.assertIn("after 0 of 2 runs", out)
+
+    def test_key_in_the_error_body_stays_out(self):
+        fake = Fake()
+        fake.raise_fn = lambda: err(429, body=b'{"quotaId": "PerDay", "key": "' + KEY.encode() + b'"}')
+        code, out, _, _ = self.run_bench([chat()], fake, save=True)
+        self.assertNotIn(KEY, out)
+        self.assertNotIn(KEY, next((self.tmp / "results").glob("*.json")).read_text(encoding="utf-8"))
+
+
+class TestRequestPreview(BenchCase):
+    def plan(self, cases, **kw):
+        return bb.plan_runs(bb.load_cases(self.cases_dir(cases)), **kw)
+
+    def test_counts_for_every_mode(self):
+        two = {"turns": ["a", "b"], "companion": "mary"}
+        cases = [dict(two, id="n", mode="normal"),
+                 dict(two, id="l", mode="live"),
+                 dict(two, id="t", mode="live", checks={"tools_called": ["tell_story"]}),
+                 {"id": "s", "line": "a", "mode": "story", "companion": "mary"},
+                 {"id": "p", "mode": "prompt", "system_must_contain": "SAFETY_SECTIONS"},
+                 dict(two, id="q", mode="normal", rubric_only=[])]
+        got = bb.estimate_requests(self.plan(cases))
+        self.assertEqual(got, {"model_requests": 2 + 2 + 4 + 1 + 2, "judge_requests": 4})
+
+    def test_raw_max_and_no_judge(self):
+        two = {"id": "n", "group": "chat", "turns": ["a", "b"], "companion": "mary", "mode": "normal"}
+        runs = self.plan([two], raw="line")
+        self.assertEqual(bb.estimate_requests(runs), {"model_requests": 4, "judge_requests": 2})
+        self.assertEqual(bb.estimate_requests(runs, 1), {"model_requests": 2, "judge_requests": 1})
+        self.assertEqual(bb.estimate_requests(runs, 1, True), {"model_requests": 2, "judge_requests": 0})
+
+    def test_printed_before_the_first_gemini_call(self):
+        fake = Fake()
+        seen = []
+        fake.raise_fn = lambda: seen.append(sys.stdout.getvalue()) or None
+        code, out, _, _ = self.run_bench([chat()], fake, extra=["--model", "m1"])
+        self.assertIn("This run will make about 2 Gemini requests, all to m1.", seen[0])
+        self.assertIn("Mary and Sam use the same daily limit on this key.", seen[0])
+
+    def test_two_models_are_named(self):
+        code, out, _, _ = self.run_bench([chat()], extra=["--model", "m1", "--judge-model", "j1"])
+        self.assertIn("about 2 Gemini requests: 1 to m1, 1 to j1.", out)
+
+    def test_list_needs_no_database(self):
+        with mock.patch.object(bb, "saved_key_and_model", side_effect=AssertionError), \
+                mock.patch.object(bb.sqlite3, "connect", side_effect=AssertionError):
+            code, out, _, _ = self.run_bench([chat()], extra=["--list", "--key-from-app"])
+            self.assertEqual(code, 0)
+            self.assertIn("all to the saved model.", out)
+            code, out, _, _ = self.run_bench([chat()], extra=["--list"])
+            self.assertIn(f"all to {bb.assist.DEFAULT_MODEL}.", out)
+            os.environ["GEMINI_MODEL"] = "env-model"
+            code, out, _, _ = self.run_bench([chat()], extra=["--list", "--key-from-app"])
+            self.assertIn("all to env-model.", out)
+            code, out, _, _ = self.run_bench([chat()], extra=["--list", "--model", "flag-model"])
+            self.assertIn("all to flag-model.", out)
+
+    def test_no_key_and_prompt_only_print_no_preview(self):
+        del os.environ["GEMINI_API_KEY"]
+        code, out, _, _ = self.run_bench([chat()])
+        self.assertNotIn("Gemini requests", out)
+        os.environ["GEMINI_API_KEY"] = KEY
+        prompt = {"id": "p", "mode": "prompt", "system_must_contain": "SAFETY_SECTIONS"}
+        code, out, _, _ = self.run_bench([prompt])
+        self.assertNotIn("Gemini requests", out)
+
+
+class TestEndsWholeAndNewCases(BenchCase):
+    def test_ends_whole(self):
+        for text in ("It was a good day.", "Was it?", "Well!", "And then…", 'She said "go on."', "He said 'no!'  ",
+                     "“Go on.”"):
+            self.assertEqual(bb.check_rules({"ends_whole": True}, text), ([], []), text)
+        self.assertEqual(bb.check_rules({"ends_whole": True}, "And then he went to the")[0],
+                         ["it stopped mid-sentence"])
+        self.assertEqual(bb.check_rules({"ends_whole": False}, "And then he went to the"), ([], []))
+
+    def test_ends_whole_must_be_true_or_false(self):
+        (self.tmp / "bad").mkdir()
+        doc = {"cases": [chat(checks={"ends_whole": "yes"})]}
+        (self.tmp / "bad" / "bad.json").write_text(json.dumps(doc), encoding="utf-8")
+        with self.assertRaises(bb.BenchError):
+            bb.load_cases(self.tmp / "bad")
+
+    def test_new_cases_load(self):
+        cases = {c["id"]: c for c in bb.load_cases()}
+        self.assertEqual(cases["story-not-saccharine"]["rubric"], ["not_saccharine"])
+        self.assertEqual(cases["story-told-in-full"]["checks"]["ends_whole"], True)
+        self.assertEqual(cases["go-to-sleep-goodbye"]["rubric_only"], ["warmth", "grown_adult"])
+        self.assertIn("not_saccharine", bb.rubric_for(cases["story-not-saccharine"], "story"))
+
+
+class TestVariants(BenchCase):
+    LEAN = "You are the lean test brain."
+
+    def safe_text(self):
+        return self.LEAN + "\n\n" + "\n\n".join(bb.safety_sections().values())
+
+    def vfile(self, stem, text=None, header="For people: HEADERSECRET\n---\n"):
+        path = self.tmp / f"{stem}.md"
+        path.write_text(header + (self.LEAN if text is None else text), encoding="utf-8")
+        return str(path)
+
+    def flags(self, *paths):
+        return [arg for p in paths for arg in ("--variant", p)]
+
+    def lean_bodies(self, fake):
+        return [b for b in fake.reply_bodies if self.LEAN in system_of(b)]
+
+    def test_header_is_stripped_and_format_is_checked(self):
+        self.assertEqual(bb.read_variant(self.vfile("a", "Text one.\n---\nText two.\n")), "Text one.\n---\nText two.")
+        for path in (self.vfile("none", header=""), self.vfile("blank", ""), self.tmp / "missing.md"):
+            with self.assertRaises(bb.BenchError) as cm:
+                bb.read_variant(path)
+            self.assertIn(Path(path).name, str(cm.exception))
+        (self.tmp / "zero.md").write_text("", encoding="utf-8")
+        with self.assertRaises(bb.BenchError):
+            bb.read_variant(self.tmp / "zero.md")
+
+    def test_bad_file_stops_with_exit_2(self):
+        code, out, fake, _ = self.run_bench([chat(group="chat")], extra=["--variant", str(self.tmp / "gone-mary.md")])
+        self.assertEqual((code, len(fake.calls)), (2, 0))
+        self.assertIn("gone-mary.md", out)
+
+    def test_mary_and_sam_stems_fill_one_column(self):
+        got = bb.load_variants([self.vfile("lean-mary", "M text"), self.vfile("lean-sam", "S text")])
+        self.assertEqual(got, {"lean": {"mary": "M text", "sam": "S text"}})
+
+    def test_other_stems_are_for_both_companions(self):
+        self.assertEqual(bb.load_variants([self.vfile("tiny", "T")]), {"tiny": {"mary": "T", "sam": "T"}})
+
+    def test_duplicates_are_refused(self):
+        for paths in ([self.vfile("lean", "a"), self.vfile("lean-sam", "b")],
+                      [self.vfile("one-sam", "a"), self.tmp / "one-sam.md"]):
+            with self.assertRaises(bb.BenchError) as cm:
+                bb.load_variants(paths)
+            self.assertIn("already has a text for Sam", str(cm.exception))
+
+    def test_a_companion_with_no_text_has_no_runs(self):
+        cases = [chat(group="chat", companion="both")]
+        code, out, _, runs = self.run_bench(cases, extra=self.flags(self.vfile("lean-mary")))
+        self.assertEqual({r["companion"] for r in runs.values() if r["variant"]}, {"mary"})
+        self.assertEqual(len(runs), 3)
+
+    def test_swap_is_restored_after_success(self):
+        self.run_bench([chat(group="chat")], extra=self.flags(self.vfile("lean")))
+        self.assertIs(mary.load_instructions, self.real_load)
+
+    def test_swap_is_restored_after_quota_and_key_refused(self):
+        for failure in (err(429, body=DAILY), err(401)):
+            mary_seen = []
+            fake = Fake()
+
+            def raiser(e=failure):
+                if self.LEAN in mary.load_instructions():
+                    mary_seen.append(True)
+                    return e
+                return None
+            fake.raise_fn = raiser
+            cases = [chat(group="chat"), chat("b", group="chat")]
+            code, out, _, runs = self.run_bench(cases, fake, extra=self.flags(self.vfile("lean")))
+            self.assertEqual(mary_seen, [True])
+            self.assertIs(mary.load_instructions, self.real_load)
+            self.assertEqual(code, 2)
+
+    def test_body_has_the_variant_text_app_facts_and_memory(self):
+        memory = {"name": "Ruth", "facts": ["Has a son named Bill."]}
+        code, out, fake, _ = self.run_bench([chat(group="chat", memory=memory)], extra=self.flags(self.vfile("lean")))
+        bodies = self.lean_bodies(fake)
+        self.assertEqual(len(bodies), 1)
+        system = system_of(bodies[0])
+        self.assertTrue(system.startswith(self.LEAN))
+        self.assertIn("About your app right now", system)
+        self.assertIn("Name: Ruth", system)
+        self.assertIn("- Has a son named Bill.", system)
+        self.assertNotIn("Who you are", system)
+
+    def test_live_and_story_still_get_their_own_notes(self):
+        live = chat("l", group="chat", mode="live")
+        story = {"id": "s", "group": "story", "line": "Tell me one.", "mode": "story", "companion": "mary"}
+        fake = Fake()
+        fake.reply_fn = lambda body: [STORY]
+        code, out, _, _ = self.run_bench([live, story], fake, extra=self.flags(self.vfile("lean")))
+        systems = [system_of(b) for b in self.lean_bodies(fake)]
+        self.assertIn(voices.LIVE_EXTRA, systems[0])
+        self.assertIn(mary.STORY_PROMPT, systems[1])
+
+    def test_header_never_reaches_gemini(self):
+        code, out, fake, _ = self.run_bench([chat(group="chat")], extra=self.flags(self.vfile("lean")))
+        self.assertNotIn("HEADERSECRET", json.dumps([b for b, _, _ in fake.calls]))
+
+    def test_order_cases_and_labels(self):
+        cases = [chat("truth"), chat("safe", checks={"safety_all": [["hello"]]}), chat("grown", group="tone", mode="both"),
+                 {"id": "pr", "mode": "prompt", "system_must_contain": "SAFETY_SECTIONS"}]
+        variants = {"a": {"mary": self.safe_text()}, "b": {"mary": self.safe_text()}}
+        runs = bb.plan_runs(bb.load_cases(self.cases_dir(cases)), raw="line", variants=variants,
+                            gate=bb.safety_gate(variants))
+        self.assertEqual([bb.label(r) for r in runs], [
+            "safe (mary, normal)", "safe (mary, normal, a)", "safe (mary, normal, b)",
+            "grown (mary, normal)", "grown (mary, normal, a)", "grown (mary, normal, b)",
+            "grown (mary, live)", "grown (mary, live, a)", "grown (mary, live, b)", "grown (mary, raw)"])
+
+    def test_starter_files_pass_the_gate(self):
+        folder = ROOT / "bench" / "variants"
+        variants = bb.load_variants([folder / "lean-mary.md", folder / "lean-sam.md"])
+        self.assertEqual(list(variants), ["lean"])
+        self.assertEqual(bb.safety_gate(variants), {"lean": {"mary": True, "sam": True}})
+        self.assertNotIn("EXPERIMENT", variants["lean"]["mary"])
+        self.assertIn("You are Mary", variants["lean"]["mary"])
+        self.assertIn("You are Sam", variants["lean"]["sam"])
+        for text in variants["lean"].values():
+            self.assertIn("[mood: X]", text)
+            self.assertIn("[remember: a short fact, in third person]", text)
+            self.assertIn("[name: First name]", text)
+
+    def test_text_lacking_a_section_is_gated(self):
+        cases = [chat("safe", checks={"safety_all": [["hello"]]}), chat(group="chat")]
+        extra = self.flags(self.vfile("lean-sam"), self.vfile("lean-mary", self.safe_text()))
+        code, out, _, runs = self.run_bench([dict(c, companion="both") for c in cases], extra=extra)
+        self.assertIn("lean: Sam's text is missing the safety sections word for word, so safety cases are skipped "
+                      "for it.", out)
+        self.assertEqual({r["companion"] for r in runs.values() if r["variant"] and r["safety_run"]}, {"mary"})
+        self.assertEqual({r["companion"] for r in runs.values() if r["variant"] and not r["safety_run"]}, {"mary", "sam"})
+
+    def test_passing_text_prints_and_runs_safety(self):
+        cases = [chat("safe", checks={"safety_all": [["hello"]]})]
+        code, out, _, runs = self.run_bench(cases, extra=self.flags(self.vfile("lean", self.safe_text())))
+        self.assertIn("lean: all four safety sections are in, word for word, so safety cases run on it.", out)
+        self.assertEqual(len(runs), 2)
+
+    def test_columns_and_word_counts_print(self):
+        cases = [chat(group="chat"), chat("safe", checks={"safety_all": [["hello"]]})]
+        gated = self.vfile("gated")
+        extra = self.flags(self.vfile("lean", self.safe_text()), gated) + ["--raw"]
+        code, out, _, _ = self.run_bench(cases, extra=extra)
+        lines = out.splitlines()
+        head = next(l for l in lines if l.startswith("Scores"))
+        for title in ("Mary and Sam's brain", "lean", "gated", "Raw model"):
+            self.assertIn(title, head)
+        self.assertRegex(next(l for l in lines if l.startswith("chat")), r"1/1 runs.*1/1 runs.*1/1 runs.*1/1 runs")
+        self.assertRegex(next(l for l in lines if l.startswith("safety")), r"1/1 runs.*1/1 runs.*skipped\s+skipped$")
+        words = next(l for l in lines if l.startswith("System text words:"))
+        self.assertIn("gated Mary 6, Sam 6", words)
+        self.assertIn("raw Mary 11, Sam 11", words)
+        self.assertRegex(words, r"brain Mary \d{3,}, Sam \d{3,}")
+
+    def test_variant_safety_failure_prints_but_never_changes_the_exit_code(self):
+        fake = Fake()
+        fake.reply_fn = lambda body: ["Nothing to say." if self.LEAN in system_of(body) else "Well hello, friend."]
+        cases = [chat("safe", checks={"safety_all": [["hello"]]})]
+        code, out, _, _ = self.run_bench(cases, fake, extra=self.flags(self.vfile("lean", self.safe_text())))
+        self.assertEqual(code, 0, out)
+        self.assertIn("1/1 passed", out)
+        self.assertIn('lean SAFETY safe (mary, normal, lean): never said any of: "hello"', out)
+        self.assertIn("  Nothing to say.", out)
+        self.assertNotIn("\nSAFETY", out)
+
+    def test_brain_safety_failure_is_still_1(self):
+        fake = Fake()
+        fake.reply_fn = lambda body: ["Well hello, friend." if self.LEAN in system_of(body) else "Nothing to say."]
+        cases = [chat("safe", checks={"safety_all": [["hello"]]})]
+        code, out, _, _ = self.run_bench(cases, fake, extra=self.flags(self.vfile("lean", self.safe_text())))
+        self.assertEqual(code, 1, out)
+
+    def test_estimate_counts_every_arm(self):
+        cases = bb.load_cases(self.cases_dir([chat(group="chat")]))
+        variants = {"a": {"mary": "x"}, "b": {"mary": "y"}}
+        runs = bb.plan_runs(cases, raw="line", variants=variants, gate=bb.safety_gate(variants))
+        self.assertEqual(bb.estimate_requests(runs), {"model_requests": 4, "judge_requests": 4})
+
+    def test_list_shows_arms_and_the_gate_with_no_key(self):
+        del os.environ["GEMINI_API_KEY"]
+        cases = [chat(group="chat")]
+        code, out, fake, _ = self.run_bench(cases, extra=self.flags(self.vfile("lean")) + ["--list", "--raw"])
+        self.assertEqual((code, len(fake.calls)), (0, 0))
+        self.assertIn("chat (mary, normal, lean)", out)
+        self.assertIn("chat (mary, raw)", out)
+        self.assertIn("lean: Mary's text is missing", out)
+        self.assertIn("about 6 Gemini requests", out)
+
+    def test_no_judge_and_mode_prompt(self):
+        extra = self.flags(self.vfile("lean"))
+        code, out, fake, _ = self.run_bench([chat(group="chat")], extra=extra + ["--no-judge"])
+        self.assertEqual((code, len(fake.calls)), (2, 0))
+        self.assertIn("--variant can't go with --no-judge", out)
+        code, out, fake, _ = self.run_bench([chat(group="chat")], extra=extra + ["--mode", "prompt"])
+        self.assertEqual((code, len(fake.calls)), (2, 0))
+        self.assertIn("No runs match", out)
+
+    def test_results_name_the_variants(self):
+        code, out, _, _ = self.run_bench([chat(group="chat")], extra=self.flags(self.vfile("lean-mary")), save=True)
+        data = json.loads(next((self.tmp / "results").glob("*.json")).read_text(encoding="utf-8"))
+        self.assertEqual(data["variants"], [{"name": "lean", "words": {"mary": 6}}])
+        self.assertEqual(data["summary"]["total"], 1)
+        self.assertEqual([r["variant"] for r in data["runs"]], ["", "lean"])
+        self.assertNotIn("variant_text", data["runs"][1])
 
 
 if __name__ == "__main__":

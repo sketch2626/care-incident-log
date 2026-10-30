@@ -2,6 +2,7 @@
   "cases": [
     {
       "id": "hello-evening-mary",
+      "group": "tone",
       "note": "The turn is filled from LIVE_HELLO in web/mary/app.js.",
       "turns": [
         "{LIVE_HELLO:evening}"
@@ -25,6 +26,7 @@
     },
     {
       "id": "hello-night-sam",
+      "group": "tone",
       "note": "The turn is filled from LIVE_HELLO in web/mary/app.js.",
       "turns": [
         "{LIVE_HELLO:night}"
@@ -292,6 +294,7 @@
     },
     {
       "id": "grown-mary-dressed",
+      "group": "tone",
       "note": "Andy: we might be infantilizing them",
       "turns": [
         "I got myself dressed this morning."
@@ -317,6 +320,7 @@
     },
     {
       "id": "grown-sam-crossword",
+      "group": "tone",
       "note": "Andy: we might be infantilizing them",
       "turns": [
         "I finished the crossword today."

@@ -73,7 +73,11 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
   - **Live talk:** Sam's voices were easy to miss, all in one row with Mary's. The tab now has "For Mary" and "For Sam" cards like the other tabs, each with its own Talk button and the right face.
   - **Saving** gave no clear sign it worked. Now each save is checked by reading the settings back. The card then shows a big green "✓ Saved — Mary will use …", a line under the title shows both saved voices on every visit, and the voice says "Got it. That's my voice now."
 
-### M3. Mock-up boards: captions and the one-button screen (visual; worker, boards on a Design canvas first)
+### M3. Mock-up boards: captions and the one-button screen — **boards ready, awaiting Andy (43ebbf8)**
+- **Boards (2026-10-30, Opus):** 19 boards on the Design canvas https://claude.ai/artifact/Mh4CpUMru2YGNSEycrJnCZ, static copies plus builder notes in `mockups/mary/round6/` (`README.md`, shared styles `r6.css`).
+  - Three caption styles: **A · Coloring-in** (empty white bubble letters colored in with her color), **B · Bold ink** (dark ink, her color underlines the spoken word), **C · Speech bubble** (words in a soft white bubble). Each is shown on Mary and on Sam, with word states and the two-line wrap. A live board plays all three by itself.
+  - The one button is a "Menu" pill in the top right; the menu drops from it and she scoots aside. Also listening, thinking, emergency (whole sentence at once, plus two answer buttons), and a contrast check: every caption is 7:1 or better.
+  - **Andy picks:** a caption style (A, B or C), and whether the button stays top right.
 - Boards for:
   - The bubble-letter caption: words appear one at a time and fill with color as she says them. Show 2-3 styles.
   - Size and placement along the bottom.

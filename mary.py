@@ -3,6 +3,7 @@
 Uses the resident's own Gemini key (see assist.py). Safety checks run on this laptop before and
 without Gemini. Mary only offers to write things down; she never writes to the incident log.
 """
+import base64  # M4a: see_image
 import json
 import os
 import re
@@ -543,7 +544,7 @@ def _gemini_stream(body, api_key, model="", deadline_s=None):
         url, data=json.dumps(body).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key})
     deadline = time.monotonic() + (deadline_s or GEMINI_DEADLINE_S)
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=min(10, deadline_s or 10)) as resp:  # M4a: a short deadline holds on a dead line too
         for line in resp:
             if time.monotonic() > deadline:
                 return
@@ -661,10 +662,15 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
             system += "\n\n" + extra
         tools = skills.gemini_tools()
     # --- end skills hook ---
-    turns = list(memory.recent)
-    while turns and turns[0]["role"] != "user":
-        turns.pop(0)
-    contents = [{"role": t["role"], "parts": [{"text": t["text"]}]} for t in turns]
+    # M4a: her scripted hello is her turn too, so a talk may start with hers, or follow her last line of the talk before
+    contents = []
+    for t in memory.recent:
+        if contents and contents[-1]["role"] == t["role"]:
+            contents[-1]["parts"][0]["text"] += "\n" + t["text"]
+        else:
+            contents.append({"role": t["role"], "parts": [{"text": t["text"]}]})
+    if contents and contents[0]["role"] != "user":
+        contents.insert(0, {"role": "user", "parts": [{"text": "(They opened the app.)"}]})
     contents.append({"role": "user", "parts": [{"text": text}]})
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4000}}  # M4a: room for a whole story; the brain keeps chat short
@@ -723,6 +729,76 @@ def tell_story(request, memory, api_key, model="", companion="mary", report=None
     text = text[:end.end()] if end else text
     report["words"] = len(text.split())
     return text if report["words"] >= STORY_MIN_WORDS else ""
+
+
+# --- M4a: her hello and her eyes: short answers on the resident's own key ---
+OPEN_DEADLINE_S = 8
+OPEN_TIMES = ("morning", "afternoon", "evening", "night")
+OPEN_NUDGE = "(They opened the app.)"
+OPEN_PROMPT = (
+    "They have just opened your screen{clock}. Say hello in one or two short sentences, as one grown-up to another: "
+    "plain and easy, no gushing and no fuss over them. Use their name if you know it and, when it fits, something you "
+    "remember about them or from your last talk. Use different words every time. A light \"good morning\", \"good "
+    "afternoon\" or \"good evening\" is fine, but never \"good night\", and never comment on the hour or how late it is. "
+    "Never ask something they have already answered, and never list what you can do. Just the words you say, with no "
+    "tags and no notes in brackets.")
+VISION_DEADLINE_S = 8
+VISION_BYTES_MAX = 700_000  # a bigger picture isn't sent: a look has to stay quick
+
+
+def _short_answer(body, api_key, model, deadline_s):
+    """One short Gemini answer as text, "" on any problem. Thinking low, as in tell_story, then one retry without
+    thinkingConfig after a fast failure (some models refuse it with a 400). Both tries share deadline_s."""
+    plain = body["generationConfig"]
+    started = time.monotonic()
+
+    def ask(config, left):
+        body["generationConfig"] = config
+        return "".join(p for p in _gemini_stream(body, api_key, model, deadline_s=left) if isinstance(p, str))
+    try:
+        return ask({**plain, "thinkingConfig": {"thinkingLevel": "low"}}, deadline_s)
+    except Exception as e:
+        spent = time.monotonic() - started
+        if isinstance(e, TimeoutError) or spent >= STORY_RETRY_WITHIN_S:
+            return ""
+    try:
+        return ask(plain, deadline_s - spent)
+    except Exception:
+        return ""
+
+
+def open_line(memory, api_key, model="", companion="mary", when=""):
+    """Her hello, from the same brain and history as her talk, with a one-off instruction that is never saved.
+    Plain spoken text, or "" on any problem: the page then says a scripted line. Never raises."""
+    if not api_key:
+        return ""
+    try:
+        body = _body(OPEN_NUDGE, memory, None, companion)
+    except Exception:
+        return ""
+    clock = f", and it is {when} where they are" if when in OPEN_TIMES else ""
+    body["systemInstruction"]["parts"][0]["text"] += "\n\n" + OPEN_PROMPT.format(clock=clock)
+    body["generationConfig"] = {"temperature": 0.9, "maxOutputTokens": 1000}
+    text = _short_answer(body, api_key, model, OPEN_DEADLINE_S)
+    text = " ".join(re.sub(r"[*#]+", "", re.sub(r"\[[^\]]*\]?", "", text)).split())
+    end = re.search(r"[.!?…][\"'”’)]*(?=[^.!?…]*$)", text)  # a line cut off by the deadline ends on a whole sentence
+    return text[:end.end()] if end else text
+
+
+def see_image(image_bytes, mime, question, api_key, model=""):
+    """What Gemini sees in a picture: the picture and one question, nothing about the resident. Plain text, or "" with
+    no key, with a picture over VISION_BYTES_MAX or on any problem. Never raises."""
+    try:
+        if not api_key or not image_bytes or len(image_bytes) > VISION_BYTES_MAX:
+            return ""
+        data = base64.b64encode(bytes(image_bytes)).decode("ascii")
+    except (TypeError, ValueError):
+        return ""
+    body = {"contents": [{"role": "user", "parts": [{"inlineData": {"mimeType": str(mime), "data": data}},
+                                                    {"text": str(question)}]}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1000}}
+    return _short_answer(body, api_key, model, VISION_DEADLINE_S).strip()
+# --- end M4a ---
 
 
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,

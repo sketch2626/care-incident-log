@@ -704,7 +704,7 @@
     var c = S.convo;   // M4a: a talk moves once and stays there, never back, whatever sound came first
     if (c && !c.live && c.voice === from) { c.voice = s.voice; S.voiceMode = s.voice; }
     else if (at === 0 && S.voiceMode === from) { S.voiceMode = s.voice; }
-    if (!S.fallbackSaid) { S.fallbackSaid = true; rest.unshift(MSG.fallback); }
+    if (!S.fallbackSaid) { S.fallbackSaid = true; rest.unshift(MSG.fallback); rememberSaid(MSG.fallback); }   // M4a: this line skips say()
     s.mvSent = [];
     s.mvEnded = false;
     s.queue = rest.concat(s.queue);
@@ -806,7 +806,8 @@
   }
 
   // Shows the text as her caption, sets the mood, speaks it. Resolves when she is done (or was interrupted).
-  function say(text, mood, voice) {   // M4a: voice: this line's voice when the talk it ends has just closed
+  // M4a: voice: this line's voice when the talk it ends has just closed; saved: the history has this line already
+  function say(text, mood, voice, saved) {
     text = String(text == null ? '' : text).trim();
     if (liveOn()) {
       try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); }   // M4a: never two voices at once
@@ -818,6 +819,9 @@
         return Promise.resolve();
       }
     }
+    // M4a: every line she speaks goes into the talk history, here and only here. A line Live says is saved from Live's
+    // own transcript (liveSaid) and never gets this far; brain replies never come through say(): mary.reply saves them.
+    if (text && !saved) { rememberSaid(text); }
     var s = spStart(voice);
     var p = waitSess(s);
     if (mood) { setMood(mood); }
@@ -1075,17 +1079,44 @@
     return say(MSG.fallback);
   }
 
+  // --- M4a: her hello, in her own words from the same brain as her talk. Thinking while it comes. On any failure, or
+  // with no key, the scripted line (say() saves that one). saved: the server has already put it in the history.
+  // Empty text: something else started meanwhile, such as an emergency, so she says nothing.
+  function openingLine(fallback) {
+    if (!S.hasKey) { return Promise.resolve({ text: fallback, saved: false }); }
+    setPhase('thinking');
+    function done(text, saved) {
+      if (S.screen !== 'everyday' && S.phase === 'thinking') { setPhase('idle'); }
+      if (S.screen !== 'everyday' || S.phase !== 'thinking') { return { text: '', saved: false }; }
+      return { text: text, saved: saved };
+    }
+    return api('POST', '/api/mary/open', { when: timeWord() }, { ms: 9000 }).then(function (j) {
+      var text = String((j && j.text) || '').trim();
+      return text ? done(text, true) : done(fallback, false);
+    }, function (e) { log(e); return done(fallback, false); });
+  }
+  function firstLine(opts) {   // what a talk opens with: opts.say as it stands, or the brain's hello with opts.say behind it
+    return opts.brainHello ? openingLine(opts.say) : Promise.resolve({ text: opts.say, saved: false });
+  }
+  // --- end M4a ---
+
   // The one way to start talking. Call it straight from a tap (Live opens the mic and sound there).
   // opts.hello: what Live is asked to say first. Resolves true when a conversation started.
   // M4a: opts.say (with opts.mood): when she starts by herself, the words Normal and Offline say before listening;
-  // with no mic it is only said, and the typing box is not opened.
+  // with no mic it is only said, and the typing box is not opened. opts.brainHello: opts.say is a hello, so the brain
+  // makes it and opts.say is only the fallback.
   function startTalk(opts) {
     opts = opts || {};
     App.onActivity();
     if (S.convo || S.phase === 'thinking' || S.phase === 'listening') { return Promise.resolve(false); }
     var mode = nextMode(S.talkOrder, null);
     if (mode === 'live' && !liveSupported()) { mode = nextMode(S.talkOrder, 'live'); }
-    if (mode !== 'live' && S.typingOnly && opts.say) { say(opts.say, opts.mood || 'happy').catch(log); return Promise.resolve(false); }   // M4a
+    if (mode !== 'live' && S.typingOnly && opts.say) {   // M4a
+      firstLine(opts).then(function (l) {
+        if (l.text) { return say(l.text, opts.mood || 'happy', undefined, l.saved); }
+      }).catch(log);
+      return Promise.resolve(false);
+    }
     if (mode !== 'live' && S.typingOnly) { openTyping(); return Promise.resolve(false); }
     var c = { mode: mode, live: false, open: false, ending: false, paused: false, seq: 0, lastAct: Date.now(),
       heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false, misses: 0,
@@ -1100,10 +1131,19 @@
     } else {
       lockTalkVoice(c).then(function () {   // M4a: from a fresh status, so a spent voice is never tried
         if (S.convo !== c || c.ending) { return; }
-        if (opts.say) {   // M4a: her hello first, then she listens
-          say(opts.say, opts.mood || 'happy').then(function () { convoListen(c, true); },
+        if (!opts.say) { convoListen(c, true); return; }
+        firstLine(opts).then(function (l) {   // M4a: her hello first, then she listens
+          if (S.convo !== c || c.ending) {
+            if (S.phase === 'thinking') { setPhase('idle'); }
+            return;
+          }
+          if (!l.text) {                      // something else started; the emergency screen goes on with the talk itself
+            if (S.screen !== 'emergency') { convoListen(c, true); }
+            return;
+          }
+          say(l.text, opts.mood || 'happy', undefined, l.saved).then(function () { convoListen(c, true); },
             function (e) { log(e); convoListen(c, true); });
-        } else { convoListen(c, true); }
+        }, log);
       });
     }
     return Promise.resolve(true);
@@ -1392,6 +1432,11 @@
     if (!c.ending || !c.byeAudio) { return; }   // M4a: only a turn of hers that came after the goodbye was asked for
     c.byeDone = true;                       // her goodbye turn is complete: close once it has been heard
     if (!liveSpeaking()) { finishLive(c); }
+  }
+
+  // M4a: a line of hers goes into the talk history, so the brain knows she said it (say() is the one caller)
+  function rememberSaid(text) {
+    api('POST', '/api/mary/live/said', { text: String(text || '') }, { ms: 8000 }).catch(log);
   }
 
   // M4a: her finished Live turn is remembered like Normal talk's, after the resident's own line and never twice.
@@ -2714,6 +2759,7 @@
     showCaption: showCaption,                // her words; M4b replaces it with bubble letters
     nextMode: nextMode,                      // pure, for tests
     liveToolGate: liveToolGate,              // pure, for tests
+    openingLine: openingLine,                // M4a: firstrun.js, for her hello
     restLine: restLine,                      // M4a: the resting caption (firstrun.js); typing = true for Type
     isGoodbye: isGoodbye,                    // pure, for tests
     storyParts: storyParts,                  // M4a: pure, for tests

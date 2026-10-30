@@ -37,7 +37,7 @@ _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 REQUIRED_FIELDS = ("contract", "name", "version", "title", "summary", "instructions", "actions",
                    "storage", "needs", "offline", "default_on")
-OPTIONAL_FIELDS = ("screen", "sees", "settings", "slow")
+OPTIONAL_FIELDS = ("screen", "sees", "settings", "slow", "vision")  # M4a: vision
 ACTION_KEYS = {"name", "description", "inputSchema", "annotations", "offline_phrases"}
 MCP_ONLY_KEYS = {"annotations", "offline_phrases"}
 SCREEN_KEYS = {"menu_label", "menu_icon", "full_screen"}
@@ -66,7 +66,7 @@ PHRASE_MAX = 60
 STORE_VALUE_MAX = 64 * 1024
 FILE_MAX = 5_000_000
 GUARD_TIMEOUT = 2.0
-GUARD_SLOW_TIMEOUT = 8.0
+GUARD_SLOW_TIMEOUT = 18.0  # M4a: was 8; a slow skill may now wait on an 8 s look at a picture (ctx.look)
 TRIP_FAILURES = 2
 TRIP_WINDOW_S = 600
 FETCH_TIMEOUT_MAX = 8.0
@@ -331,7 +331,7 @@ def manifest_problems(manifest, folder_name):
     for key, limit in (("title", TITLE_MAX), ("summary", SUMMARY_MAX), ("instructions", INSTRUCTIONS_MAX)):
         if not _text_ok(manifest[key], limit):
             problems.append(f"{key} must be text of at most {limit} characters")
-    for key in ("storage", "default_on", "sees", "slow"):
+    for key in ("storage", "default_on", "sees", "slow", "vision"):  # M4a: vision
         if key in manifest and not _bool_ok(manifest[key]):
             problems.append(f"{key} must be true or false")
     if manifest["offline"] not in ("works", "needs_internet"):
@@ -589,7 +589,7 @@ class SkillFiles:
 
 
 class SkillContext:
-    """What one call into a skill gets: store, state, files, effect(), settings_get/put and fetch()."""
+    """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch() and look() (M4a)."""
 
     def __init__(self, host, skill):
         self._host = host
@@ -641,6 +641,17 @@ class SkillContext:
         """The only way to the internet: https GET to the card's internet_hosts. Returns {status, content_type, body}."""
         return self._host._fetch(self._skill, url, method, params, headers, max_bytes, timeout)
 
+    def look(self, image_bytes, mime, question):  # M4a
+        """Asks what a picture shows, through the host, so a skill never holds the key. Text, or "" when the card has no
+        "vision": true, the host has no vision, or anything went wrong."""
+        vision = self._host.vision
+        if vision is None or not self._skill.manifest.get("vision"):
+            return ""
+        try:
+            return str(vision(image_bytes, mime, question) or "")
+        except Exception:  # noqa: BLE001 (a look that fails is no answer, never the skill's fault)
+            return ""
+
 
 class Skill:
     """One loaded skill: its card, its code, its in-memory state and its failure record."""
@@ -686,6 +697,7 @@ class SkillHost:
         self.slow_timeout = slow_timeout
         self._clock = clock
         self._fetcher = fetcher
+        self.vision = None  # M4a: set by the app: vision(image_bytes, mime, question) -> text or ""
         self._table_ready = False
         self._log_lock = threading.Lock()
         self._settings_lock = threading.Lock()

@@ -3,6 +3,7 @@
 Only the few search words go out (nothing else the resident said), only to Wikipedia, and only free
 pictures come back. A short blocklist turns away adult or gory asks before any search. Every network
 problem becomes a kind line, never a crash. The page loads the picture from IMAGE_ROUTE.
+M4a: the picture and the search words also go to Gemini, through the host (ctx.look), so she knows what is really shown.
 """
 import html
 import json
@@ -15,15 +16,22 @@ IMAGE_ROUTE = "/api/mary/skills/pictures/image/"
 CREDIT_FIELDS = "Artist|LicenseShortName|Credit|UsageTerms"
 QUERY_MAX, TITLE_MAX, SUMMARY_MAX, ARTIST_MAX, LICENSE_MAX, VIEW_MAX = 100, 100, 400, 80, 30, 600
 IMAGE_BYTES_MAX, JSON_BYTES_MAX, IMAGE_WIDTH = 4_000_000, 1_000_000, 1600
-TIME_BUDGET_S = 7.0   # the core stops a slow skill at 8 s
+TIME_BUDGET_S = 12.0  # M4a: the core stops a slow skill at 18 s; a look begun inside this budget takes up to 8 s
 FETCH_TIMEOUT_S = 4.0
 MIN_FETCH_S = 0.8     # with less time than this left, don't start another fetch
 TRIES = 3             # pictures to try before giving up (one may be too big)
 SHOWN_MAX = 50
+LOOKS_MAX = 2         # M4a: looks per picture shown: the one that's shown, and one turned down
+LOOK_MIN_S = 4.0      # M4a: with less time than this left, don't start a look
+SEEN_MAX = 200
+RANK_LAST = 4         # M4a: a drawing, a mascot, a logo: only when nothing else exists
+MIMES = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
+ASK_SEEN = ("Does this show a real {subject}, as a photo or painting of the actual thing, not a mascot, logo, costume, "
+            "cartoon or diagram? Answer YES or NO on the first line, then describe what it shows in one plain sentence.")
 
 SAY_ASK = "What would you like to see?"
 SAY_BLOCKED = ("That's not something I'll show, but I'd love to find you something else. "
-               "How about a bird or a pretty place?")
+               "What else would you like to see?")  # M4a: she never picks a subject herself
 SAY_NOT_FOUND = "I couldn't find a picture of that. Want to try something else?"
 SAY_OFFLINE = "I need the internet to find pictures."
 SAY_FAILED = "I couldn't get a picture just now. Want to try again?"
@@ -44,8 +52,21 @@ _BLOCKED = re.compile(r"\b(?:" + "|".join([
 ]) + r")\b", re.IGNORECASE)
 # File names that are rarely photos: icons, logos, maps, flags, symbols, diagrams, signatures, arms.
 _JUNK = re.compile(r"(?<![a-z])(?:icons?|logos?|maps?|flags?|symbols?|diagrams?|signatures?|"
-                   r"coat[\s-]*of[\s-]*arms|locator|emblems?|seal[\s-]+of|charts?|graphs?)(?![a-z])", re.IGNORECASE)
+                   r"coat[\s-]*of[\s-]*arms|locator|emblems?|seal[\s-]+of|charts?|graphs?|"
+                   r"mascots?|costumes?|jerseys?|uniforms?|helmets?|stadiums?|teams?|cheerleaders?)(?![a-z])",  # M4a
+                   re.IGNORECASE)
+# M4a: pages and files about a namesake, not the thing itself: a ball club, a film or a mascot named for it
+_NAMESAKE = re.compile(r"(?<![a-z])(?:mascots?|costumes?|teams?|franchises?|athletics?|baseball|football|basketball|"
+                       r"hockey|soccer|nfl|mlb|nba|nhl|ncaa|sports?|logos?|season|film|album|song|band|novel|"
+                       r"video[\s-]*game|television|tv[\s-]+series|fictional|character|comic)(?![a-z])", re.IGNORECASE)
+_NATURAL = re.compile(r"(?<![a-z])(?:species|genus|birds?|mammals?|animals?|breeds?|plants?|trees?|flowers?|fish|"
+                      r"insects?|reptiles?|amphibians?)(?![a-z])", re.IGNORECASE)
+# M4a: narrow on purpose: even a page named exactly what they asked for loses if it's one of these
+_MASCOT = re.compile(r"(?<![a-z])(?:mascots?|costumes?|logos?)(?![a-z])", re.IGNORECASE)
+_FILLER = {"a", "an", "the", "some"}  # M4a: "the canyon" asks for the same thing as "canyon"
 _TAG = re.compile(r"<[^>]*>")
+_TAG_CUT = re.compile(r"<[a-zA-Z/!][^>]*$")  # M4a: a tag cut off by a limit, with no closing >
+_ENTITY = re.compile(r"&#?[a-zA-Z0-9]+;|&(?:#\w*|[a-z]{2,8})$")  # M4a: unknown, or cut off at the end (not "AT&T")
 _PIC = re.compile(r"pic-\d+\.(?:jpg|png|gif|webp)")
 
 
@@ -70,9 +91,15 @@ def blocked(text):
 
 
 def plain_text(value, limit):
-    """Wikipedia HTML as short plain text: no tags, no entities, single spaces."""
-    text = _TAG.sub(" ", html.unescape(_TAG.sub(" ", str(value or ""))))
-    return _cap(" ".join(text.split()), limit)
+    """Wikipedia HTML as short plain text: no tags, whole or cut off, no entities, even encoded twice, single spaces."""
+    text = _no_tags(str(value or ""))
+    for _ in range(3):  # M4a
+        text = _no_tags(html.unescape(text))
+    return _cap(" ".join(_ENTITY.sub(" ", " ".join(text.split())).split()), limit)
+
+
+def _no_tags(text):  # M4a
+    return _TAG_CUT.sub(" ", _TAG.sub(" ", text))
 
 
 def credit_text(meta, repository="shared"):
@@ -104,10 +131,35 @@ def sniff_image(data):
     return None
 
 
-def pick_pages(data):
-    """Search results in rank order with a free lead picture: no disambiguation pages, nothing blocked."""
+def _words(text):
+    return [w[:-1] if w.endswith("s") else w for w in re.findall(r"[a-z0-9]+", str(text or "").lower())]
+
+
+def _spread(name):  # M4a: "BigMascot.jpg" reads as two words, so whole-word patterns can see it
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(name or ""))
+
+
+def _rank(page, query):  # M4a: 0 is best; Wikipedia's own order decides within a rank
+    """The article named exactly what they asked for, then a living thing named for it, then the rest, then namesakes.
+    Last of all, only when nothing else exists: a drawing (.svg), or a mascot, costume or logo even under the exact name."""
+    title, image = str(page.get("title") or ""), _spread(page.get("pageimage"))
+    asked = [w for w in _words(query) if w not in _FILLER]
+    if image.lower().endswith(".svg"):
+        return RANK_LAST
+    text = f"{title} {page.get('extract') or ''}"
+    if asked and _words(title) == asked:
+        return RANK_LAST if _MASCOT.search(f"{_spread(text)} {image}") and not _MASCOT.search(query) else 0
+    if _NAMESAKE.search(f"{text} {image}") and not _NAMESAKE.search(query):
+        return 3
+    return 1 if set(asked) & set(_words(title)) and _NATURAL.search(text) else 2
+
+
+def pick_pages(data, query=""):
+    """Search results, best first, with a free lead picture: no disambiguation pages, nothing blocked. M4a: query
+    puts the real thing ahead of teams, mascots and other namesakes."""
     out = []
-    for page in sorted(_pages(data), key=lambda p: p["index"] if isinstance(p.get("index"), int) else 99):
+    order = lambda p: (_rank(p, query) if query else 0, p["index"] if isinstance(p.get("index"), int) else 99)
+    for page in sorted(_pages(data), key=order):
         thumb = page.get("thumbnail") if isinstance(page.get("thumbnail"), dict) else {}
         title, image = str(page.get("title") or ""), _norm(page.get("pageimage"))
         props = page.get("pageprops") if isinstance(page.get("pageprops"), dict) else {}
@@ -115,8 +167,11 @@ def pick_pages(data):
             continue
         if blocked(title) or blocked(image):
             continue
-        out.append({"page": title, "title": _cap(title, TITLE_MAX), "image": image, "src": str(thumb["source"]),
-                    "summary": plain_text(page.get("extract"), SUMMARY_MAX)})
+        shown = plain_text(title, TITLE_MAX)  # M4a: the title reaches her caption and her "say" too
+        if not shown:
+            continue
+        out.append({"page": title, "title": shown, "image": image, "src": str(thumb["source"]),
+                    "summary": plain_text(page.get("extract"), SUMMARY_MAX), "rank": order(page)[0]})
     return out
 
 
@@ -183,9 +238,25 @@ def _api(ctx, params, deadline):
 
 
 def _search_params(query):
-    return {"action": "query", "generator": "search", "gsrsearch": query, "gsrnamespace": 0, "gsrlimit": 5,
+    return {"action": "query", "generator": "search", "gsrsearch": query, "gsrnamespace": 0, "gsrlimit": 10,
             "prop": "pageimages|extracts|pageprops", "piprop": "thumbnail|name", "pithumbsize": IMAGE_WIDTH,
             "pilicense": "free", "exintro": 1, "explaintext": 1, "exsentences": 2, "redirects": 1}
+
+
+def _find_pages(ctx, query, deadline):  # M4a
+    """Search results with a free lead picture, best first. When none is the thing itself or a living thing named for
+    it, one more search with "species" added; never more than that."""
+    pages = pick_pages(_api(ctx, _search_params(query), deadline), query)
+    if any(p["rank"] <= 1 for p in pages):
+        return pages
+    try:
+        more = pick_pages(_api(ctx, _search_params(query + " species"), deadline), query)
+    except _NetError:
+        if pages:
+            return pages
+        raise
+    known = {p["page"] for p in pages}
+    return sorted(pages + [p for p in more if p["page"] not in known], key=lambda p: p["rank"])
 
 
 def _info_params(names, width=None):
@@ -218,6 +289,39 @@ def _credit(ctx, name, deadline):
     return credit_text(_info(page).get("extmetadata"), page.get("imagerepository", "shared"))
 
 
+def verdict(answer):  # M4a
+    """The first word's YES or NO (None when it's neither) and what follows as plain text."""
+    match = re.match(r"\W*(yes|no)\b\W*(.*)", str(answer or "").strip(), re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None, ""
+    return match.group(1).lower() == "yes", plain_text(match.group(2), SEEN_MAX)
+
+
+def _look(ctx, got, query, title, deadline):  # M4a
+    """Has Mary look at the picture: (True, sentence), (False, sentence), or (None, "") when there's no answer."""
+    if deadline - time.monotonic() < LOOK_MIN_S:
+        return None, ""
+    subject = query if _words(query) == _words(title) else f'{query} (the article "{title}")'
+    return verdict(ctx.look(got[0], MIMES.get(got[1], "image/jpeg"), ASK_SEEN.format(subject=subject)))
+
+
+def _pick_picture(ctx, pages, query, deadline):  # M4a
+    """The first candidate that loads and isn't turned down: (page, (bytes, type), seen), or None. Only a real NO turns
+    one down: with no answer the picture stands, with no seen line. Two NOs and she stops looking."""
+    looks = 0
+    for page in pages[:TRIES]:
+        got = _image(ctx, page["src"], deadline)
+        if not got:
+            continue
+        looks += 1
+        yes, seen = _look(ctx, got, query, page["title"], deadline)
+        if yes is not False:
+            return page, got, seen
+        if looks >= LOOKS_MAX:
+            return None
+    return None
+
+
 def _say_for(reason):
     return {"offline": SAY_OFFLINE, "slow": SAY_SLOW}.get(reason, SAY_FAILED)
 
@@ -244,7 +348,10 @@ def _show(ctx):
     s = ctx.state
     ctx.effect("show_screen", {})
     ctx.effect("picture", {"src": IMAGE_ROUTE + s["file"], "title": s["title"], "credit": s["credit"]})
-    return {"title": s["title"], "summary": s["summary"], "credit": s["credit"], "say": f"Here's {s['title']}."}
+    out = {"title": s["title"], "summary": s["summary"], "credit": s["credit"], "say": f"Here's {s['title']}."}
+    if s.get("seen"):  # M4a: what the picture really shows, so she talks about that
+        out["seen"] = s["seen"]
+    return out
 
 
 # ---------- actions ----------
@@ -258,21 +365,19 @@ def show_picture(ctx, what=""):
         return {"blocked": True, "say": SAY_BLOCKED}
     deadline = time.monotonic() + TIME_BUDGET_S
     try:
-        for page in pick_pages(_api(ctx, _search_params(query), deadline))[:TRIES]:
-            got = _image(ctx, page["src"], deadline)
-            if got:
-                break
-        else:
-            return {"found": False, "say": SAY_NOT_FOUND}
+        picked = _pick_picture(ctx, _find_pages(ctx, query, deadline), query, deadline)  # M4a
     except _NetError as err:
         return {"say": _say_for(err.reason)}
+    if not picked:
+        return {"found": False, "say": SAY_NOT_FOUND}
+    page, got, seen = picked
     try:
         credit = _credit(ctx, page["image"], deadline)
     except _NetError:
         credit = CREDIT_FALLBACK
     file = _store(ctx, *got)
     ctx.state.update(title=page["title"], summary=page["summary"], credit=credit, file=file, query=query,
-                     page=page["page"], shown=[page["image"]])
+                     page=page["page"], shown=[page["image"]], seen=seen)  # M4a: seen
     return _show(ctx)
 
 
@@ -282,28 +387,38 @@ def next_picture(ctx):
     if not page:
         return {"say": SAY_NO_PICTURE}
     shown = ctx.state.setdefault("shown", [])
+    line = "the only picture" if len(shown) <= 1 else "all the pictures"
+    nothing = {"title": title, "say": f"That's {line} I have of {title}."}
     deadline = time.monotonic() + TIME_BUDGET_S
+    looks = 0  # M4a
     try:
         listed = _api(ctx, {"action": "query", "titles": page, "prop": "images", "imlimit": 50, "redirects": 1},
                       deadline)
         fresh = pick_files([i.get("title") for p in _pages(listed) for i in _list(p.get("images"))], shown)[:TRIES]
         if not fresh:
-            line = "the only picture" if len(shown) <= 1 else "all the pictures"
-            return {"title": title, "say": f"That's {line} I have of {title}."}
+            return nothing
         infos = {_norm(p.get("title")): p for p in _pages(_api(ctx, _info_params(fresh, IMAGE_WIDTH), deadline))}
         for name in fresh:
             p = infos.get(name, {})
             info = _info(p)
             got = (_image(ctx, info.get("thumburl") or info.get("url"), deadline)
                    if p.get("imagerepository") == "shared" else None)  # Commons only: every file there is free
+            yes, seen = None, ""
+            if got:  # M4a: a file from the article can be anything: shown only when she sees it's the real thing
+                looks += 1
+                yes, seen = _look(ctx, got, ctx.state.get("query") or title, title, deadline)
+                if yes is None:  # no answer: not shown, and not counted as tried
+                    return nothing
             shown.append(name)
             del shown[:-SHOWN_MAX]
-            if got:
-                ctx.state.update(file=_store(ctx, *got), credit=credit_text(info.get("extmetadata"), "shared"))
+            if yes:
+                ctx.state.update(file=_store(ctx, *got), credit=credit_text(info.get("extmetadata"), "shared"), seen=seen)
                 return _show(ctx)
+            if looks >= LOOKS_MAX:
+                return nothing
     except _NetError as err:
         return {"say": _say_for(err.reason)}
-    return {"title": title, "say": SAY_FAILED}
+    return nothing if looks else {"title": title, "say": SAY_FAILED}
 
 
 def close_picture(ctx):
@@ -327,9 +442,10 @@ def on_event(ctx, event):
 
 
 def view(state):
-    """What Mary sees: the picture's title, its two-sentence summary and the credit."""
+    """What Mary sees: the picture's title, what it really shows (M4a), its two-sentence summary and the credit."""
     if not state.get("title"):
         return "No picture is up."
-    parts = [f"A picture of {state['title']} is on the screen.", state.get("summary") or "",
+    parts = [f"A picture of {state['title']} is on the screen.",
+             f"Seen: {state['seen']}" if state.get("seen") else "", state.get("summary") or "",  # M4a: seen
              f"({state['credit']})" if state.get("credit") else ""]
     return _cap(" ".join(" ".join(parts).split()), VIEW_MAX - 1)

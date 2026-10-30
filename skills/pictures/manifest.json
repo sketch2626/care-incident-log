@@ -3,18 +3,19 @@
   "name": "pictures",
   "version": "0.1.0",
   "title": "Pictures",
-  "summary": "Shows a picture from Wikipedia of something the resident asks to see, like a bird or a place, so Mary can talk about it.",
-  "instructions": "When they ask to see something (\"show me a cardinal\"), show a picture of it. Then talk about it warmly, using what's on the screen. Offer another picture of it. When they're done, put the picture away.",
+  "summary": "Shows a picture from Wikipedia of what the resident asks to see, so Mary can talk about it.",
+  "instructions": "When they name something they want to see, show it. If they don't say what, ask what they'd like to see; never pick a subject yourself. Then talk about the thing itself, the way a friend would: a fact, a memory, a question. Never tell them where to look or describe the screen. Go by the seen line, which says what the picture really shows. When they're done, put the picture away.",
   "screen": {"menu_label": "Pictures", "menu_icon": "picture", "full_screen": true},
   "sees": true,
   "slow": true,
+  "vision": true,
   "actions": [
     {
       "name": "show_picture",
-      "description": "Show a picture of something they want to see, like a bird, an animal or a place.",
+      "description": "Show a picture of the thing they named. Only call this when they have said what they want to see.",
       "inputSchema": {"type": "object",
                       "properties": {"what": {"type": "string", "maxLength": 100,
-                                              "description": "What to show, in a few plain words, like 'cardinal bird'"}},
+                                              "description": "What they asked to see, in their own words."}},
                       "required": ["what"]},
       "annotations": {"readOnlyHint": false, "destructiveHint": false}
     },

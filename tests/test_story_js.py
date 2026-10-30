@@ -399,6 +399,7 @@ var MSG = { fallback: 'FALLBACK' };
 var window = { MaryVoice: { more: function () {} } };
 var said = [], closed = 0, pumps = 0, status = null;
 function log() {}
+function rememberSaid() {}
 function spPump() { pumps++; }
 function spFinish() {}
 function setPhase() {}

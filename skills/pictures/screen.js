@@ -89,7 +89,7 @@
     bar.appendChild(bigButton('pic-back', 'Back to ' + who, goBack));
     root.appendChild(bar);
     var stage = make('div', 'pic-stage');
-    var s = make('p', 'pic-status', 'Ask ' + who + ' for a picture. Say “show me a bird.”');
+    var s = make('p', 'pic-status', 'Ask ' + who + ' for a picture of anything you like.');
     s.setAttribute('aria-live', 'polite');
     stage.appendChild(s);
     root.appendChild(stage);

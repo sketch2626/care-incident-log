@@ -829,6 +829,11 @@ function fillInfo() {
   $('#flowInfo').hidden = !state.inbox.installed;
   $('#i-andyflow_enabled').checked = s.andyflow_enabled === '1';
   updateFlowState();
+  // M4a: talk mode (Live by default) and how long she waits
+  const mode = ['live', 'normal', 'offline'].includes(s.talk_mode) ? s.talk_mode : 'live';
+  document.querySelector(`input[name="talk_mode"][value="${mode}"]`).checked = true;
+  const wait = Number(s.listen_wait) >= 3.5 ? '4' : '2.5';
+  document.querySelector(`input[name="listen_wait"][value="${wait}"]`).checked = true;
   $('#backName').textContent = s.companion === 'him' ? 'Sam' : 'Mary';
   $('#backToMary').hidden = !FROM_MARY;
   loadSkills();
@@ -935,6 +940,9 @@ $('#infoForm').addEventListener('submit', async e => {
   btn.disabled = true;
   const payload = Object.fromEntries(INFO_FIELDS.map(k => [k, $(`#i-${k}`).value.trim()]));
   payload.gemini_enabled = $('#i-gemini_enabled').checked ? '1' : '0';
+  payload.talk_mode = document.querySelector('input[name="talk_mode"]:checked').value; // M4a
+  const waitNow = Number(state.settings.listen_wait) || 2.5, waitPick = document.querySelector('input[name="listen_wait"]:checked').value;
+  if ((waitNow >= 3.5 ? '4' : '2.5') !== waitPick) payload.listen_wait = waitPick; // M4a: keep a voice-set 5 or 6 s
   if (state.inbox.installed) payload.andyflow_enabled = $('#i-andyflow_enabled').checked ? '1' : '0';
   const key = $('#i-gemini_key').value.trim();
   if (key) payload.gemini_key = key; // blank means "keep the saved key"

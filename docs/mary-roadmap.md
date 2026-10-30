@@ -160,6 +160,7 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - Mock-up boards first, then the build.
 
 ### M8. Fit and speed
+- **Two kinds of laptops (Andy, 2026-10-30):** many residents get new donated Lenovos like Andy's (Ryzen 5 7520U), and some get refurbished ones. Idea: a quick speed check on first run (Kokoro, Whisper, the wake word) that picks lighter settings by itself on a slow machine, so nobody has to tune it by hand.
 - Timings and layout at his screen size.
 - Gemini speed with his key (`tools/mary_speed.py`). Fold this into M2 if possible.
 

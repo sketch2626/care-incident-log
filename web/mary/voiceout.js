@@ -137,6 +137,11 @@
 
     if (!it.scheduled) {
       it.scheduled = true;
+      if (j.onSentenceAudio) {   // M4b: the caption plans this sentence's words on the playback clock
+        try {
+          j.onSentenceAudio(it.i, it.text, at + (ctx.outputLatency || ctx.baseLatency || 0), ctx, it.dur || null);
+        } catch (e5) { /* the caller's problem, not the voice's */ }
+      }
       if (j.onSentence) {
         var wait = Math.max(0, (at - now + (ctx.outputLatency || ctx.baseLatency || 0)) * 1000);
         j.timers.push(setTimeout(function () {
@@ -215,6 +220,11 @@
       return;
     }
     it.streamDone = true;
+    // M4b: its whole sound is here, so its real length is known (the server makes the speed, playback is 1x)
+    it.dur = Math.floor(it.bytes / (2 * it.channels)) / it.rate;
+    if (it.scheduled && j.onSentenceLength) {
+      try { j.onSentenceLength(it.i, it.dur); } catch (e) { /* the caller's problem, not the voice's */ }
+    }
     if (it.i === j.cur) advance(j);
   }
 
@@ -282,6 +292,8 @@
   // {ok:true, cut:true} after cancel(), or {ok:false, kind:'failed', at:i} when sentence i could not be made
   // (at:0 means no sound at all). opts: mode 'normal'|'offline', rate 0.6-1.4, volume 0-1,
   // onSentence(i, text) when sentence i starts coming out of the speakers.
+  // M4b: onSentenceAudio(i, text, at, ctx, dur) when sentence i's first sound is scheduled (at = seconds on
+  // ctx.currentTime, dur = its length if already known, else null); onSentenceLength(i, dur) once it is known.
   function queue(sentences, opts) {
     cancel();
     opts = opts || {};
@@ -307,6 +319,8 @@
       rate: clamp(opts.rate, 0.6, 1.4, 1),
       volume: clamp(opts.volume, 0, 1, 1),
       onSentence: typeof opts.onSentence === 'function' ? opts.onSentence : null,
+      onSentenceAudio: typeof opts.onSentenceAudio === 'function' ? opts.onSentenceAudio : null,      // M4b
+      onSentenceLength: typeof opts.onSentenceLength === 'function' ? opts.onSentenceLength : null,   // M4b
       failAt: null,
       allDone: false,
       open: !!opts.open,   // M4a: more sentences may follow with more(); end() says none are left

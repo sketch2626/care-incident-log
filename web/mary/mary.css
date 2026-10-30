@@ -35,12 +35,9 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .talk[data-state="listening"] .ring{display:block;opacity:.3}
 .talk[data-state="listening"]{background:#0f5560}
 
-.caption{max-height:182px;overflow-y:auto;overscroll-behavior:contain;
-  background:rgba(31,27,22,.9);color:#fff;font-size:36px;font-weight:600;line-height:1.3;
-  padding:18px 28px;border-radius:20px;user-select:text;-webkit-user-select:text}
-.caption.said{background:rgba(255,254,250,.94);color:#1f1b16;font-weight:500;border:3px solid #62574a}
-.urgent .caption{background:#7a1212}
-.urgent .caption.said{background:rgba(255,254,250,.94);color:#1f1b16}
+/* M4b: her captions are in captions.css; this is the polite live region they are read out from (screen readers only) */
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 
 .chip{align-self:flex-start;background:#fffefa;color:#0b4a54;border:3px solid #0f5560;border-radius:16px;
   padding:8px 20px;font-size:26px;font-weight:700;line-height:1.3}
@@ -127,7 +124,6 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
   .ask{width:100%}
 }
 @media (max-height:700px){
-  .caption{max-height:172px;font-size:34px}
   .talk{min-height:96px}
 }
 @media (prefers-reduced-motion:reduce){

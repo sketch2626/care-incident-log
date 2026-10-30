@@ -22,7 +22,8 @@ class MaryPageTests(unittest.TestCase):
         self.assertIn("/mary/face.css", html)
         self.assertIn("/mary/mary.css", html)
         self.assertIn("/mary/app.js", html)
-        for needle in ('id="talkBtn"', 'id="caption"', 'id="lightBtn"', 'id="okBtn"', 'id="infoBtn"', 'id="moreBtn"'):
+        self.assertIn("/mary/captions.js", html)   # M4b: style A captions; capLive is their polite live region
+        for needle in ('id="talkBtn"', 'id="capLive"', 'id="lightBtn"', 'id="okBtn"', 'id="infoBtn"', 'id="moreBtn"'):
             self.assertIn(needle, html)
 
     def test_app_script_and_style_load(self):

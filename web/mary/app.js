@@ -101,7 +101,8 @@
     convo: null                  // the open conversation (startTalk), or null
   };
 
-  var NULLFACE = { setMood: noop, setActivity: noop, setCompanion: noop, bounce: noop, destroy: noop };
+  var NULLFACE = { setMood: noop, setActivity: noop, setCompanion: noop, bounce: noop, destroy: noop,
+    setLoud: noop, setMenuOpen: noop, setEmergency: noop };   // M4b
   var face = NULLFACE;
 
   function makeFace(companion) {
@@ -132,6 +133,7 @@
     D.documentElement.style.background = bg;
     D.body.style.background = bg;
     $('scr').style.background = bg;
+    $('scr').setAttribute('data-companion', c === 'him' ? 'him' : 'mary');   // M4b: her caption ink (captions.css)
   }
 
   // ---------------------------------------------------------------- server calls
@@ -172,17 +174,166 @@
   }
 
   // ---------------------------------------------------------------- caption, chip, button
+  // M4b: lines that are not her voice ("You said: ...", tips) as a plain caption line (captions.js plain()).
   function setCaption(text, kind) {
-    var c = $('caption');
     text = String(text == null ? '' : text);
-    c.className = 'caption' + (kind ? ' ' + kind : '');
-    c.textContent = text;
-    c.hidden = !text;
-    c.scrollTop = c.scrollHeight;
+    CapS.plain = text;
+    capCall(function () { if (text) { cap.plain(text, kind); } else { cap.clear(); } });
   }
 
-  // M4a: her own words (Live captions, her replies, say()). M4b replaces this with bubble letters.
-  function showCaption(text) { setCaption(text); }
+  // M4a: her own words (Live captions, her replies, say()). M4b: those now show word by word as she says them
+  // (capSay in the speech paths, capLivePiece in Live, whole() on the emergency screen), so this does nothing.
+  function showCaption(text) { /* M4b */ }
+
+  // --- M4b: her words as style A captions (captions.js) on the playback clock, and the face's listening and
+  // thinking states (mockups/mary/round6/README.md, "Notes for the builder" 1-4, 6, 8) ---
+  var NULLCAP = { sentence: function () { return 0; }, setDuration: noop, retime: noop, liveAudio: noop,
+    livePiece: function () { return 0; }, whole: function () { return 0; }, cut: noop, stopped: noop, clear: noop,
+    setSide: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
+  var cap = NULLCAP;
+  // plain: the plain line showing; owner: whose words are up (a speech session or 'live');
+  // liveWhole / liveTimed / emTurn: Live on the emergency screen; liveDone: her Live turn was heard to the end
+  // liveCut: Live cut her off; her next turn's first sound starts a fresh caption (captions.js drops pieces after cut())
+  var CapS = { plain: '', owner: null, liveWhole: '', liveTimed: false, emTurn: '', liveDone: false, liveCut: false };
+  var LOUD_HOLD_MS = 500;          // the resident counts as talking until this long after their last voice
+  var SPOKE_MS = 350;              // Live: this much voice is a real turn of theirs, not a cough (speech.py HEARD_VOICE_S)
+  var LIVE_THINK_AFTER_MS = 700;   // Live: this much quiet after they spoke = their turn is over, she is thinking
+  var LIVE_THINK_MAX_MS = 8000;    // ...and back to listening if she has not answered by then
+  var LV = { loud: false, voiceAt: 0, loudSince: 0, spoke: false, thinking: false, thinkTimer: null };
+
+  function makeCaptions() {
+    try {
+      if (typeof MaryCaptions !== 'undefined') { return MaryCaptions.create($('scr'), { liveRegion: $('capLive') }); }
+    } catch (e) { log(e); }
+    return NULLCAP;
+  }
+  function capCall(fn) { try { return fn(); } catch (e) { log(e); return 0; } }
+  function announceLive(text) { try { $('capLive').textContent = String(text || '').trim(); } catch (e) { /* nothing */ } }
+  // New words from someone else (another speech session, or Live after one): never join the caption showing.
+  // (clear, not cut: cut() would also drop the Live pieces that follow until the resident talks)
+  function capOwn(owner) {
+    if (CapS.owner === owner) { return; }
+    CapS.owner = owner;
+    if (cap.showing()) { capCall(function () { cap.clear(); }); }
+  }
+  // Emergency: all of it at once, already filled (whole). `say` goes to the live region; a re-show stays quiet.
+  function quietWhole(text, o, say) {
+    capCall(function () { cap.setLiveRegion(null); cap.whole(text, o || {}); });
+    capCall(function () { cap.setLiveRegion($('capLive')); });
+    if (say) { announceLive(say); }
+  }
+  function wholeTiming(text, o) {
+    var t = { dur: estimateMs(text) / 1000 };
+    if (o && o.ctx) { t.at = o.at; t.ctx = o.ctx; }
+    return t;
+  }
+  // One sentence of hers (her picked voice, the computer's voice, caption only), at its first sound. Returns its id.
+  function capSay(s, text, o) {
+    if (!s || Sp.sess !== s || s.finished) { return 0; }
+    if (!s.sounded) { s.sounded = true; faceAct(); }   // her first sound: thinking ends, talking starts
+    CapS.plain = '';
+    capOwn(s);
+    if (S.screen !== 'emergency') { return capCall(function () { return cap.sentence(text, o); }); }
+    if (s.capPre) {                       // say() put the words up already: now the spoken word lifts with her voice
+      if (!s.capTimed) { s.capTimed = true; quietWhole(s.capPre, wholeTiming(s.capPre, o), ''); }
+      return 0;
+    }
+    var first = !s.capWhole;
+    s.capWhole = first ? text : s.capWhole + ' ' + text;
+    quietWhole(s.capWhole, first ? wholeTiming(text, o) : {}, text);
+    return 0;
+  }
+  function capStopped() { if (S.screen !== 'emergency') { capCall(function () { cap.stopped(); }); } }   // the emergency words stay up
+  function capCut() {
+    if (S.screen === 'emergency') { return; }
+    if (CapS.owner === 'live') { CapS.liveCut = true; }   // her next Live sound starts a fresh caption
+    capCall(function () { cap.cut(); });
+  }
+  // No words while listening (round 6): a plain tip goes now; her own words fade 4 s after her or when they talk.
+  function capListening() { if (CapS.plain) { CapS.plain = ''; capCall(function () { cap.clear(); }); } }
+  // Live: each piece of her words (talklive onCaptionPiece), each audio chunk, her turn heard to the end.
+  function capLivePiece(piece) {
+    CapS.plain = '';
+    if (S.screen !== 'emergency') {
+      capOwn('live');
+      capCall(function () { return cap.livePiece(piece); });
+      if (CapS.liveDone) { capCall(function () { cap.stopped(); }); }   // a late piece after her sound ended still fades
+      return;
+    }
+    if (CapS.liveWhole) { return; }       // her safety words are up already, whole
+    CapS.emTurn += piece;
+    quietWhole(CapS.emTurn.trim(), {}, '');
+  }
+  function capLiveAudio(at, dur, ctx) {
+    CapS.liveDone = false;
+    if (CapS.liveCut) { CapS.liveCut = false; if (S.screen !== 'emergency') { capCall(function () { cap.clear(); }); } }
+    if (S.screen !== 'emergency') { capCall(function () { cap.liveAudio(at, dur, ctx); }); return; }
+    if (CapS.liveWhole && !CapS.liveTimed) {
+      CapS.liveTimed = true;
+      quietWhole(CapS.liveWhole, wholeTiming(CapS.liveWhole, { at: at, ctx: ctx }), '');
+    }
+  }
+  function capLiveDone() {
+    CapS.liveDone = true;
+    if (S.screen !== 'emergency') { capCall(function () { cap.stopped(); }); return; }
+    if (CapS.emTurn.trim()) { announceLive(CapS.emTurn); }
+    CapS.emTurn = '';
+    if (CapS.liveTimed) { CapS.liveWhole = ''; }
+  }
+  function capLiveEmergency(words) {
+    CapS.liveWhole = words;
+    CapS.liveTimed = false;
+    CapS.emTurn = '';
+    CapS.owner = 'live';
+    quietWhole(words, {}, words);
+  }
+  function capLeaveEmergency() {
+    CapS.liveWhole = '';
+    CapS.liveTimed = false;
+    CapS.emTurn = '';
+    capCall(function () { cap.stopped(); });   // her last emergency words fade gently
+  }
+
+  // The face's activity follows the phase, except that thinking runs on to her first sound (round 6 note 6),
+  // and in Live the open mic shows thinking between the end of their turn and her answer (face.js: cloud at 400 ms).
+  function faceActivity() {
+    var p = S.phase, sess = (typeof Sp !== 'undefined' && Sp) ? Sp.sess : null;
+    if (p === 'speaking') { return (sess && !sess.sounded && !liveSpeaking()) ? 'thinking' : 'talking'; }
+    if (p === 'listening') { return LV.thinking ? 'thinking' : 'listening'; }
+    return p === 'thinking' ? 'thinking' : 'resting';
+  }
+  function faceAct() { try { face.setActivity(faceActivity()); } catch (e) { log(e); } }
+  // The resident is talking (a voice on the mic now): bright, fast ear waves, and her caption fades.
+  function setLoudNow(on) {
+    on = !!on;
+    if (LV.loud === on) { return; }
+    LV.loud = on;
+    if (on) { LV.loudSince = Date.now(); }
+    try { face.setLoud(on); } catch (e) { log(e); }
+    if (on && S.screen !== 'emergency') { CapS.plain = ''; capCall(function () { cap.clear(); }); }
+  }
+  function liveThinkStop() { LV.thinking = false; LV.spoke = false; clearTimeout(LV.thinkTimer); }
+  function liveThink() {
+    liveThinkStop();
+    LV.thinking = true;
+    LV.thinkTimer = setTimeout(function () { liveThinkStop(); faceAct(); }, LIVE_THINK_MAX_MS);
+    faceAct();
+  }
+  // Live: the page's own mic level (talklive onMicLevel); voice = above talklive's talking level (VOICE_LEVEL).
+  function liveMicLevel(voice) {
+    if (S.phase !== 'listening') { return; }   // she is talking: her own voice may reach the mic
+    var now = Date.now();
+    if (voice) {
+      LV.voiceAt = now;
+      if (LV.thinking) { liveThinkStop(); faceAct(); }   // they went on talking
+      setLoudNow(true);
+      if (now - LV.loudSince >= SPOKE_MS) { LV.spoke = true; }
+    } else if (LV.loud && now - LV.voiceAt > LOUD_HOLD_MS) {
+      setLoudNow(false);
+    }
+    if (LV.spoke && !LV.loud && !LV.thinking && now - LV.voiceAt >= LIVE_THINK_AFTER_MS) { liveThink(); }
+  }
+  // --- end M4b ---
 
   function showChip() {
     var c = $('chip');
@@ -218,8 +369,8 @@
 
   function setPhase(p) {
     S.phase = p;
-    var a = p === 'listening' ? 'listening' : p === 'thinking' ? 'thinking' : p === 'speaking' ? 'talking' : 'resting';
-    try { face.setActivity(a); } catch (e) { log(e); }
+    if (p !== 'listening') { setLoudNow(false); liveThinkStop(); }   // M4b
+    faceAct();   // M4b: the phase's activity, but thinking runs on to her first sound (faceActivity)
     $('scr').setAttribute('data-phase', p);
     updateTalkButton();
     if (p !== 'listening') { setRing(0); }
@@ -380,6 +531,7 @@
 
   function spCancel() {
     var s = Sp.sess;
+    var wasSaying = !!(s && !s.finished && s.sounded);   // M4b
     Sp.sess = null;
     if (s) {
       s.finished = true;
@@ -388,6 +540,7 @@
       s.timers = [];
       settle(s);
     }
+    if (wasSaying) { capCut(); }   // M4b: she was cut off: keep the words she said, fade the rest
     try { if (window.MaryVoice) { window.MaryVoice.cancel(); } } catch (e) { log(e); }   // M4a: her picked voice too
     if (V.ok) {
       try { window.speechSynthesis.cancel(); } catch (e) { /* nothing */ }
@@ -429,6 +582,7 @@
     s.finished = true;
     for (var i = 0; i < s.timers.length; i++) { clearTimeout(s.timers[i]); }
     s.timers = [];
+    if (s.sounded) { capStopped(); }   // M4b: all of it was heard: the last words finish, then fade
     if (S.phase === 'speaking' || S.phase === 'thinking') { setPhase(restPhase()); }   // M4a: Live goes back to listening
     settle(s);
   }
@@ -451,12 +605,17 @@
       var batch = s.queue.splice(0, s.queue.length);
       if (!s.started) { s.started = true; setPhase('speaking'); }
       if (!s.mvJob) {
-        var job = {}, p;
+        var job = { capIds: {} }, p;   // M4b: capIds = sentence index -> caption id
         s.mvJob = job;
         s.mvSent = batch.slice();
         s.mvEnded = false;
         try {
-          p = window.MaryVoice.queue(batch, { mode: s.voice, rate: S.rate, volume: S.volume, open: true });
+          p = window.MaryVoice.queue(batch, { mode: s.voice, rate: S.rate, volume: S.volume, open: true,
+            // M4b: each sentence's caption on the playback clock, corrected once its real length is known
+            onSentenceAudio: function (i, text, at, ctx, dur) { job.capIds[i] = capSay(s, text, { at: at, ctx: ctx, dur: dur }); },
+            onSentenceLength: function (i, dur) {
+              if (Sp.sess === s && job.capIds[i]) { capCall(function () { cap.setDuration(job.capIds[i], dur); }); }
+            } });
         } catch (e) { log(e); p = null; }
         Promise.resolve(p || { ok: false, kind: 'failed', at: 0 }).then(function (r) { mvDone(s, job, r); },
           function (e) { log(e); mvDone(s, job, { ok: false, kind: 'failed', at: 0 }); });
@@ -514,6 +673,8 @@
   function speakOne(s, text, cb) {
     var settled = false;
     var est = estimateMs(text);
+    var shown = false;   // M4b
+    function capOnce() { if (!shown) { shown = true; capSay(s, text, { dur: est / 1000 }); } }   // M4b: performance clock
 
     function done() {
       if (settled) { return; }
@@ -522,6 +683,7 @@
     }
     function captionOnly() {
       // no voice: the mouth moves for about as long as it would take to say it
+      capOnce();   // M4b
       addTimer(s, function () { if (Sp.sess === s) { done(); } }, est);
     }
 
@@ -554,8 +716,8 @@
         captionOnly();
       }
 
-      u.onstart = function () { began = true; };
-      u.onend = function () { began = true; if (!failed) { done(); } };
+      u.onstart = function () { began = true; capOnce(); };   // M4b: her first sound
+      u.onend = function () { began = true; if (!failed) { capOnce(); done(); } };   // M4b: capOnce if it never said it started
       u.onerror = function (ev) { fail(ev && ev.error ? ev.error : 'error'); };
       addTimer(s, function () { fail('timeout'); }, est * 2 + 2000);
       var wait = Math.max(0, Sp.cancelAt + 120 - Date.now());   // Chromium drops a speak() right after cancel()
@@ -592,6 +754,12 @@
     var p = waitSess(s);
     if (mood) { setMood(mood); }
     showCaption(text);   // M4a
+    if (S.screen === 'emergency') {   // M4b: the emergency words all at once, before her voice starts
+      s.capPre = text;
+      if (CapS.liveWhole !== text) { quietWhole(text, {}, text); }
+      CapS.liveWhole = '';
+      CapS.owner = s;
+    }
     var parts = splitSentences(text, true).sentences;
     for (var i = 0; i < parts.length; i++) { spAdd(s, parts[i]); }
     spEnd(s);
@@ -611,6 +779,7 @@
     var root = $('scr');
     root.setAttribute('data-screen', name);
     root.classList.toggle('urgent', name === 'emergency');
+    try { face.setEmergency(name === 'emergency'); } catch (e) { log(e); }   // M4b: the calm concerned face, steady glow
     if (screens[name] && screens[name].enter) {
       try { screens[name].enter(opts || {}, prev); } catch (e) { log(e); }
     }
@@ -631,6 +800,7 @@
     },
     leave: function () {
       clearTimeout(S.lightTimer);
+      capLeaveEmergency();   // M4b
       setTimeout(convoAfterEmergency, 0);   // M4a: the paused conversation goes on
     }
   });
@@ -679,7 +849,7 @@
       var timer = null, hard = null, fails = 0, notRec = 0;
       S.listenReason = '';
       setPhase('listening');
-      setCaption(MSG.listening);
+      capListening();   // M4b: no words while listening (round 6)
 
       function cleanup() {
         ended = true;
@@ -708,6 +878,8 @@
           fails = 0;
           l = l || {};
           setRing(l.level);
+          // M4b: the ear waves brighten while the server hears a voice now (its own voice test, held LOUD_HOLD_MS)
+          setLoudNow(Number(l.elapsed_s) - Number(l.quiet_s) > 0.05 && Number(l.quiet_s) * 1000 < LOUD_HOLD_MS);
           var elapsed = Number(l.elapsed_s) || 0;
           notRec = (l.recording === false) ? notRec + 1 : 0;
           if (l.heard_voice && Number(l.quiet_s) >= QUIET_END_S) { finish('quiet'); return; }
@@ -862,6 +1034,7 @@
       c.live = false;
       c.open = false;
       try { window.MaryLive.stop('end'); } catch (e) { log(e); }
+      if (CapS.owner === 'live') { capCut(); }   // M4b: her voice stops with the talk
       if (!Sp.sess && (S.phase === 'listening' || S.phase === 'speaking')) { setPhase('idle'); }
     }
     updateTalkButton();
@@ -912,6 +1085,12 @@
         onTurnComplete: function () { if (mine()) { liveTurnDone(c); } },
         onToolCall: function (tc) { return liveToolCall(c, tc); },
         onActivity: function () { if (mine()) { c.lastAct = Date.now(); } },
+        // M4b: her words on her playback clock, the ear waves, and thinking until her first sound
+        onCaptionPiece: function (t) { if (mine()) { capLivePiece(t); } },
+        onAudioChunk: function (at, dur, ctx) { if (mine()) { capLiveAudio(at, dur, ctx); } },
+        onAudioDone: function () { if (mine()) { capLiveDone(); } },
+        onCut: function () { if (mine()) { capCut(); } },
+        onMicLevel: function (rms, voice) { if (mine()) { liveMicLevel(voice); } },
         onEnd: function (why, detail) { if (mine()) { liveDropped(c, why, detail); } }
       });
     } catch (e) { p = Promise.reject(e); }
@@ -921,7 +1100,7 @@
       c.lastAct = Date.now();
       try { window.MaryLive.setVolume(S.volume); } catch (e) { log(e); }
       setPhase('listening');
-      setCaption(MSG.listening);
+      capListening();   // M4b: no words while listening (round 6)
       greetLive(hello);
       clearInterval(c.idleTimer);
       c.idleTimer = setInterval(function () { liveIdleCheck(c); }, 1000);
@@ -1047,6 +1226,7 @@
     c.lastAct = Date.now();
     if (S.screen !== 'emergency') { show('emergency'); }
     showCaption(words);
+    capLiveEmergency(words);   // M4b: all of it at once (whole), before her voice
     if (!greetLive(LIVE_SAFETY + words + ')')) { say(words, 'alert'); }
   }
 
@@ -1388,9 +1568,15 @@
     refreshLabels();
     $('closeBtn').hidden = !(window.pywebview && window.pywebview.api && typeof window.pywebview.api.close_window === 'function');
     $('menu').hidden = false;
+    try { face.setMenuOpen(true); } catch (e) { log(e); }   // M4b: she moves aside and looks at it
+    capCall(function () { cap.setSide(true); });            // M4b: her words keep clear of it
     try { $('menu').querySelector('button').focus(); } catch (e) { /* nothing */ }
   }
-  function closeMenu() { $('menu').hidden = true; }
+  function closeMenu() {
+    $('menu').hidden = true;
+    try { face.setMenuOpen(false); } catch (e) { log(e); }   // M4b
+    capCall(function () { cap.setSide(false); });            // M4b
+  }
 
   function openTyping() {
     closeMenu();
@@ -1582,6 +1768,7 @@
 
   async function init() {
     face = makeFace('mary');
+    cap = makeCaptions();   // M4b
     applyLook('mary');
     bind();
     setPhase('idle');
@@ -1597,7 +1784,7 @@
     // The mic check can be slow on a cold laptop: wait 3 s at most, and let a late answer update the button.
     await Promise.race([pListen, new Promise(function (r) { setTimeout(r, 3000); })]);
     pListen.then(function () {
-      if (S.typingOnly && S.phase === 'idle' && $('caption').textContent === MSG.tapToTalk) { setCaption(MSG.tapToType); }
+      if (S.typingOnly && S.phase === 'idle' && CapS.plain === MSG.tapToTalk) { setCaption(MSG.tapToType); }
     });
 
     if (!st) {

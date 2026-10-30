@@ -421,6 +421,7 @@
     set('waitTitle', 'How long ' + n + ' waits');
     set('wakeTitle', 'Listen for “Hey ' + n + '”');   // M6
     set('skillTitle', 'Things ' + n + ' can do');
+    set('memTitle', 'What ' + n + ' remembers');   // M9c
     set('chooseTitle', 'Choose ' + both);
     try { $('menu').setAttribute('aria-label', n + "'s menu"); } catch (e) { /* nothing */ }
     var backs = D.querySelectorAll('.backLbl');
@@ -1874,12 +1875,19 @@
     return null;
   }
 
+  // M9c: typed marks words typed in the box in Normal/Offline, so the server can tell them from speech
+  function talkBody(text, typed) {
+    var b = { text: text, screen: skillScreen() };   // skills hook (M13)
+    if (typed) { b.typed = true; }
+    return b;
+  }
+
   async function streamReply(text, T, ctrl) {
     var init = {
       method: 'POST',
       cache: 'no-store',
       headers: { 'X-Tracker': '1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, screen: skillScreen() })   // skills hook (M13)
+      body: JSON.stringify(talkBody(text, T.typed))   // skills hook (M13); M9c
     };
     if (ctrl) { init.signal = ctrl.signal; }
     var resp = await fetch('/api/mary/talk?stream=1', init);
@@ -1927,8 +1935,8 @@
     return null;
   }
 
-  async function plainReply(text, ctrl) {
-    return await api('POST', '/api/mary/talk', { text: text, screen: skillScreen() }, { signal: ctrl ? ctrl.signal : undefined, ms: 30000 });
+  async function plainReply(text, ctrl, typed) {   // M9c: typed
+    return await api('POST', '/api/mary/talk', talkBody(text, typed), { signal: ctrl ? ctrl.signal : undefined, ms: 30000 });
   }
 
   async function replyFailed() {
@@ -1980,7 +1988,7 @@
   }
 
   // Sends what the resident said (spoken or typed) to Mary and speaks her answer as it arrives.
-  async function talkTo(text) {
+  async function talkTo(text, typed) {   // M9c: typed = from the typing box
     text = String(text == null ? '' : text).trim();
     if (!text) { return; }
     App.onActivity();
@@ -1990,7 +1998,7 @@
     setCaption('You said: ' + text, 'said');
     setPhase('thinking');
 
-    var T = { turn: turn, streamed: '', rest: '', mood: '', sess: null, gotLine: false, gotResponse: false, dead: false };
+    var T = { turn: turn, typed: !!typed, streamed: '', rest: '', mood: '', sess: null, gotLine: false, gotResponse: false, dead: false };   // M9c: typed
     var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
     S.ctrl = ctrl;
     var timer = null;
@@ -2009,7 +2017,7 @@
       } catch (e) {
         if (!alive(T)) { throw e; }
         if (T.gotResponse || T.gotLine) { throw e; }
-        d = await Promise.race([plainReply(text, ctrl), timeoutP]);      // streaming failed before any answer came
+        d = await Promise.race([plainReply(text, ctrl, T.typed), timeoutP]);      // streaming failed before any answer came
       }
       clearTimeout(timer);
       if (turn !== S.turn) { return; }
@@ -2253,6 +2261,7 @@
     fillWake();   // M6
     fillVoices();
     fillSkills();
+    fillMemories();   // M9c
   }
   // M6: listen for her name, On or Off; one plain line when it cannot run on this computer
   function fillWake() {
@@ -2393,6 +2402,60 @@
     }, function (e) { log(e); infoLead(box, "Sorry, I couldn't get the list just now."); });
   }
 
+  // M9c: what she remembers. Memories are untrusted text: createElement and textContent only, never innerHTML.
+  var MEM_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function memDate(s) {   // "2026-10-30" read by its parts, so the timezone can't shift the day
+    var p = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')), mo = p && MEM_MONTHS[Number(p[2]) - 1];
+    return mo ? mo + ' ' + Number(p[3]) + ', ' + p[1] : '';
+  }
+  function memRow(mem, box, empty) {
+    var text = String(mem.text || '');
+    var row = D.createElement('div');
+    row.className = 'row';
+    var t = D.createElement('span');
+    t.className = 'txt';
+    var m = D.createElement('span');
+    m.textContent = text;
+    t.appendChild(m);
+    var when = memDate(mem.date);
+    if (when) { var s2 = D.createElement('span'); s2.className = 'say'; s2.textContent = when; t.appendChild(s2); }
+    var b = D.createElement('button');
+    b.type = 'button';
+    b.className = 'side';
+    b.textContent = 'Remove';
+    b.setAttribute('aria-label', 'Remove: ' + text);
+    b.addEventListener('click', function () {
+      if (b.getAttribute('aria-disabled') === 'true') { return; }   // a second tap while the first is on its way
+      b.setAttribute('aria-disabled', 'true');
+      infoNote('Removing…');
+      api('DELETE', '/api/mary/memories/' + encodeURIComponent(mem.id)).then(function () {
+        if (row.parentNode) { row.parentNode.removeChild(row); }
+        infoNote('Removed. ' + companionName(S.companion) + " won't bring that up again.");
+        if (!box.querySelector('.row')) { infoLead(box, empty); }
+      }, function (e) {
+        log(e);
+        b.removeAttribute('aria-disabled');
+        infoNote("Sorry, that didn't go through. Please try again.");
+      });
+    });
+    row.appendChild(t);
+    row.appendChild(b);
+    return row;
+  }
+  function fillMemories() {
+    var box = $('memList');
+    if (!box) { return; }
+    var empty = 'Nothing saved yet. As you talk, ' + companionName(S.companion) + ' keeps what matters here.';
+    infoLead(box, 'Getting the list…');
+    api('GET', '/api/mary/memories').then(function (r) {
+      if (M.panel !== 'infoPanel') { return; }
+      var list = (r && r.memories) || [];
+      if (!list.length) { infoLead(box, empty); return; }
+      box.textContent = '';
+      list.forEach(function (mem) { box.appendChild(memRow(mem, box, empty)); });
+    }, function (e) { log(e); infoLead(box, "Sorry, I couldn't get the list just now."); });
+  }
+
   // The menu's Talk row: start a talk, or "Stop talking" while she is in one (the same end path as before)
   function onTalkRow() {
     var c = S.convo;
@@ -2423,7 +2486,7 @@
     if (!v) { try { t.focus(); } catch (e) { /* nothing */ } return; }
     closeTyping(true);
     if (S.convo && S.convo.live && liveOn()) { liveTyped(S.convo, v); return; }   // M4a
-    talkTo(v);
+    talkTo(v, true);   // M9c
   }
 
   function adjust(kind, delta) {

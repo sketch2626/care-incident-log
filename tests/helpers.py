@@ -115,9 +115,9 @@ def reset_db():
     """Empty the scratch db and remove the fixture Andy Flow db."""
     start_server()
     with closing(sqlite3.connect(server.DB_PATH)) as conn:
-        for table in ("incidents", "settings", "inbox_seen"):
+        for table in ("incidents", "settings", "inbox_seen", "memories"):  # M9c: memories
             conn.execute(f"DELETE FROM {table}")
-        conn.execute("DELETE FROM sqlite_sequence WHERE name = 'incidents'")
+        conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('incidents', 'memories')")
         conn.commit()
     try:
         server.ANDYFLOW_DB.unlink()

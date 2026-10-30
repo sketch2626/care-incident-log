@@ -223,7 +223,8 @@ class LiveBrain(M4aCase):
     def test_memory_tools_even_with_no_skills(self):
         setup = self.token_setup(self.memory())
         names = {d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])}
-        self.assertEqual(names, {"remember_fact", "set_their_name", "tell_story", "story_more", "end_talk"})
+        self.assertEqual(names, {"remember_fact", "set_their_name", "recall", "forget_memory",  # M9c
+                                 "tell_story", "story_more", "end_talk"})
         self.assertFalse(any("__" in n for n in names))
         self.assertIn(voices.LIVE_TOOLS_NOTE, setup["systemInstruction"]["parts"][0]["text"])
 
@@ -251,7 +252,7 @@ class LiveBrain(M4aCase):
         self.assertEqual(self.call("set_their_name", {"name": "Andy"})["response"], {"ok": True})
         self.assertEqual(self.memory().name, "Andy")
         self.assertTrue(self.call("remember_fact", {"fact": "Grew up near Boone."})["response"]["ok"])
-        self.assertIn("Grew up near Boone.", self.memory().facts)
+        self.assertIn("Grew up near Boone.", [m["text"] for m in server.mary_memory().store.active()])  # M9c: in the store
         self.assertFalse(self.call("set_their_name", {"name": "honey"})["response"]["ok"])  # a pet name
         self.assertFalse(self.call("set_their_name", {"name": "  "})["response"]["ok"])
         self.assertFalse(self.call("remember_fact", {"fact": " "})["response"]["ok"])
@@ -260,7 +261,7 @@ class LiveBrain(M4aCase):
     def test_emergency_heard_refuses_memory_tools(self):
         self.assertTrue(self.call("set_their_name", {"name": "Andy"}, heard=FELL).get("emergency"))
         self.assertTrue(self.call("remember_fact", {"fact": "Likes tea."}, heard=FELL).get("emergency"))
-        self.assertEqual((self.memory().name, self.memory().facts), ("", []))
+        self.assertEqual((self.memory().name, server.mary_memory().store.count()), ("", 0))  # M9c: in the store
 
     def test_heard_remembers_their_turn_and_learns_call_me(self):
         helpers.api("POST", "/api/mary/heard", {"text": "My name is Andrew, but call me Andy."})

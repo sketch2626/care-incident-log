@@ -74,7 +74,15 @@ Put this app on every eligible resident's laptop, starting with one North Caroli
        - **M9a:** character sheets approved (`docs/characters/`).
        - **M9b:** done (39fd97c). Mary and Sam each have their own brain text plus live facts about their app; 349 tests pass. Not yet tried with his real key.
        - **M13 skills core:** merged into `main` (28c8fe0), built on the second account. 407 tests pass. The first skill is `voice_comfort` (slower, faster, quieter, louder, switch to Sam, by voice and offline). How-to: `docs/how-to-make-a-skill.md`. **Still open:** (1) the one-line Live hook in `voices.py` `live_token()` (`server.mary_live_skill_setup()`) lands with M4; (2) ~~JS syntax~~ checked with Node on 2026-10-30: every script passes, and 407 tests pass with no skips; (3) remove `.worktrees/M13` and branch `other/M13` once its terminal tab is closed.
-       - **Next after those:** M3 boards (here), then M4 and M5 (tricky, so second account), M12 pictures as a skill, and M7 games as skills.
+       - **2026-10-30:**
+         - **Andy's second try:** the new brain is great (her NC story "nailed it"), and "slow down"/"speed up" work. She cut him off mid-sentence, so `QUIET_END_S` went from 1.4 to 2.5 s (779728c).
+         - **M12 pictures skill:** merged (6962a23), 428 tests pass. Not yet seen in a real window or against live Wikipedia. `.worktrees/M12` stays until its terminal tab closes.
+         - **M3 boards** (`mockups/mary/round6/`, canvas https://claude.ai/artifact/Mh4CpUMru2YGNSEycrJnCZ):
+           - Approved: caption style A, the emergency screen, and the menu (one Menu button, top right).
+           - Being revised: listening = sound-wave arcs off both "ears", with no "I'm listening" pill; thinking = bubbles rising into a thought cloud over her head.
+         - **M4a, the good voice** (`docs/handoff/M4a.md`): M5 hands-free is folded in. It waits on Andy's go. M4b, the bubble captions, comes after the boards.
+         - **M6 wake word:** Stage 1 is in progress on the second account (Vosk gate plus Whisper confirm).
+       - **Next after those:** M4a (second account), M4b captions, then M7 games as skills.
     2. **Docs:** `docs/companion-plan.md` gets the build status with commit ids and Sam's name. Also bundle `mary/instructions.md` in `packaging/build.py` when the installer is rebuilt (Next step 5).
 
 ## Next steps

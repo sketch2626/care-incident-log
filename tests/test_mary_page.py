@@ -23,8 +23,17 @@ class MaryPageTests(unittest.TestCase):
         self.assertIn("/mary/mary.css", html)
         self.assertIn("/mary/app.js", html)
         self.assertIn("/mary/captions.js", html)   # M4b: style A captions; capLive is their polite live region
-        for needle in ('id="talkBtn"', 'id="capLive"', 'id="lightBtn"', 'id="okBtn"', 'id="infoBtn"', 'id="moreBtn"'):
+        # M4b: the one Menu button (round 6 boards); Talk is a menu row, and there is no big Talk button any more
+        for needle in ('id="menuBtn"', 'id="menu"', 'id="miTalk"', 'id="miCan"', 'id="miInfo"', 'id="miChoose"',
+                       'id="miGames"', 'id="closeBtn"', 'id="canPanel"', 'id="infoPanel"', 'id="choosePanel"',
+                       'id="capLive"', 'id="lightBtn"', 'id="okBtn"', 'id="infoBtn"', 'id="typing"'):
             self.assertIn(needle, html)
+        for gone in ('id="talkBtn"', 'id="moreBtn"', 'data-act="slower"', 'data-act="louder"'):
+            self.assertNotIn(gone, html)
+        self.assertIn('role="menu"', html)
+        self.assertEqual(html.count('role="menuitem"'), 6)
+        self.assertIn('aria-disabled="true" data-act="games"', html)
+        self.assertEqual(html.count('role="dialog"'), 3)
 
     def test_app_script_and_style_load(self):
         js, _ = self.get("/mary/app.js")
@@ -47,19 +56,26 @@ class MaryPageTests(unittest.TestCase):
         self.assertIn("/api/power", js)
         self.assertIn("wakeLock", js)
 
-    def test_more_button_stays_on_first_run_screens_and_menu_keeps_a_way_out(self):
-        # first run has no other way out of her full-screen window, so More must show on choose and hello,
-        # and the menu there must keep Close and Done while hiding the items that would derail the first run
+    def test_menu_button_stays_on_first_run_screens_and_menu_keeps_a_way_out(self):
+        # first run has no other way out of her full-screen window, so the Menu button must show on choose and hello,
+        # and the menu there must keep Close Mary while hiding the items that would derail the first run
         css, _ = self.get("/mary/mary.css")
         html, _ = self.get("/mary.html")
-        self.assertNotRegex(css, r'\[data-screen="(choose|hello)"\]\s*\.more')
-        rule = re.search(r'\[data-screen="choose"\] \.menu \.panel > ([^,{]+),\s*\[data-screen="hello"\] \.menu \.panel > ([^{]+)\{display:none\}', css)
+        self.assertNotRegex(css, r'\[data-screen="(choose|hello)"\]\s*\.menu-btn')
+        rule = re.search(r'\[data-screen="choose"\] \.menu > ([^,{]+),\s*\[data-screen="hello"\] \.menu > ([^{]+)\{display:none\}', css)
         self.assertIsNotNone(rule, "first-run menu rule is missing")
         for selector in rule.groups():
             self.assertIn(":not(#closeBtn)", selector)
-            self.assertIn(':not([data-act="done"])', selector)
         self.assertIn('id="closeBtn"', html)
-        self.assertIn('data-act="done"', html)
+
+    def test_menu_closes_on_idle_and_skills_list_into_things_she_can_do(self):
+        js, _ = self.get("/mary/app.js")
+        self.assertRegex(js, r"var MENU_IDLE_MS = 20000;")
+        self.assertIn("'Stop talking'", js)
+        self.assertIn("'Hide menu'", js)
+        skills, _ = self.get("/mary/skills.js")
+        self.assertIn("addThing", skills)
+        self.assertNotIn("typeMenuBtn", skills)
 
     def test_listening_guards_double_tap_and_slow_first_stop(self):
         # a tremor double tap must not end the recording at once, and the first stop (which waits for the

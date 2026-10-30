@@ -128,18 +128,15 @@
     return chain.then(function () { return { functionResponses: out }; });
   }
 
+  // M4b: a switched-on skill with a screen is listed in "Things Mary can do" (the old menu buttons are gone)
   function addMenuButton(s) {
-    var menu = D.getElementById('menu');
-    var before = D.getElementById('typeMenuBtn');
-    if (!menu || !before || !before.parentNode) { return; }
-    var b = D.createElement('button');
-    b.type = 'button';
-    b.className = 'btn';
-    b.setAttribute('data-act', 'skill');
-    b.setAttribute('data-skill', s.name);
-    b.textContent = s.menu.label;
-    b.addEventListener('click', function () { if (app()) { app().show(s.name); } });
-    before.parentNode.insertBefore(b, before);
+    if (!app() || typeof app().addThing !== 'function') { return; }
+    app().addThing({
+      name: s.name,
+      label: s.menu.label,
+      say: s.menu.say || '',
+      open: function () { if (app()) { app().show(s.name); } }
+    });
   }
 
   function addFile(tag, attrs) {

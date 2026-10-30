@@ -1,5 +1,5 @@
 /* The pictures skill's screen: the picture fills the window on a dark warm backdrop, with its title over the bottom
-   edge and the credit under it. Mary's face scoots into the top-left corner; the More button (top right) and the
+   edge and the credit under it. Mary's face scoots into the top-left corner; the Menu button (top right) and the
    dock (Talk button and caption, bottom) stay above this box and are kept clear.
    Rules for residents 65-95: text 20px or more (title 36px, credit 18px), buttons 64px or more, high contrast. */
 .skill-screen[data-skill="pictures"]{padding:0!important;overflow:hidden!important;background:#1d1712;color:#fff8ec}
@@ -7,9 +7,9 @@
 .skill-screen[data-skill="pictures"] .skill-body{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;
   padding:16px 24px 144px}   /* 144px at the bottom: room for the Talk button */
 
-/* buttons: right of Mary's small face, left of More */
+/* buttons: right of Mary's small face, left of Menu */
 .skill-screen[data-skill="pictures"] .pic-bar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;flex:none;
-  min-height:88px;padding-left:calc(22vmin + 24px);padding-right:150px}
+  min-height:88px;padding-left:calc(22vmin + 24px);padding-right:300px}
 .skill-screen[data-skill="pictures"] .pic-bar .btn{min-height:88px;font-size:32px;border-color:#fff8ec}
 .skill-screen[data-skill="pictures"] .pic-bar .btn.yes{border-color:#0f5560}
 .skill-screen[data-skill="pictures"] .pic-bar .btn:disabled{opacity:.6;cursor:default;transform:none}

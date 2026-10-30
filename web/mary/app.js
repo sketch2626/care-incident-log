@@ -348,23 +348,24 @@
 
   function setRing(level) {
     var r = $('ring');
+    if (!r) { return; }   // M4b: the big Talk button (and its ring) is gone
     level = Math.max(0, Math.min(1, Number(level) || 0));
     r.style.opacity = String(0.3 + level * 0.7);
     r.style.transform = reduced() ? '' : 'scale(' + (1 + level * 0.1).toFixed(3) + ')';
   }
 
+  // M4b: the menu's Talk row stands in for the big Talk button (gone): "Stop talking" while she is in a talk
   function updateTalkButton() {
-    var b = $('talkBtn'), lbl = $('talkLbl'), n = companionName(S.companion);
-    var ic = 'mic', text = 'Talk to ' + n, disabled = false;
-    if (S.phase === 'listening') { ic = 'done'; text = "I'm done"; }
-    else if (S.phase === 'thinking') { ic = 'wait'; text = 'One moment…'; disabled = true; }
-    else if (S.convo && !S.convo.paused) { ic = 'done'; text = "I'm done"; }   // M4a: a tap ends the conversation
-    else if (S.typingOnly && !liveFirst()) { ic = 'type'; text = 'Type to ' + n; }   // M4a: Live has its own mic
-    b.setAttribute('data-state', S.phase);
-    b.setAttribute('data-ic', ic);
-    b.setAttribute('aria-busy', S.phase === 'thinking' ? 'true' : 'false');
+    var b = $('miTalk'), lbl = $('miTalkLbl');
+    if (!b || !lbl) { return; }
+    var n = companionName(S.companion), text = 'Talk to ' + n, busy = false;
+    if (S.convo) { text = 'Stop talking'; }
+    else if (S.phase === 'listening') { text = "I'm done"; }
+    else if (S.phase === 'thinking') { text = 'One moment…'; busy = true; }
+    else if (S.typingOnly && !liveFirst()) { text = 'Type to ' + n; }   // M4a: Live has its own mic
     lbl.textContent = text;
-    b.disabled = disabled;
+    if (busy) { b.setAttribute('aria-disabled', 'true'); } else { b.removeAttribute('aria-disabled'); }
+    b.setAttribute('aria-busy', busy ? 'true' : 'false');
   }
 
   function setPhase(p) {
@@ -376,11 +377,23 @@
     if (p !== 'listening') { setRing(0); }
   }
 
-  function refreshLabels() {
+  function refreshLabels() {   // M4b: the menu and panel words follow the companion's name
     var n = companionName(S.companion);
-    var other = companionName(S.companion === 'mary' ? 'him' : 'mary');
-    $('switchBtn').textContent = 'Switch to ' + other;
-    $('typeMenuBtn').textContent = 'Type to ' + n;
+    var both = companionName('mary') + ' or ' + companionName('him');
+    function set(id, t) { var el = $(id); if (el) { el.textContent = t; } }
+    set('miCanLbl', 'Things ' + n + ' can do');
+    set('miChooseLbl', 'Choose ' + both);
+    set('closeLbl', 'Close ' + n);
+    set('canTitle', 'Things ' + n + ' can do');
+    set('canLead', 'You can say these to ' + n + ', or tap one.');
+    set('modeTitle', 'How ' + n + ' talks');
+    set('voiceTitle', n + "'s voice");
+    set('waitTitle', 'How long ' + n + ' waits');
+    set('skillTitle', 'Things ' + n + ' can do');
+    set('chooseTitle', 'Choose ' + both);
+    try { $('menu').setAttribute('aria-label', n + "'s menu"); } catch (e) { /* nothing */ }
+    var backs = D.querySelectorAll('.backLbl');
+    for (var i = 0; i < backs.length; i++) { backs[i].textContent = 'Back to ' + n; }
     $('typeLabel').textContent = 'Type what you would like to say to ' + n;
     D.title = n;
     updateTalkButton();
@@ -790,6 +803,7 @@
   registerScreen('emergency', {
     enter: function () {
       S.emSeq++;
+      closePanel(false); closeMenu(false);   // M4b: nothing covers the answers
       S.lightPressed = false;
       S.helpAsked = false;
       clearTimeout(S.lightTimer);
@@ -1183,7 +1197,7 @@
     if (S.convo !== c || !c.live) { clearInterval(c.idleTimer); return; }
     if (c.ending || !c.open) { return; }
     var now = Date.now();
-    if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || !$('menu').hidden) { c.lastAct = now; return; }
+    if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || uiOpen()) { c.lastAct = now; return; }   // M4b: or a panel
     if (now - c.lastAct >= CONVO_IDLE_S * 1000) { endConvo(c, 'idle'); }
   }
 
@@ -1314,7 +1328,7 @@
   function convoNext(c) {
     if (S.convo !== c || c.ending || c.live) { return; }
     if (S.screen === 'emergency') { c.paused = true; setPhase('idle'); updateTalkButton(); return; }   // no auto-listen there
-    if ((S.screen !== 'everyday' && !skillScreen()) || !$('menu').hidden || !$('typing').hidden) { closeConvo(c); return; }
+    if ((S.screen !== 'everyday' && !skillScreen()) || uiOpen() || !$('typing').hidden) { closeConvo(c); return; }   // M4b: or a panel
     if (S.phase !== 'idle' || Sp.sess) { setTimeout(function () { convoNext(c); }, 300); return; }
     convoListen(c);
   }
@@ -1563,19 +1577,364 @@
     }
   }
 
-  // ---------------------------------------------------------------- menu and typing
+  // ---------------------------------------------------------------- M4b: the one Menu button, its menu and three panels
+  var MENU_IDLE_MS = 20000;      // M4b: the menu closes after 20 s with nothing done in it
+  var PANEL_IDLE_MS = 120000;    // M4b: a panel left alone goes back to her face after 2 minutes
+  var PANELS = ['canPanel', 'infoPanel', 'choosePanel'];
+  var M = { timer: null, panel: null, extra: [] };   // M4b: extra = the skills' rows for "Things Mary can do"
+
+  function hasWindow() {
+    return !!(window.pywebview && window.pywebview.api && typeof window.pywebview.api.close_window === 'function');
+  }
+  function menuOpen() { return !$('menu').hidden; }
+  function uiOpen() { return menuOpen() || !!M.panel; }   // M4b: the menu or a panel is over her face
+  function armIdle(ms) {
+    clearTimeout(M.timer);
+    M.timer = setTimeout(function () { if (M.panel) { closePanel(false); } else if (menuOpen()) { closeMenu(false); } }, ms);
+  }
+  function menuItems() {
+    return [].filter.call($('menu').querySelectorAll('.mi'), function (b) { return !b.hidden && b.offsetParent !== null; });
+  }
+
   function openMenu() {
+    if (M.panel) { closePanel(false); }
     refreshLabels();
-    $('closeBtn').hidden = !(window.pywebview && window.pywebview.api && typeof window.pywebview.api.close_window === 'function');
+    $('closeBtn').hidden = !hasWindow();
+    if ((S.screen === 'choose' || S.screen === 'hello') && !hasWindow()) { return; }   // first run in a browser: nothing to offer
     $('menu').hidden = false;
+    var b = $('menuBtn');
+    b.classList.add('open');
+    b.setAttribute('aria-expanded', 'true');
+    $('menuBtnLbl').textContent = 'Hide menu';
     try { face.setMenuOpen(true); } catch (e) { log(e); }   // M4b: she moves aside and looks at it
     capCall(function () { cap.setSide(true); });            // M4b: her words keep clear of it
-    try { $('menu').querySelector('button').focus(); } catch (e) { /* nothing */ }
+    armIdle(MENU_IDLE_MS);
+    var items = menuItems();
+    try { if (items.length) { items[0].focus(); } } catch (e) { /* nothing */ }
   }
-  function closeMenu() {
+  function closeMenu(refocus) {
+    var was = menuOpen();
     $('menu').hidden = true;
+    if (!M.panel) { clearTimeout(M.timer); }
+    var b = $('menuBtn');
+    b.classList.remove('open');
+    b.setAttribute('aria-expanded', 'false');
+    $('menuBtnLbl').textContent = 'Menu';
     try { face.setMenuOpen(false); } catch (e) { log(e); }   // M4b
     capCall(function () { cap.setSide(false); });            // M4b
+    if (refocus && was) { try { b.focus(); } catch (e) { /* nothing */ } }
+  }
+  function onMenuKey(ev) {   // M4b: arrow keys move through the menu
+    var items = menuItems(), i = items.indexOf(D.activeElement), j = -1;
+    if (ev.key === 'ArrowDown') { j = (i + 1) % items.length; }
+    else if (ev.key === 'ArrowUp') { j = (i - 1 + items.length) % items.length; }
+    else if (ev.key === 'Home') { j = 0; }
+    else if (ev.key === 'End') { j = items.length - 1; }
+    if (j < 0 || !items.length) { return; }
+    ev.preventDefault();
+    try { items[j].focus(); } catch (e) { /* nothing */ }
+  }
+  // Any tap or key while the menu or a panel is open keeps it open; a tap on her face (off the menu) closes the menu.
+  function onUiTouch(ev) {
+    if (!uiOpen()) { return; }
+    armIdle(M.panel ? PANEL_IDLE_MS : MENU_IDLE_MS);
+    if (ev.type !== 'pointerdown' || M.panel) { return; }
+    var t = ev.target;
+    if (t && t.closest && (t.closest('#menu') || t.closest('#menuBtn'))) { return; }
+    closeMenu(false);
+  }
+  function trapTab(ev) {   // M4b: Tab stays inside an open panel (it is a dialog)
+    var card = $(M.panel).querySelector('.sheetcard');
+    var f = [].filter.call(card.querySelectorAll('button, a[href]'), function (el) { return el.offsetParent !== null; });
+    if (!f.length) { return; }
+    var first = f[0], last = f[f.length - 1];
+    if (ev.shiftKey && (D.activeElement === first || !card.contains(D.activeElement))) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && (D.activeElement === last || !card.contains(D.activeElement))) { ev.preventDefault(); first.focus(); }
+  }
+
+  function openPanel(id) {
+    if (M.panel && M.panel !== id) { $(M.panel).hidden = true; }
+    M.panel = id;
+    refreshLabels();
+    if (id === 'canPanel') { fillCan(); } else if (id === 'infoPanel') { fillInfo(); } else { fillChoose(); }
+    $(id).hidden = false;
+    $(id).scrollTop = 0;
+    armIdle(PANEL_IDLE_MS);
+    setTimeout(function () { try { $(id).querySelector('.back').focus(); } catch (e) { /* nothing */ } }, 30);
+  }
+  function closePanel(refocus) {
+    if (!M.panel) { return; }
+    $(M.panel).hidden = true;
+    M.panel = null;
+    clearTimeout(M.timer);
+    stopSample();
+    if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }
+  }
+
+  // A big row: its words, an optional second line, and what a tap does.
+  function rowBtn(text, sub, onTap, attrs) {
+    var b = D.createElement('button');
+    b.type = 'button';
+    b.className = 'row';
+    var t = D.createElement('span');
+    t.className = 'txt';
+    var m = D.createElement('span');
+    m.textContent = text;
+    t.appendChild(m);
+    if (sub) { var s2 = D.createElement('span'); s2.className = 'say'; s2.textContent = sub; t.appendChild(s2); }
+    b.appendChild(t);
+    if (attrs) { for (var k in attrs) { if (attrs.hasOwnProperty(k)) { b.setAttribute(k, attrs[k]); } } }
+    if (onTap) { b.addEventListener('click', onTap); }
+    return b;
+  }
+  function sayLine(words) { return 'Say: “' + words + '”'; }
+
+  // --- Things Mary can do: things to say; a tap does the same thing
+  var CAN = [
+    { act: 'slower', text: 'Slow down', say: 'slow down' },
+    { act: 'faster', text: 'Speed up', say: 'speed up' },
+    { act: 'quieter', text: 'Talk quieter', say: 'quieter' },
+    { act: 'louder', text: 'Talk louder', say: 'speak up' },
+    { act: 'more_time', text: 'Give me more time', say: 'give me more time' },
+    { act: 'type', text: 'Type to {n}' },
+    { act: 'notes', text: 'My notes' }
+  ];
+  function fillCan() {
+    var box = $('canList'), n = companionName(S.companion);
+    box.textContent = '';
+    CAN.forEach(function (it) {
+      box.appendChild(rowBtn(it.text.replace('{n}', n), it.say ? sayLine(it.say) : '', function () { closePanel(true); doThing(it.act); }));
+    });
+    M.extra.forEach(function (x) {   // the switched-on skills that have a screen (skills.js)
+      box.appendChild(rowBtn(x.label, x.say ? sayLine(x.say) : '', function () {
+        closePanel(true);
+        try { x.open(); } catch (e) { log(e); }
+      }));
+    });
+  }
+  function addThing(x) {   // M4b: skills.js lists a skill's screen here (the old menu buttons are gone)
+    if (!x || !x.name || !x.label || typeof x.open !== 'function') { return; }
+    M.extra = M.extra.filter(function (o) { return o.name !== x.name; });
+    M.extra.push({ name: String(x.name), label: String(x.label), say: x.say ? String(x.say) : '', open: x.open });
+    if (M.panel === 'canPanel') { fillCan(); }
+  }
+  function doThing(act) {
+    // --- skills hook (M13) --- voice_comfort does these; the old code is the fallback
+    if (act === 'slower') { skillMenu('slower').then(function (ok) { if (!ok) { adjust('rate', -0.08); } }); }
+    else if (act === 'faster') { skillMenu('faster').then(function (ok) { if (!ok) { adjust('rate', 0.08); } }); }
+    else if (act === 'quieter') { skillMenu('quieter').then(function (ok) { if (!ok) { adjust('volume', -0.1); } }); }
+    else if (act === 'louder') { skillMenu('louder').then(function (ok) { if (!ok) { adjust('volume', 0.1); } }); }
+    else if (act === 'more_time') {
+      skillMenu('more_time').then(function (ok) {
+        if (!ok) {
+          newTurn();
+          api('PUT', '/api/settings', { listen_wait: 4 }).then(function () { return refreshStatus(); }).catch(noop);
+          say("I'll wait longer for you.");
+          return;
+        }
+        refreshStatus().catch(noop);   // the longer wait applies from the next turn
+      });
+    }
+    else if (act === 'switch') { skillMenu('switch_companion', 'happy').then(function (ok) { if (!ok) { switchCompanion(); } }); }
+    // --- end skills hook ---
+    else if (act === 'type') { openTyping(); }
+    else if (act === 'notes') { window.location.href = '/?from=mary'; }
+  }
+
+  // --- Choose Mary or Sam
+  function fillChoose() {
+    var box = $('chooseList');
+    box.textContent = '';
+    box.setAttribute('role', 'radiogroup');
+    box.setAttribute('aria-labelledby', 'chooseTitle');
+    ['mary', 'him'].forEach(function (c) {
+      var now = c === S.companion;
+      box.appendChild(rowBtn(companionName(c), now ? 'Talking with you now' : '', function () {
+        closePanel(true);
+        if (c !== S.companion) { doThing('switch'); }
+      }, { role: 'radio', 'aria-checked': now ? 'true' : 'false' }));
+    });
+  }
+
+  // --- My info: how she talks, her voice, how long she waits, skills on or off, and a link to the rest
+  function infoNote(t) { $('infoSaved').textContent = t || ''; }
+  function savedNote() { return 'Saved. ' + companionName(S.companion) + ' will use this the next time you talk.'; }
+  function saveSetting(body, after) {
+    infoNote('Saving…');
+    return api('PUT', '/api/settings', body).then(function () {
+      return refreshStatus().catch(noop);   // the new setting applies from the next talk
+    }).then(function () {
+      infoNote(savedNote());
+      if (after) { after(); }
+    }, function (e) {
+      log(e);
+      infoNote("Sorry, that didn't save. Please try again.");
+    });
+  }
+  function radioRows(box, items, isOn, onPick) {
+    box.textContent = '';
+    items.forEach(function (it) {
+      var attrs = { role: 'radio', 'aria-checked': isOn(it) ? 'true' : 'false' };
+      var b = rowBtn(it.t, it.h, null, attrs);
+      b.addEventListener('click', function () {
+        if (b.getAttribute('aria-checked') === 'true') { return; }
+        [].forEach.call(box.querySelectorAll('[role="radio"]'), function (o) { o.setAttribute('aria-checked', o === b ? 'true' : 'false'); });
+        onPick(it);
+      });
+      box.appendChild(b);
+    });
+  }
+  function fillInfo() {
+    infoNote('');
+    var him = S.companion === 'him', Her = him ? 'His' : 'Her', she = him ? 'he' : 'she';
+    radioRows($('modeList'), [
+      { v: 'live', t: 'Live (best)', h: Her + ' natural voice. Talk back and forth, and cut in any time. Needs the internet.' },
+      { v: 'normal', t: 'Normal', h: 'This computer turns your words into text, then ' + she + ' answers in ' + Her.toLowerCase() + ' voice. Needs the internet.' },
+      { v: 'offline', t: 'Offline', h: Her + ' voice is made on this computer.' + (S.offlineReady === false ? ' Not set up on this computer yet.' : '') }
+    ], function (it) { return (S.talkMode || 'live') === it.v; }, function (it) {
+      saveSetting({ talk_mode: it.v }, fillVoices);   // the voice list follows the talk mode
+    });
+    radioRows($('waitList'), [
+      { v: 2.5, t: 'Usual', h: 'About 2 and a half seconds of quiet.' },
+      { v: 4, t: 'More time', h: 'About 4 seconds. You can also say “give me more time”.' }
+    ], function (it) { return (QUIET_END_S >= 3.5) === (it.v >= 3.5); }, function (it) {
+      saveSetting({ listen_wait: it.v });
+    });
+    fillVoices();
+    fillSkills();
+  }
+  function infoLead(box, t) {
+    box.textContent = '';
+    var p = D.createElement('p');
+    p.className = 'lead';
+    p.textContent = t;
+    box.appendChild(p);
+  }
+  function fillVoices() {
+    var box = $('voiceList'), c = S.companion;
+    infoLead(box, 'Getting the voices…');
+    api('GET', '/api/mary/voices').then(function (v) {
+      if (M.panel !== 'infoPanel') { return; }
+      var offline = S.talkMode === 'offline', kind = offline ? 'kokoro' : 'gemini';
+      var gender = c === 'him' ? 'male' : 'female';
+      var chosen = String((v && v.chosen && v.chosen[c]) || ''), parts = chosen.split(':');
+      var chosenKind = parts[0] || '', chosenName = parts[1] || '';
+      var mine = chosenKind === 'kokoro' ? offline : !offline && !!chosenName;   // a pick for this kind of voice
+      var list = ((v && v.candidates) || []).filter(function (x) { return x.kind === kind && x.gender === gender; });
+      if (!list.length || (offline && !list.some(function (x) { return x.ready; }))) {
+        infoLead(box, 'The offline voices are not set up on this computer yet.');
+        return;
+      }
+      box.textContent = '';
+      list.forEach(function (x, i) {
+        var on = mine ? x.voice === chosenName : i === 0;   // nothing picked: the first one is the one in use
+        var row = D.createElement('div');
+        row.className = 'row';
+        var pick = rowBtn(x.about || x.voice, '', null, { role: 'radio', 'aria-checked': on ? 'true' : 'false' });
+        pick.className = 'main';
+        if (!x.ready) { pick.setAttribute('aria-disabled', 'true'); }
+        pick.addEventListener('click', function () {
+          if (pick.getAttribute('aria-disabled') === 'true' || pick.getAttribute('aria-checked') === 'true') { return; }
+          [].forEach.call(box.querySelectorAll('[role="radio"]'), function (o) { o.setAttribute('aria-checked', o === pick ? 'true' : 'false'); });
+          var body = {};
+          body[c === 'him' ? 'voice_sam' : 'voice_mary'] = x.id;
+          saveSetting(body);
+        });
+        var hear = D.createElement('button');
+        hear.type = 'button';
+        hear.className = 'side';
+        hear.textContent = 'Hear it';
+        hear.setAttribute('aria-label', 'Hear the ' + (x.about || x.voice) + ' voice');
+        hear.addEventListener('click', function () { playSample(x.id, hear); });
+        row.appendChild(pick);
+        if (x.ready) { row.appendChild(hear); }
+        box.appendChild(row);
+      });
+    }, function (e) { log(e); infoLead(box, "Sorry, I couldn't get the voices just now."); });
+  }
+  var SMP = { audio: null, url: '' };
+  function stopSample() {
+    if (SMP.audio) { try { SMP.audio.pause(); } catch (e) { /* nothing */ } SMP.audio = null; }
+    if (SMP.url) { try { URL.revokeObjectURL(SMP.url); } catch (e) { /* nothing */ } SMP.url = ''; }
+  }
+  function playSample(id, btn) {
+    if (btn.getAttribute('aria-disabled') === 'true') { return; }
+    stopSample();
+    btn.textContent = 'Getting it…';
+    btn.setAttribute('aria-disabled', 'true');
+    function fin() { btn.textContent = 'Hear it'; btn.removeAttribute('aria-disabled'); }
+    fetch('/api/mary/voices/sample', { method: 'POST', cache: 'no-store',
+      headers: { 'X-Tracker': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) })
+      .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.blob(); })
+      .then(function (blob) {
+        if (M.panel !== 'infoPanel') { return; }
+        SMP.url = URL.createObjectURL(blob);
+        var a = new Audio(SMP.url);
+        a.volume = Math.max(0, Math.min(1, Number(S.volume) || 1));
+        SMP.audio = a;
+        a.addEventListener('ended', function () { if (SMP.audio === a) { stopSample(); } });
+        return a.play();
+      })
+      .then(fin, function (e) { log(e); fin(); infoNote("Sorry, I couldn't play that voice just now."); });
+  }
+  function fillSkills() {
+    var box = $('skillList');
+    infoLead(box, 'Getting the list…');
+    api('GET', '/api/mary/skills').then(function (r) {
+      if (M.panel !== 'infoPanel') { return; }
+      var list = (r && r.skills) || [];
+      if (!list.length) { infoLead(box, 'Nothing here yet.'); return; }
+      box.textContent = '';
+      list.forEach(function (sk) {
+        var row = D.createElement('div');
+        row.className = 'row';
+        var t = D.createElement('span');
+        t.className = 'txt';
+        var m = D.createElement('span');
+        m.textContent = sk.title || sk.name;
+        t.appendChild(m);
+        if (sk.summary) { var s2 = D.createElement('span'); s2.className = 'say'; s2.textContent = sk.summary; t.appendChild(s2); }
+        var b = D.createElement('button');
+        b.type = 'button';
+        b.className = 'side';
+        if (sk.locked) {
+          b.textContent = 'Set by your helper';
+          b.setAttribute('aria-disabled', 'true');
+        } else {
+          b.textContent = sk.on ? 'On' : 'Off';
+          b.setAttribute('aria-pressed', sk.on ? 'true' : 'false');
+        }
+        b.setAttribute('aria-label', (sk.title || sk.name) + ': ' + b.textContent);
+        b.addEventListener('click', function () {
+          if (sk.locked) { infoNote('Your helper set this one.'); return; }
+          infoNote('Saving…');
+          api('PUT', '/api/mary/skills/' + encodeURIComponent(sk.name), { on: !sk.on }).then(function () {
+            sk.on = !sk.on;
+            b.textContent = sk.on ? 'On' : 'Off';
+            b.setAttribute('aria-pressed', sk.on ? 'true' : 'false');
+            b.setAttribute('aria-label', (sk.title || sk.name) + ': ' + b.textContent);
+            infoNote(savedNote());
+          }, function (e) {
+            log(e);
+            infoNote(/locked/.test(String(e && e.message)) ? 'Your helper set this one.' : "Sorry, that didn't save. Please try again.");
+          });
+        });
+        row.appendChild(t);
+        row.appendChild(b);
+        box.appendChild(row);
+      });
+    }, function (e) { log(e); infoLead(box, "Sorry, I couldn't get the list just now."); });
+  }
+
+  // The menu's Talk row: start a talk, or "Stop talking" while she is in one (the same end path as before)
+  function onTalkRow() {
+    var c = S.convo;
+    if (c) {
+      if (c.ending) { if (c.live) { finishLive(c); } }
+      else { endConvo(c, 'tap'); }
+      return;
+    }
+    onTalkTap();
   }
 
   function openTyping() {
@@ -1589,7 +1948,7 @@
   }
   function closeTyping(refocus) {
     $('typing').hidden = true;
-    if (refocus) { try { $('talkBtn').focus(); } catch (e) { /* nothing */ } }
+    if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }   // M4b
   }
   function submitTyping() {
     var t = $('typeText');
@@ -1641,23 +2000,28 @@
     try { face.bounce(); } catch (e) { /* nothing */ }
   }
 
-  function onMenuClick(ev) {
-    var t = ev.target;
-    if (t === $('menu')) { closeMenu(); return; }
-    while (t && t !== $('menu') && !(t.getAttribute && t.getAttribute('data-act'))) { t = t.parentNode; }
-    if (!t || t === $('menu')) { return; }
+  function onMenuClick(ev) {   // M4b: the approved six items
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
+    if (!t || !$('menu').contains(t)) { return; }
     var act = t.getAttribute('data-act');
-    closeMenu();
-    // --- skills hook (M13) --- voice_comfort does these; the old code is the fallback
-    if (act === 'slower') { skillMenu('slower').then(function (ok) { if (!ok) { adjust('rate', -0.08); } }); }
-    else if (act === 'faster') { skillMenu('faster').then(function (ok) { if (!ok) { adjust('rate', 0.08); } }); }
-    else if (act === 'quieter') { skillMenu('quieter').then(function (ok) { if (!ok) { adjust('volume', -0.1); } }); }
-    else if (act === 'louder') { skillMenu('louder').then(function (ok) { if (!ok) { adjust('volume', 0.1); } }); }
-    else if (act === 'switch') { skillMenu('switch_companion', 'happy').then(function (ok) { if (!ok) { switchCompanion(); } }); }
-    // --- end skills hook ---
-    else if (act === 'type') { openTyping(); }
-    else if (act === 'notes') { window.location.href = '/?from=mary'; }
+    App.onActivity();
+    if (act === 'talk') {
+      if (t.getAttribute('aria-disabled') === 'true') { return; }
+      closeMenu(true);
+      onTalkRow();
+    }
+    else if (act === 'can') { closeMenu(false); openPanel('canPanel'); }
+    else if (act === 'info') { closeMenu(false); openPanel('infoPanel'); }
+    else if (act === 'choose') { closeMenu(false); openPanel('choosePanel'); }
+    else if (act === 'games') {   // Coming soon (M7): she says so, unless she is in a talk
+      closeMenu(true);
+      if (!S.convo && S.phase === 'idle' && S.screen === 'everyday') {
+        newTurn();
+        say("Games are coming soon. I can't wait to play with you.", 'happy');
+      }
+    }
     else if (act === 'close') {
+      closeMenu(false);
       try { window.pywebview.api.close_window(); } catch (e) { log(e); }
     }
   }
@@ -1715,6 +2079,7 @@
     S.volume = clampNum(st.voice_volume, VOL_MIN, VOL_MAX, S.volume);
     // M4a: the talk modes the server says will work, best first, and the quiet that ends a turn
     if (st.talk_mode) { S.talkMode = String(st.talk_mode); }
+    if (st.offline_ready != null) { S.offlineReady = !!st.offline_ready; }   // M4b: for My info
     if (Array.isArray(st.talk_order)) {
       S.talkOrder = st.talk_order.filter(function (m) { return m === 'live' || m === 'normal' || m === 'offline'; });
     }
@@ -1797,9 +2162,18 @@
   }
 
   function bind() {
-    $('talkBtn').addEventListener('click', onTalkTap);
-    $('moreBtn').addEventListener('click', openMenu);
+    // M4b: the one Menu button, its menu and the three panels (the big Talk button is gone; Talk is in the menu)
+    $('menuBtn').addEventListener('click', function () { App.onActivity(); if (menuOpen()) { closeMenu(true); } else { openMenu(); } });
     $('menu').addEventListener('click', onMenuClick);
+    $('menu').addEventListener('keydown', onMenuKey);
+    PANELS.forEach(function (id) {
+      $(id).addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (t === $(id) || (t && t.closest && t.closest('[data-back]'))) { closePanel(true); }   // Back, or a tap off the card
+      });
+    });
+    D.addEventListener('pointerdown', onUiTouch, true);
+    D.addEventListener('keydown', onUiTouch, true);
     $('lightBtn').addEventListener('click', onLightPressed);
     $('okBtn').addEventListener('click', onOkNow);
     $('infoBtn').addEventListener('click', function () { window.location.href = '/?from=mary#info'; });
@@ -1810,8 +2184,10 @@
       if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submitTyping(); }
     });
     D.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Tab' && M.panel) { trapTab(ev); return; }   // M4b
       if (ev.key !== 'Escape') { return; }
-      if (!$('menu').hidden) { closeMenu(); }
+      if (M.panel) { closePanel(true); }                         // M4b
+      else if (menuOpen()) { closeMenu(true); }                  // M4b
       else if (!$('typing').hidden) { closeTyping(true); }
     });
     window.addEventListener('pagehide', function () {
@@ -1836,6 +2212,9 @@
     newTurn: newTurn,
     cancelSpeech: spCancel,
     openTyping: openTyping,
+    addThing: addThing,                      // M4b: skills.js lists a skill's screen in "Things Mary can do"
+    openMenu: openMenu,                      // M4b
+    closeMenu: closeMenu,                    // M4b
     refreshStatus: refreshStatus,
     enterMain: enterMain,
     startFirstRun: startFirstRun,

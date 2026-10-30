@@ -191,6 +191,7 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
     - Memories never leave the laptop except in the packet for one reply.
     - They're encrypted along with the log in backend phase 1.
   - **Order:** queued by Andy (2026-10-30) to start right after M4a's current fixes land (it overlaps `mary.py`/`server.py`), together with M9e's lean core.
+  - **Built 2026-10-30 (83dc00d, branch `other/M9c`), waiting for Andy to try it:** `memory_core.py`, the `recall` and `forget_memory` tools in Live and Normal, and "What Mary remembers" in both My info screens. Tests: `tests/test_memory_core.py`. Not yet tried with real Gemini or in a real window.
 - **Main talk mode, being decided (Andy, 2026-10-30):** Andy leans toward Normal back-and-forth as the main mode instead of Live: the full text brain every turn, one voice for the whole talk, hands-free with the wake word and "go to sleep". Live stays an option.
   - **Facts:** Live's brain is a smaller, speed-tuned model, which is why its own stories were thin. Live is free on the free tier. Gemini TTS is capped at 10 requests a day on the free tier, so Normal on the free tier needs the laptop's own voice (Kokoro now, M14's open-source voice later) until there's a paid key. On a paid key, Live bills audio while it listens, but Normal's listening is free on the laptop.
   - **Costs of Normal:** replies come about 1-2 s slower, and cutting in mid-sentence needs echo-cancelled barge-in, which Live does well.

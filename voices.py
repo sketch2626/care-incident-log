@@ -319,6 +319,9 @@ def _iter_interactions(resp, started, flags):
         yield from found
 
 
+PACE_SLOW_BELOW, PACE_FAST_ABOVE = 0.90, 1.05  # M4a: the default speed (0.92) and his 1.0 are "normal": no pace words
+
+
 def pace_style(rate):  # M4a: the style line for a speaking speed (Gemini can't take a speed number)
     try:
         rate = float(rate)
@@ -326,9 +329,9 @@ def pace_style(rate):  # M4a: the style line for a speaking speed (Gemini can't 
         return STYLE
     if rate <= 0.76:
         return STYLE + ", speaking very slowly and clearly"
-    if rate < 0.97:
+    if rate < PACE_SLOW_BELOW:
         return STYLE + ", speaking slowly and clearly"
-    if rate > 1.05:
+    if rate > PACE_FAST_ABOVE:
         return STYLE + ", at a brisk, lively pace"
     return STYLE
 
@@ -745,9 +748,9 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
             r = None
         # M4a: a mild hint, and none at normal speed: Live has no speed setting, and this is all it gets.
         # "Speak slowly... stay that slow" made her crawl at the start of a talk (Andy's fourth try).
-        if r is not None and r < 0.97:
+        if r is not None and r < PACE_SLOW_BELOW:
             system += "\n\nThey like a somewhat slower pace than most people."
-        elif r is not None and r > 1.05:
+        elif r is not None and r > PACE_FAST_ABOVE:
             system += "\n\nThey like a brisker pace."
         now = datetime.now(timezone.utc)
         stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")

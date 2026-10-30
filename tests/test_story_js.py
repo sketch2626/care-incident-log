@@ -108,6 +108,8 @@ assert.strictEqual(notEnglish(null), false);
 
 // the talk's one voice
 const all = ['live', 'normal', 'offline'];
+assert.strictEqual(micMissGoesOn(0), true);
+assert.strictEqual(micMissGoesOn(1), false);
 assert.strictEqual(talkVoice('normal', false, all), 'normal');
 assert.strictEqual(talkVoice('normal', true, all), 'offline');
 assert.strictEqual(talkVoice('normal', true, ['normal', 'offline']), 'offline');

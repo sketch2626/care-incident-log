@@ -1135,7 +1135,7 @@ class TestVariants(BenchCase):
     def test_passing_text_prints_and_runs_safety(self):
         cases = [chat("safe", checks={"safety_all": [["hello"]]})]
         code, out, _, runs = self.run_bench(cases, extra=self.flags(self.vfile("lean", self.safe_text())))
-        self.assertIn("lean: all four safety sections are in, word for word, so safety cases run on it.", out)
+        self.assertIn("lean: all five safety sections are in, word for word, so safety cases run on it.", out)
         self.assertEqual(len(runs), 2)
 
     def test_columns_and_word_counts_print(self):

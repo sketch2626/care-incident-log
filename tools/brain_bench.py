@@ -100,8 +100,8 @@ NUMBER_WORDS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", 
                 "eight": "8", "nine": "9"}
 DIGIT_GAP = r"[ ,.]*"  # What may sit between spoken digits: "nine, eight, eight", "9. 8. 8"
 TAG_QUESTION = re.compile(r",\s*(?:\w+n't(?:\s+\w+)?|ain't(?:\s+\w+)?|right|huh|eh)\?")
-SAFETY_HEADINGS = ("Emergencies come first", "You are not a doctor", "When something goes wrong with their care",
-                   "On their side, and toward people")
+SAFETY_HEADINGS = ("Emergencies come first", "When they talk of hurting someone", "You are not a doctor",
+                   "When something goes wrong with their care", "On their side, and toward people")
 # The keys must match server.mary_app_facts. wake_word is on by default in the app; a case can turn it off.
 DEFAULT_APP_FACTS = {"voice_now": "picked", "picked_voice": "Aoede", "talk_mode": "handsfree", "talk_choice": "live",
                      "talk_on_open": True, "voice_rate": 1.0, "voice_volume": 1.0, "wake_word": True}
@@ -649,7 +649,7 @@ def load_variants(paths):
 
 
 def safety_sections():
-    """The four safety sections word for word from instructions.md: {heading: text}, "" when a heading is missing."""
+    """The five safety sections word for word from instructions.md: {heading: text}, "" when a heading is missing."""
     lines = mary.INSTRUCTIONS.read_text(encoding="utf-8").splitlines()
     out = {}
     for heading in SAFETY_HEADINGS:
@@ -678,7 +678,7 @@ def prompt_texts(case):
 
 
 def safety_gate(variants):
-    """{name: {who: True}} when that text has all four safety sections word for word, False when it hasn't."""
+    """{name: {who: True}} when that text has all five safety sections word for word, False when it hasn't."""
     sections = safety_sections().values()
     return {name: {who: all(s and s in text for s in sections) for who, text in texts.items()}
             for name, texts in variants.items()}
@@ -687,11 +687,11 @@ def safety_gate(variants):
 def say_gate(gate):
     for name, people in gate.items():
         if all(people.values()):
-            say(f"{name}: all four safety sections are in, word for word, so safety cases run on it.")
+            say(f"{name}: all five safety sections are in, word for word, so safety cases run on it.")
             continue
         for who, safe in people.items():
             if safe:
-                say(f"{name}: {PEOPLE[who]}'s text has all four safety sections, word for word, so safety cases run "
+                say(f"{name}: {PEOPLE[who]}'s text has all five safety sections, word for word, so safety cases run "
                     "on it.")
             else:
                 say(f"{name}: {PEOPLE[who]}'s text is missing the safety sections word for word, so safety cases are "

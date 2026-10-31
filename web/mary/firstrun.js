@@ -353,7 +353,7 @@
     skipOn = false;
     if (tok !== flow) { return; }
     await wait(300);
-    await askName();                               // step 3: getting to know you
+    if (!S.nameForgotten) { await askName(); }     // step 3: getting to know you (M9c: not after "forget my name")
     if (tok !== flow) { return; }
     if (S.talkOnOpen && S.hasKey) {                // M4a: she carries on talking, no tap needed
       S.firstRun = false;

@@ -176,7 +176,8 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - Word search first, then tic-tac-toe, then solitaire. She suggests a game, scoots aside, and helps by voice.
 - Add a **crossword** (Andy, 2026-10-29). She plays along live: "this hint is too hard, give me an easier one", and she rewrites the clue on screen on the spot. She can also give a letter, explain a word, or check an answer. Every game follows the rule under M12.
 - Mock-up boards first, then the build.
-- **Progress (second account, branch `other/M7a`, 2026-10-31):** M7a word search boards are in `mockups/mary/round7/`, waiting for Andy. The skill `skills/word_search/` is built and tested (Opus for the generator, skill and screen; Sonnet for the word lists and tests). Not yet seen in a real window.
+- **Word search (M7a): boards approved by Andy 2026-10-31.** Size is the resident's choice (Andy: "let's just leave it up to the patient… Mary needs to be able to change the size on the fly"): three sizes, offered once when the game comes up, changed by voice anytime, and remembered.
+- **Progress (second account, branch `other/M7a`, 2026-10-31):** the skill `skills/word_search/` is built and tested, with the three sizes (saved in setting `word_search_size`), ready to merge. Opus wrote the generator, skill and screen; Sonnet the word lists and tests. Not yet seen in a real window.
 
 ### M8. Fit and speed
 - **Two kinds of laptops (Andy, 2026-10-30):** many residents get new donated Lenovos like Andy's (Ryzen 5 7520U), and some get refurbished ones. Idea: a quick speed check on first run (Kokoro, Whisper, the wake word) that picks lighter settings by itself on a slow machine, so nobody has to tune it by hand.
@@ -210,6 +211,7 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
     - They're encrypted along with the log in backend phase 1.
   - **Order:** queued by Andy (2026-10-30) to start right after M4a's current fixes land (it overlaps `mary.py`/`server.py`), together with M9e's lean core.
   - **Built 2026-10-30 (83dc00d, branch `other/M9c`), waiting for Andy to try it:** `memory_core.py`, the `recall` and `forget_memory` tools in Live and Normal, and "What Mary remembers" in both My info screens. Tests: `tests/test_memory_core.py`. Not yet tried with real Gemini or in a real window.
+  - **Truly forget (Andy, 2026-10-30):** "forget that means forget that." Forget is a real delete: memories live in their own file (`mary/memories.db`, one rolling backup), never in the incident log or its backups, and the talk history drops what was forgotten. Open: `wake.log` keeps spoken words, and "forget my name" doesn't clear the name.
 - **Main talk mode, being decided (Andy, 2026-10-30):** Andy leans toward Normal back-and-forth as the main mode instead of Live: the full text brain every turn, one voice for the whole talk, hands-free with the wake word and "go to sleep". Live stays an option.
   - **Facts:** Live's brain is a smaller, speed-tuned model, which is why its own stories were thin. Live is free on the free tier. Gemini TTS is capped at 10 requests a day on the free tier, so Normal on the free tier needs the laptop's own voice (Kokoro now, M14's open-source voice later) until there's a paid key. On a paid key, Live bills audio while it listens, but Normal's listening is free on the laptop.
   - **Costs of Normal:** replies come about 1-2 s slower, and cutting in mid-sentence needs echo-cancelled barge-in, which Live does well.

@@ -1,8 +1,9 @@
-"""Mary's long memory (M9c): what a resident has told her, dated, in the app's own SQLite log.
+"""Mary's long memory (M9c): what a resident has told her, dated, in its own SQLite file, apart from the incident log.
 
 Only a small core goes to Gemini every turn (always_sent). The rest stays on the laptop until she looks it up with
-recall, which is plain word matching in Python, with no cloud. Like the incident log, nothing is ever hard deleted.
-Takes a connect callable (server.connect), and imports neither server nor mary.
+recall, which is plain word matching in Python, with no cloud. The incident log is evidence and keeps soft delete;
+this is not: forgetting is a real delete, and what is forgotten is gone from this file and from its one backup.
+Takes a connect callable (server.connect_memories), and imports neither server nor mary.
 """
 import json
 import re
@@ -16,10 +17,8 @@ CREATE TABLE IF NOT EXISTS memories (
     created_at TEXT NOT NULL,
     kind TEXT NOT NULL,
     text TEXT NOT NULL,
-    source TEXT NOT NULL,
-    deleted_at TEXT
+    source TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_memories_deleted ON memories (deleted_at);
 """
 KINDS = ("person", "family", "likes", "health_care", "history", "preference", "other")
 SOURCES = ("talk", "typed", "said")
@@ -75,6 +74,30 @@ _CALL_THEM_RE = re.compile(r"\b(?:pet\s+names?|nicknames?|goes\s+by|(?:likes?|pr
                            r"(?:okay|ok|fine|all\s+right|alright)\s+(?:with\s+being|being|to\s+be)\s+called|"
                            r"call(?:ed|ing)?\s+(?:him|her|them)\b)", re.I)
 FORGET_THAT_S = 3600  # "forget that" means something just saved, never a memory from months ago
+FORGET_YES_S = 300  # how long "forget about my son" waits for the resident's yes
+# Who a memory names, so "forget about my son" takes every memory about him. Only these spots count as a name, never
+# every capitalized word: "Raleigh" must not spread.
+_RELATIONS = "son daughter wife husband brother sister mother father friend grandson granddaughter"
+_NAMED = re.compile(rf"\b(?=(?i:named|called|{'|'.join(_RELATIONS.split())})\s*,?\s+([^\W\d_]+))")  # overlapping: "son named Mike"
+_MY_WORD_NAMED = re.compile(r"\b(?i:my|his|her|their)\s+[^\W\d_]+\s+([^\W\d_]+)")  # "my nephew Joe"; for talk history only
+_NOT_NAMES = STOPWORDS | frozenset("monday tuesday wednesday thursday friday saturday sunday".split())
+
+
+def _whole(name):  # M9c
+    return r"(?<!\w)" + r"\s+".join(re.escape(w) for w in str(name or "").split()) + r"(?!\w)"
+
+
+def holds_name(text, name):  # M9c
+    """True when a saved memory holds this name: the whole word as written, or in any case after "called" or "goes
+    by". "Will" stays out of "will walk"; "Goes by andy" is caught."""
+    if not str(name or "").strip():
+        return False
+    return bool(re.search(_whole(name), text) or re.search(r"\b(?:called|goes\s+by)\s+" + _whole(name), text, re.I))
+
+
+def says_name(text, name):  # M9c
+    """True when a turn of talk holds this name as a whole word, in any case."""
+    return bool(str(name or "").strip()) and bool(re.search(_whole(name), text, re.I))
 
 
 def _now():
@@ -124,6 +147,55 @@ def _meaningful(text):
     return {_stem(w) for w in _words(text) if w not in STOPWORDS}
 
 
+_RELATION_STEMS = frozenset(_stem(w) for w in _RELATIONS.split())
+
+
+def is_everything(about):
+    """True when they asked her to forget all of it, not one thing."""
+    words = str(about or "").lower().replace("’", "'").strip(" .!?")
+    return words in ("everything", "all of it", "all that", "everything about me", "all about me", "all of that",
+                     "everything you know", "everything you know about me", "everything you remember")
+
+
+def _names(texts, pattern=_NAMED):
+    """The people's names in these texts, as written: the capitalized word in the spots pattern allows."""
+    found = set()
+    for text in texts:
+        for word in pattern.findall(str(text or "").replace("’", "'")):
+            if word[0].isupper() and word.lower() not in _NOT_NAMES:
+                found.add(word)
+    return found
+
+
+def same_about(one, other):
+    """True when two ways of saying what to forget hold the same meaningful words."""
+    if is_everything(one) or is_everything(other):
+        return is_everything(one) and is_everything(other)
+    wanted = _meaningful(one)
+    return bool(wanted) and wanted == _meaningful(other)
+
+
+def carries(turn_text, forgotten_texts, about=""):
+    """True when a turn of talk still holds what was just forgotten: all the meaningful words of about, a name from the
+    forgotten texts or about, or at least half (never fewer than 2) of the meaningful words of a forgotten fact.
+    A turn caught by mistake only costs a line of talk history, so this leans toward catching. "Everything" is every turn."""
+    if is_everything(about):
+        return True
+    have = set(_stems(turn_text))
+    wanted = _meaningful(about)
+    if wanted and wanted <= have:
+        return True
+    texts = [*forgotten_texts, about]
+    names = _names(texts) | _names(texts, _MY_WORD_NAMED)
+    if {name.lower() for name in names} & set(_words(turn_text)):
+        return True
+    for fact in forgotten_texts:
+        stems = _meaningful(fact)
+        if len(stems & have) >= max(2, (len(stems) + 1) // 2):
+            return True
+    return False
+
+
 _FAMILY_OF = {}
 for _group in SYNONYMS:
     _members = {s for word in _group for s in _stems(word)}
@@ -168,20 +240,35 @@ def public(memory):
 
 
 def _insert(conn, text, kind, source):
-    """One new memory from cleaned text. None, and nothing added, when an active memory already says the same."""
+    """One new memory from cleaned text. None, and nothing added, when a memory already says the same."""
     same = text.casefold()
-    if any(r[0].casefold() == same for r in conn.execute("SELECT text FROM memories WHERE deleted_at IS NULL")):
+    if any(r[0].casefold() == same for r in conn.execute("SELECT text FROM memories")):
         return None
     return conn.execute("INSERT INTO memories (created_at, kind, text, source) VALUES (?, ?, ?, ?)",
                         (_now(), kind if kind in KINDS else guess_kind(text), text,
                          source if source in SOURCES else "talk")).lastrowid
 
 
-class MemoryStore:
-    """Her dated memories. Every call opens and closes its own connection, so it needs no lock of its own."""
+def _row_id(memory_id):
+    """memory_id as a number SQLite can look up, or None."""
+    try:
+        memory_id = int(memory_id)
+    except (TypeError, ValueError):
+        return None
+    return memory_id if 0 < memory_id < 2 ** 63 else None  # SQLite refuses a bigger number
 
-    def __init__(self, connect):
+
+class MemoryStore:
+    """Her dated memories. Every call opens and closes its own connection, so it needs no lock of its own.
+    on_change(deleted) runs after every change is saved, so the server can keep her one backup current."""
+
+    def __init__(self, connect, on_change=None):
         self.connect = connect
+        self.on_change = on_change
+
+    def _changed(self, deleted):
+        if self.on_change:
+            self.on_change(deleted)
 
     def add(self, text, kind="", source="talk"):
         """The new memory's id, or None if it was empty or is already saved. There is no cap. Something forgotten
@@ -190,12 +277,15 @@ class MemoryStore:
         if not text:
             return None
         with closing(self.connect()) as conn, conn:
-            return _insert(conn, text, kind, source)
+            new_id = _insert(conn, text, kind, source)
+        if new_id is not None:
+            self._changed(False)
+        return new_id
 
     def active(self, limit=None):
-        """Memories not forgotten, newest first."""
+        """Her memories, newest first."""
         with closing(self.connect()) as conn:
-            rows = conn.execute(f"SELECT {', '.join(_COLUMNS)} FROM memories WHERE deleted_at IS NULL "
+            rows = conn.execute(f"SELECT {', '.join(_COLUMNS)} FROM memories "
                                 "ORDER BY created_at DESC, id DESC LIMIT ?", (-1 if limit is None else limit,)).fetchall()
         out = [dict(zip(_COLUMNS, row)) for row in rows]
         for memory in out:
@@ -204,19 +294,27 @@ class MemoryStore:
 
     def count(self):
         with closing(self.connect()) as conn:
-            return conn.execute("SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL").fetchone()[0]
+            return conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+
+    def text_of(self, memory_id):
+        """The words of one memory, or None if it isn't here."""
+        memory_id = _row_id(memory_id)
+        if memory_id is None:
+            return None
+        with closing(self.connect()) as conn:
+            row = conn.execute("SELECT text FROM memories WHERE id = ?", (memory_id,)).fetchone()
+        return row[0] if row else None
 
     def remove(self, memory_id):
-        """Soft delete. True if it was active."""
-        try:
-            memory_id = int(memory_id)
-        except (TypeError, ValueError):
-            return False
-        if not 0 < memory_id < 2 ** 63:  # SQLite refuses a bigger number
+        """A real delete. True if it was here."""
+        memory_id = _row_id(memory_id)
+        if memory_id is None:
             return False
         with closing(self.connect()) as conn, conn:
-            return conn.execute("UPDATE memories SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-                                (_now(), memory_id)).rowcount > 0
+            gone = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,)).rowcount > 0
+        if gone:
+            self._changed(True)
+        return gone
 
     def recall(self, words="", kind="", limit=6):
         """The best matches for words, newest first, so a newer fact always comes before an older one. No words: the
@@ -236,20 +334,44 @@ class MemoryStore:
                 scored.append((-score, place))
         return [public(rows[place]) for place in sorted(place for _, place in sorted(scored)[:limit])]
 
+    def matching(self, about):
+        """Everything saved about this, newest first: every memory holding all the meaningful words of about (exact
+        words and stems, no synonyms). When about is just a person ("my son", "Mike"), also every memory with a name
+        taken from those; "my son's job" stays with the job. The name must be written the same way, so a son named Will
+        doesn't take "will" and a daughter named Faith doesn't take "faith". "Everything" is every memory."""
+        rows = self.active()
+        if is_everything(about):
+            return rows
+        wanted = _meaningful(about)
+        if not wanted:
+            return []
+        hits = {r["id"] for r in rows if wanted <= set(_stems(r["text"]))}
+        names = _names(r["text"] for r in rows if r["id"] in hits)
+        if not (len(wanted) == 1 and (wanted <= _RELATION_STEMS or wanted <= {_stem(n.lower()) for n in names})):
+            names = set()
+        named = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b") if names else None
+        return [r for r in rows if r["id"] in hits or (named and named.search(r["text"]))]
+
     def forget(self, about=""):
-        """Soft deletes and returns the texts removed. Empty about: the single newest memory ("forget that"), if it
-        was saved within FORGET_THAT_S. Otherwise every memory holding all the meaningful words of about, exact words
-        and stems only, no synonyms."""
+        """Really deletes and returns the texts removed. Empty about: the single newest memory ("forget that"), if it
+        was saved within FORGET_THAT_S. Otherwise everything matching(about) finds."""
         if str(about or "").strip():
-            wanted = _meaningful(about)
-            rows = [r for r in self.active() if wanted and wanted <= set(_stems(r["text"]))]
+            rows = self.matching(about)
         else:
             rows = [r for r in self.active(limit=1) if _just_saved(r)]
         if rows:
-            when = _now()
             with closing(self.connect()) as conn, conn:
-                conn.executemany("UPDATE memories SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-                                 [(when, r["id"]) for r in rows])
+                conn.executemany("DELETE FROM memories WHERE id = ?", [(r["id"],) for r in rows])
+            self._changed(True)
+        return [r["text"] for r in rows]
+
+    def forget_name(self, name):  # M9c
+        """Really deletes every memory holding their name and returns the texts removed."""
+        rows = [r for r in self.active() if holds_name(r["text"], name)]
+        if rows:
+            with closing(self.connect()) as conn, conn:
+                conn.executemany("DELETE FROM memories WHERE id = ?", [(r["id"],) for r in rows])
+            self._changed(True)
         return [r["text"] for r in rows]
 
     def always_sent(self, name="", limit_words=120):
@@ -295,19 +417,17 @@ def _old_facts(path):
     return [f for f in (facts if isinstance(facts, list) else []) if isinstance(f, str)]
 
 
-def migrate_json(path, target):
-    """Moves the facts in the old memory.json into memories, once, keeping their order (oldest id first). Settings key
-    memories_moved goes in with them, so a removed fact never comes back. The file itself is left as it is.
-    target is an open connection (its caller commits) or a MemoryStore. Returns how many facts moved."""
-    if isinstance(target, MemoryStore):
-        with closing(target.connect()) as conn, conn:
-            return migrate_json(path, conn)
-    if target.execute("SELECT 1 FROM settings WHERE key = 'memories_moved' AND value = '1'").fetchone():
+def migrate_json(path, store, settings):
+    """Moves the facts in the old memory.json into the store, once, keeping their order (oldest id first). Settings key
+    memories_moved goes in after them, so a removed fact never comes back. settings is an open connection to the
+    incident log, whose caller commits. The server strips the facts from the file. Returns how many facts moved."""
+    if settings.execute("SELECT 1 FROM settings WHERE key = 'memories_moved' AND value = '1'").fetchone():
         return 0
     moved = 0
-    for fact in _old_facts(path):
-        text = _clean(fact)
-        if text and _insert(target, text, "", "talk") is not None:
-            moved += 1
-    target.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('memories_moved', '1')")
+    with closing(store.connect()) as conn, conn:
+        for fact in _old_facts(path):
+            text = _clean(fact)
+            if text and _insert(conn, text, "", "talk") is not None:
+                moved += 1
+    settings.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('memories_moved', '1')")
     return moved

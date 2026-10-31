@@ -287,7 +287,7 @@ class TestEmergency(MaryTestCase):
         self.fake.fail = False
         r = self.say("I fell this morning", ["I'm here with you."])
         self.assertTrue(r["text"].startswith(mary.EMERGENCY_TEXT["medical"] + " I'm here with you."))
-        self.assertIn("already told them", self.fake.bodies[0]["systemInstruction"]["parts"][0]["text"])
+        self.assertIn("already told them this out loud", self.fake.bodies[0]["systemInstruction"]["parts"][0]["text"])
 
 
 class TestOffer(MaryTestCase):

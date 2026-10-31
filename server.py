@@ -41,6 +41,8 @@ DATA = Path(os.environ.get("TRACKER_DATA") or DEFAULT_DATA)
 LEGACY_DATA = ROOT / "data"  # where versions before the desktop app kept the log
 DB_PATH = DATA / "incidents.db"
 BACKUPS = DATA / "backups"
+MEMORIES_DB = DATA / "mary" / "memories.db"  # M9c: her memories, never inside the incident log or its dated backups
+MEMORIES_BACKUP = DATA / "mary" / "memories_backup.db"  # M9c: one rolling copy, rewritten after every forget
 ANDYFLOW_DB = Path(os.environ.get("APPDATA", "")) / "Andyflow" / "history.db"
 PORT = int(os.environ.get("TRACKER_PORT", "8765"))
 PAGE_TITLE = "Care Incident Log"
@@ -123,6 +125,15 @@ def connect():
     return conn
 
 
+def connect_memories():  # M9c
+    """Her memories' own file. secure_delete: SQLite overwrites what a delete frees, so forgotten words don't stay in it."""
+    MEMORIES_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(MEMORIES_DB, timeout=5)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA secure_delete=ON")
+    return conn
+
+
 def log_is_empty(path):
     """True if the log at path doesn't exist yet or holds no incidents and no settings.
     Any other trouble reading it counts as "not empty", so a real log is never overwritten."""
@@ -161,7 +172,6 @@ def init_db():
     migrate_legacy_data()
     with connect() as conn:
         conn.executescript(SCHEMA)
-        conn.executescript(memory_core.MEMORIES_SCHEMA)  # M9c
         if "formal_summary" not in {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}:
             conn.execute("ALTER TABLE incidents ADD COLUMN formal_summary TEXT NOT NULL DEFAULT ''")
         # The Andy Flow link is the resident's choice and starts off. A log that already holds entries
@@ -169,8 +179,9 @@ def init_db():
         if "andyflow_enabled" not in get_settings(conn) and conn.execute(
                 "SELECT 1 FROM incidents WHERE source LIKE 'andyflow-%' LIMIT 1").fetchone():
             conn.execute("INSERT INTO settings (key, value) VALUES ('andyflow_enabled', '1')")
-        memory_core.migrate_json(DATA / "mary" / "memory.json", conn)  # M9c: once only, by settings key memories_moved
+    init_memories()  # M9c
     backup_db()
+    backup_memories()  # M9c
 
 
 def backup_db():
@@ -196,6 +207,130 @@ def backup_db():
                 tmp.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+# M9c: her memories' own file. Forgetting is a real delete, so unlike the incident log they keep one copy, not thirty.
+_memory_backup_stale = False  # a forget's rewrite failed and the old copy couldn't be removed either
+
+
+def _gone(path):
+    """True when the file no longer exists."""
+    try:
+        path.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _memory_backup_is_today():
+    try:
+        return datetime.fromtimestamp(MEMORIES_BACKUP.stat().st_mtime).date() == datetime.now().date()
+    except OSError:
+        return False
+
+
+def backup_memories(fresh=False):
+    """One rolling copy of her memories, swapped in whole: once a day, and at once after every forget (fresh), so nothing
+    forgotten stays in it. If that rewrite fails the copy is deleted: no copy beats a stale copy. Never raises."""
+    global _memory_backup_stale
+    fresh = fresh or _memory_backup_stale
+    tmp = MEMORIES_BACKUP.with_suffix(".tmp")
+    try:
+        if not fresh and _memory_backup_is_today():
+            return
+        tmp.unlink(missing_ok=True)
+        with closing(connect_memories()) as src, closing(sqlite3.connect(tmp)) as dst:
+            src.backup(dst)
+        os.replace(tmp, MEMORIES_BACKUP)
+        _memory_backup_stale = False
+    except Exception:
+        _gone(tmp)
+        if fresh:
+            _memory_backup_stale = not _gone(MEMORIES_BACKUP)
+
+
+def _has_old_memories(conn):
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memories'").fetchone() is not None
+
+
+def _move_old_memories(conn):
+    """Moves the rows not forgotten from the old memories table of the incident log into memories.db and drops the table,
+    in one transaction across both files. So a crash can't lose a memory or copy one twice, and a later retry can't
+    bring back something forgotten in between."""
+    conn.isolation_level = None  # this transaction is written out by hand
+    conn.execute("ATTACH DATABASE ? AS own", (str(MEMORIES_DB),))
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute("INSERT INTO own.memories (created_at, kind, text, source) "
+                         "SELECT created_at, kind, text, source FROM main.memories WHERE deleted_at IS NULL "
+                         "AND lower(text) NOT IN (SELECT lower(text) FROM own.memories) ORDER BY id")
+            conn.execute("DROP TABLE main.memories")
+            conn.execute("COMMIT")
+        except sqlite3.Error:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.execute("DETACH DATABASE own")
+
+
+def _clear_old_memories(conn):
+    """Drops the old memories table from an incident database, soft-deleted rows and all, and rewrites the file so none
+    of it stays in free pages. A VACUUM that failed last time runs again, because the free pages are still there."""
+    conn.isolation_level = None  # VACUUM can't run inside a transaction
+    conn.execute("PRAGMA secure_delete=ON")
+    had = _has_old_memories(conn)
+    if had:
+        conn.execute("DROP TABLE memories")
+    if had or conn.execute("PRAGMA freelist_count").fetchone()[0]:
+        conn.execute("VACUUM")
+
+
+def split_memories():
+    """Once: her memories move out of the incident log and out of every dated backup of it. Incidents aren't touched.
+    Retried at each start until it all worked, then settings key memories_split is set. Never raises: a locked or bad
+    backup must not stop the app."""
+    try:
+        with closing(connect()) as conn:
+            if conn.execute("SELECT 1 FROM settings WHERE key = 'memories_split' AND value = '1'").fetchone():
+                return
+            if _has_old_memories(conn):
+                _move_old_memories(conn)
+            _clear_old_memories(conn)
+        clean = True
+        for path in BACKUPS.glob("incidents_*.db"):
+            try:
+                with closing(sqlite3.connect(path, timeout=1)) as conn:
+                    _clear_old_memories(conn)
+            except (sqlite3.Error, OSError):
+                clean = False
+        for path in BACKUPS.glob("incidents_*.tmp"):  # a backup_db that was cut off holds the table too
+            clean = _gone(path) and clean
+        if clean:
+            with closing(connect()) as conn, conn:
+                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('memories_split', '1')")
+    except (sqlite3.Error, OSError):
+        pass
+
+
+def init_memories():
+    """Her memories' file, the one-time moves into it, and memory.json left with no facts in it, at every start.
+    Never raises: the incident log must start even if her memory can't."""
+    path = DATA / "mary" / "memory.json"
+    try:
+        with closing(connect_memories()) as conn, conn:
+            conn.executescript(memory_core.MEMORIES_SCHEMA)
+        split_memories()
+        with closing(connect()) as conn, conn:
+            memory_core.migrate_json(path, memory_core.MemoryStore(connect_memories), conn)  # once, by key memories_moved
+        memory = mary.Memory(path)
+        if memory.facts:
+            memory.facts = []
+            memory.save()
+        path.with_name(path.name + ".tmp").unlink(missing_ok=True)
+    except (sqlite3.Error, OSError):
+        pass
 
 
 def clean_incident(data):
@@ -273,14 +408,39 @@ def clean_voice_setting(key, value):
 
 # Mary. One talk at a time, so two requests never interleave her memory.
 _mary_lock = threading.Lock()
+# M9c: Live says her words after the tool has run, so for a little while they aren't remembered. Its session keeps
+# talking after a real delete, and what she says then could carry the very thing just forgotten.
+LIVE_FORGOT_QUIET_S = 30
+_live_forgot_at = None
 HELLO_NO_NAME = "I'm sorry, I didn't quite catch your name. Could you say it once more?"
 TALK_NO_TEXT = "I didn't catch anything. Could you say that again?"
 
 
 def mary_memory():
     memory = mary.Memory(DATA / "mary" / "memory.json")
-    memory.store = memory_core.MemoryStore(connect)  # M9c
+    memory.facts = []  # M9c: they live in the store, and memory.json keeps none
+    memory.store = memory_store()  # M9c
     return memory
+
+
+def memory_store():  # M9c: any change may be the day's backup; a delete always rewrites it
+    return memory_core.MemoryStore(connect_memories, on_change=lambda deleted: backup_memories(fresh=deleted))
+
+
+def mary_remove_memory(memory_id):  # M9c: the Remove button
+    """Really deletes one memory and what her talk history holds of it. False if it isn't here. Under the lock: a talk
+    in flight would otherwise save its old talk history back over this."""
+    with _mary_lock:
+        memory = mary_memory()
+        text = memory.store.text_of(memory_id)
+        if text is None or not memory.store.remove(memory_id):
+            return False
+        memory.scrub([text])
+        try:
+            memory.save()
+        except OSError:
+            pass
+    return True
 
 
 def mary_settings():
@@ -303,10 +463,11 @@ def mary_settings():
 
 def mary_status():
     s = mary_settings()
-    name = mary_memory().name
+    memory = mary_memory()
+    name = memory.name
     offline_ready = voices.kokoro_ready()  # M4a
     return {"companion": s["companion"], "first_run": not s["companion"],
-            "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name,
+            "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name, "name_forgotten": memory.name_forgotten,  # M9c
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
             # M4a: talk modes, the order the page tries them in, and the voice for each
             "talk_mode": s["talk_mode"], "listen_wait": s["listen_wait"], "talk_on_open": s["talk_on_open"],
@@ -475,10 +636,20 @@ def mary_live_skill_setup(screen=None):
 def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact and set_their_name tools; M9c: recall too
     """Saves what one of Live's memory tools asked for, or runs recall or forget_memory (M9c). The same shape as a skill
     call's result. heard is what Live heard, which says whether they asked her to remember (M9c)."""
+    global _live_forgot_at
     args = args if isinstance(args, dict) else {}
     if name in mary.MEMORY_TOOL_NAMES:  # M9c
         with _mary_lock:
-            return mary.memory_tool(mary_memory(), name, args)
+            memory = mary_memory()
+            result = mary.memory_tool(memory, name, args)
+            if name in ("forget_memory", "forget_name"):  # its waiting question and the scrubbed talk history
+                try:
+                    memory.save()
+                except OSError:
+                    pass
+                if memory.scrubbed:
+                    _live_forgot_at = time.monotonic()
+        return result
     if name == "set_their_name":
         value = mary.clean_name(args.get("name"))
         error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
@@ -492,6 +663,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         try:
             if name == "set_their_name":
                 memory.name = value
+                memory.name_forgotten = False  # M9c
             else:
                 memory.add_fact(value, str(args.get("kind") or ""), mary.fact_source(heard))  # M9c
             memory.save()
@@ -1033,6 +1205,7 @@ class Handler(SimpleHTTPRequestHandler):
                 with _mary_lock:
                     memory = mary_memory()
                     memory.name = name
+                    memory.name_forgotten = False  # M9c
                     try:
                         memory.save()
                     except OSError:
@@ -1123,7 +1296,8 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.pending_offer = None
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
-                    memory.add_turn("user", text.strip())
+                    if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran
+                        memory.add_turn("user", text.strip())
                     if say:
                         memory.add_turn("model", say)
                     try:
@@ -1135,7 +1309,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
             text = " ".join(str(self._body().get("text") or "").split())[:2000]
-            if text and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
+            quiet = _live_forgot_at is not None and time.monotonic() - _live_forgot_at < LIVE_FORGOT_QUIET_S  # M9c
+            if text and not quiet and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
                 with _mary_lock:
                     memory = mary_memory()
                     last = memory.recent[-1] if memory.recent else {}
@@ -1153,6 +1328,7 @@ class Handler(SimpleHTTPRequestHandler):
             text = str(body.get("text") or "").strip()[:2000]
             if not text:
                 raise ValueError(TALK_NO_TEXT)
+            text = mary.spoken_numbers(text)  # M4a: 988 digit by digit, whoever wrote the line
             mode = body.get("mode")
             if mode not in ("normal", "offline"):
                 raise ValueError(BAD_REQUEST)
@@ -1175,11 +1351,11 @@ class Handler(SimpleHTTPRequestHandler):
                                       spent_voice=offline_voice)  # M4a: the request that hits the limit swaps too
         # --- end M4a ---
         if method == "GET" and path == "/api/mary/memories":  # M9c: the page's list; no lock, each store call stands alone
-            found = memory_core.MemoryStore(connect).active()
+            found = memory_store().active()
             return self._send({"memories": [memory_core.public(m) for m in found], "count": len(found)})
         m = re.fullmatch(r"/api/mary/memories/(\d+)", path)  # M9c
         if m and method == "DELETE":
-            if not memory_core.MemoryStore(connect).remove(m.group(1)):
+            if not mary_remove_memory(m.group(1)):
                 return self._send({"error": "That memory isn't here."}, 404)
             return self._send({"ok": True})
         if path == "/api/mary/skills" or path.startswith("/api/mary/skills/"):  # --- skills hook (M13) ---

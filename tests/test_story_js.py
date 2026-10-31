@@ -169,6 +169,7 @@ var window = {
   } }
 };
 function greetLive(t) { greets.push(t); return true; }
+function spokenNumbers(t) { return t; }
 function liveSpeaking() { return speaking; }
 function finishLive() { finished++; S.convo = null; }
 function liveBye() { return 'BYE LINE'; }

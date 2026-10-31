@@ -74,18 +74,24 @@ LIVE_EXTRA = ("You are talking out loud in a live voice conversation. "  # M4a: 
               "people use with a child. "
               "Speak at the natural speed of ordinary conversation, and keep that same speed from your first word to "  # M4a: pace
               "your last; never speed up or slow down as you go. "
-              "Never say anything in square brackets. "
-              "That includes the mood, name and remember tags described above: don't use them here.")
+              "Never say anything in square brackets.")
 # M4a: only on Mary's own screen, where Live has the remember_fact and set_their_name tools
-LIVE_TOOLS_NOTE = ("Instead of the name and remember lines, use your tools: when they tell you what they like to be "
-                   "called, call set_their_name, and when they tell you something worth remembering about their life, "
-                   "call remember_fact. Do it quietly, without mentioning it, and keep talking. "
+LIVE_TOOLS_NOTE = ("When they tell you what they like to be called, call set_their_name with the name they go by, "
+                   "exactly as they say it: if they say \"call me Bill\", it's Bill, never William. When they tell you "
+                   "something worth remembering about their life, call remember_fact. Do it quietly, without mentioning it, and keep talking. "
                    # M9c: her long memory, looked up when it's needed
                    "When they mention a person, a place or a past talk, call recall before you answer, and say nothing "
                    "about the tool. Never make up a memory; if recall finds nothing, say so kindly. When two memories "
                    "disagree, the newer date wins. If they ask what you remember about them, call recall with no words "
-                   "and give a short spoken summary. If they say \"forget that\" or \"forget about my…\", call "
-                   "forget_memory, then confirm in one line. "
+                   "and give a short spoken summary. If they say \"forget that\", call forget_memory with nothing, then "
+                   "confirm in one line. If they say \"forget about my…\", call forget_memory with their words. When it "
+                   "answers needs_yes nothing is gone yet: ask in one line whether to forget everything about that, and "
+                   "only if they say yes call it again with confirmed true, then confirm in one line. Never bring up "
+                   "anything forgotten again, even if it came up earlier in this talk. "
+                   # M9c
+                   "If they ask you to forget their name or stop calling them something, call forget_name, then confirm "
+                   "in one line, and don't use a name or ask for one. A pet name like honey isn't their name: just stop "
+                   "using it. "
                    # M4a: tell_story, after Andy found Live's own stories thin
                    "When they ask for a story, first say one short, warm line, like \"Oh, I've got a good one for "
                    "you,\" then call tell_story with what they asked for and stay quiet until it answers. It gives you the "
@@ -93,7 +99,8 @@ LIVE_TOOLS_NOTE = ("Instead of the name and remember lines, use your tools: when
                    "own; don't shorten it, sum it up or change it, and add nothing after it. The next part comes by "
                    "itself when you finish. If they cut in, talk with them; if they then want the rest, call story_more. "
                    "Never mention the tool or say the story came from anywhere. If it gives you no story, tell one "
-                   "yourself, for a grown-up: funny or surprising, with no moral. Jokes, songs and poems you make up "
+                   "yourself, for a grown-up: about other people, never your own family or past, funny or surprising, with no "
+                   "moral. Jokes, songs and poems you make up "
                    "yourself. "
                    # M4a: Live says the goodbye itself and the talk closes; the page's word check can miss a mishearing
                    "When they say goodbye, tell you to go to sleep or rest, or say they're done talking, say one short "
@@ -733,7 +740,7 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
         name = _voice_name(voice, "live")
         event.update(id=f"live:{name}", voice=name)
         if memory is not None:  # M4a: Mary's own screen
-            system = mary.system_text(memory, companion, facts=True)
+            system = mary.system_text(memory, companion, facts=True, tags=False)  # M4a: Live is spoken as it comes
             turns = [t for t in (getattr(memory, "recent", None) or [])[-8:]
                      if isinstance(t, dict) and str(t.get("text") or "").strip()]
             if turns:  # M4a: so her hello can pick up where they left off
@@ -742,7 +749,7 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
                     for t in turns)
         else:  # the voice tryout
             system = mary.system_text(SimpleNamespace(name=memory_name or "", facts=[], recent=[]), companion,
-                                      facts=False)
+                                      facts=False, tags=False)
         if skills and skills.get("instruction"):  # M4a: before LIVE_EXTRA
             system += "\n\n" + skills["instruction"]
         system += "\n\n" + LIVE_EXTRA

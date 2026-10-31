@@ -2,19 +2,27 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-30, about 16:00)
-- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice on the laptop. It was switched from Live for Andy's tuning, because Gemini TTS allows only 10 requests a day on the free tier. Live stays an option.
-- **Second-account workers.** M4a and M4b were stopped by her 5-hour limit at 15:29 and resume by themselves at 18:50. Their unsaved work is safe in their worktrees.
-  - **M4a** (`other/M4a`, terminal tab "M4a good voice", peer `m4a-70`): merged; waits for Andy's next findings. Earlier job, the fifth-try fixes:
-    - Every line she speaks goes into the brain's history, and the online hello comes from the brain.
-    - She uses his name rarely and never narrates the screen.
-    - Pictures: no example subjects, the real thing plus a Gemini vision check, and plain-text credits.
-  - **M4b** (`other/M4b`, tab "M4b captions and menu", peer `m4b-32`): one shared slide-aside layout for pictures now and games later. The credit never covers the picture.
+## Right now (2026-10-31, about 00:20)
+- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
+- **Her account's workers resumed at 23:50.** Her weekly limit resets Oct 31 at 5pm, and Andy wants her usage used before then. Check each worker's size with `python tools/worker_context.py`. New jobs go to fresh workers; reuse one only for fixes to its own job while it's under about 200,000 tokens.
+  - **M9c truly forget: merged 2026-10-31** (811 tests). It's a real delete: memories live in their own `mary/memories.db` with secure_delete, so incident backups never hold them, and the old table is wiped from every backup. "Forget my name" merged too (822 tests): it clears the saved name, its memories and its talk turns, then she uses no name until one is offered. The page reloads the name after each turn (hub fix). Not run with real Gemini yet. Note: `test_live_skills` failed once while M8 was timing the laptop (a skill guard timeout under load); it passed on rerun.
+  - **M7a word search: boards approved by Andy 2026-10-31** ("I approve the boards completely"), canvas https://claude.ai/artifact/TgmCCW2RZK9TVVcTWQemzQ. His size decision: the resident chooses. There are three sizes (8x8 with the biggest letters, 10x10 as the first-time default, 12x12). Mary offers bigger letters once when the game comes up, changes size by voice on the fly (a fresh puzzle at the new size, same theme), and remembers their size. Peer `m7a-ec` is building that, then commits `DONE: M7a word search`; the hub merges it and rebuilds the installer. Note: there are now 20 skill tools plus her own; M13b fixes that next.
+  - **M8 laptop speed check** (`other/M8`, tab "M8 laptop speed her acct", brief `docs/handoff/M8.md`, started 00:15): on first run it times Kokoro, Whisper and the wake word, picks a "normal" or "light" tier, and lightens settings by itself on a slow laptop. Anything a resident would see or hear differently waits for Andy.
+  - **M9d2 bench fixes** (`other/M9d`, tab "M9d2 bench fixes her acct", peer `m9d-4b`): the fixes committed, tests in progress. Then the hub does a second real bench run.
+  - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
+- **Merged today since 20:30:**
+  - the speak-up review and plan, plus S0 (legal facts fixed against Appendix PP Rev. 232);
+  - M4a's fixes from the bench (no tags in Live, every bracket stripped in Normal, crisis numbers digit by digit, harm before the write-down offer, grown-up stories with no human past);
+  - bench run 1 (`bench/results/2026-10-30_2051.*`, 16/88, a mix of real problems and bench flaws).
+- **Questions for Andy:**
+  - Should Mary name autonomic dysreflexia to the resident? The safety section names it on purpose; the bench judge called it diagnosing.
+  - Speak-up decisions D1-D10.
+  - "Pal" was added to Sam's pet names that wait until asked; keep it?
 - **Merged, waiting on a check:**
   - **M9c memory core** (merged 2026-10-30, 707 tests):
     - Memories are dated entries in the app's database, pulled with a `recall` tool; about 120 words are always sent.
     - "What do you remember about me?", "forget that", and a "What Mary remembers" list in My info.
-    - Andy tries it after M4a and M4b land. It's open whether "forget" should really erase.
+    - Andy tries it after M4a and M4b land. "Forget" really erases since the 2026-10-31 merge.
   - **M9d brain bench:** the hub's first live run waits until Andy is done with Mary for the day, because it shares his free Gemini allowance. Commands are in the M9d merge commit body:
     - `python tools/brain_bench.py --key-from-app --delay 4` (about 168 requests);
     - add `--raw --variant bench/variants/lean-mary.md --variant bench/variants/lean-sam.md` for the full side-by-side (about 349 requests).
@@ -23,15 +31,17 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 - **Decisions waiting on Andy:**
   - **Politics:** decided 2026-10-30 (Andy's answer 10). Merged into her instructions and bench (bd7cc85).
   - **M9f, threats against others:** the safety-section gap. A draft is in the roadmap, waiting on Andy.
-  - **"Forget that":** truly erase, or hide and keep a copy? The hub leans toward truly erasing.
+  - **wake.log words:** decided 2026-10-31 (Andy: "word count at pilot"). The log keeps Whisper's words around each wake while Andy tunes the wake word. Before the pilot it keeps only a word count, because forget can't reach the log.
+  - **"Forget that":** decided 2026-10-30: truly erase (Andy: "forget that means forget that"). Merged 2026-10-31.
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. M9e, a leaner brain, after the bench A/B.
-  2. M7 games as skills (boards first, on Andy's account).
-  3. Rebuild the installer after the big merges.
-  4. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
-  5. Presentable GitHub before the pilot.
+  1. **M13b, tool groups** (brief `docs/handoff/M13b.md`, ready), started right after M7a merges and before the next game. Andy decided 2026-10-31: group her tools so she only holds the ones for what you're asking about. Each skill is one group, plus her own tools and a way to open another group, at most about 12 at once. With word search she has about 26 today.
+  2. M9e, a leaner brain, after the bench A/B.
+  3. M7 games as skills (boards first, on Andy's account).
+  4. Rebuild the installer after the big merges.
+  5. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
+  6. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.
 - **Free-tier facts:** Gemini TTS allows 10 requests a day and resets at midnight Pacific. Live is free. The text model's daily limit isn't measured yet.
 - **GitHub:** all of `main` is backed up to the `dev` branch (2026-10-30). The public `main` is still v0.2.0 until the cleanup before the pilot.
 - **Clean-up done 2026-10-30:** the installer, M12 and M13 worktrees and branches were removed, and the finished briefs moved to `docs/handoff/done/`.
@@ -41,8 +51,8 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 ### Status (from 2026-10-24)
 - Pushed to GitHub: v0.2.0. That's talk-to-log, design C, Talk buttons on detail boxes, formal reports, optional Gemini, and the installer build.
 - Verified research, not yet committed:
-  - `contacts/NC.json`: DHSR complaint line 1-800-624-3004 (no email or online form, printable forms only); state ombudsman (919) 855-3400 (re-check the roster date).
-  - `docs/retaliation.md`: F585, F550, F600, F622/F623, NCGS 131E-117(12), 131E-124(c).
+  - `contacts/NC.json`: DHSR complaint line 1-800-624-3004 (no email or online form, printable forms only); state ombudsman (919) 855-3400 (re-check the roster date). Corrected 2026-10-30: DHSR's pages do list an email, unconfirmed for complaints (see `docs/speakup-review.md`).
+  - `docs/retaliation.md`: F585, F550, F600, F622/F623, NCGS 131E-117(12), 131E-124(c). Corrected 2026-10-30: F622/F623 are now F627/F628.
 - Parked on branch `wip/report-to-state` (commit fddfdbc). It's unreviewed and untested, because helpers were stopped mid-work:
   - Report-to-state backend in `server.py` and `reports.py`: urgency levels via `/api/status`; the send wizard (grievance letter, completeness check, attestation, email/letter/phone from the contacts JSON); the submissions table; the retaliation flag and pattern detection; and quick notes (`/api/quick`). The `web/` screens for `#send` and `#rights` were never started.
   - The floating mic button in `desktop.py` + `web/float.html`, and the installer's "start with Windows" option.

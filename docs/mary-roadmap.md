@@ -339,6 +339,17 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
 - **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.
+  - **Andy (2026-10-31, afternoon, talking it through, not started):** "I really liked them when we first made them, but the more we talk about being childlike and infantilizing… a lot of people might take that from this design. I'm not saying that we completely redo it, but… we need to do some things that add some depth to the whole scene in the background… I'm pretty sure we're going to have to do some major work on the graphics."
+  - **What the hub found in the code:**
+    - The face is the round 4 "Cute 3" (`web/mary/face.js`): big low-set eyes with twinkling sparkle catchlights, a pulsing blush, hops, "zz" and thought dots. Those are cartoon conventions from children's apps.
+    - The captions use Fredoka, a rounded font common in kids' apps.
+    - The background is flat cream (`#fff0d2`), with no setting.
+    - Round 8's cards (painted scenes, Garamond, script) are already grown up, so Mary's screen and her cards no longer match.
+  - **Worth keeping:** her warmth, the moods and the talking mouth (`face.js` keeps the drawing apart from the behavior, so the look can change without redoing how she works), the big text and the one-button menu.
+  - **Directions to board (the hub's first thoughts):**
+    - a painted setting with real depth, in the cards' style: a porch, a sitting room or a kitchen window for Mary; a workshop or a dock for Sam. Layered, with light that follows the real time of day;
+    - a grown-up drawn face: natural eye size, no sparkles, blush or hops, quieter movement. Stylized, not lifelike, because a too-real face feels false for an AI;
+    - a grown-up caption font.
 - **M11. Reporting portal overhaul,** the incident log screens (`web/`): a complete visual redo, with boards first. Also decide **how much of it each resident sees**: whether they get the full-screen portal at all, which parts make sense for them, and what stays behind Mary. Decide this with Andy when we get there.
 
 ## Order and dependencies

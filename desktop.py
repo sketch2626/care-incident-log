@@ -9,6 +9,13 @@ default web browser instead and keeps running until the computer restarts. In th
 browser fallback Mary has no KeepAwake (we can't tell when a browser tab closes);
 the page's own Wake Lock covers it.
 """
+import sys  # M8
+
+if "--laptop-check" in sys.argv:  # M8: the speed check's child; it must stop before `import server` below
+    import speedcheck
+    speedcheck.child_main(sys.argv[sys.argv.index("--laptop-check") + 1])
+    sys.exit(0)
+
 import ctypes
 import faulthandler
 import os
@@ -22,6 +29,7 @@ from http.server import ThreadingHTTPServer
 
 import power
 import server
+import speedcheck  # M8
 
 AUTOPLAY_ARG = "--autoplay-policy=no-user-gesture-required"
 # The env var replaces pywebview's own browser arguments, so repeat the one it sets.
@@ -40,6 +48,7 @@ def start_server():
     except OSError:
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
     server.init_db()
+    server.laptop_check_setup()  # M8
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return f"http://127.0.0.1:{httpd.server_port}"
 
@@ -61,6 +70,14 @@ def log_note(what, detail=""):
 
 def log_error(what):
     log_note(what, traceback.format_exc())
+
+
+def start_laptop_check():  # M8
+    """Called once something is on screen; it can't affect the window."""
+    try:
+        speedcheck.CHECK.start_after_window()
+    except Exception:
+        log_error("The laptop speed check couldn't start.")
 
 
 def thread_stacks():
@@ -305,6 +322,7 @@ def open_window(url, mary=False, voices=False, startup=None):
                 startup.done("window and page showing")
             else:
                 startup.at("page loaded, but the window isn't showing")
+            start_laptop_check()  # M8
 
         window.events.shown += shown
         window.events.loaded += loaded
@@ -331,6 +349,7 @@ def main():
     startup.page = url + window_options(mary, voices)["path"]
     if not open_window(url, mary, voices, startup):
         startup.open_browser()
+        start_laptop_check()  # M8
         threading.Event().wait()  # keep serving the browser tab  # keep serving the browser tab
 
 

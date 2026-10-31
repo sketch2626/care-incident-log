@@ -53,7 +53,8 @@
   var LIVE_HELLO = '(The resident is ready to talk with you, and it is {when} where they are. Greet them in one or ' +
     'two short, warm sentences, like a friend who is glad to see them: use their name if you know it and, when it ' +
     'fits, something you remember about them or from your last talk. Talk as one grown-up to another: plain and ' +
-    'easy, no gushing and no fuss over them. Use different words every time. A light ' +
+    'easy, no gushing and no fuss over them. Use different words every time and never open the way your last ' +
+    'hello did; "Well, hey there" is only one way among many, so most days use another. A light ' +
     '"good morning", "good afternoon" or "good evening" is fine, but never "good night", never comment on the hour ' +
     'or how late it is, and never say you are still here or waiting for them. Never list what you can do.)';
   function timeWord() {   // M4a: the same slots as the scripted greetings in firstrun.js
@@ -61,7 +62,16 @@
     return (h >= 22 || h < 5) ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
   }
   function goodbyeLine() { return MSG.goodbye + ' ' + restLine(false); }   // M4a
-  function liveHello() { return LIVE_HELLO.replace('{when}', timeWord()); }   // M4a
+  // M4d: a different way in each time, because a model left alone opens the same way. mary.py has the same list.
+  var OPEN_WAYS = ['This time, open with their name and one plain word.',
+    'This time, open with a light greeting for the time of day.',
+    'This time, open with a plain "hey".',
+    'This time, open by saying it\'s good to talk with them again.',
+    'This time, open with something you remember about them, if you have something; if not, just their name.'];
+  function liveHello() {   // M4a. M4d: the way in goes inside the closing bracket
+    var way = OPEN_WAYS[Math.floor(Math.random() * OPEN_WAYS.length)];
+    return LIVE_HELLO.replace('{when}', timeWord()).replace(/\)$/, ' ' + way + ')');
+  }
   // M4a: the big Talk button is gone (M4b). The way back in is her name (M6), when it can run here, or Menu.
   function wakeOn() { return !!S.wakeWord && !!S.wakeReady; }
   function restLine(typing) {   // the resting caption and the end of her goodbye: only ways that really work now
@@ -78,7 +88,8 @@
   }
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_SAY = '(Say this out loud, word for word, and nothing else: ';   // M4a: say() while Live is open
-  var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say this to them right now, warmly and plainly, then stay with them: ';
+  // M4d: her exact words, because Live says the line itself and could drop the number (saidSafety checks it)
+  var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say these exact words first, word for word, then add at most one short, calm line of your own to stay with them: ';
   // --- end M4a ---
 
   var MSG = {
@@ -223,7 +234,10 @@
   // plain: the plain line showing; owner: whose words are up (a speech session or 'live');
   // liveWhole / liveTimed / emTurn: Live on the emergency screen; liveDone: her Live turn was heard to the end
   // liveCut: Live cut her off; her next turn's first sound starts a fresh caption (captions.js drops pieces after cut())
-  var CapS = { plain: '', owner: null, liveWhole: '', liveTimed: false, emTurn: '', liveDone: false, liveCut: false };
+  // numHeld / numLead (M4d): a tail of her Live words that could still grow into a crisis number, and what already
+  // showed of the sentence under way
+  var CapS = { plain: '', owner: null, liveWhole: '', liveTimed: false, emTurn: '', liveDone: false, liveCut: false,
+    numHeld: '', numLead: '' };
   var LOUD_HOLD_MS = 500;          // the resident counts as talking until this long after their last voice
   var SPOKE_MS = 350;              // Live: this much voice is a real turn of theirs, not a cough (speech.py HEARD_VOICE_S)
   var LIVE_THINK_AFTER_MS = 700;   // Live: this much quiet after they spoke = their turn is over, she is thinking
@@ -274,6 +288,7 @@
   }
   function capStopped() { if (S.screen !== 'emergency') { capCall(function () { cap.stopped(); }); } }   // the emergency words stay up
   function capCut() {
+    capLiveFlush();   // M4d: first, because captions.js drops pieces after cut()
     if (S.screen === 'emergency') { return; }
     if (CapS.owner === 'live') { CapS.liveCut = true; }   // her next Live sound starts a fresh caption
     capCall(function () { cap.cut(); });
@@ -281,7 +296,21 @@
   // No words while listening (round 6): a plain tip goes now; her own words fade 4 s after her or when they talk.
   function capListening() { if (CapS.plain) { CapS.plain = ''; capCall(function () { cap.clear(); }); } }
   // Live: each piece of her words (talklive onCaptionPiece), each audio chunk, her turn heard to the end.
+  // M4d: a piece can end half way through a number, so a tail that could still grow waits for the next piece.
+  // A late piece after her sound ended has none coming, so it holds nothing back.
   function capLivePiece(piece) {
+    var text = CapS.numHeld + piece, cut = CapS.liveDone ? text.length : numberTail(text);
+    CapS.numHeld = text.slice(cut);
+    text = fixNumbers(text.slice(0, cut), CapS.numLead);
+    CapS.numLead = (CapS.numLead + text).split(NUM_SENTENCE).pop();
+    capLiveWords(text);
+  }
+  function capLiveFlush() {   // M4d: whatever was held goes up now, so no word is lost
+    var held = CapS.numHeld, lead = CapS.numLead;
+    CapS.numHeld = CapS.numLead = '';
+    if (held) { capLiveWords(fixNumbers(held, lead)); }
+  }
+  function capLiveWords(piece) {
     CapS.plain = '';
     if (S.screen !== 'emergency') {
       capOwn('live');
@@ -289,7 +318,7 @@
       if (CapS.liveDone) { capCall(function () { cap.stopped(); }); }   // a late piece after her sound ended still fades
       return;
     }
-    if (CapS.liveWhole) { return; }       // her safety words are up already, whole
+    if (CapS.liveWhole || !piece) { return; }   // her safety words are up already, whole
     CapS.emTurn += piece;
     quietWhole(CapS.emTurn.trim(), {}, '');
   }
@@ -303,6 +332,7 @@
     }
   }
   function capLiveDone() {
+    capLiveFlush();   // M4d
     CapS.liveDone = true;
     if (S.screen !== 'emergency') { capCall(function () { cap.stopped(); }); return; }
     if (CapS.emTurn.trim()) { announceLive(CapS.emTurn); }
@@ -310,6 +340,7 @@
     if (CapS.liveTimed) { CapS.liveWhole = ''; }
   }
   function capLiveEmergency(words) {
+    capLiveFlush();   // M4d
     CapS.liveWhole = words;
     CapS.liveTimed = false;
     CapS.emTurn = '';
@@ -1069,8 +1100,99 @@
   }
   // M4a: the crisis numbers digit by digit for her voice; mary.py has the same list. Captions keep the digits.
   function spokenNumbers(text) {
-    return String(text).replace(/\b988\b/g, 'nine, eight, eight').replace(/\b911\b/g, 'nine one one')
-      .replace(/\b838[- ]?255\b/g, 'eight three eight, two five five');
+    return fixNumbers(String(text)).replace(/\b988\b/g, 'nine, eight, eight').replace(/\b911\b/g, 'nine one one')
+      .replace(/\b838[- ]?255\b/g, 'eight three eight, two five five')
+      .replace(/\bpress\s+1\b(?![-.]?\d)/gi, 'press one');   // M4d
+  }
+  // M4d: bench run 3: Sam said 988 as "ninety-eight-eight". The wrong forms of the crisis numbers; mary.py has the
+  // same patterns and guards (fix_numbers). Plain digits aren't wrong: spokenNumbers reads those out.
+  var NUM_H = '[-\\u2010-\\u2015\\s]', NUM_J = '[-\\u2010-\\u2015,\\s]+', NUM_D = '[-\\u2010-\\u2015,.\\s]+';
+  var NUM_HUNDRED = 'hundred' + NUM_J + '(?:and' + NUM_J + ')?';
+  var NUM_ELEVEN = new RegExp('\\bnine' + NUM_H + '+eleven\\b', 'gi');   // no comma: "nine, eleven" is a count
+  var NUM_FIX = [
+    [new RegExp('\\b(?:ninety' + NUM_J + 'eight|nine' + NUM_J + '(?:' + NUM_HUNDRED + ')?eighty|nine' + NUM_J +
+      'eight)' + NUM_J + 'eight\\b|\\b9' + NUM_D + '8' + NUM_D + '8\\b', 'gi'), 'nine, eight, eight'],
+    [new RegExp('\\bnine' + NUM_J + '(?:one' + NUM_J + 'one|' + NUM_HUNDRED + 'eleven)\\b|\\b9' + NUM_D + '1' +
+      NUM_D + '1\\b', 'gi'), 'nine one one'],
+    [new RegExp('\\beight' + NUM_J + '(?:(?:' + NUM_HUNDRED + ')?thirty' + NUM_J + 'eight|three' + NUM_J + 'eight)' +
+      NUM_J + 'two' + NUM_J + '(?:(?:' + NUM_HUNDRED + ')?fifty' + NUM_J + 'five|five' + NUM_J + 'five)\\b|\\b8' +
+      NUM_D + '3' + NUM_D + '8' + NUM_D + '2' + NUM_D + '5' + NUM_D + '5\\b', 'gi'), 'eight three eight, two five five'],
+    [NUM_ELEVEN, 'nine one one']];
+  // "press 1" alone isn't here: a caption may keep it, and spokenNumbers says it
+  var NUM_PRESS = new RegExp('\\bpress\\s+(?:(?:the\\s+)?(?:number|digit|option)\\s+(?:one|1)(?:[\\s-]+(?:key|button))?' +
+    '|the\\s+1(?:[\\s-]+(?:key|button))?|(?:the\\s+)?(?:one|1)[\\s-]+(?:key|button))\\b', 'gi');
+  // A digit or number word right against a form makes it some longer number ("nine eight eight seven", "1-9-8-8").
+  // After a comma and a space it's a new thought ("ninety-eight-eight, 24 hours a day"), so that doesn't count.
+  var NUM_WORD = 'zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve' +
+    '|(?:thir|four|fif|six|seven|eigh|nine)teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand';
+  var NUM_BEFORE = new RegExp('(?:\\d(?:[.,]|' + NUM_H + '*)|\\b(?:' + NUM_WORD + ')' + NUM_H + '*)$', 'i');
+  var NUM_AFTER = new RegExp('^(?:(?:[.,]|' + NUM_H + '*)\\d|' + NUM_H + '*(?:' + NUM_WORD + ')\\b)', 'i');
+  // "nine-eleven" meaning the attacks or a time stays as it is. A heart attack is the very time she should give the number.
+  var NINE11_BEFORE = new RegExp('\\b(?:after|since|before|on|of|until|at|post)' + NUM_H + '+(?:the\\s+)?$', 'i');
+  var NINE11_AFTER = /^[\s,]*(?:[ap]\.?\s?m\b|o['’]?clock\b|in\s+the\s+(?:morning|afternoon|evening)\b|this\s+(?:morning|afternoon|evening)\b|at\s+night\b|last\s+night\b|tonight\b)/i;
+  var NINE11_TALK = /\bseptember\b|\btowers?\b|\battacks?\b|\bterror|\b2001\b|\btrade\s+cent(?:er|re)\b|\bpentagon\b|\bground\s+zero\b/i;
+  var NUM_BODY_ATTACK = /\b(?:heart|panic|asthma|anxiety)[\s-]+attacks?\b/gi;
+  var NUM_SENTENCE_SRC = '[.!?](?:\\s|$)|\\n', NUM_SENTENCE = new RegExp(NUM_SENTENCE_SRC);
+  // Live's pieces: the end of a piece that could still grow into a form waits for the next piece. Only the last word
+  // can be cut in two. A nine-eleven waits for its sentence's end, because that's where it's decided.
+  var NUM_FIRST = ['press', 'ninety', 'nine', 'eight'];
+  var NUM_MORE = ['and', 'the', 'number', 'digit', 'option', 'key', 'button', 'hundred', 'one', '1', 'eleven', 'two',
+    'three', 'five', 'eight', 'nine', 'thirty', 'fifty', 'eighty'];
+  function numStarts(words) {
+    var seen = {};
+    words.forEach(function (w) { for (var i = 1; i <= w.length; i++) { seen[w.slice(0, i)] = true; } });
+    return Object.keys(seen).sort(function (a, b) { return b.length - a.length; }).join('|');
+  }
+  var NUM_TAIL = new RegExp('\\b(?:(?:' + NUM_FIRST.join('|') + ')(?:' + NUM_J + '(?:' + NUM_MORE.join('|') + '))*' +
+    '(?:' + NUM_J + '(?:' + numStarts(NUM_MORE) + '))?(?:' + NUM_J + ')?|' + numStarts(NUM_FIRST) +
+    '|[89](?:' + NUM_D + '\\d)*(?:' + NUM_D + ')?)$', 'i');
+  var NINE11_OPEN = new RegExp('\\bnine' + NUM_H + '+eleven\\b(?![\\s\\S]*(?:' + NUM_SENTENCE_SRC + '))', 'i');
+  var NUM_TENS = /eleven|thirty|fifty|eighty|ninety|hundred/i;
+  function numberFits(form, m, at, text, before) {   // false: part of a longer number, or the attacks or a time
+    var head = before + text.slice(0, at), tail = text.slice(at + m.length);
+    if (NUM_BEFORE.test(head) || NUM_AFTER.test(tail)) { return false; }
+    if (form !== NUM_ELEVEN) { return true; }
+    if (NINE11_BEFORE.test(head) || NINE11_AFTER.test(tail)) { return false; }
+    var sentence = head.split(NUM_SENTENCE).pop() + ' ' + tail.split(NUM_SENTENCE)[0];
+    return !NINE11_TALK.test(sentence.replace(NUM_BODY_ATTACK, ' '));
+  }
+  // text with every wrong form put right. Digits stay digits. before: this sentence's words that already showed.
+  function fixNumbers(text, before) {
+    text = String(text == null ? '' : text);
+    before = before || '';
+    NUM_FIX.forEach(function (f) {
+      text = text.replace(f[0], function (m, at, whole) { return numberFits(f[0], m, at, whole, before) ? f[1] : m; });
+    });
+    return text.replace(NUM_PRESS, function (m, at, whole) {
+      return NUM_AFTER.test(whole.slice(at + m.length)) ? m : 'press one';
+    });
+  }
+  function numberTail(text) {   // where the end of text could still grow into a form; what's before can go now
+    var tail = text.search(NUM_TAIL), open = text.search(NINE11_OPEN);
+    return Math.min(tail < 0 ? text.length : tail, open < 0 ? text.length : open);
+  }
+  // Live's voice can't be rewritten, so what sounded wrong gets said again. Only forms that sound wrong count: a
+  // transcript's "9-1-1" or "nine eight eight" was said digit by digit, and she shouldn't correct herself for that.
+  function numberCorrection(text) {
+    var out = [];
+    text = String(text == null ? '' : text);
+    NUM_FIX.forEach(function (f) {
+      text.replace(f[0], function (m, at, whole) {
+        if (NUM_TENS.test(m) && numberFits(f[0], m, at, whole, '') && out.indexOf(f[1]) < 0) { out.push(f[1]); }
+        return m;
+      });
+    });
+    return out.join(' and ');
+  }
+  // M4d: the numbers an emergency line can hold, in digits or said one at a time, read after fixNumbers.
+  var SAFETY_NUMBERS = [
+    new RegExp('\\b911\\b|\\bnine' + NUM_D + 'one' + NUM_D + 'one\\b', 'i'),
+    new RegExp('\\b988\\b|\\bnine' + NUM_D + 'eight' + NUM_D + 'eight\\b', 'i'),
+    new RegExp('\\bpress' + NUM_J + '(?:1|one)\\b', 'i')];
+  // M4d: true when her turn holds every number the emergency line holds. Pure.
+  function saidSafety(said, words) {
+    var turn = fixNumbers(said), line = fixNumbers(words);
+    return SAFETY_NUMBERS.every(function (n) { return !n.test(line) || n.test(turn); });
   }
   function greetLive(text) {
     try { return !!window.MaryLive.greet(text); } catch (e) { log(e); return false; }
@@ -1351,7 +1473,7 @@
         screen: skillScreen(),
         aside: asideSkill(),   // M13b
         plain: !!c.plain,   // M4a: no language hint, after a start that failed with it
-        onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
+        onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(fixNumbers(t)); } },   // M4d: saidText stays raw
         // M4a: liveHeardPiece: the story's cut-in, the early goodbye, and garbled lines (true = don't show it)
         // Andy (2026-10-30): his own words are never shown; only her words go on screen
         onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); liveHeardPiece(c, t); } },
@@ -1362,7 +1484,7 @@
           liveSaid(c);
           if (mine()) { c.lastAct = Date.now(); if (c.story) { c.story.paused = true; } }
         },
-        onTurnComplete: function () { liveSaid(c); if (mine()) { liveTurnDone(c); } },   // M4a: liveSaid
+        onTurnComplete: function () { liveTurnEnded(c, mine()); },   // M4a: liveSaid. M4d: and the checks on her words
         onToolCall: function (tc) { return liveToolCall(c, tc); },
         onActivity: function () { if (mine()) { c.lastAct = Date.now(); } },
         // M4b: her words on her playback clock, the ear waves, and thinking until her first sound
@@ -1476,6 +1598,41 @@
     }).catch(log);
   }
 
+  // M4d: Live's audio comes straight from Gemini, so a number she got wrong gets said again, once per resident turn.
+  // numFixed also stops her correcting her own correction.
+  function liveNumberFix(c, fix) {
+    if (!fix || c.numFixed || c.ending || c.story) { return; }
+    c.numFixed = true;
+    greetLive(LIVE_SAY + 'Let me say that number clearly: ' + fix + '.)');
+  }
+
+  // M4d: the emergency words if her finished turn left a number out; '' if not. Empty means the hushed old turn ended,
+  // so it keeps waiting, and a cut-in reaches her next finished turn the same way. Reads saidText: before liveSaid.
+  function liveSafetyMissing(c) {
+    var words = c.safetyWords, said = String(c.saidText || '').trim();
+    if (!words || !said) { return ''; }
+    c.safetyWords = '';
+    return saidSafety(said, words) ? '' : words;
+  }
+
+  // M4d: once only, because safetyWords is already clear. It doesn't look at c.ending or c.story: nothing holds this back.
+  function liveSafetyAgain(c, words) {
+    c.lastAct = Date.now();
+    c.saidSkip = true;                      // /api/mary/heard saved these words; not saved twice
+    if (!greetLive(LIVE_SAY + spokenNumbers(words) + ')')) { c.saidSkip = false; say(words, 'alert'); }
+  }
+
+  // M4d: her Live turn is finished. isMine: the talk she said it in is still the open one. A retry says the number right,
+  // so no number fix on top of it, and a goodbye waits for its turn to finish.
+  function liveTurnEnded(c, isMine) {
+    var fix = numberCorrection(c.saidText), again = isMine ? liveSafetyMissing(c) : '';
+    liveSaid(c);
+    if (!isMine) { return; }
+    if (again) { liveSafetyAgain(c, again); return; }
+    liveTurnDone(c);
+    liveNumberFix(c, fix);
+  }
+
   function liveByeCap(c, extended) {
     if (S.convo !== c) { return; }
     if (!extended && liveSpeaking()) { c.byeTimer = setTimeout(function () { liveByeCap(c, true); }, 6000); return; }
@@ -1506,6 +1663,7 @@
     text = String(text == null ? '' : text).trim();
     c.heard = text;
     c.lastAct = Date.now();
+    c.numFixed = false;   // M4d
     var tail = heardFinal(c.heardTrack, text);   // M4a: their last words, not what built up before a pause
     var p = api('POST', '/api/mary/heard', { text: text }, { ms: 8000 }).then(function (j) {
       return j || {};
@@ -1548,6 +1706,7 @@
     capLiveEmergency(words);   // M4b: all of it at once (whole), before her voice
     c.saidText = '';                        // M4a: /api/mary/heard saved the emergency words; not saved twice
     c.saidSkip = true;
+    c.safetyWords = words;                  // M4d: liveTurnEnded checks her turn for the numbers
     if (!greetLive(LIVE_SAFETY + spokenNumbers(words) + ')')) { c.saidSkip = false; say(words, 'alert'); }
   }
 

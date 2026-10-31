@@ -6,6 +6,7 @@ without Gemini. Mary only offers to write things down; she never writes to the i
 import base64  # M4a: see_image
 import json
 import os
+import random  # M4d: open_line
 import re
 import sys
 import time
@@ -22,13 +23,65 @@ INSTRUCTIONS = ROOT / "mary" / "instructions.md"
 
 # M4a: the same three numbers and words in app.js (spokenNumbers), for what her voice says; captions keep the digits
 SPOKEN_NUMBERS = ((re.compile(r"\b988\b"), "nine, eight, eight"), (re.compile(r"\b911\b"), "nine one one"),
-                  (re.compile(r"\b838[- ]?255\b"), "eight three eight, two five five"))
+                  (re.compile(r"\b838[- ]?255\b"), "eight three eight, two five five"),
+                  (re.compile(r"\bpress\s+1\b(?![-.]?\d)", re.I), "press one"))  # M4d
+# M4d: bench run 3: Sam said 988 as "ninety-eight-eight". The wrong forms of the crisis numbers, for fix_numbers.
+# app.js (fixNumbers) has the same patterns and guards. Plain digits aren't wrong: spoken_numbers reads those out.
+_NH = r"[-‐-―\s]"     # a hyphen, a dash or a space
+_NJ = r"[-‐-―,\s]+"   # between the words of a number: any mix of those and commas
+_ND = r"[-‐-―,.\s]+"  # between its digits, where a dot counts too: 9.8.8
+_HUNDRED = rf"hundred{_NJ}(?:and{_NJ})?"
+_NINE_ELEVEN = re.compile(rf"\bnine{_NH}+eleven\b", re.I)  # no comma: "nine, eleven" is a count
+_FIX_NUMBERS = (
+    (re.compile(rf"\b(?:ninety{_NJ}eight|nine{_NJ}(?:{_HUNDRED})?eighty|nine{_NJ}eight){_NJ}eight\b"
+                rf"|\b9{_ND}8{_ND}8\b", re.I), "nine, eight, eight"),
+    (re.compile(rf"\bnine{_NJ}(?:one{_NJ}one|{_HUNDRED}eleven)\b|\b9{_ND}1{_ND}1\b", re.I), "nine one one"),
+    (re.compile(rf"\beight{_NJ}(?:(?:{_HUNDRED})?thirty{_NJ}eight|three{_NJ}eight){_NJ}"
+                rf"two{_NJ}(?:(?:{_HUNDRED})?fifty{_NJ}five|five{_NJ}five)\b"
+                rf"|\b8{_ND}3{_ND}8{_ND}2{_ND}5{_ND}5\b", re.I), "eight three eight, two five five"),
+    (_NINE_ELEVEN, "nine one one"))
+# "press 1" alone isn't here: a caption may keep it, and SPOKEN_NUMBERS says it
+_PRESS_ONE = re.compile(r"\bpress\s+(?:(?:the\s+)?(?:number|digit|option)\s+(?:one|1)(?:[\s-]+(?:key|button))?"
+                        r"|the\s+1(?:[\s-]+(?:key|button))?|(?:the\s+)?(?:one|1)[\s-]+(?:key|button))\b", re.I)
+# A digit or number word right against a form makes it some longer number ("nine eight eight seven", "1-9-8-8").
+# After a comma and a space it's a new thought ("ninety-eight-eight, 24 hours a day"), so that doesn't count.
+_NUM_WORD = ("zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
+             "|(?:thir|four|fif|six|seven|eigh|nine)teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
+             "|hundred|thousand")
+_NUM_BEFORE = re.compile(rf"(?:\d(?:[.,]|{_NH}*)|\b(?:{_NUM_WORD}){_NH}*)$", re.I)
+_NUM_AFTER = re.compile(rf"^(?:(?:[.,]|{_NH}*)\d|{_NH}*(?:{_NUM_WORD})\b)", re.I)
+# "nine-eleven" meaning the attacks or a time stays as it is. A heart attack is the very time she should give the number.
+_NINE11_BEFORE = re.compile(rf"\b(?:after|since|before|on|of|until|at|post){_NH}+(?:the\s+)?$", re.I)
+_NINE11_AFTER = re.compile(r"^[\s,]*(?:[ap]\.?\s?m\b|o['’]?clock\b|in\s+the\s+(?:morning|afternoon|evening)\b"
+                           r"|this\s+(?:morning|afternoon|evening)\b|at\s+night\b|last\s+night\b|tonight\b)", re.I)
+_NINE11_TALK = re.compile(r"\bseptember\b|\btowers?\b|\battacks?\b|\bterror|\b2001\b|\btrade\s+cent(?:er|re)\b"
+                          r"|\bpentagon\b|\bground\s+zero\b", re.I)
+_BODY_ATTACK = re.compile(r"\b(?:heart|panic|asthma|anxiety)[\s-]+attacks?\b", re.I)
+_NUM_SENTENCE = re.compile(r"[.!?](?:\s|$)|\n")
+# Normal's stream: the end of a piece that could still grow into a form waits for the next piece. Only the last word
+# can be cut in two. A nine-eleven waits for its sentence's end, because that's where it's decided.
+_HOLD_FIRST = ("press", "ninety", "nine", "eight")
+_HOLD_MORE = ("and", "the", "number", "digit", "option", "key", "button", "hundred", "one", "1", "eleven", "two",
+              "three", "five", "eight", "nine", "thirty", "fifty", "eighty")
+
+
+def _word_starts(words):
+    return "|".join(sorted({w[:i] for w in words for i in range(1, len(w) + 1)}, key=len, reverse=True))
+
+
+_NUM_TAIL = re.compile(rf"\b(?:(?:{'|'.join(_HOLD_FIRST)})(?:{_NJ}(?:{'|'.join(_HOLD_MORE)}))*"
+                       rf"(?:{_NJ}(?:{_word_starts(_HOLD_MORE)}))?(?:{_NJ})?"
+                       rf"|{_word_starts(_HOLD_FIRST)}|[89](?:{_ND}\d)*(?:{_ND})?)$", re.I)
+_NINE11_OPEN = re.compile(rf"{_NINE_ELEVEN.pattern}(?![\s\S]*(?:{_NUM_SENTENCE.pattern}))", re.I)
 EMERGENCY_TEXT = {
     "medical": "Please press your call light or call out for staff right now. If it's serious, call 911.",
     "self_harm": "I'm really glad you told me. Please press your call light and tell a nurse how you're feeling, "
                  "or call or text 988 any time, day or night.",
 }
 STAY_TEXT = "I'm right here with you."  # M4c: when her emergency reply was all a repeat of EMERGENCY_TEXT
+# M4d: Live hushes her own reply, so the app's line has to carry this. "If you've served": a wrong guess tells no one
+# they're a veteran.
+VETERANS_TEXT = "If you've served, you can also call 988 and press 1 for the Veterans Crisis Line, or text 838255."
 OFFLINE_TEXT = "I'm sorry, I'm having trouble thinking right now, but I'm still right here with you."
 OFFER_QUESTION = "Would you like me to write that down?"
 SAVED_TEXT = "All right, I've written that down for you, with today's date and time. Is there anything else on your mind?"
@@ -328,8 +381,36 @@ def _plain(text):
     return text.replace("’", "'").replace("‘", "'").replace("ʼ", "'")
 
 
+def _number_fits(form, m, before):  # M4d
+    """False when this match is part of a longer number, or a nine-eleven that means the attacks or a time."""
+    head, tail = before + m.string[:m.start()], m.string[m.end():]
+    if _NUM_BEFORE.search(head) or _NUM_AFTER.search(tail):
+        return False
+    if form is not _NINE_ELEVEN:
+        return True
+    if _NINE11_BEFORE.search(head) or _NINE11_AFTER.search(tail):
+        return False
+    sentence = _NUM_SENTENCE.split(head)[-1] + " " + _NUM_SENTENCE.split(tail)[0]
+    return not _NINE11_TALK.search(_BODY_ATTACK.sub(" ", sentence))
+
+
+def fix_numbers(text, before=""):  # M4d
+    """text with every wrong form of a crisis number put right, for captions, saved words and a voice alike.
+    Digits stay digits. before: the words of this sentence that already went out, when text is part of a stream."""
+    for form, words in _FIX_NUMBERS:
+        text = form.sub(lambda m: words if _number_fits(form, m, before) else m.group(), text)
+    return _PRESS_ONE.sub(lambda m: m.group() if _NUM_AFTER.search(m.string[m.end():]) else "press one", text)
+
+
+def _number_cut(text):  # M4d
+    """Where the end of text could still grow into a number form. What's before the cut can go out now."""
+    tail, open_ = _NUM_TAIL.search(text), _NINE11_OPEN.search(text)
+    return min(tail.start() if tail else len(text), open_.start() if open_ else len(text))
+
+
 def spoken_numbers(text):  # M4a: a voice left alone can say 988 as "nine eighty-eight"
     """text with the crisis numbers written out digit by digit, for a voice to read."""
+    text = fix_numbers(text)  # M4d
     for number, words in SPOKEN_NUMBERS:
         text = number.sub(words, text)
     return text
@@ -746,16 +827,25 @@ class _ReplyStream:
     A [mood: x] tag is handled the moment its "]" arrives and the words after it flow on at once.
     Any other "[" starts a hold: everything from there to the end is kept, so a [remember:] or
     [name:] line is never spoken half-way. speak(piece, after_tag) and mood(value) are callbacks.
+    M4d: the words go out through fix_numbers. number holds a tail that could still grow into a crisis number, since
+    a chunk can end half way through one; sentence is what already went out of the sentence under way.
     """
 
     def __init__(self, speak, mood):
         self.speak, self.mood = speak, mood
-        self.buf = self.held = ""
+        self.buf = self.held = self.number = self.sentence = ""
         self.after_tag = False
 
     def _say(self, piece):
         if not piece:
             return
+        text = self.number + piece
+        cut = _number_cut(text)
+        self.number = text[cut:]
+        piece = fix_numbers(text[:cut], self.sentence)
+        if not piece:
+            return
+        self.sentence = _NUM_SENTENCE.split(self.sentence + piece)[-1]
         self.speak(piece, self.after_tag)
         if piece.strip():
             self.after_tag = False
@@ -788,8 +878,10 @@ class _ReplyStream:
     def finish(self):
         """The held-back text with every tag removed, and nothing from a half-finished tag."""
         held = _MOOD_TAG.sub(lambda m: self.mood(m.group(1)) or "", _TAG.sub("", self.held))
-        self.buf = self.held = ""
-        return _BRACKETS.sub("", held)  # M4a: nothing in brackets is ever spoken, like an [alarm: emergency] of her own
+        held = _BRACKETS.sub("", held)  # M4a: nothing in brackets is ever spoken, like an [alarm: emergency] of her own
+        held, sentence = self.number + held, self.sentence  # M4d: a held number goes first, in its place
+        self.buf = self.held = self.number = self.sentence = ""
+        return fix_numbers(held, sentence)
 
 
 # --- skills hook (M13) ---
@@ -962,7 +1054,7 @@ def _app_facts_text(companion):  # M9b
         return ""
 
 
-def _body(text, memory, kind, companion="mary", skills=None, screen=None):
+def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line=""):  # M4d: safety_line
     system = system_text(memory, companion)
     # --- skills hook (M13) --- an emergency line gets no skills at all
     tools = []
@@ -974,10 +1066,13 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     # --- end skills hook ---
     system += CHARACTER_NOTE  # M4c: late in the prompt, where it holds; only the turn notes come after it
     if kind:  # M4a: the bench heard the same instruction twice in a row
-        system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} Those words are your very "
+        said = safety_line or EMERGENCY_TEXT[kind]  # M4d: what emergency_text gave
+        system += (f"\n\nThe app has already told them this out loud: {said} Those words are your very "
                    "first words, so the safety rule is already met. They heard it, so don't say any of it again, in any "
                    "words. Add only one short, calm line of your own, to stay with them.")
-        if kind == "self_harm":
+        if VETERANS_TEXT in said:  # M4d
+            system += " That includes the Veterans Crisis Line, so don't say that again either."
+        elif kind == "self_harm":
             system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
     else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
         if _HARMED.search(_plain(text)):
@@ -1016,23 +1111,35 @@ _FEARS_STAFF = re.compile(
 HARM_NOTE = ("\n\nThey may have just said someone hurt, hit, threatened or stole from them. If so, say all of this, in "
              "this order: say plainly that it's not okay, suggest telling a nurse or a person in charge they trust, and "
              "only then offer to write it down. Never promise that you will report it yourself.")
-FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell them that retaliation against residents "
-             "is against the law, that nothing is written or sent without their say, and that the long-term care "
-             "ombudsman can help them in confidence.")
+# M4d: plain words; the meaning of the safety section, which stays as it is
+FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell them in plain words, not \"retaliation\": "
+             "they're not allowed to punish you for speaking up, it's against the law, and nothing is written or sent "
+             "without your say. Name the long-term care ombudsman and say who that is: someone from outside whose job is "
+             "to stand up for residents, and who keeps it private.")
 # M4c: closes Normal's prompt and Live's (voices.LIVE_TOOLS_NOTE), because run 2 showed the manner rules fade mid-prompt.
 # For either companion, so no name. No square brackets: Live's prompt must never hold one.
 CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- No pet names unless they've asked for one: no \"honey\", no \"sugar\", no \"dear\". Any other "
                   "friendly name only the way your own section above allows.\n"
-                  "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\", no "
-                  "\"That's wonderful!\" Take it the way a neighbor your own age would.\n"
+                  "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\" or \"Well, look at that\", no "
+                  "\"That's wonderful!\" Take it the way a neighbor your own age would: told of a finished crossword, "
+                  "skip the applause and go to the thing itself, like \"Those can fight back. What was the hardest word?\"\n"
                   "- \"Bless your heart\" only as real sympathy, never as praise.\n"
                   "- No fussing, no \"we\" when you mean \"you\", and no customer-service lines like \"Is there "
                   "anything else I can help you with?\"\n"
                   "- Your warmth is in paying attention, not in sugar.\n"
                   "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
                   "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
-                  "else. Don't ask about it.")
+                  "else. Don't ask about it.\n"
+                  "- When someone confused asks for a person who has passed, don't argue, don't lie and don't announce the death, "
+                  "even when you know it. Meet the feeling, like \"You miss him. Tell me about him,\" and turn gently "
+                  "toward comfort. Tell them only if they ask you straight out, and gently.\n"  # M4d
+                  "- Rights in plain words: not \"retaliation\" but \"They're not allowed to punish you for speaking up.\" "
+                  "With the ombudsman's name, say who that is: someone from outside whose job is to stand up for residents.\n"
+                  "- Asked what you can do, name two or three real things from your instructions and skills. Never offer "
+                  "weather, news, reminders, calls or anything that plays music.\n"
+                  "- Say the crisis numbers one digit at a time: \"nine, eight, eight\", \"nine one one\", and \"press "
+                  "one\"; never \"ninety-eight-eight\", \"nine eighty-eight\" or \"nine-eleven\".")  # M4d
 
 # M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
 # Narrow on purpose: "you need a nurse" stays out, because whether she names autonomic dysreflexia is Andy's open question.
@@ -1040,22 +1147,63 @@ _STEP = re.compile(
     r"\bcall\s+(?:light|button)\b|\bcall\s+out\b|\b911\b|\bnine[,\s-]+one[,\s-]+one\b"
     r"|\b988\b|\bnine[,\s-]+eight[,\s-]+eight\b"
     r"|\b(?:tell|get|find|grab|call)\s+(?:for\s+)?(?:(?:a|an|the|your|charge)\s+){0,2}(?:nurses?|staff)\b", _I)
-_VETERANS_LINE = re.compile(r"veteran|\bpress\s+(?:one|1)\b|838|\beight[,\s-]+three[,\s-]+eight\b", _I)  # never dropped
+# Stays, unless the app's line already gave it (M4d)
+_VETERANS_LINE = re.compile(r"veteran|\bpress\s+(?:one|1)\b|838|\beight[,\s-]+three[,\s-]+eight\b", _I)
 _SENTENCE_GAP = re.compile(r"(?<=[.!?])\s+")
 _TAG_PIECE = re.compile(f"({_BRACKETS.pattern})")
 
 
-def _without_steps(text):
+def _without_steps(text, veterans_said=False):
     """Her emergency reply with every sentence that repeats the app's line taken out. Tags pass through untouched,
-    and a tag in front of a sentence doesn't shield that sentence. The Veterans Crisis Line always stays."""
+    and a tag in front of a sentence doesn't shield that sentence. The Veterans Crisis Line stays, unless the app's
+    line already gave it (veterans_said, M4d)."""
+    def stays(sentence):
+        if _VETERANS_LINE.search(sentence):
+            return not veterans_said
+        return not _STEP.search(sentence)
+
     out = []
     for piece in _TAG_PIECE.split(text):
         if piece.startswith("["):
             out.append(piece)
         else:
-            out.append(" ".join(s for s in _SENTENCE_GAP.split(piece)
-                                if _VETERANS_LINE.search(s) or not _STEP.search(s)))
+            out.append(" ".join(s for s in _SENTENCE_GAP.split(fix_numbers(piece))  # M4d: a wrong form repeats it too
+                                if stays(s)))
     return "".join(out)
+
+
+# M4d: an animal vet ("the vet's office") and "navy blue" don't count. A wrong yes costs nothing, because of how
+# VETERANS_TEXT is worded.
+_VETERAN = re.compile(r"\bveterans?\b|\bserved\s+my\s+country\b"
+                      r"|\b(?:a|war|army|navy|marine|air\s+force|coast\s+guard|vietnam|korea|korean\s+war)\s+vet\b(?!['’]s\b)"
+                      r"|\bserved\s+in\s+(?:the\s+)?(?:war|military|service|army|navy|marines|air\s+force|coast\s+guard"
+                      r"|national\s+guard|korea|vietnam|iraq|afghanistan|gulf|world\s+war)\b"
+                      r"|\bin\s+the\s+(?:army|navy\b(?!\s+blue)|marines|air\s+force|coast\s+guard)\b"
+                      r"|\bmarine\s+corps\b|\bnational\s+guard\b", _I)
+
+
+def _known_veteran(memory, heard):
+    """M4d: from what they just said, their saved facts, or their recent turns. Never raises: a locked database must
+    never stop an emergency line."""
+    if _VETERAN.search(str(heard or "")):
+        return True
+    if memory is None:
+        return False
+    try:
+        said = [t["text"] for t in memory.recent if t["role"] == "user"] + list(memory.facts)
+        if any(_VETERAN.search(str(s)) for s in said):
+            return True
+        store = getattr(memory, "store", None)
+        return store is not None and any(_VETERAN.search(str(m["text"])) for m in store.active())
+    except Exception:
+        return False
+
+
+def emergency_text(kind, memory=None, heard=""):
+    """M4d: the app's emergency line, the same in Normal and Live. Self-harm adds the Veterans line for a known veteran."""
+    if kind == "self_harm" and _known_veteran(memory, heard):
+        return EMERGENCY_TEXT[kind] + " " + VETERANS_TEXT
+    return EMERGENCY_TEXT[kind]
 
 
 def not_english(text):  # M4a: Live's transcript sometimes comes back in another script
@@ -1129,10 +1277,18 @@ OPEN_NUDGE = "(They opened the app.)"
 OPEN_PROMPT = (
     "They have just opened your screen{clock}. Say hello in one or two short sentences, as one grown-up to another: "
     "plain and easy, no gushing and no fuss over them. Use their name if you know it and, when it fits, something you "
-    "remember about them or from your last talk. Use different words every time. A light \"good morning\", \"good "
+    "remember about them or from your last talk. Use different words every time, and never open the way your last "
+    "hello did. {way} A light \"good morning\", \"good "
     "afternoon\" or \"good evening\" is fine, but never \"good night\", and never comment on the hour or how late it is. "
     "Never ask something they have already answered, and never list what you can do. Just the words you say, with no "
     "tags and no notes in brackets.")
+# M4d: a different way in each time, picked here because a model left alone opens the same way (bench run 3).
+# web/mary/app.js (OPEN_WAYS) has the same list. No companion names and no square brackets.
+OPEN_WAYS = ("This time, open with their name and one plain word.",
+             "This time, open with a light greeting for the time of day.",
+             "This time, open with a plain \"hey\".",
+             "This time, open by saying it's good to talk with them again.",
+             "This time, open with something you remember about them, if you have something; if not, just their name.")
 VISION_DEADLINE_S = 8
 VISION_BYTES_MAX = 700_000  # a bigger picture isn't sent: a look has to stay quick
 
@@ -1168,7 +1324,7 @@ def open_line(memory, api_key, model="", companion="mary", when=""):
     except Exception:
         return ""
     clock = f", and it is {when} where they are" if when in OPEN_TIMES else ""
-    body["systemInstruction"]["parts"][0]["text"] += "\n\n" + OPEN_PROMPT.format(clock=clock)
+    body["systemInstruction"]["parts"][0]["text"] += "\n\n" + OPEN_PROMPT.format(clock=clock, way=random.choice(OPEN_WAYS))
     body["generationConfig"] = {"temperature": 0.9, "maxOutputTokens": 1000}
     text = _short_answer(body, api_key, model, OPEN_DEADLINE_S)
     text = " ".join(re.sub(r"[*#]+", "", re.sub(r"\[[^\]]*\]?", "", text)).split())
@@ -1280,9 +1436,11 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     forget_yes = bool(waiting) and not kind and not said_yes and _forget_yes(text)
     if waiting and not kind and is_decline(text):
         memory.pending_forget = None
+    safety_line = ""
     if kind:
         set_mood("alert")
-        emit(EMERGENCY_TEXT[kind])
+        safety_line = emergency_text(kind, memory, text)  # M4d
+        emit(safety_line)
         if said_yes:
             memory.pending_offer = prior  # the emergency comes first; the offer waits one more turn
     confirmed = said_yes and not kind and write is not None
@@ -1325,7 +1483,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     elif api_key:
         raw = ""
         stream = _ReplyStream(speak, take_mood)
-        body = _body(text, memory, kind, companion, skills, screen)  # --- skills hook (M13) ---
+        body = _body(text, memory, kind, companion, skills, screen, safety_line)  # --- skills hook (M13) ---
         try:
             while True:  # --- skills hook (M13) --- one pass per tool round
                 calls, said = [], ""
@@ -1372,7 +1530,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         except Exception:
             error = NO_GEMINI
         if kind:  # M4c: the app's line played in full, so she doesn't repeat its steps; she stays with them
-            kept = _without_steps(raw)
+            kept = _without_steps(raw, veterans_said=VETERANS_TEXT in safety_line)  # M4d: veterans_said
             if _BRACKETS.sub("", raw).strip() and not _BRACKETS.sub("", kept).strip():
                 kept = STAY_TEXT + kept  # first, so a held-back tag can't swallow it
             stream.feed(kept)

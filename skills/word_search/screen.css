@@ -1,0 +1,106 @@
+/* The word search screen, side by side with Mary (aside:true; the shared rules are .skill-screen.aside in
+   web/mary/mary.css). This box is the right 60% of the window. The approved boards are mockups/mary/round7 (r7.css):
+   at 1280x800 the box is 768x800, the grid 540 square at 54px cells, the list 184 wide, the bar 88 tall.
+   Everything here is sized from that box (cq units), so those same numbers come out at 1280x800 and scale from there.
+   The Menu button doesn't scale (28px from the top and right, about 223x96), so the top row stays 124px with 290px clear.
+   Rules for residents 65-95: text 20px or more, letters 24px or more, buttons 64px or more, high contrast.
+   The settle on a new mark is skipped for prefers-reduced-motion by the global rule in web/mary/mary.css. */
+.skill-screen[data-skill="word_search"]{overflow:hidden!important;color:#1f1b16}
+.skill-screen[data-skill="word_search"] > .btn{display:none}   /* our "Back to Mary" replaces the small generic Back */
+.skill-screen[data-skill="word_search"] .skill-body{position:absolute;inset:0;container-type:size}
+
+/* --size, --rows and --chars come from screen.js: the grid's size, the list's rows and the longest word's letters */
+.skill-screen[data-skill="word_search"] .ws{
+  --pad-r:min(28px,3.646cqw);
+  --pad-b:min(32px,4cqh);
+  --top:124px;
+  --under:16px;
+  --bar:clamp(72px,11cqh,110px);
+  --list-font:clamp(20px,3.385cqw,34px);
+  --list-w:max(calc(var(--list-font)*7.077),calc(var(--list-font)*(var(--chars,7)*.6 + 1.25)));
+  --fit-w:calc(100cqw - var(--pad-r) - 16px - var(--list-w));
+  --fit-h:calc(100cqh - var(--top) - var(--under) - var(--bar) - var(--pad-b));
+  --side:calc(min(var(--fit-w),var(--fit-h))*var(--fit,1));
+  --cell:calc(var(--side)/var(--size,10));
+  position:absolute;inset:0;box-sizing:border-box;padding:0 var(--pad-r) var(--pad-b) 0;
+  display:grid;grid-template-columns:var(--side) var(--list-w);justify-content:space-between;
+  grid-template-rows:var(--top) var(--side) minmax(var(--under),1fr) var(--bar);
+  font-family:"Segoe UI",system-ui,sans-serif
+}
+.skill-screen[data-skill="word_search"] .ws.big{--fit:.9778;--letter:.6364}   /* 8 by 8: 66px cells, 42px letters */
+
+/* top row, beside the Menu button: the theme, then "That's all of them." at the end */
+.skill-screen[data-skill="word_search"] .ws-title{grid-column:1 / -1;grid-row:1;align-self:start;min-width:0;margin:0;
+  padding:24px 290px 0 0;display:flex;flex-direction:column;font-size:clamp(26px,4.427cqw,40px);font-weight:700;
+  line-height:1.25;color:#1f1b16}
+.skill-screen[data-skill="word_search"] .ws-theme{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  overflow:hidden;overflow-wrap:anywhere}
+.skill-screen[data-skill="word_search"] .ws-title.done .ws-theme{-webkit-line-clamp:1}
+
+/* the grid: the dark border is drawn on top, so the cells keep their size. The whole square is the tap target. */
+.skill-screen[data-skill="word_search"] .ws-grid{grid-column:1;grid-row:2;position:relative;box-sizing:border-box;
+  display:grid;grid-template-columns:repeat(var(--size,10),1fr);grid-auto-rows:var(--cell);
+  width:var(--side);height:var(--side);border-radius:20px;overflow:hidden;
+  font:700 max(24px,calc(var(--cell)*var(--letter,.63)))/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16;
+  background-color:#ffffff;
+  background-image:linear-gradient(to right,#f1ebe1 1px,transparent 1px),linear-gradient(to bottom,#f1ebe1 1px,transparent 1px);
+  background-size:var(--cell) var(--cell);touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.skill-screen[data-skill="word_search"] .ws-grid::after{content:"";position:absolute;inset:0;z-index:3;box-sizing:border-box;
+  border:4px solid #2b1f17;border-radius:20px;pointer-events:none}
+.skill-screen[data-skill="word_search"] .ws-c{position:relative;z-index:2;display:flex;align-items:center;
+  justify-content:center;box-sizing:border-box;width:100%;height:100%;min-width:0;margin:0;padding:0;border:0;
+  background:transparent;color:inherit;font:inherit;cursor:pointer;appearance:none;-webkit-appearance:none;
+  -webkit-tap-highlight-color:transparent}
+.skill-screen[data-skill="word_search"] .ws-c.on{color:#ffffff}
+.skill-screen[data-skill="word_search"] .ws-c:focus{outline:none}
+.skill-screen[data-skill="word_search"] .ws-c:focus-visible{outline:4px solid var(--ink,#9b2c58);outline-offset:-4px}
+
+/* found or shown: a capsule behind the letters, teal with white letters. It's a shape, so it reads for weak and
+   colorblind eyes. The thin white edge keeps two crossing or neighboring words apart. */
+.skill-screen[data-skill="word_search"] .ws-mark{--inset:calc(var(--cell)*.0926);position:absolute;z-index:1;
+  box-sizing:border-box;left:calc(var(--c)*var(--cell) + var(--inset));top:calc(var(--r)*var(--cell) + var(--inset));
+  width:calc(var(--cell) - 2*var(--inset));height:calc(var(--cell) - 2*var(--inset));
+  border-radius:calc(var(--cell)/2);background:#0f5560;box-shadow:0 0 0 2px #ffffff;pointer-events:none}
+.skill-screen[data-skill="word_search"] .ws-mark.h{width:calc(var(--n)*var(--cell) - 2*var(--inset))}
+.skill-screen[data-skill="word_search"] .ws-mark.v{height:calc(var(--n)*var(--cell) - 2*var(--inset))}
+/* a slanted word: the same capsule turned on the middle of its first letter */
+.skill-screen[data-skill="word_search"] .ws-mark.d{width:calc((var(--n) - 1)*var(--cell)*1.4142 + var(--cell) - 2*var(--inset));
+  transform-origin:calc(var(--cell)/2 - var(--inset)) 50%;transform:rotate(var(--a))}
+
+/* the new mark settles once: a soft glow that fades, nothing bouncy */
+.skill-screen[data-skill="word_search"] .ws-mark.fresh{animation:ws-settle 1.6s ease-out 1}
+@keyframes ws-settle{0%{box-shadow:0 0 0 2px #ffffff,0 0 0 14px rgba(15,85,96,.38)}100%{box-shadow:0 0 0 2px #ffffff,0 0 0 14px rgba(15,85,96,0)}}
+
+/* hint: step 1 is the pale gold row or column, step 2 the solid gold first letter with a thick dark ring */
+.skill-screen[data-skill="word_search"] .ws-band{position:absolute;z-index:0;left:0;right:0;top:calc(var(--r)*var(--cell));
+  height:var(--cell);background:#ffe7a3;pointer-events:none}
+.skill-screen[data-skill="word_search"] .ws-band.col{left:calc(var(--c)*var(--cell));right:auto;top:0;bottom:0;
+  width:var(--cell);height:auto}
+.skill-screen[data-skill="word_search"] .ws-c.lit{background:#f2b632;border-radius:10px;box-shadow:inset 0 0 0 5px #2b1f17}
+.skill-screen[data-skill="word_search"] .ws-c.on.lit{color:#1f1b16}
+
+/* picked letter: a thick ring in her color. On a found word it gets white behind it, so the ring and letter still read. */
+.skill-screen[data-skill="word_search"] .ws-c.picked{border-radius:12px;box-shadow:inset 0 0 0 5px var(--ink,#9b2c58)}
+.skill-screen[data-skill="word_search"] .ws-c.on.picked{background:#ffffff;color:#1f1b16}
+
+/* the word list, right of the grid. Each word lines up with a row of the grid. */
+.skill-screen[data-skill="word_search"] .ws-list{grid-column:2;grid-row:2;margin:0;padding:0;list-style:none;display:grid;
+  grid-auto-rows:calc(var(--side)/var(--rows,10));align-content:start}
+.skill-screen[data-skill="word_search"] .ws-word{display:flex;align-items:center;min-width:0;
+  font:700 var(--list-font)/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16;white-space:nowrap}
+.skill-screen[data-skill="word_search"] .ws-word svg{flex:none;width:1em;height:1em;margin-right:.23em;visibility:hidden}
+.skill-screen[data-skill="word_search"] .ws-word.found{color:#544739}
+.skill-screen[data-skill="word_search"] .ws-word.found svg{visibility:visible}
+.skill-screen[data-skill="word_search"] .ws-word.found .ws-w{text-decoration:line-through 4px}
+.skill-screen[data-skill="word_search"] .ws-word.shown .ws-w{outline:3px dashed #544739;outline-offset:3px;border-radius:6px}
+
+/* bottom row: three buttons share the width; four at the end, each as wide as its words need */
+.skill-screen[data-skill="word_search"] .ws-bar{grid-column:1 / -1;grid-row:4;display:flex;gap:16px;min-width:0}
+.skill-screen[data-skill="word_search"] .ws-bar .ans{flex:1 1 0;min-width:0;min-height:0;height:var(--bar);padding:0 8px;
+  box-sizing:border-box;font-size:clamp(22px,3.646cqw,34px);white-space:nowrap}
+.skill-screen[data-skill="word_search"] .ws-bar.four{gap:12px}
+.skill-screen[data-skill="word_search"] .ws-bar.four .ans{flex:1 1 auto;padding:0 16px}
+
+/* no puzzle yet: plain words where the grid would be */
+.skill-screen[data-skill="word_search"] .ws-wait{grid-column:1 / -1;grid-row:2;align-self:center;margin:0;
+  font-size:30px;font-weight:700;line-height:1.3;text-align:center;color:#1f1b16}

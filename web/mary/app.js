@@ -416,6 +416,7 @@
     set('closeLbl', 'Close ' + n);
     set('canTitle', 'Things ' + n + ' can do');
     set('canLead', 'You can say these to ' + n + ', or tap one.');
+    set('gamesLead', 'You can say one of these to ' + n + ', or tap one.');   // M7a
     set('modeTitle', 'How ' + n + ' talks');
     set('voiceTitle', n + "'s voice");
     set('waitTitle', 'How long ' + n + ' waits');
@@ -1064,6 +1065,20 @@
   }
   function greetLive(text) {
     try { return !!window.MaryLive.greet(text); } catch (e) { log(e); return false; }
+  }
+  // M7a: true means a screen's line should be dropped. In a Live talk she rests on 'listening', so there only the
+  // resident's words coming in count; otherwise 'listening' means the mic is open for them.
+  function busy() {
+    if (S.phase === 'thinking') { return true; }
+    if (liveOn()) {
+      try { return !!window.MaryLive.isHearing(); } catch (e) { log(e); return true; }
+    }
+    return S.phase === 'listening';
+  }
+  // M7a: a silent note to Live about what changed on a screen. Normal mode already gets view() in every reply.
+  function screenNote(text) {
+    if (!liveOn()) { return; }
+    try { window.MaryLive.note(text); } catch (e) { log(e); }
   }
   function restPhase() {
     var c = S.convo;
@@ -2091,6 +2106,7 @@
   var MENU_IDLE_MS = 20000;      // M4b: the menu closes after 20 s with nothing done in it
   var PANEL_IDLE_MS = 120000;    // M4b: a panel left alone goes back to her face after 2 minutes
   var PANELS = ['canPanel', 'infoPanel', 'choosePanel'];
+  PANELS.push('gamesPanel');   // M7a
   var M = { timer: null, panel: null, extra: [] };   // M4b: extra = the skills' rows for "Things Mary can do"
 
   function hasWindow() {
@@ -2175,7 +2191,7 @@
     if (M.panel && M.panel !== id) { $(M.panel).hidden = true; }
     M.panel = id;
     refreshLabels();
-    if (id === 'canPanel') { fillCan(); } else if (id === 'infoPanel') { fillInfo(); } else { fillChoose(); }
+    if (id === 'canPanel') { fillCan(); } else if (id === 'infoPanel') { fillInfo(); } else if (id === 'gamesPanel') { fillGames(); } else { fillChoose(); }   // M7a: gamesPanel
     $(id).hidden = false;
     $(id).scrollTop = 0;
     armIdle(PANEL_IDLE_MS);
@@ -2230,6 +2246,29 @@
         try { x.open(); } catch (e) { log(e); }
       }));
     });
+  }
+  // M7a: the Games panel, from the skills list. A skill is a game when it's named here; only those switched on show.
+  var GAMES = ['word_search'];
+  function fillGames() {
+    var box = $('gamesList'), on = [];
+    try {
+      on = window.MarySkills.list().filter(function (s) { return s.on && GAMES.indexOf(s.name) >= 0; });
+    } catch (e) { log(e); }
+    box.textContent = '';
+    on.forEach(function (s) {
+      var label = (s.menu && s.menu.label) || s.title || s.name;
+      box.appendChild(rowBtn(label, sayLine("let's do a " + label.toLowerCase()), function () {
+        closePanel(true);
+        try { show(s.name); } catch (e) { log(e); }
+      }));
+    });
+    $('gamesLead').hidden = !on.length;
+    if (!on.length) {
+      var none = D.createElement('p');
+      none.className = 'lead';
+      none.textContent = 'Games are switched off in My info.';
+      box.appendChild(none);
+    }
   }
   function addThing(x) {   // M4b: skills.js lists a skill's screen here (the old menu buttons are gone)
     if (!x || !x.name || !x.label || typeof x.open !== 'function') { return; }
@@ -2604,13 +2643,7 @@
     else if (act === 'can') { closeMenu(false); openPanel('canPanel'); }
     else if (act === 'info') { closeMenu(false); openPanel('infoPanel'); }
     else if (act === 'choose') { closeMenu(false); openPanel('choosePanel'); }
-    else if (act === 'games') {   // Coming soon (M7): she says so, unless she is in a talk
-      closeMenu(true);
-      if (!S.convo && S.phase === 'idle' && S.screen === 'everyday') {
-        newTurn();
-        say("Games are coming soon. I can't wait to play with you.", 'happy');
-      }
-    }
+    else if (act === 'games') { closeMenu(false); openPanel('gamesPanel'); }   // M7a
     else if (act === 'close') {
       closeMenu(false);
       try { window.pywebview.api.close_window(); } catch (e) { log(e); }
@@ -2812,6 +2845,8 @@
     cancelSpeech: spCancel,
     openTyping: openTyping,
     addThing: addThing,                      // M4b: skills.js lists a skill's screen in "Things Mary can do"
+    busy: busy,                              // M7a: a skill's screen drops its line when this is true
+    screenNote: screenNote,                  // M7a: a silent note to Live about what changed on a screen
     openMenu: openMenu,                      // M4b
     closeMenu: closeMenu,                    // M4b
     sideBySide: sideBySide,                  // M4b: a skill's screen beside her face (skills.js does this for aside:true)

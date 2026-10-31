@@ -771,6 +771,24 @@
     }
   }
 
+  // M7a: a silent note about what changed on a screen. turnComplete is false, so it goes in the talk and she doesn't
+  // answer it. Unlike greet it leaves the mute alone: nothing here is meant to be heard. false if the line is not open.
+  function note(text) {
+    var s = S;
+    if (!s || !s.ready || s.ended || !s.ws || s.ws.readyState !== 1 || !text) return false;
+    try {
+      s.ws.send(JSON.stringify({clientContent: {turns: [{role: 'user', parts: [{text: String(text)}]}], turnComplete: false}}));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // M7a: true while the resident's words are coming in.
+  function isHearing() {
+    return !!(S && !S.ended && S.heardState === 'open');
+  }
+
   function stop(reason) {
     if (!S) return;
     S.stopReason = String(reason || '');
@@ -811,6 +829,8 @@
     supported: supported,
     start: start,
     greet: greet,
+    note: note,                // M7a
+    isHearing: isHearing,      // M7a
     stop: stop,
     stopSpeaking: stopSpeaking,
     isOpen: isOpen,

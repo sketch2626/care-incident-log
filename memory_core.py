@@ -83,6 +83,23 @@ _MY_WORD_NAMED = re.compile(r"\b(?i:my|his|her|their)\s+[^\W\d_]+\s+([^\W\d_]+)"
 _NOT_NAMES = STOPWORDS | frozenset("monday tuesday wednesday thursday friday saturday sunday".split())
 
 
+def _whole(name):  # M9c
+    return r"(?<!\w)" + r"\s+".join(re.escape(w) for w in str(name or "").split()) + r"(?!\w)"
+
+
+def holds_name(text, name):  # M9c
+    """True when a saved memory holds this name: the whole word as written, or in any case after "called" or "goes
+    by". "Will" stays out of "will walk"; "Goes by andy" is caught."""
+    if not str(name or "").strip():
+        return False
+    return bool(re.search(_whole(name), text) or re.search(r"\b(?:called|goes\s+by)\s+" + _whole(name), text, re.I))
+
+
+def says_name(text, name):  # M9c
+    """True when a turn of talk holds this name as a whole word, in any case."""
+    return bool(str(name or "").strip()) and bool(re.search(_whole(name), text, re.I))
+
+
 def _now():
     return datetime.now().isoformat(timespec="seconds")
 
@@ -342,6 +359,15 @@ class MemoryStore:
             rows = self.matching(about)
         else:
             rows = [r for r in self.active(limit=1) if _just_saved(r)]
+        if rows:
+            with closing(self.connect()) as conn, conn:
+                conn.executemany("DELETE FROM memories WHERE id = ?", [(r["id"],) for r in rows])
+            self._changed(True)
+        return [r["text"] for r in rows]
+
+    def forget_name(self, name):  # M9c
+        """Really deletes every memory holding their name and returns the texts removed."""
+        rows = [r for r in self.active() if holds_name(r["text"], name)]
         if rows:
             with closing(self.connect()) as conn, conn:
                 conn.executemany("DELETE FROM memories WHERE id = ?", [(r["id"],) for r in rows])

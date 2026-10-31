@@ -226,7 +226,7 @@ class LiveBrain(M4aCase):
     def test_memory_tools_even_with_no_skills(self):
         setup = self.token_setup(self.memory())
         names = {d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])}
-        self.assertEqual(names, {"remember_fact", "set_their_name", "recall", "forget_memory",  # M9c
+        self.assertEqual(names, {"remember_fact", "set_their_name", "recall", "forget_memory", "forget_name",  # M9c
                                  "tell_story", "story_more", "end_talk"})
         self.assertFalse(any("__" in n for n in names))
         self.assertIn(voices.LIVE_TOOLS_NOTE, setup["systemInstruction"]["parts"][0]["text"])

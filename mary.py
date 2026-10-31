@@ -20,6 +20,9 @@ import memory_core  # M9c
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 INSTRUCTIONS = ROOT / "mary" / "instructions.md"
 
+# M4a: the same three numbers and words in app.js (spokenNumbers), for what her voice says; captions keep the digits
+SPOKEN_NUMBERS = ((re.compile(r"\b988\b"), "nine, eight, eight"), (re.compile(r"\b911\b"), "nine one one"),
+                  (re.compile(r"\b838[- ]?255\b"), "eight three eight, two five five"))
 EMERGENCY_TEXT = {
     "medical": "Please press your call light or call out for staff right now. If it's serious, call 911.",
     "self_harm": "I'm really glad you told me. Please press your call light and tell a nurse how you're feeling, "
@@ -148,6 +151,7 @@ _NOT_NAMES = {"back", "when", "if", "later", "please", "crazy", "maybe", "someti
               "at", "in", "to", "by", "after", "before", "now", "soon",
               "honey", "sugar", "sweetie", "sweetheart", "darling", "dear", "hon"}  # M4a: a pet name isn't their name
 _TAG = re.compile(r"\[(remember|name):\s*([^\]]+)\]")
+_BRACKETS = re.compile(r"\[[^\]]*\]?")  # M4a: any bracketed note, or one cut off at the end
 _MOOD_TAG = re.compile(r"\[\s*mood\s*:\s*([^\[\]]*?)\s*\]", _I)
 # A "[" so far that may still turn into a mood tag, so the stream waits for more before deciding.
 _MOOD_OPEN = re.compile(r"\[\s*(?:m(?:o(?:o(?:d\s*(?::[^\[\]]{0,30})?)?)?)?)?$", _I)
@@ -260,6 +264,13 @@ class Memory:
 
 def _plain(text):
     return text.replace("’", "'").replace("‘", "'").replace("ʼ", "'")
+
+
+def spoken_numbers(text):  # M4a: a voice left alone can say 988 as "nine eighty-eight"
+    """text with the crisis numbers written out digit by digit, for a voice to read."""
+    for number, words in SPOKEN_NUMBERS:
+        text = number.sub(words, text)
+    return text
 
 
 def is_emergency(text):
@@ -542,13 +553,15 @@ STORY_PROMPT = (  # M4a: rewritten after Andy's fourth try ("saccharine", "child
     "of life. Tell it the way a good porch storyteller or Southern humorist would, not a children's book. Make it a "
     "fresh story you make up now, with real people who have names and flaws, a real place (North Carolina flavor "
     "unless they've told you they're from somewhere else), and real stakes: money, pride, a feud, a bad decision, a "
-    "lie that got out of hand. Use concrete grown-up detail, dry humor, and at least one thing nobody saw coming. It "
+    "lie that got out of hand. Tell it about other people, the way you'd tell any story (\"There was a fellow over in "
+    "Duplin County...\"). You and your family are never in it: no \"my cousin\", no \"my granddaddy\", no \"I remember "
+    "when\", because you have no family or past of your own. Use concrete grown-up detail, dry humor, and at least one thing nobody saw coming. It "
     "can be a tall tale, a funny one, a bit of North Carolina history with the rough edges left on, or an old folk "
     "tale told your way. End on a good last line: a punchline, a twist, or something left hanging. No moral, no "
     "lesson, nobody learning anything, no tidy feel-good ending, and nobody's kindness saving the day. Keep it clean: "
     "no profanity and nothing crude. If they asked for something in particular, give them that. Don't build it from "
-    "your own likes and hobbies; you may lean on what you know they like. About 180 to 300 words, in 3 to 5 short "
-    "paragraphs with a blank line between them. Write only the words you will say: plain spoken sentences, no title, "
+    "your own likes and hobbies; you may lean on what you know they like. About 180 to 280 words and never more than "
+    "300, in 3 to 5 short paragraphs with a blank line between them. Write only the words you will say: plain spoken sentences, no title, "
     "no brackets or tags, no lists, no headings, no stage directions. Don't greet them or ask a question first; just "
     "begin the story.")
 
@@ -602,10 +615,7 @@ class _ReplyStream:
         """The held-back text with every tag removed, and nothing from a half-finished tag."""
         held = _MOOD_TAG.sub(lambda m: self.mood(m.group(1)) or "", _TAG.sub("", self.held))
         self.buf = self.held = ""
-        cut = held.rfind("[")
-        if cut >= 0 and "]" not in held[cut:]:
-            held = held[:cut]
-        return held
+        return _BRACKETS.sub("", held)  # M4a: nothing in brackets is ever spoken, like an [alarm: emergency] of her own
 
 
 # --- skills hook (M13) ---
@@ -668,10 +678,19 @@ def _key_refused(err):
         return False
 
 
-def system_text(memory, companion="mary", facts=True):
+def _no_tag_rules(text):  # M4a: Live and stories have nothing to strip tags, so they never hear of them
+    """Her instructions without the "Your face" section or any other line that shows a [tag]."""
+    text = re.sub(r"^Your face\n(?:.+\n)*\n?", "", text, flags=re.MULTILINE)
+    return "\n".join(line for line in text.split("\n") if "[" not in line)
+
+
+def system_text(memory, companion="mary", facts=True, tags=True):
     """Her system prompt: her own instructions, the live facts about her app, and what she knows of the resident.
-    facts=False keeps only the resident's name (no app facts, no facts list, no ask-for-a-name tag): for a live voice chat."""
+    facts=False keeps only the resident's name (no app facts, no facts list, no ask-for-a-name tag): for a live voice chat.
+    tags=False (M4a) leaves out every rule about tags, for text nothing cleans up before it's spoken."""
     system = load_instructions(companion)  # M9b: Sam has his own block now, so no more swapping Mary for Sam
+    if not tags:
+        system = _no_tag_rules(system)
     if facts:
         system += _app_facts_text(companion)  # M9b
     lines = ([f"Name: {memory.name}"] if memory.name else []) + ([f"- {f}" for f in memory.facts] if facts else [])
@@ -685,9 +704,9 @@ def system_text(memory, companion="mary", facts=True):
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
     if facts and not memory.name:
-        system += ("\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called; "
-                   "when they tell you, add the line [name: First name], using the name they go by, "
-                   "exactly as they say it.")  # M4a
+        system += "\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called"
+        system += ("; when they tell you, add the line [name: First name], using the name they go by, "
+                   "exactly as they say it." if tags else ".")  # M4a
     return system
 
 
@@ -751,9 +770,16 @@ def _app_facts_text(companion):  # M9b
 
 def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     system = system_text(memory, companion)
-    if kind:
-        system += (f"\n\nThe app has already told them: {EMERGENCY_TEXT[kind]} "
-                   "Don't repeat it word for word; follow on calmly and kindly.")
+    if kind:  # M4a: the bench heard the same instruction twice in a row
+        system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} They heard it, so don't "
+                   "say any of it again, in any words. Add only one short, calm line of your own, to keep them company.")
+        if kind == "self_harm":
+            system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
+    else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
+        if _HARMED.search(_plain(text)):
+            system += HARM_NOTE
+        if _FEARS_STAFF.search(_plain(text)):
+            system += FEAR_NOTE
     # --- skills hook (M13) --- an emergency line gets no skills at all
     tools = []
     if skills is not None and not kind:
@@ -779,6 +805,24 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     if tools:  # --- skills hook (M13) ---
         body["tools"] = tools
     return body
+
+
+# M4a: a nudge on the turn it matters. The words only make the note appear, and it says "if so", so a miss costs nothing.
+_HARMED = re.compile(
+    r"\b(?:hit|hitting|slapped|punched|kicked|shoved|pinched|grabbed|threatened|threatening|hurt|hurting)\s+me\b"
+    r"|\bthreatened\s+to\b|\b(?:put|puts|laid)\s+(?:his|her|their)\s+hands\s+on\s+me\b|\b(?:stole|stolen|stealing|robbed)\b"
+    r"|\b(?:took|taken|missing|gone)\b[^.?!]{0,30}\b(?:money|purse|wallet|ring|jewelry)\b"
+    r"|\b(?:money|purse|wallet|ring|jewelry)\b[^.?!]{0,30}\b(?:took|taken|missing|gone)\b", _I)
+_FEARS_STAFF = re.compile(
+    r"\b(?:afraid|scared|fear|frightened|worried|nervous)\b[^.?!]{0,60}"
+    r"\b(?:trouble|retaliat\w*|punish\w*|get back at|take it out|mad at me|worse|report\w*|telling|tell)\b"
+    r"|\b(?:take it out on|hold it against|get back at) me\b|\bretaliat\w*\b", _I)
+HARM_NOTE = ("\n\nThey may have just said someone hurt, hit, threatened or stole from them. If so, say all of this, in "
+             "this order: say plainly that it's not okay, suggest telling a nurse or a person in charge they trust, and "
+             "only then offer to write it down. Never promise that you will report it yourself.")
+FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell them that retaliation against residents "
+             "is against the law, that nothing is written or sent without their say, and that the long-term care "
+             "ombudsman can help them in confidence.")
 
 
 def not_english(text):  # M4a: Live's transcript sometimes comes back in another script
@@ -808,7 +852,7 @@ def tell_story(request, memory, api_key, model="", companion="mary", report=None
     if not api_key:
         return ""
     ask = " ".join(str(request or "").split())[:300]
-    system = system_text(memory, companion) + _story_memories(memory, ask) + "\n\n" + STORY_PROMPT  # M9c
+    system = system_text(memory, companion, tags=False) + _story_memories(memory, ask) + "\n\n" + STORY_PROMPT  # M9c
     body = {"systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": "Tell me a story" + (f": {ask}" if ask else ".")}]}],
             "generationConfig": {"temperature": 0.9, "maxOutputTokens": 6000}}
@@ -835,8 +879,7 @@ def tell_story(request, memory, api_key, model="", companion="mary", report=None
             report["error"] = type(e2).__name__
             return ""
         report.pop("error", None)
-    text = _TAG.sub("", _MOOD_TAG.sub("", text))
-    text = re.sub(r"\[[^\]]*\]?", "", text)       # any other bracketed note, or one cut off at the end
+    text = _BRACKETS.sub("", text)
     text = re.sub(r"[*#]+", "", text)              # markdown bold and headings are never spoken
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\s*\n\s*\n\s*", "\n\n", text).strip()

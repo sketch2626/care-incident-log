@@ -1152,6 +1152,7 @@ class Handler(SimpleHTTPRequestHandler):
             text = str(body.get("text") or "").strip()[:2000]
             if not text:
                 raise ValueError(TALK_NO_TEXT)
+            text = mary.spoken_numbers(text)  # M4a: 988 digit by digit, whoever wrote the line
             mode = body.get("mode")
             if mode not in ("normal", "offline"):
                 raise ValueError(BAD_REQUEST)

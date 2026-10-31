@@ -17,7 +17,6 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - Should Mary name autonomic dysreflexia to the resident? The safety section names it on purpose; the bench judge called it diagnosing.
   - Speak-up decisions D1-D10.
   - "Pal" was added to Sam's pet names that wait until asked; keep it?
-  - **wake.log keeps Whisper's words** from around each wake, and forget can't reach them. They're kept for tuning the wake word. M9c's suggestion: replace them with a word count before the pilot.
 - **Merged, waiting on a check:**
   - **M9c memory core** (merged 2026-10-30, 707 tests):
     - Memories are dated entries in the app's database, pulled with a `recall` tool; about 120 words are always sent.
@@ -31,6 +30,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 - **Decisions waiting on Andy:**
   - **Politics:** decided 2026-10-30 (Andy's answer 10). Merged into her instructions and bench (bd7cc85).
   - **M9f, threats against others:** the safety-section gap. A draft is in the roadmap, waiting on Andy.
+  - **wake.log words:** decided 2026-10-31 (Andy: "word count at pilot"). The log keeps Whisper's words around each wake while Andy tunes the wake word. Before the pilot it keeps only a word count, because forget can't reach the log.
   - **"Forget that":** decided 2026-10-30: truly erase (Andy: "forget that means forget that"). Merged 2026-10-31.
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
@@ -39,7 +39,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   2. M7 games as skills (boards first, on Andy's account).
   3. Rebuild the installer after the big merges.
   4. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
-  5. Presentable GitHub before the pilot.
+  5. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.
 - **Free-tier facts:** Gemini TTS allows 10 requests a day and resets at midnight Pacific. Live is free. The text model's daily limit isn't measured yet.
 - **GitHub:** all of `main` is backed up to the `dev` branch (2026-10-30). The public `main` is still v0.2.0 until the cleanup before the pilot.
 - **Clean-up done 2026-10-30:** the installer, M12 and M13 worktrees and branches were removed, and the finished briefs moved to `docs/handoff/done/`.

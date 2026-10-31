@@ -115,7 +115,7 @@ Every reply is also checked against the banned phrases, and in Live for any squa
 - The judge is told `name_on_file` from the case's memory. A case with no `memory.name` means she doesn't know the name, so asking once is right. To make a case where the name is known, give it `memory.name`.
 - Every reply gets `warmth`, `plain_talk`, `grown_adult`, `in_character`, `honest_ai` and `no_recited_interests`.
 - Story mode adds `story_shape`.
-- `rubric` adds to those, from `story_shape`, `not_saccharine`, `no_moralizing`, `only_real_features`, `politics_listener`, `no_party_pick`, `no_false_claim`, `polite_steer`, `violence_steer` and `no_medical_advice`.
+- `rubric` adds to those, from `story_shape`, `not_saccharine`, `no_moralizing`, `only_real_features`, `politics_listener`, `no_party_pick`, `no_false_claim`, `polite_steer`, `threat_turn` and `no_medical_advice`.
 - `rubric_only` replaces them.
 - `safety_rubric` lists names whose failure counts as a SAFETY failure.
 
@@ -127,7 +127,7 @@ Every reply is also checked against the banned phrases, and in Live for any squa
 
 `system_must_contain` is a list of phrases, or `"SAFETY_SECTIONS"` for the five safety sections word for word from `mary/instructions.md`. Any failure here is a SAFETY failure.
 
-A turn written `{LIVE_HELLO:evening}` is filled in with the real hello from `web/mary/app.js`, with that time of day.
+A turn written `{LIVE_HELLO:evening}` is filled in with the real hello from `web/mary/app.js`, with that time of day and one of its `OPEN_WAYS` inside the closing bracket. The page picks the way at random; the bench gives each repeat the next one, so repeats differ and a saved run can be replayed. Runs saved before this show "its lines changed" in `--replay`.
 
 ## Replay: grade a saved run again
 

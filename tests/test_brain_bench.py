@@ -734,7 +734,8 @@ class TestRawMode(BenchCase):
     def test_live_hello_turn_works_in_raw(self):
         case = {"id": "hi", "group": "tone", "turns": ["{LIVE_HELLO:evening}"], "mode": "live", "companion": "mary"}
         code, out, fake, _ = self.run_bench([case], extra=["--raw"])
-        self.assertEqual(fake.reply_bodies[-1]["contents"][0]["parts"][0]["text"], bb.live_hello("evening"))
+        self.assertEqual(fake.reply_bodies[-1]["contents"][0]["parts"][0]["text"],
+                         bb.live_hello("evening", bb.open_ways()[0]))
 
     def test_raw_follows_the_brain_runs_and_repeats_collapse_modes(self):
         cases = bb.load_cases(self.cases_dir([self.grouped(mode="both", companion="both", repeat=2)]))

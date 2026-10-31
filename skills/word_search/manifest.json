@@ -1,0 +1,84 @@
+{
+  "contract": 1,
+  "name": "word_search",
+  "version": "0.1.0",
+  "title": "Word search",
+  "summary": "A big-print word search on a topic they like, played by voice or by touch, with hints when they ask.",
+  "instructions": "Enjoy this with them like a friend. Never describe the screen. Never give a word or where it is unless they ask. When they say they found one, call check with that word. If they don't name a topic, use one from what you know about them. For a topic of your own, pass 10 to 14 plain fitting words in words. When they're done, call end.",
+  "screen": {"menu_label": "Word search", "menu_icon": "grid", "full_screen": true},
+  "sees": true,
+  "memory": true,
+  "actions": [
+    {
+      "name": "start",
+      "description": "Start a new word search. Pass a topic if they named one, and fitting words if it's a topic of your own.",
+      "inputSchema": {"type": "object",
+                      "properties": {"topic": {"type": "string", "maxLength": 60,
+                                               "description": "The topic, in plain words."},
+                                     "words": {"type": "array",
+                                               "description": "10 to 14 plain single words that fit the topic.",
+                                               "items": {"type": "string", "maxLength": 40,
+                                                         "description": "One plain word."}},
+                                     "level": {"type": "integer", "minimum": 1, "maximum": 5,
+                                               "description": "How hard, from 1 (easiest) to 5. Leave it out to keep the level they're on."},
+                                     "diagonal": {"type": "boolean",
+                                                  "description": "True to put words on the diagonal too."},
+                                     "backward": {"type": "boolean",
+                                                  "description": "True to let words run backward too."}}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["new puzzle", "another puzzle", "word search"]
+    },
+    {
+      "name": "hint",
+      "description": "Give the next hint, only when they ask for one. Each ask helps a little more.",
+      "inputSchema": {"type": "object",
+                      "properties": {"word": {"type": "string", "maxLength": 40,
+                                              "description": "The word they want help with, if they named one."}}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["give me a hint", "a hint", "i need a hint", "hint please"]
+    },
+    {
+      "name": "check",
+      "description": "They say they found a word. Always pass the word they said.",
+      "inputSchema": {"type": "object",
+                      "properties": {"word": {"type": "string", "maxLength": 40,
+                                              "description": "The word they say they found."}}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["i found", "found the word"]
+    },
+    {
+      "name": "show",
+      "description": "Show where one word is, only when they ask to see it.",
+      "inputSchema": {"type": "object",
+                      "properties": {"word": {"type": "string", "maxLength": 40,
+                                              "description": "The word to show, if they named one."}}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["show me where"]
+    },
+    {
+      "name": "easier",
+      "description": "Start an easier word search on the same topic.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["make it easier", "easier one"]
+    },
+    {
+      "name": "harder",
+      "description": "Start a harder word search on the same topic.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["make it harder", "harder one"]
+    },
+    {
+      "name": "end",
+      "description": "Put the word search away and go back to Mary. An unfinished puzzle stays saved.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["i'm done", "im done", "i am done"]
+    }
+  ],
+  "storage": true,
+  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
+  "offline": "works",
+  "default_on": true
+}

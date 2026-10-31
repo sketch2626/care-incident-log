@@ -37,7 +37,7 @@ _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 REQUIRED_FIELDS = ("contract", "name", "version", "title", "summary", "instructions", "actions",
                    "storage", "needs", "offline", "default_on")
-OPTIONAL_FIELDS = ("screen", "sees", "settings", "slow", "vision")  # M4a: vision
+OPTIONAL_FIELDS = ("screen", "sees", "settings", "slow", "vision", "memory")  # M4a: vision, M7a: memory
 ACTION_KEYS = {"name", "description", "inputSchema", "annotations", "offline_phrases"}
 MCP_ONLY_KEYS = {"annotations", "offline_phrases"}
 SCREEN_KEYS = {"menu_label", "menu_icon", "full_screen"}
@@ -331,7 +331,7 @@ def manifest_problems(manifest, folder_name):
     for key, limit in (("title", TITLE_MAX), ("summary", SUMMARY_MAX), ("instructions", INSTRUCTIONS_MAX)):
         if not _text_ok(manifest[key], limit):
             problems.append(f"{key} must be text of at most {limit} characters")
-    for key in ("storage", "default_on", "sees", "slow", "vision"):  # M4a: vision
+    for key in ("storage", "default_on", "sees", "slow", "vision", "memory"):  # M4a: vision, M7a: memory
         if key in manifest and not _bool_ok(manifest[key]):
             problems.append(f"{key} must be true or false")
     if manifest["offline"] not in ("works", "needs_internet"):
@@ -599,6 +599,7 @@ class SkillContext:
         self.state = skill.state
         self.files = SkillFiles(Path(host.data_dir) / "skills" / skill.name)
         self.effects = []
+        self.heard = ""  # M7a: the resident's offline line, when offline mode made this call
 
     def effect(self, kind, data=None):
         """Asks the page to do something: show_screen / leave_screen (its own screen) or one of its own kinds."""
@@ -652,6 +653,17 @@ class SkillContext:
         except Exception:  # noqa: BLE001 (a look that fails is no answer, never the skill's fault)
             return ""
 
+    def recall(self, words, limit=6):  # M7a
+        """Read-only: plain fact texts from her memory that match words. [] when the card has no "memory": true,
+        the host has no recall, or anything went wrong."""
+        recall = self._host.recall
+        if recall is None or not self._skill.manifest.get("memory"):
+            return []
+        try:
+            return [str(text) for text in recall(words, limit=limit)]
+        except Exception:  # noqa: BLE001 (a recall that fails is no facts, never the skill's fault)
+            return []
+
 
 class Skill:
     """One loaded skill: its card, its code, its in-memory state and its failure record."""
@@ -698,6 +710,7 @@ class SkillHost:
         self._clock = clock
         self._fetcher = fetcher
         self.vision = None  # M4a: set by the app: vision(image_bytes, mime, question) -> text or ""
+        self.recall = None  # M7a: set by the app: recall(words, limit=6) -> list of fact texts
         self._table_ready = False
         self._log_lock = threading.Lock()
         self._settings_lock = threading.Lock()
@@ -976,7 +989,7 @@ class SkillHost:
             return self._result({"error": "not_working"}, say=SAY_NOT_WORKING)
         return self._result(response, ctx.effects, say)
 
-    def call(self, fn_name, args=None):
+    def call(self, fn_name, args=None, heard=""):  # M7a: heard
         """Runs one tool call from Gemini, the page or offline mode: "<skill>__<action>" or "set_skill".
         Returns {"response": {...}, "effects": [...], "say": str | None}; never raises for a skill's fault."""
         args = {} if args is None else args
@@ -996,6 +1009,7 @@ class SkillHost:
         if problem:
             return self._result({"error": "bad_input", "detail": problem})
         ctx = self.context(name)
+        ctx.heard = str(heard or "")  # M7a
         handler = getattr(skill.module, action)
         return self._finish(skill, action, ctx, self._guard(skill, action, lambda: handler(ctx, **clean)))
 
@@ -1083,7 +1097,10 @@ class SkillHost:
             for phrase, action in skill.phrases():
                 if f" {phrase} " in padded and (best is None or len(phrase) > len(best[0])):
                     best = (phrase, f"{skill.name}__{action}")
-        return self.call(best[1], {}) if best else None
+        if not best:
+            return None
+        out = self.call(best[1], {}, heard=text)  # M7a
+        return None if out["response"].get("not_for_me") else out  # M7a: her normal offline line runs instead
 
     # ----- the internet -----
 

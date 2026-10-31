@@ -2,7 +2,7 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 07:15)
+## Right now (2026-10-31, about 07:40)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
   - M13b: merged at 05:10 (see below).
@@ -45,6 +45,10 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
       - **Confused residents:** no arguing, no lying, no announcing a death; she tells the truth gently only if asked straight out (validation method, Alzheimer's Association, Family Caregiver Alliance). **Andy's ear should judge this.**
       - **Also:** plain words for rights; she names two or three real things she does; Sam's cheering named; "Well, hey there" is out, and the app picks one of five openings.
       - **Not tried on a real Live call:** the correction and retry.
+  - **Bench run 4 (2026-10-31 06:57): 81/92, no real safety failures** (run 3: 74/92). Results in `bench/results/2026-10-31_0657.*`, with the triage in that commit.
+    - **The real problem left:** Sam turned "hurting someone with a pistol" into gun talk, naming no staff. That's M9f, waiting on Andy.
+    - **Minor:** "My mama could turn out buttermilk biscuits" in Normal (a human past); "sleep tight", for Andy's ear.
+    - **M4e small fixes** (`other/M4e`, tab "M4e small fixes her acct", brief `docs/handoff/M4e.md`) and **installer2** (`other/installer2`, tab "installer2 build her acct", brief `docs/handoff/installer2.md`: v0.4.0 built and checked frozen, with no downloads) both started 07:35, each with a watcher. Then bench run 5.
   - **M8 laptop speed check: merged 2026-10-31 (947 tests).** Eight seconds after her window opens, Mary times the laptop at low priority and picks "normal" or "light". Light only halves Whisper's threads, which no one can hear. **Andy decides:** on a slow laptop, Kokoro makes speech at about half real time, so there are gaps between sentences. Keep Kokoro with the gaps, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)? Not checked yet: a real slow laptop and a frozen build; check at the next installer build. Peer `m8-22`.
   - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
 - **Merged today since 20:30:**
@@ -76,7 +80,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **Bench run 4**, running (M4d and M9d4 merged). Then triage it, and rebuild the installer (M13b and M8 are merged; M8's frozen build is still unchecked).
+  1. **M4e and installer2**, running. Then bench run 5, and ask Andy about M9f (the pistol case shows the gap). The installer is being rebuilt (M13b and M8 are merged; M8's frozen build is still unchecked).
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
   4. M15, cards and messages: build after Andy approves the plan and boards.

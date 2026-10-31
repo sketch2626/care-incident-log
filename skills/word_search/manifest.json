@@ -11,7 +11,7 @@
   "actions": [
     {
       "name": "start",
-      "description": "Start a new word search. Pass a topic if they named one, and fitting words if it's a topic of your own.",
+      "description": "Start a word search, or bring back the one in progress. Pass a topic if they named one, and fitting words if it's a topic of your own.",
       "inputSchema": {"type": "object",
                       "properties": {"topic": {"type": "string", "maxLength": 60,
                                                "description": "The topic, in plain words."},
@@ -26,7 +26,14 @@
                                      "backward": {"type": "boolean",
                                                   "description": "True to let words run backward too."}}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
-      "offline_phrases": ["new puzzle", "another puzzle", "word search"]
+      "offline_phrases": ["word search"]
+    },
+    {
+      "name": "new_puzzle",
+      "description": "Start a fresh puzzle on a different topic, only when they ask for a new or another one.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["new puzzle", "another puzzle"]
     },
     {
       "name": "hint",

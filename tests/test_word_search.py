@@ -210,6 +210,48 @@ class ActionsTest(Base):
         self.assertLess(len(json.dumps(out["effects"])), skills_core.RESULT_MAX)
         self.assertIsNotNone(self.effect(out, "puzzle"))
 
+    def test_start_resumes_and_new_puzzle_starts_fresh(self):
+        self.call("start", topic="fishing")
+        before = self.puzzle()["grid"]
+        word = self.puzzle()["placed"][0]["word"]
+        self.call("check", word=word)
+        out = self.call("start")
+        self.assertEqual(out["say"], "Here's where you left off.")
+        self.assertIsNotNone(self.effect(out, "show_screen"))
+        self.assertEqual(self.effect(out, "puzzle")["grid"], before)
+        self.assertEqual(self.puzzle()["found"], [word])
+        out = self.call("start", topic="birds")  # a topic is a new puzzle
+        self.assertEqual(self.effect(out, "puzzle")["theme"], "Birds")
+        out = self.call("new_puzzle")
+        self.assertNotEqual(self.effect(out, "puzzle")["theme"], "Birds")
+        self.assertEqual(self.puzzle()["found"], [])
+
+    def test_resume_after_a_restart_and_a_closing(self):
+        self.call("start", topic="fishing")
+        grid = self.puzzle()["grid"]
+        host = self.scratch.host()
+        host.call("word_search__end")
+        out = host.call("word_search__start")
+        self.assertEqual(out["say"], "Here's where you left off.")
+        self.assertEqual(self.effect(out, "puzzle")["grid"], grid)
+
+    def test_finished_puzzle_is_not_resumed(self):
+        self.call("start", topic="fishing")
+        for place in list(self.puzzle()["placed"]):
+            self.call("check", word=place["word"])
+        self.assertTrue(self.puzzle()["finished"])
+        out = self.call("start")
+        self.assertNotEqual(out.get("say"), "Here's where you left off.")
+        self.assertFalse(self.puzzle()["finished"])
+
+    def test_themes_are_full(self):
+        self.assertEqual(len(self.module.THEMES), 12)
+        for key, theme in self.module.THEMES.items():
+            self.assertGreaterEqual(len(theme["words"]), 35, key)
+            self.assertTrue(theme["title"] and theme["keywords"], key)
+            for word in theme["words"]:
+                self.assertRegex(word, r"^[A-Z]{3,12}$")
+
 
 class CoreHooksTest(Base):
     def test_not_for_me_lets_her_normal_line_run(self):
@@ -238,6 +280,31 @@ class CoreHooksTest(Base):
         self.assertEqual(self.host.context("word_search").recall("garden"), ["likes his garden on Elm Street"])
         self.host.recall = lambda *a, **k: 1 / 0
         self.assertEqual(self.host.context("word_search").recall("x"), [])
+
+    def test_offline_word_search_resumes(self):
+        self.call("start", topic="fishing")
+        grid = self.puzzle()["grid"]
+        out = self.host.offline_match("let's do a word search")
+        self.assertEqual(out["say"], "Here's where you left off.")
+        self.assertEqual(self.puzzle()["grid"], grid)
+        out = self.host.offline_match("give me another puzzle")
+        self.assertNotEqual(self.puzzle()["grid"], grid)
+        self.assertIn("Here's one on", out["say"])
+
+    def test_emergency_line_never_runs_an_action(self):
+        self.call("start", topic="fishing")
+        grid = self.puzzle()["grid"]
+        for line in ("I found blood and I can't breathe", "I found blood and I need a new puzzle"):
+            self.assertTrue(mary.skill_blocked(line), line)
+            self.assertIsNone(self.host.offline_match(line, is_blocked=mary.skill_blocked))
+        self.assertEqual(self.puzzle()["grid"], grid)
+        self.assertEqual(self.puzzle()["found"], [])
+
+    def test_recall_result_never_shows_in_view(self):
+        self.host.recall = lambda words, limit=6: ["likes his garden on Elm Street"]
+        self.call("start")
+        self.assertNotIn("Elm", self.host.view("word_search"))
+        self.assertNotIn("garden on", self.host.view("word_search"))
 
     def test_recall_needs_the_card(self):
         self.host.recall = lambda words, limit=6: ["a fact"]

@@ -35,37 +35,96 @@ BLOCKLIST = frozenset("""
 THEMES = {
     "fishing": {"title": "Fishing",
                 "keywords": ["fishing", "fish", "fisherman", "lake", "river", "pond", "bass"],
-                "words": ["BASS", "TROUT", "CATFISH", "BOBBER", "TACKLE", "CREEL", "WORM", "DOCK", "LURE", "NET",
-                          "ROD", "SINKER", "HOOK", "PERCH", "CRAPPIE", "MINNOW"]},
+                "words": [
+                    "BASS", "TROUT", "CATFISH", "BOBBER", "TACKLE", "CREEL", "WORM", "DOCK", "LURE", "ROD", "SINKER",
+                    "HOOK", "PERCH", "CRAPPIE", "MINNOW", "BREAM", "BLUEGILL", "SALMON", "WALLEYE", "REEL", "LINE",
+                    "SPINNER", "JIG", "CRICKET", "WADERS", "CANOE", "BOAT", "PADDLE", "LAKE", "RIVER", "STREAM",
+                    "CREEK", "BAIT", "CAST", "SHORE", "FILLET", "STRINGER", "SWIVEL", "FLOAT", "PIER", "ANGLER"]},
     "gardening": {"title": "Gardening",
-                  "keywords": ["garden", "gardening", "flowers", "vegetables", "tomatoes", "roses", "planting", "yard"],
-                  "words": ["TOMATO", "SQUASH", "BEANS", "CORN", "HOE", "SPADE", "SEED", "ROSES", "WEEDS", "MULCH",
-                            "SOIL", "PEPPER", "TROWEL", "RAKE", "COMPOST", "FENCE"]},
+                "keywords": ["garden", "gardening", "flowers", "vegetables", "tomatoes", "roses", "planting", "yard"],
+                "words": [
+                    "TOMATO", "SQUASH", "BEANS", "CORN", "HOE", "SPADE", "SEED", "ROSES", "WEEDS", "MULCH", "SOIL",
+                    "PEPPER", "TROWEL", "RAKE", "COMPOST", "FENCE", "CARROT", "LETTUCE", "CUCUMBER", "OKRA",
+                    "RADISH", "ONION", "POTATO", "PEAS", "CABBAGE", "ZINNIA", "MARIGOLD", "TULIP", "DAISY", "SHOVEL",
+                    "WATER", "SPROUT", "BLOOM", "HARVEST", "PLANT", "FLOWER", "BED", "GLOVES", "SUNSHINE"]},
     "church": {"title": "Church",
-               "keywords": ["church", "faith", "prayer", "bible", "hymns", "pastor", "sunday", "god", "gospel"],
-               "words": ["HYMN", "PEW", "PASTOR", "CHOIR", "BIBLE", "PRAYER", "SERMON", "DEACON", "STEEPLE", "ALTAR",
-                         "BAPTISM", "PSALM", "GRACE", "ORGAN", "SUNDAY", "AMEN"]},
+                "keywords": ["church", "faith", "prayer", "bible", "hymns", "pastor", "sunday", "god", "gospel"],
+                "words": [
+                    "HYMN", "PEW", "PASTOR", "CHOIR", "BIBLE", "PRAYER", "SERMON", "DEACON", "STEEPLE", "ALTAR",
+                    "BAPTISM", "PSALM", "GRACE", "ORGAN", "SUNDAY", "AMEN", "FAITH", "BLESSING", "GOSPEL", "CROSS",
+                    "PRAISE", "WORSHIP", "SPIRIT", "HOPE", "MERCY", "SINGING", "PIANO", "USHER", "OFFERING",
+                    "COMMUNION", "CHAPEL", "BELL", "CHURCH", "GLORY", "TESTIMONY", "REVIVAL", "SCRIPTURE", "PRAYING",
+                    "CANDLE", "SAVIOR"]},
     "cooking": {"title": "Cooking",
                 "keywords": ["cooking", "cook", "baking", "recipes", "kitchen", "food", "biscuits"],
-                "words": ["BISCUIT", "GRAVY", "SKILLET", "BACON", "FLOUR", "BUTTER", "PIE", "STEW", "OVEN", "SALT",
-                          "PEPPER", "ONION", "ROAST", "SUGAR", "LADLE", "CORNBREAD"]},
+                "words": [
+                    "BISCUIT", "GRAVY", "SKILLET", "BACON", "FLOUR", "BUTTER", "PIE", "STEW", "OVEN", "SALT",
+                    "PEPPER", "ONION", "ROAST", "SUGAR", "LADLE", "CORNBREAD", "APRON", "WHISK", "SPATULA",
+                    "CASSEROLE", "COBBLER", "MUFFIN", "PANCAKE", "SAUSAGE", "GRITS", "BEANS", "CHICKEN", "MEATLOAF",
+                    "FRY", "BOIL", "SIMMER", "BAKE", "GRILL", "SPICE", "CINNAMON", "VANILLA", "RECIPE", "TEASPOON",
+                    "POTATO"]},
     "trucks": {"title": "Trucks",
-               "keywords": ["trucks", "truck", "pickup", "cars", "driving", "mechanic", "engine"],
-               "words": ["PICKUP", "DIESEL", "TAILGATE", "TIRE", "ENGINE", "HITCH", "TRAILER", "BUMPER", "HAUL", "CAB",
-                         "RADIO", "WINCH", "GEARS", "MUFFLER", "HEADLIGHT", "BED"]},
+                "keywords": ["trucks", "truck", "pickup", "cars", "driving", "mechanic", "engine"],
+                "words": [
+                    "PICKUP", "DIESEL", "TAILGATE", "TIRE", "ENGINE", "HITCH", "TRAILER", "BUMPER", "HAUL", "CAB",
+                    "RADIO", "WINCH", "GEARS", "MUFFLER", "HEADLIGHT", "BED", "MIRROR", "HORN", "BRAKES", "CLUTCH",
+                    "WHEEL", "AXLE", "FENDER", "GRILLE", "DASHBOARD", "FUEL", "TANK", "TOWING", "CARGO", "LOAD",
+                    "ROAD", "HIGHWAY", "DRIVER", "TRUCKER", "PEDAL", "WIPER", "WINDSHIELD", "TOOLBOX", "MILES"]},
     "birds": {"title": "Birds",
-              "keywords": ["birds", "bird", "birdwatching", "feeder", "cardinals"],
-              "words": ["CARDINAL", "ROBIN", "BLUEJAY", "WREN", "CROW", "HAWK", "OWL", "DOVE", "SPARROW", "FINCH",
-                        "HERON", "EAGLE", "QUAIL", "TURKEY", "GOOSE", "MOCKINGBIRD"]},
+                "keywords": ["birds", "bird", "birdwatching", "feeder", "cardinals"],
+                "words": [
+                    "CARDINAL", "ROBIN", "BLUEJAY", "WREN", "CROW", "HAWK", "OWL", "DOVE", "SPARROW", "FINCH",
+                    "HERON", "EAGLE", "QUAIL", "TURKEY", "GOOSE", "MOCKINGBIRD", "DUCK", "SWAN", "CRANE", "FALCON",
+                    "PELICAN", "WOODPECKER", "HUMMINGBIRD", "BLACKBIRD", "STARLING", "SWALLOW", "BLUEBIRD",
+                    "PHEASANT", "VULTURE", "OSPREY", "KILLDEER", "NEST", "FEATHER", "WING", "BEAK", "FEEDER", "SEED",
+                    "FLOCK", "CHIRP", "SONG", "PERCH"]},
     "north_carolina": {"title": "North Carolina",
-                       "keywords": ["north carolina", "carolina", "raleigh", "asheville", "charlotte", "outer banks"],
-                       "words": ["RALEIGH", "DURHAM", "BOONE", "COAST", "BEACH", "PINE", "PIEDMONT", "DOGWOOD",
-                                 "TARHEEL", "CARDINAL", "BARBECUE", "HATTERAS", "ASHEVILLE", "CHARLOTTE", "MOUNTAIN",
-                                 "PEANUT"]},
+                "keywords": ["north carolina", "carolina", "raleigh", "asheville", "charlotte", "outer banks"],
+                "words": [
+                    "RALEIGH", "DURHAM", "BOONE", "COAST", "BEACH", "PINE", "PIEDMONT", "DOGWOOD", "TARHEEL",
+                    "CARDINAL", "BARBECUE", "HATTERAS", "ASHEVILLE", "CHARLOTTE", "MOUNTAIN", "PEANUT", "WILMINGTON",
+                    "GREENSBORO", "FAYETTEVILLE", "CHAPEL", "TOBACCO", "BLUEGRASS", "SWEETPOTATO", "LIGHTHOUSE",
+                    "WRIGHT", "BROTHERS", "KITTYHAWK", "OCRACOKE", "NASCAR", "BLUERIDGE", "SMOKIES", "APPALACHIAN",
+                    "CAROLINA", "PECAN", "HUSHPUPPY", "MOREHEAD", "CAPE", "FARMS", "MARSH"]},
     "holidays": {"title": "Holidays",
-                 "keywords": ["holidays", "holiday", "christmas", "thanksgiving", "easter", "fourth of july"],
-                 "words": ["CHRISTMAS", "EASTER", "TURKEY", "THANKSGIVING", "FIREWORKS", "PARADE", "GIFTS", "STOCKING",
-                           "CANDY", "WREATH", "CAROLS", "FEAST", "PUMPKIN", "HAM", "FLAG", "BELLS"]},
+                "keywords": ["holidays", "holiday", "christmas", "thanksgiving", "easter", "fourth of july"],
+                "words": [
+                    "CHRISTMAS", "EASTER", "TURKEY", "THANKSGIVING", "FIREWORKS", "PARADE", "GIFTS", "STOCKING",
+                    "CANDY", "WREATH", "CAROLS", "FEAST", "PUMPKIN", "HAM", "FLAG", "BELLS", "SANTA", "TINSEL",
+                    "ORNAMENT", "MANGER", "SLEIGH", "SNOWMAN", "COOKIES", "STUFFING", "CRANBERRY", "HARVEST",
+                    "PICNIC", "SPARKLER", "BASKET", "EGGS", "BUNNY", "LILY", "GARLAND", "MISTLETOE", "CANDLE",
+                    "FAMILY", "GATHER", "GRATEFUL", "BLESSED"]},
+    "farm": {"title": "Farm",
+                "keywords": ["farm", "farming", "farmer", "cows", "cattle", "tractor", "barn", "chickens", "hay"],
+                "words": [
+                    "BARN", "TRACTOR", "COW", "HORSE", "PIG", "GOAT", "SHEEP", "CHICKEN", "ROOSTER", "HAYLOFT",
+                    "PASTURE", "FIELD", "CROPS", "PLOW", "COTTON", "SOYBEANS", "WHEAT", "SILO", "FENCE", "GATE",
+                    "TROUGH", "STABLE", "MEADOW", "HARVEST", "MILK", "EGGS", "CALF", "FOAL", "COOP", "DAIRY",
+                    "CORNFIELD", "TOBACCO", "SEEDS", "COMBINE", "HARROW", "PITCHFORK", "BUCKET", "SADDLE", "ORCHARD",
+                    "ACRES"]},
+    "baseball": {"title": "Baseball",
+                "keywords": ["baseball", "ball game", "softball", "pitcher", "braves", "umpire"],
+                "words": [
+                    "PITCHER", "CATCHER", "BATTER", "UMPIRE", "INNING", "STRIKE", "HOMERUN", "DUGOUT", "MOUND",
+                    "GLOVE", "BASES", "DIAMOND", "OUTFIELD", "INFIELD", "SHORTSTOP", "FASTBALL", "CURVEBALL", "BUNT",
+                    "STEAL", "SLIDE", "SINGLE", "DOUBLE", "TRIPLE", "WALK", "FOUL", "FLY", "GRANDSLAM", "BULLPEN",
+                    "STADIUM", "PENNANT", "HOTDOG", "PEANUTS", "ROOKIE", "COACH", "SCORE", "TEAM", "LEAGUE",
+                    "BATTING", "HELMET"]},
+    "old_cars": {"title": "Old Cars",
+                "keywords": ["old cars", "classic cars", "antique cars", "hot rod", "mustang", "chevy", "model t", "roadster"],
+                "words": [
+                    "MUSTANG", "CAMARO", "CORVETTE", "CHEVY", "FORD", "BUICK", "CADILLAC", "PONTIAC", "IMPALA",
+                    "BELAIR", "COUPE", "SEDAN", "ROADSTER", "CONVERTIBLE", "HOTROD", "CHROME", "FENDER", "HUBCAP",
+                    "GRILLE", "WHITEWALL", "RUNNING", "BOARD", "DRIVEIN", "CRUISE", "CRUISING", "GARAGE", "ENGINE",
+                    "HORSEPOWER", "CARBURETOR", "POLISH", "WAX", "RESTORE", "ANTIQUE", "VINTAGE", "CLASSIC", "SHOW",
+                    "TAILFIN", "RUMBLE", "DASHBOARD", "STEERING"]},
+    "hunting": {"title": "Hunting",
+                "keywords": ["hunting", "hunter", "deer", "turkey season", "duck", "rifle", "woods"],
+                "words": [
+                    "DEER", "RIFLE", "DECOY", "STAND", "BUCK", "DOE", "ANTLER", "SCOPE", "CAMO", "BLIND", "TRACK",
+                    "TRAIL", "WOODS", "FOREST", "DOG", "BEAGLE", "HOUND", "SQUIRREL", "RABBIT", "QUAIL", "DUCK",
+                    "TURKEY", "GOOSE", "SHOTGUN", "BOW", "ARROW", "CALL", "SEASON", "LICENSE", "ORANGE", "BOOTS",
+                    "THERMOS", "LODGE", "CAMP", "DAWN", "FIELD", "HARVEST", "HUNTER", "PURSUIT"]},
 }
 
 RECENT_KEEP = 20          # words of a theme remembered, so the next puzzle starts with the others
@@ -503,7 +562,21 @@ def _locked(fn):
 
 @_locked
 def start(ctx, topic="", words=None, level=None, diagonal=None, backward=None):
+    if not topic and not words and level is None:
+        puzzle = _current(ctx, reopen=True)
+        if puzzle is not None and not puzzle["finished"]:  # M7a: a puzzle in progress is brought back, not thrown away
+            puzzle["closed"] = False
+            _save(ctx, puzzle)
+            ctx.effect("show_screen")
+            ctx.effect("puzzle", _page(puzzle))
+            return {"ok": True, "resumed": True, "theme": puzzle["title"], "words_left": len(_left(puzzle)),
+                    "say": "Here's where you left off."}
     return _start(ctx, topic, words, level, diagonal, backward)
+
+
+@_locked
+def new_puzzle(ctx):
+    return _start(ctx)
 
 
 def _hint(ctx, word=None):

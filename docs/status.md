@@ -2,12 +2,12 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 03:30)
+## Right now (2026-10-31, about 04:55)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
-- **Her account hit its 5-hour session limit at about 03:15 on Oct 31.** It resets at 4:49am, and the hub has a wake-up set for 4:52 to resume. Her weekly limit resets at 5pm, and Andy wants her usage used before then. Paused until 4:49:
-  - M13b: uncommitted tests in its folder, so resume that same worker.
-  - M9d3: hadn't changed anything yet, so resume it.
-  - M15b: the new board redraw (brief `docs/handoff/M15b.md`). Its worktree `.worktrees/M15b` is ready, already holding M15's plan and boards.
+- **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
+  - M13b: resumed; its uncommitted tests were still in its folder.
+  - M9d3: resumed.
+  - M15b: the board redraw (brief `docs/handoff/M15b.md`, tab "M15b card boards her acct", `.worktrees/M15b`), started 04:52. Its branch already holds M15's plan and boards.
   - The rule for workers: check each one's size with `python tools/worker_context.py`. New jobs go to fresh workers. Reuse one only for fixes to its own job, while it's under about 200,000 tokens. M15's worker is at 232K, so the redraw went to a fresh one.
   - Andy's own account: 61% of its week used; it resets Nov 4.
   - **M9c truly forget: merged 2026-10-31** (811 tests). It's a real delete: memories live in their own `mary/memories.db` with secure_delete, so incident backups never hold them, and the old table is wiped from every backup. "Forget my name" merged too (822 tests): it clears the saved name, its memories and its talk turns, then she uses no name until one is offered. The page reloads the name after each turn (hub fix). Not run with real Gemini yet. Note: `test_live_skills` failed once while M8 was timing the laptop (a skill guard timeout under load); it passed on rerun.

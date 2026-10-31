@@ -47,9 +47,18 @@ class LiveSkills(unittest.TestCase):
     def test_setup_has_tools_and_text(self):
         setup = server.mary_live_skill_setup()
         names = {d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])}
-        self.assertIn("voice_comfort__louder", names)
+        self.assertIn("open_skill", names)  # M13b
+        self.assertIn("use_skill", names)  # M13b
         self.assertIn("set_skill", names)
         self.assertIsInstance(setup["instruction"], str)
+        self.assertIn("louder: ", setup["instruction"])  # M13b: an "always" action
+
+    def test_use_skill_through_the_route(self):  # M13b
+        self.addCleanup(server.skill_host().set_aside, None)
+        got = helpers.api("POST", "/api/mary/skills/call", {"name": "use_skill", "args": {"action": "louder"},
+                                                            "aside": "voice_comfort"})[1]
+        self.assertNotIn("error", got["response"])
+        self.assertEqual(server.skill_host().aside, "voice_comfort")
 
     def test_round_trip_louder_saves_volume(self):
         helpers.api("PUT", "/api/settings", {"voice_volume": "0.5"})

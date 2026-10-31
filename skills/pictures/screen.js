@@ -3,7 +3,8 @@
    Taps go to POST /api/mary/skills/pictures/event {"event": {"type": "next"|"close"}}.
    aside:true stands this screen side by side with Mary: she slides left and turns toward the picture.
    Nothing ever sits over the picture: the title is above it, the credit under it, and status words show in the card
-   only while no picture is up, otherwise in their own line under it. */
+   only while no picture is up, otherwise in their own line under it.
+   M13b: with a game set aside for the picture, the Back button names the game, and the game comes back (web/mary/skills.js). */
 (function () {
   'use strict';
   var D = document;
@@ -103,6 +104,16 @@
     });
   }
 
+  // M13b: where Back goes: the game set aside for this picture when there is one, otherwise Mary.
+  function backWords() {
+    var who = 'Mary', label = null;
+    try {
+      who = (app() && app().companionName && app().companionName()) || 'Mary';
+      label = window.MarySkills && window.MarySkills.backLabel && window.MarySkills.backLabel();
+    } catch (e) { log(e); }
+    return 'Back to ' + (label || who);
+  }
+
   // Shown when there is no picture: what to say to get one.
   function drawEmpty() {
     var who = 'Mary';
@@ -114,7 +125,7 @@
     stage.appendChild(s);
     root.appendChild(stage);
     var bar = make('div', 'pic-bar');
-    bar.appendChild(bigButton('pic-back', 'Back to ' + who, goBack));
+    bar.appendChild(bigButton('pic-back', backWords(), goBack));   // M13b
     root.appendChild(bar);
   }
 
@@ -122,8 +133,6 @@
     if (!root) { return; }
     root.innerHTML = '';
     if (!last || !last.src) { drawEmpty(); return; }
-    var who = 'Mary';
-    try { who = (app() && app().companionName && app().companionName()) || 'Mary'; } catch (e) { log(e); }
     var data = last;
 
     var title = make(data.title ? 'h2' : 'div', 'pic-title', data.title);   // the row stays when there is no title
@@ -158,7 +167,7 @@
     root.appendChild(credit);
 
     var bar = make('div', 'pic-bar');
-    bar.appendChild(bigButton('pic-back', 'Back to ' + who, goBack));
+    bar.appendChild(bigButton('pic-back', backWords(), goBack));   // M13b
     bar.appendChild(bigButton('pic-next yes', 'Another picture', another));
     root.appendChild(bar);
 
@@ -176,6 +185,10 @@
       el.innerHTML = '';
       root = null;
       fresh = false;
+    },
+    backChanged: function () {   // M13b: the game behind the picture was ended, so Back goes to Mary now
+      var b = find('pic-back');
+      if (b) { b.textContent = backWords(); }
     },
     effect: function (kind, data) {
       if (kind !== 'picture' || !data || !data.src) { return; }

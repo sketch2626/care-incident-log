@@ -261,6 +261,51 @@
     <p class="formerr" id="infoError" role="alert" hidden></p>
     <button type="submit" class="primary left" id="infoSave">Save</button>
   </form>
+  <!-- M15d: outside #infoForm, because the password is not part of Save. Plain text steps: nothing here opens a browser. -->
+  <div class="card infocard skillscard" id="mailCard">
+    <h2 class="smarth first">Connect email</h2>
+    <p class="note" id="mailMsg" aria-live="polite"></p>
+    <p class="note" id="mailNone" hidden>This computer has no safe place to keep an email password, so email can't be set up here.</p>
+    <div id="mailOff" hidden>
+      <p class="note">This lets Mary send a card or message from the resident's own email, only after the resident says to send it.</p>
+      <label class="fl" for="mailAddress">Email address</label>
+      <input class="txt" type="email" id="mailAddress" autocomplete="off" spellcheck="false">
+      <fieldset class="mailpick">
+        <legend>Which email is it?</legend>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="mail_provider" value="gmail"><span class="box"><span class="t">Gmail</span></span></label>
+          <label class="opt"><input type="radio" name="mail_provider" value="yahoo"><span class="box"><span class="t">Yahoo</span></span></label>
+        </div>
+      </fieldset>
+      <ol class="mailsteps" id="mailStepsGmail" hidden>
+        <li>Open myaccount.google.com/apppasswords in the browser and sign in.</li>
+        <li>If it asks, turn on 2-Step Verification first.</li>
+        <li>Type the name Mary and choose Create.</li>
+        <li>Copy the 16 letters it shows.</li>
+      </ol>
+      <ol class="mailsteps" id="mailStepsYahoo" hidden>
+        <li>Open login.yahoo.com/account/security in the browser and sign in.</li>
+        <li>Find App passwords or External connections. Yahoo doesn't offer this on every account.</li>
+        <li>Make one named Mary.</li>
+        <li>Copy the letters it shows.</li>
+      </ol>
+      <label class="fl" for="mailPass">App password</label>
+      <div class="keyrow">
+        <input class="txt" type="password" id="mailPass" autocomplete="new-password" spellcheck="false">
+        <button type="button" class="pastebtn" id="pasteMail">Paste</button>
+      </div>
+      <p class="note" id="mailPassState" aria-live="polite"></p>
+      <p class="formerr" id="mailError" role="alert" hidden></p>
+      <button type="button" class="bigbtn" id="mailConnect">Connect email</button>
+    </div>
+    <div id="mailOn" hidden>
+      <p class="mailline" id="mailLine"></p>
+      <p class="note">The password stays on this computer, locked away by Windows. It never comes back to this page.</p>
+      <button type="button" class="bigbtn" id="mailTest">Send a test to myself</button>
+      <p class="note" id="mailTestMsg" aria-live="polite"></p>
+      <button type="button" class="bigbtn alt" id="mailDisconnect">Disconnect</button>
+    </div>
+  </div>
   <div class="card infocard skillscard" id="skillsCard">
     <h2 class="smarth first">Things Mary can do</h2>
     <p class="note" id="skillsMsg" aria-live="polite"></p>

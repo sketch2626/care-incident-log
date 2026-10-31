@@ -41,8 +41,8 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 ### Status (from 2026-10-24)
 - Pushed to GitHub: v0.2.0. That's talk-to-log, design C, Talk buttons on detail boxes, formal reports, optional Gemini, and the installer build.
 - Verified research, not yet committed:
-  - `contacts/NC.json`: DHSR complaint line 1-800-624-3004 (no email or online form, printable forms only); state ombudsman (919) 855-3400 (re-check the roster date).
-  - `docs/retaliation.md`: F585, F550, F600, F622/F623, NCGS 131E-117(12), 131E-124(c).
+  - `contacts/NC.json`: DHSR complaint line 1-800-624-3004 (no email or online form, printable forms only); state ombudsman (919) 855-3400 (re-check the roster date). Corrected 2026-10-30: DHSR's pages do list an email, unconfirmed for complaints (see `docs/speakup-review.md`).
+  - `docs/retaliation.md`: F585, F550, F600, F622/F623, NCGS 131E-117(12), 131E-124(c). Corrected 2026-10-30: F622/F623 are now F627/F628.
 - Parked on branch `wip/report-to-state` (commit fddfdbc). It's unreviewed and untested, because helpers were stopped mid-work:
   - Report-to-state backend in `server.py` and `reports.py`: urgency levels via `/api/status`; the send wizard (grievance letter, completeness check, attestation, email/letter/phone from the contacts JSON); the submissions table; the retaliation flag and pattern detection; and quick notes (`/api/quick`). The `web/` screens for `#send` and `#rights` were never started.
   - The floating mic button in `desktop.py` + `web/float.html`, and the installer's "start with Windows" option.

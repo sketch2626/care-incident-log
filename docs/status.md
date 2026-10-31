@@ -2,7 +2,7 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 12:45)
+## Right now (2026-10-31, about 13:55)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
   - M13b: merged at 05:10 (see below).
@@ -87,11 +87,11 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **M4f merged 2026-10-31 12:55 (5b25611, 1102 tests):** the warmer threat line in `CHARACTER_NOTE` (no orders; family, the chaplain or the ombudsman; the safety rules come first for immediate danger or when they're the one hurt). It's about 95 words, up from 35, and closes every prompt; bench run 5 tells if it holds. If orders persist, the safety section's "encourage them to step back" is Andy's call. **Running on her account since 12:40, in its own worktree with a watcher and a 20-minute check:** **M15a** (`other/M15a`, tab "M15a dates her acct", brief `docs/handoff/M15a.md`, the first M15 build piece). Her week resets at 4:59pm; the hub nudges them after any limit stop. Then bench run 5 in full after 3am.
+  1. **M4f merged 2026-10-31 12:55 (5b25611, 1102 tests):** the warmer threat line in `CHARACTER_NOTE` (no orders; family, the chaplain or the ombudsman; the safety rules come first for immediate danger or when they're the one hurt). It's about 95 words, up from 35, and closes every prompt; bench run 5 tells if it holds. If orders persist, the safety section's "encourage them to step back" is Andy's call. **M15a merged 2026-10-31 13:50 (3050c0b, 1186 tests):** dates from what the resident said, raised once a year 8 to 5 days ahead in one talk only (done at talk end, after 3 replies, or after a crash), one reminder per person, none for the dead, "don't remind me", forget clears them. New `POST /api/mary/talk/end`, `stop_reminders` tool, and a `TRACKER_TODAY` test hook. Known gap: if the mic is refused after a Live token, that year's reminder can close unheard. Not checked frozen. **Running on her account since 13:52, with a watcher and a 20-minute check:** **M15b cards** (`other/M15b-cards`, tab "M15b cards her acct", brief `docs/handoff/M15b-cards.md`): the `messages` skill, 12 painted fronts, the folded card, two handwriting styles, saved pictures, print, plain messages; no sending yet. Andy approved downloading the five card fonts. Ends WAITING for Andy to try it.
      - **Andy (2026-10-31, 12:40): his own account is hub only for now,** so it lasts until its Nov 4 reset. No workers or helpers there; everything goes to her account, watched closely so nothing strands mid-job.
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
-  4. M15, cards and messages: plan and boards approved; M15a running; then M15b to M15d, in order, on her account.
+  4. M15, cards and messages: plan and boards approved; M15a merged; M15b cards running; then M15c and M15d, in order, on her account.
   5. M16, which brain for the pilot (Gemini paid tier, Meta's models, Muse): run the candidates through the brain bench when it's time.
   5. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
   6. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.

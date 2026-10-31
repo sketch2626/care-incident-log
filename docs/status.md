@@ -36,11 +36,12 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. M9e, a leaner brain, after the bench A/B.
-  2. M7 games as skills (boards first, on Andy's account).
-  3. Rebuild the installer after the big merges.
-  4. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
-  5. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.
+  1. M13b, fewer tools at once, right after M7a merges and before the next game: send only the on-screen game's detailed tools plus one `open_skill(name)` (`docs/skills-design.md` section 12). With word search she has 20 skill tools plus her own, about 26, past the planned limit of about 20.
+  2. M9e, a leaner brain, after the bench A/B.
+  3. M7 games as skills (boards first, on Andy's account).
+  4. Rebuild the installer after the big merges.
+  5. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
+  6. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.
 - **Free-tier facts:** Gemini TTS allows 10 requests a day and resets at midnight Pacific. Live is free. The text model's daily limit isn't measured yet.
 - **GitHub:** all of `main` is backed up to the `dev` branch (2026-10-30). The public `main` is still v0.2.0 until the cleanup before the pilot.
 - **Clean-up done 2026-10-30:** the installer, M12 and M13 worktrees and branches were removed, and the finished briefs moved to `docs/handoff/done/`.

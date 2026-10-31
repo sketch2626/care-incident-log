@@ -7,6 +7,7 @@ How to run (from the project folder):
     python tools/brain_bench.py --key-from-app   # use the key saved in the app (read-only)
     python tools/brain_bench.py --list           # show the runs; needs no key
     python tools/brain_bench.py --mode prompt    # check the safety text only; needs no key
+    python tools/brain_bench.py --replay FILE    # re-grade a saved results file; needs no key
 
 Each reply gets rule checks and a Gemini judge. A summary prints, split into real safety failures, other failures, and
 bench or runtime problems, then each one in plain words.
@@ -18,6 +19,8 @@ spares Mary's daily limit), --no-judge, -v.
 picks its one-line system text or none. Safety cases are skipped there.
 --variant FILE (repeatable) runs another brain text side by side with the real one; see bench/README.md. Only the
 real brain counts toward the exit code.
+--replay FILE grades a file from bench/results again with today's cases and rule checks, and calls no Gemini. The
+judge's verdicts in it stay as they were. --cases and --only work with it.
 
 Exit code: 1 on any safety failure. Otherwise 2 if safety couldn't be verified, the key was missing or refused,
 Gemini's daily limit stopped the run, or a case file is bad. Otherwise 0, even with ordinary failures.
@@ -57,6 +60,7 @@ sys.path.insert(0, str(ROOT))
 
 import assist  # noqa: E402
 import mary  # noqa: E402
+import skills_core  # noqa: E402
 import voices  # noqa: E402
 
 CASES_DIR = ROOT / "bench" / "cases"
@@ -534,6 +538,39 @@ def facts_for(case=None):
     return lambda companion: dict(facts)
 
 
+_skill_host = None
+_skill_errors_said = False
+
+
+def bench_skills():
+    """The real skills, as the app has them, loaded on first use. Everything they keep stays in the scratch folder."""
+    global _skill_host, _skill_errors_said
+    if _skill_host is None:
+        folder = Path(SCRATCH) / "skills" / uuid.uuid4().hex
+        folder.mkdir(parents=True)
+        settings = {}
+
+        def connect():
+            conn = sqlite3.connect(folder / "skills.db", timeout=5)
+            conn.row_factory = sqlite3.Row
+            return conn
+
+        host = skills_core.SkillHost(ROOT / "skills", folder, connect, lambda: dict(settings), settings.update,
+                                     online=lambda: True)
+        host.load(is_blocked=mary.skill_blocked)
+        if host.load_errors and not _skill_errors_said:
+            _skill_errors_said = True
+            say("These skills wouldn't load, so the bench runs without them: " + ", ".join(sorted(host.load_errors)))
+        _skill_host = host
+    return _skill_host
+
+
+def fresh_skills():
+    """Drops the skills, so the next try loads new ones: one run's word search can't leak into the next."""
+    global _skill_host
+    _skill_host = None
+
+
 def live_system_text(memory, companion):
     """Live's system text, built the way voices.live_token does for her own screen."""
     system = mary.system_text(memory, companion, facts=True, tags=False)  # as voices.live_token sends it
@@ -541,6 +578,9 @@ def live_system_text(memory, companion):
     if turns:
         system += "\n\nYour last talk together (most recent last):\n" + "\n".join(
             ("They: " if t.get("role") == "user" else "You: ") + " ".join(str(t["text"]).split()) for t in turns)
+    instruction = bench_skills().instruction_text(None)
+    if instruction:  # before LIVE_EXTRA, as voices.live_token does
+        system += "\n\n" + instruction
     return system + "\n\n" + voices.LIVE_EXTRA + " " + voices.LIVE_TOOLS_NOTE
 
 
@@ -736,14 +776,14 @@ def more_patience(gemini):
 def talk_normal(run, memory, key, model, gemini):
     who = COMPANION_IDS[run["companion"]]
     for line in run["turns"]:
-        result = mary.reply(line, memory, key, model, companion=who)
+        result = mary.reply(line, memory, key, model, companion=who, skills=bench_skills(), screen=None)
         if gemini.failure or result.get("error"):
             run["error"] = gemini.failure or str(result["error"])
             return
         run["replies"].append(app_spoken(result.get("text") or ""))
 
 
-def live_tool(call, memory, key, model, who, run):
+def live_tool(call, memory, key, model, who, run, heard=""):
     """What one Live tool call does, and the answer that goes back to her. Every tool she has gets a real answer: one
     that says "no such tool" sends her round and round and leaves her with nothing to say."""
     name, args = call.get("name"), call.get("args") or {}
@@ -765,16 +805,25 @@ def live_tool(call, memory, key, model, who, run):
         return {"memories": [], "note": mary.RECALL_EMPTY_NOTE}
     if name in ("forget_memory", "story_more", "end_talk"):
         return {"ok": True}
+    if name == "set_skill" or "__" in str(name):
+        return bench_skills().call(name, args, heard=heard)["response"]
     return {"error": "No such tool."}
+
+
+def live_tools():
+    """Her Live tools, as voices.live_token sends them: the skills' declarations, then the core ones, in one list."""
+    declared = [d for tool in bench_skills().gemini_tools() for d in tool.get("functionDeclarations", ())]
+    return [{"functionDeclarations": declared + list(mary.LIVE_CORE_TOOLS)}]
 
 
 def live_turn(system, contents, run, memory, key, model, who):
     """One resident turn in Live, with its tool rounds. Adds to contents; returns everything she said."""
     spoken, rounds = "", 0
+    tools, heard = live_tools(), contents[-1]["parts"][0]["text"]
     while True:
         body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
                 "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1200},
-                "tools": [{"functionDeclarations": list(mary.LIVE_CORE_TOOLS)}]}
+                "tools": tools}
         calls, said = [], ""
         for chunk in mary._gemini_stream(body, key, model):
             if isinstance(chunk, mary.ToolCall):
@@ -790,7 +839,7 @@ def live_turn(system, contents, run, memory, key, model, who):
         answers = []
         for part in calls:
             call = part.get("functionCall") or {}
-            answer = {"name": call.get("name"), "response": live_tool(call, memory, key, model, who, run)}
+            answer = {"name": call.get("name"), "response": live_tool(call, memory, key, model, who, run, heard)}
             if call.get("id"):
                 answer["id"] = call["id"]
             answers.append({"functionResponse": answer})
@@ -1055,6 +1104,7 @@ def attempt(run, key, model, judge_model, gemini, no_judge):
     """One try at a run: talk, rules, judge. A variant's text stands in for her instructions for this try only,
     whatever way it ends."""
     mary.app_facts = facts_for(run["case"])
+    fresh_skills()
     gemini.failure = ""
     real_instructions = mary.load_instructions
     if run["variant"]:
@@ -1385,6 +1435,8 @@ def parse_args(argv):
     p.add_argument("--variant", action="append", default=[], metavar="FILE",
                    help="a brain text to run beside the real one; repeat for more. Only the real brain counts toward "
                         "the exit code")
+    p.add_argument("--replay", default="", metavar="FILE",
+                   help="grade a saved results file again with today's cases and rule checks; needs no key")
     p.add_argument("--list", action="store_true", help="show the runs and stop; needs no key")
     p.add_argument("-v", "--verbose", action="store_true", help="one line per run")
     return p.parse_args(argv)
@@ -1426,8 +1478,80 @@ def say_preview(runs, max_runs, no_judge, model, judge_model):
     say("Mary and Sam use the same daily limit on this key.")
 
 
+def replay_grades(run, old):
+    """Today's rules on a saved run's replies, then the judge's old verdicts, which can't change without Gemini."""
+    grades = old.get("grades")
+    run.update(replies=list(old["replies"]), openers=list(old.get("openers") or []), tools=list(old.get("tools") or []),
+               grades=grades, ungraded=old.get("status") == "ungraded")
+    grade_rules(run)
+    for name, grade in (grades or {}).items():
+        if grade.get("pass") is False:
+            target = "safety_failures" if name in run["case"]["safety_rubric"] else "failures"
+            run[target].append(f"judge (old verdict) {name}: {grade.get('why')}" if grade.get("why")
+                               else f"judge (old verdict) {name}")
+    run["status"] = status_of(run)
+
+
+def say_replayed(title, runs):
+    """One replay section, left out when it's empty. A run with reasons gets them on the lines under it."""
+    if runs:
+        say(title)
+    for run in runs:
+        say(f"  {label(run)}" + (" SAFETY" if run["safety_failures"] else ""))
+        for why in run["safety_failures"] + run["failures"]:
+            say(f"    {why}")
+
+
+def replay(path, cases_folder=None, only=""):
+    """Grades a saved results file again with today's cases and rules. Calls no Gemini and needs no key."""
+    path = Path(path)
+    try:
+        saved = json.loads(path.read_text(encoding="utf-8"))["runs"]
+        if not isinstance(saved, list):
+            raise ValueError
+    except (OSError, ValueError, KeyError, TypeError):
+        say(f"{path.name} can't be read as a results file.")
+        return 2
+    cases = {c["id"]: c for c in load_cases(cases_folder)}
+    picked = [old for old in saved if isinstance(old, dict) and old.get("mode") in ("normal", "live", "story")
+              and old.get("replies") and not old.get("variant") and only in str(old.get("id"))]
+    graded, was, fresh = [], [], []
+    for old in picked:
+        case = cases.get(old.get("id"))
+        if case is None:
+            more = f" #{old.get('repeat')}" if old.get("repeat", 1) > 1 else ""
+            fresh.append(f"{old.get('id')} ({old.get('companion')}, {old['mode']}){more}: its case is gone")
+            continue
+        run = new_run(case, old.get("companion"), old["mode"], old.get("repeat", 1))
+        if run["turns"] != old.get("turns"):
+            fresh.append(f"{label(run)}: its lines changed")
+        elif old.get("status") in ("error", "not_run"):  # its replies may stop short, and it never met the judge
+            fresh.append(f"{label(run)}: it didn't finish last time")
+        else:
+            replay_grades(run, old)
+            graded.append(run)
+            was.append(old.get("status"))
+    apply_vary(graded)
+    before = sum(old.get("status") == "passed" for old in picked)
+    now = sum(run["status"] == "passed" for run in graded)
+    say(f"Replay of {path.name}: was {before}/{len(picked)} passed, now {now}/{len(graded)} passed, "
+        f"{len(fresh)} need a fresh run")
+    pairs = list(zip(was, graded))
+    say_replayed("Cleared:", [r for w, r in pairs if w in ("failed", "safety") and r["status"] == "passed"])
+    say_replayed("Still failing:", [r for w, r in pairs if w in ("failed", "safety") and r["status"] != "passed"])
+    say_replayed("Newly failing:", [r for w, r in pairs if w not in ("failed", "safety") and r["status"] in SCORED[1:]])
+    if fresh:
+        say("Needs a fresh run:")
+    for line in fresh:
+        say(f"  {line}")
+    say('The judge\'s verdicts are the old ones, so anything marked "judge (old verdict)" may change on a real run.')
+    return 0
+
+
 def bench(args):
     global _secret
+    if args.replay:
+        return replay(args.replay, args.cases, args.only)
     if (args.raw or args.variant) and args.no_judge:
         flag = "--raw" if args.raw else "--variant"
         say(f"{flag} can't go with --no-judge, because the judge is the comparison. Take off --no-judge.")

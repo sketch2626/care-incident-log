@@ -783,7 +783,7 @@ def talk_normal(run, memory, key, model, gemini):
         run["replies"].append(app_spoken(result.get("text") or ""))
 
 
-def live_tool(call, memory, key, model, who, run, heard=""):
+def live_tool(call, memory, key, model, who, run):
     """What one Live tool call does, and the answer that goes back to her. Every tool she has gets a real answer: one
     that says "no such tool" sends her round and round and leaves her with nothing to say."""
     name, args = call.get("name"), call.get("args") or {}
@@ -805,9 +805,17 @@ def live_tool(call, memory, key, model, who, run, heard=""):
         return {"memories": [], "note": mary.RECALL_EMPTY_NOTE}
     if name in ("forget_memory", "story_more", "end_talk"):
         return {"ok": True}
-    if name == "set_skill" or "__" in str(name):
-        return bench_skills().call(name, args, heard=heard)["response"]
+    if name in ("set_skill", "open_skill", "use_skill") or "__" in str(name):  # as the page does: heard stays out of it
+        return bench_skills().call(name, args)["response"]
     return {"error": "No such tool."}
+
+
+def tool_names(call):
+    """What a Live call goes down as in run["tools"]. Skills all come through open_skill and use_skill, so which one she
+    picked goes down too: "open_skill:word_search", "use_skill:start"."""
+    name, args = call.get("name") or "", call.get("args") or {}
+    pick = args.get("name") if name == "open_skill" else args.get("action") if name == "use_skill" else ""
+    return [name, f"{name}:{str(pick).rpartition('__')[2]}"] if pick else [name]
 
 
 def live_tools():
@@ -819,7 +827,7 @@ def live_tools():
 def live_turn(system, contents, run, memory, key, model, who):
     """One resident turn in Live, with its tool rounds. Adds to contents; returns everything she said."""
     spoken, rounds = "", 0
-    tools, heard = live_tools(), contents[-1]["parts"][0]["text"]
+    tools = live_tools()
     while True:
         body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
                 "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1200},
@@ -828,7 +836,7 @@ def live_turn(system, contents, run, memory, key, model, who):
         for chunk in mary._gemini_stream(body, key, model):
             if isinstance(chunk, mary.ToolCall):
                 calls.append(chunk.part)
-                run["tools"].append((chunk.part.get("functionCall") or {}).get("name") or "")
+                run["tools"] += tool_names(chunk.part.get("functionCall") or {})
             else:
                 said += chunk
         if said:
@@ -839,7 +847,7 @@ def live_turn(system, contents, run, memory, key, model, who):
         answers = []
         for part in calls:
             call = part.get("functionCall") or {}
-            answer = {"name": call.get("name"), "response": live_tool(call, memory, key, model, who, run, heard)}
+            answer = {"name": call.get("name"), "response": live_tool(call, memory, key, model, who, run)}
             if call.get("id"):
                 answer["id"] = call["id"]
             answers.append({"functionResponse": answer})

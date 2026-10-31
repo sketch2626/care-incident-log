@@ -2,11 +2,18 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 05:30)
+## Right now (2026-10-31, about 05:50)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
   - M13b: merged at 05:10 (see below).
-  - **M4c brain fixes** (`other/M4c`, tab "M4c brain fixes her acct", brief `docs/handoff/M4c.md`), started 05:12. It covers Live character (pet names, cheering), the racist steer, the emergency steps said once in Normal, no name re-asking, and Live passing what was heard to skills.
+  - **M4c brain fixes: merged 05:45 (1020 tests).** Nothing is tried with real Gemini yet; bench run 3 is the check, running since 05:45.
+    - **Manner rules:** `mary.CHARACTER_NOTE` closes every talk prompt in Normal and Live. Live had the same text, but the manner rules sat mid-prompt.
+    - **Racist talk:** its own rule, with one plain line such as "I don't see people that way," then turn the talk.
+    - **Emergencies in Normal:** code drops the sentences in her reply that repeat the app's steps, always keeps the Veterans Crisis Line, and falls back to "I'm right here with you." Her reply comes a moment later. Live isn't filtered.
+    - **Names:** she asks a name once ever, and never asks or checks one she knows.
+    - **Skills:** both routes pass what was heard to them.
+    - **Pet names, for Andy:** the hub's brief went past his approved sheet ("ease in, ask first") to "none unless asked". The sheet now says so, waiting on his choice.
+    - A possibly flaky test: `test_word_search.test_size_is_saved_and_used_next_time` errored once.
   - **M9d3 bench fixes: merged 05:25 (990 tests).**
     - A replay of run 2 cleared 9 failures, 5 of the 8 "safety" ones among them. The 3 real ones are Sam's violent politics (M9f) and dysreflexia in both modes (Andy's question).
     - The bench now gives her the real skills and M13b's tools, and records her tool picks in Live. `--replay FILE` re-grades saved results with no key.
@@ -24,7 +31,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - **Bench run 2 (2026-10-31 00:59): 61/88** (run 1: 16/88). Results and the hub's triage are in `bench/results/2026-10-31_0059.*` and that commit's message. 4 of the 8 "safety" failures are bench flaws (988 said with commas, "pressing one").
     - **Real safety problems:** she names autonomic dysreflexia (Andy's question); in Normal the app's emergency line and her reply both give the instructions, so she says them twice; Sam doesn't name staff when he steers from violent talk (waits on M9f).
     - **Real brain problems (mostly Live):** pet names (honey, sugar), cheerleading ("good for you!"), the racist steer still agrees, and "bless your heart" praise. ("Tap Talk" from the Menu was right after all.)
-    - M9d3 is merged, and **M4c brain fixes** is running (see above). Bench run 3 comes after M4c merges.
+    - M9d3 and M4c are merged. Bench run 3 is running (see above).
   - **M8 laptop speed check: merged 2026-10-31 (947 tests).** Eight seconds after her window opens, Mary times the laptop at low priority and picks "normal" or "light". Light only halves Whisper's threads, which no one can hear. **Andy decides:** on a slow laptop, Kokoro makes speech at about half real time, so there are gaps between sentences. Keep Kokoro with the gaps, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)? Not checked yet: a real slow laptop and a frozen build; check at the next installer build. Peer `m8-22`.
   - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
 - **Merged today since 20:30:**
@@ -32,6 +39,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - M4a's fixes from the bench (no tags in Live, every bracket stripped in Normal, crisis numbers digit by digit, harm before the write-down offer, grown-up stories with no human past);
   - bench run 1 (`bench/results/2026-10-30_2051.*`, 16/88, a mix of real problems and bench flaws).
 - **Questions for Andy:**
+  - Mary's pet names: keep "none unless the resident asks" (M4c), or go back to his approved "ease in, but ask first"?
   - Should Mary name autonomic dysreflexia to the resident? The safety section names it on purpose; the bench judge called it diagnosing.
   - Speak-up decisions D1-D10.
   - "Pal" was added to Sam's pet names that wait until asked; keep it?
@@ -55,7 +63,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **M4c brain fixes**, running (M9d3 merged). Then bench run 3, and rebuild the installer (M13b and M8 are merged; M8's frozen build is still unchecked).
+  1. **Bench run 3**, running (M4c and M9d3 merged). Then triage it, and rebuild the installer (M13b and M8 are merged; M8's frozen build is still unchecked).
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
   4. M15, cards and messages: build after Andy approves the plan and boards.

@@ -2,13 +2,14 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 00:05)
+## Right now (2026-10-31, about 00:20)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account's workers resumed at 23:50.** Her weekly limit resets Oct 31 at 5pm, and Andy wants her usage used before then. Check each worker's size with `python tools/worker_context.py`. New jobs go to fresh workers; reuse one only for fixes to its own job while it's under about 200,000 tokens.
   - **M9c truly forget: merged 2026-10-31** (811 tests). It's a real delete: memories live in their own `mary/memories.db` with secure_delete, so incident backups never hold them, and the old table is wiped from every backup. Peer `m9c-00` (about 201K) is doing one follow-up: "forget my name" clears the saved name. It commits `DONE: M9c forget my name`.
-  - **M7a word search** (`other/M7a`, tab "M7a word search her acct", peer `m7a-ec`): boards done (`mockups/mary/round7/`), the generator and skill tools committed, the screen in progress. Merge only after Andy approves the boards.
+  - **M7a word search: WAITING for Andy** (`other/M7a`, peer `m7a-ec`, 807 tests). Built in all three talk modes. Boards are on the Design canvas "Mary round 7: word search" (https://claude.ai/artifact/TgmCCW2RZK9TVVcTWQemzQ). Andy decides: (1) the default size, 10x10 (54px letters beside Mary) or 8x8 (66px, board E); (2) the builder's own looks (12x12, slanted word marks, the row-hint band, the dashed outline for a shown word, the teal "Same"); (3) the play bar during "New puzzle". Merge only after he approves, then rebuild the installer. Note: there are now 20 skill tools plus her own; watch for wrong tool picks (`skills-design.md` section 12).
+  - **M8 laptop speed check** (`other/M8`, tab "M8 laptop speed her acct", brief `docs/handoff/M8.md`, started 00:15): on first run it times Kokoro, Whisper and the wake word, picks a "normal" or "light" tier, and lightens settings by itself on a slow laptop. Anything a resident would see or hear differently waits for Andy.
   - **M9d2 bench fixes** (`other/M9d`, tab "M9d2 bench fixes her acct", peer `m9d-4b`): the fixes committed, tests in progress. Then the hub does a second real bench run.
-  - **Idle, waiting for Andy:** M4a (`m4a-70`), M4b (`m4b-32`), and speak-up (`speakup-d4`, waiting on decisions D1-D10 in `docs/speakup-plan.md`).
+  - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
 - **Merged today since 20:30:**
   - the speak-up review and plan, plus S0 (legal facts fixed against Appendix PP Rev. 232);
   - M4a's fixes from the bench (no tags in Live, every bracket stripped in Normal, crisis numbers digit by digit, harm before the write-down offer, grown-up stories with no human past);

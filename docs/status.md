@@ -4,7 +4,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 
 ## Right now (2026-10-31, about 03:30)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
-- **Her account hit its weekly limit at about 03:15 on Oct 31.** It resets at 5pm that day, and the hub has a wake-up set for 17:07 to resume. Paused until then:
+- **Her account hit its 5-hour session limit at about 03:15 on Oct 31.** It resets at 4:49am, and the hub has a wake-up set for 4:52 to resume. Her weekly limit resets at 5pm, and Andy wants her usage used before then. Paused until 4:49:
   - M13b: uncommitted tests in its folder, so resume that same worker.
   - M9d3: hadn't changed anything yet, so resume it.
   - M15b: the new board redraw (brief `docs/handoff/M15b.md`). Its worktree `.worktrees/M15b` is ready, already holding M15's plan and boards.

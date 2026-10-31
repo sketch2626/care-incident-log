@@ -326,7 +326,7 @@ Andy's words: "Mary says, I see that it's your son's birthday coming up next wee
   - **No "who gets it" list** ("We already said we're making a birthday card for my son, so why are we going to send it to Ellen and Tyler?") and no Back and Next. Keep a button only when there's a real reason: "If there's a reason for it that I'm missing, and there may be, so I don't know everything."
   - **Five seconds to undo:** before sending, Mary explains there'll be five seconds to cancel. After Send comes an Undo button counting "5 4 3 2 1".
   - **Messenger in the panel** "looks okay."
-  - Redraw: M15b (`docs/handoff/M15b.md`), on her account after its weekly reset.
+  - Redraw: M15b (`docs/handoff/M15b.md`), on her account once its session limit resets.
 - Boards first, then a skill of its own (after M13b's tool groups).
 
 ### M16. Which brain for the pilot (idea; Andy, 2026-10-31, speculation for now)

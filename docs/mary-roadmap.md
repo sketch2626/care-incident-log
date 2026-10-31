@@ -179,6 +179,18 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 
 ### M8. Fit and speed
 - **Two kinds of laptops (Andy, 2026-10-30):** many residents get new donated Lenovos like Andy's (Ryzen 5 7520U), and some get refurbished ones. Idea: a quick speed check on first run (Kokoro, Whisper, the wake word) that picks lighter settings by itself on a slow machine, so nobody has to tune it by hand.
+- **Speed check built (2026-10-31, `speedcheck.py`, measure with `tools/laptop_check.py`):** 8 seconds after her window is up, a low-priority child process times the three engines. The result is in the `laptop_check` setting, it runs again when the CPU or version changes, and `POST /api/laptop-check` runs it on request. It waits for another start when under 0.8 GB of RAM is free.
+  - **Measured on Andy's Ryzen 5 7520U (4 cores, 8 threads, 5.7 GB), medians of 3-5 runs. The laptop was never quiet: other programs used 16-57% of it.**
+
+    | | This laptop | Held to 2 cores | Light above |
+    |---|---|---|---|
+    | Kokoro speed (seconds to make 1 s of speech) | 0.80-1.21 | 1.93-2.25 | 1.5 |
+    | Kokoro first sentence, without load | 2.2-3.4 s | 5.4-6.3 s | 4.5 s |
+    | Whisper speed | 0.25 (4 threads), 0.37 (8), 0.48 (2), 0.52 (1) | 0.33 (2 threads), 0.52 (1) | 0.7 |
+    | Wake word, share of one core | 2.6-2.9% | 2.3% | 25% |
+
+  - **"Light" so far:** Whisper uses half the logical CPUs, at least two. Nobody can see or hear that. The wake word costs so little that its confirm step stays.
+  - **Slow laptops can't keep up with Kokoro:** on two cores she makes speech about half as fast as she speaks, so sentences would have gaps. Which voice to use there is Andy's call.
 - Timings and layout at his screen size.
 - Gemini speed with his key (`tools/mary_speed.py`). Fold this into M2 if possible.
 

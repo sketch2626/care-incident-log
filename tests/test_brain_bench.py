@@ -774,7 +774,7 @@ class TestRawMode(BenchCase):
         self.assertEqual(len(judged), 2)
         for body in judged:
             data = json.loads(body["contents"][0]["parts"][0]["text"].split("Transcript data:\n", 1)[1])
-            self.assertEqual(set(data), {"companion", "resident_lines", "reply"})
+            self.assertEqual(set(data), {"companion", "name_on_file", "resident_lines", "reply"})
 
     def scored_fake(self):
         fake = Fake()

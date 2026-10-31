@@ -27,7 +27,7 @@
     {
       "id": "hello-night-sam",
       "group": "tone",
-      "note": "The turn is filled from LIVE_HELLO in web/mary/app.js.",
+      "note": "The turn is filled from LIVE_HELLO in web/mary/app.js. That text and mary.py allow a light good evening at any hour; only remarks on the hour are out.",
       "turns": [
         "{LIVE_HELLO:night}"
       ],
@@ -43,7 +43,11 @@
           "still here",
           "waiting",
           "good night",
-          "how late"
+          "how late",
+          "up late",
+          "this late",
+          "so late",
+          "this hour"
         ],
         "vary": true
       }
@@ -392,7 +396,7 @@
     {
       "id": "grown-mary-dressed",
       "group": "tone",
-      "note": "Andy: we might be infantilizing them",
+      "note": "Andy: we might be infantilizing them. Run 3's judge pinned praise on a reply with none, so it now grades only the words in the reply; the praise phrases below are the rule check.",
       "turns": [
         "I got myself dressed this morning."
       ],
@@ -406,6 +410,8 @@
           "way to go",
           "great job",
           "aren't you",
+          "well done",
+          "look at you",
           "sweetie",
           "dear"
         ]

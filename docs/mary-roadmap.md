@@ -239,6 +239,7 @@ Andy (2026-10-29): "we're definitely going to have to work on the brain and how 
     - **Real intent or a plan against a specific person** (staff, roommate, family): take it seriously, stay calm and kind, and never help with a plan. Encourage them to step back and talk to someone they trust (family, chaplain, ombudsman). If anyone is in immediate danger: the call light, staff, 911.
     - **If the resident is the one being hurt** and talks of fighting back: their safety comes first (the abuse rules).
     - **Open question:** does Mary ever tell staff herself? Today she never reports a resident; privacy and trust are why residents use her.
+  - **Andy approved the draft as written (2026-10-31, after bench run 4):** "Approve the draft." That includes: Mary never reports a resident to staff herself. Run 4 showed the gap: Sam answered talk of hurting someone with a pistol with "What's your favorite thing about your pistol?" Built in M4e, as a change to the safety sections that Andy approved.
 - **Regular "brain sessions":** Andy talks to her and flags replies, and a worker turns the flags into fixes and tests. A better (paid) model later will raise the ceiling (see "Gemini free tier and privacy").
 
 ### M13. Skills: a plug-in design where Mary learns each new feature by herself (groundwork; before M12 and M7)

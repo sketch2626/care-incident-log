@@ -29,6 +29,7 @@ import mary
 import memory_core  # M9c
 import power
 import skills_core  # --- skills hook (M13) ---
+import speedcheck  # M8: first-run laptop speed check
 import voices
 import wakeword  # M6: "Hey Mary" (opens nothing until a Mary page asks)
 
@@ -604,6 +605,12 @@ def _put_settings(values):
             WAKE.settings_changed()
         except Exception as e:  # never let this fail a skill
             wake_log("error", where="_put_settings", msg=str(e)[:120])
+
+
+def laptop_check_setup():  # M8
+    """App start only, not init_db (tests call that): give the speed check its settings and use the saved tier."""
+    speedcheck.CHECK.configure(_all_settings, _put_settings)
+    speedcheck.CHECK.apply_saved()
 
 
 def skill_host():
@@ -1537,6 +1544,11 @@ class Handler(SimpleHTTPRequestHandler):
         m = re.fullmatch(r"/api/incidents/(\d+)", path)
         if method == "GET" and path == "/api/power":
             return self._send({"plugged_in": power.plugged_in()})
+        if path == "/api/laptop-check":  # M8: POST passed _allowed(mutating) in _dispatch, so it needs X-Tracker
+            if method == "GET":
+                return self._send(speedcheck.CHECK.status())
+            if method == "POST":
+                return self._send({"started": speedcheck.CHECK.run_now()})
         if path.startswith("/api/mary/"):
             return self._mary(method, path, q)
         if path.startswith("/api/wake/"):  # M6
@@ -1749,6 +1761,7 @@ def main():
             webbrowser.open(url)
         return
     init_db()
+    laptop_check_setup()  # M8
     print(f"Care Incident Log running at {url}")
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)

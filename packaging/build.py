@@ -10,7 +10,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSION = "0.3.0"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # M8
+from version import VERSION  # M8
+
 NAME = "Care Incident Log"
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -29,6 +31,7 @@ SPEECH_ARGS = ["--hidden-import", "speech", "--hidden-import", "reports",
 # Mary's own modules, named for the same reason, and what the Kokoro voice reads at run time.
 MARY_ARGS = ["--hidden-import", "mary", "--hidden-import", "voices", "--hidden-import", "skills_core",
              "--hidden-import", "memory_core", "--hidden-import", "difflib",  # M9c; M7a: word_search imports difflib, and PyInstaller never sees a skill's imports
+             "--hidden-import", "speedcheck", "--hidden-import", "version",  # M8
              "--hidden-import", "power", "--hidden-import", "kokoro_onnx", "--collect-data", "kokoro_onnx",
              "--collect-all", "espeakng_loader", "--collect-data", "phonemizer"]
 ISCC_PATHS = [Path(os.environ.get("LOCALAPPDATA", ""), "Programs", "Inno Setup 6", "ISCC.exe"),
@@ -54,6 +57,7 @@ def main():
         "--windowed", "--name", NAME, "--icon", ICON,
         "--add-data", f"{ROOT / 'web'}{os.pathsep}web",
         "--add-data", f"{ROOT / 'mary' / 'instructions.md'}{os.pathsep}mary",  # Mary's instructions (mary.py reads ROOT/mary/)
+        "--add-data", f"{ROOT / 'mary' / 'laptop_check_clip.wav'}{os.pathsep}mary",  # M8: the speed check's clip
         "--add-data", f"{ROOT / 'skills'}{os.pathsep}skills",  # Mary's skills (M13; server.py reads ROOT/skills/)
         *(arg for m in MODELS for arg in ("--add-data", f"{ROOT / m}{os.pathsep}{m}")),
         *SPEECH_ARGS, *MARY_ARGS,

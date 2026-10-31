@@ -27,6 +27,8 @@ import threading
 import time
 from pathlib import Path
 
+import speedcheck  # M8
+
 try:  # numpy is installed with faster-whisper; keep is_ready() working without it
     import numpy as np
 except Exception:  # pragma: no cover
@@ -124,7 +126,7 @@ def _load_model_worker() -> None:
         else:
             from faster_whisper import WhisperModel
 
-            threads = max(1, min(8, os.cpu_count() or 4))
+            threads = speedcheck.whisper_threads()  # M8
             model = WhisperModel(
                 str(model_dir),
                 device="cpu",

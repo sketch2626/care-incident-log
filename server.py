@@ -1318,6 +1318,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
             text = " ".join(str(self._body().get("text") or "").split())[:2000]
+            text = mary.fix_numbers(text)  # M4d: what's remembered has the number right, whatever her voice said
             quiet = _live_forgot_at is not None and time.monotonic() - _live_forgot_at < LIVE_FORGOT_QUIET_S  # M9c
             if text and not quiet and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
                 with _mary_lock:

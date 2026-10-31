@@ -22,7 +22,56 @@ INSTRUCTIONS = ROOT / "mary" / "instructions.md"
 
 # M4a: the same three numbers and words in app.js (spokenNumbers), for what her voice says; captions keep the digits
 SPOKEN_NUMBERS = ((re.compile(r"\b988\b"), "nine, eight, eight"), (re.compile(r"\b911\b"), "nine one one"),
-                  (re.compile(r"\b838[- ]?255\b"), "eight three eight, two five five"))
+                  (re.compile(r"\b838[- ]?255\b"), "eight three eight, two five five"),
+                  (re.compile(r"\bpress\s+1\b(?![-.]?\d)", re.I), "press one"))  # M4d
+# M4d: bench run 3: Sam said 988 as "ninety-eight-eight". The wrong forms of the crisis numbers, for fix_numbers.
+# app.js (fixNumbers) has the same patterns and guards. Plain digits aren't wrong: spoken_numbers reads those out.
+_NH = r"[-‐-―\s]"     # a hyphen, a dash or a space
+_NJ = r"[-‐-―,\s]+"   # between the words of a number: any mix of those and commas
+_ND = r"[-‐-―,.\s]+"  # between its digits, where a dot counts too: 9.8.8
+_HUNDRED = rf"hundred{_NJ}(?:and{_NJ})?"
+_NINE_ELEVEN = re.compile(rf"\bnine{_NH}+eleven\b", re.I)  # no comma: "nine, eleven" is a count
+_FIX_NUMBERS = (
+    (re.compile(rf"\b(?:ninety{_NJ}eight|nine{_NJ}(?:{_HUNDRED})?eighty|nine{_NJ}eight){_NJ}eight\b"
+                rf"|\b9{_ND}8{_ND}8\b", re.I), "nine, eight, eight"),
+    (re.compile(rf"\bnine{_NJ}(?:one{_NJ}one|{_HUNDRED}eleven)\b|\b9{_ND}1{_ND}1\b", re.I), "nine one one"),
+    (re.compile(rf"\beight{_NJ}(?:(?:{_HUNDRED})?thirty{_NJ}eight|three{_NJ}eight){_NJ}"
+                rf"two{_NJ}(?:(?:{_HUNDRED})?fifty{_NJ}five|five{_NJ}five)\b"
+                rf"|\b8{_ND}3{_ND}8{_ND}2{_ND}5{_ND}5\b", re.I), "eight three eight, two five five"),
+    (_NINE_ELEVEN, "nine one one"))
+# "press 1" alone isn't here: a caption may keep it, and SPOKEN_NUMBERS says it
+_PRESS_ONE = re.compile(r"\bpress\s+(?:(?:the\s+)?(?:number|digit|option)\s+(?:one|1)(?:[\s-]+(?:key|button))?"
+                        r"|the\s+1(?:[\s-]+(?:key|button))?|(?:the\s+)?(?:one|1)[\s-]+(?:key|button))\b", re.I)
+# A digit or number word right against a form makes it some longer number ("nine eight eight seven", "1-9-8-8").
+# After a comma and a space it's a new thought ("ninety-eight-eight, 24 hours a day"), so that doesn't count.
+_NUM_WORD = ("zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
+             "|(?:thir|four|fif|six|seven|eigh|nine)teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
+             "|hundred|thousand")
+_NUM_BEFORE = re.compile(rf"(?:\d(?:[.,]|{_NH}*)|\b(?:{_NUM_WORD}){_NH}*)$", re.I)
+_NUM_AFTER = re.compile(rf"^(?:(?:[.,]|{_NH}*)\d|{_NH}*(?:{_NUM_WORD})\b)", re.I)
+# "nine-eleven" meaning the attacks or a time stays as it is. A heart attack is the very time she should give the number.
+_NINE11_BEFORE = re.compile(rf"\b(?:after|since|before|on|of|until|at|post){_NH}+(?:the\s+)?$", re.I)
+_NINE11_AFTER = re.compile(r"^[\s,]*(?:[ap]\.?\s?m\b|o['’]?clock\b|in\s+the\s+(?:morning|afternoon|evening)\b"
+                           r"|this\s+(?:morning|afternoon|evening)\b|at\s+night\b|last\s+night\b|tonight\b)", re.I)
+_NINE11_TALK = re.compile(r"\bseptember\b|\btowers?\b|\battacks?\b|\bterror|\b2001\b|\btrade\s+cent(?:er|re)\b"
+                          r"|\bpentagon\b|\bground\s+zero\b", re.I)
+_BODY_ATTACK = re.compile(r"\b(?:heart|panic|asthma|anxiety)[\s-]+attacks?\b", re.I)
+_NUM_SENTENCE = re.compile(r"[.!?](?:\s|$)|\n")
+# Normal's stream: the end of a piece that could still grow into a form waits for the next piece. Only the last word
+# can be cut in two. A nine-eleven waits for its sentence's end, because that's where it's decided.
+_HOLD_FIRST = ("press", "ninety", "nine", "eight")
+_HOLD_MORE = ("and", "the", "number", "digit", "option", "key", "button", "hundred", "one", "1", "eleven", "two",
+              "three", "five", "eight", "nine", "thirty", "fifty", "eighty")
+
+
+def _word_starts(words):
+    return "|".join(sorted({w[:i] for w in words for i in range(1, len(w) + 1)}, key=len, reverse=True))
+
+
+_NUM_TAIL = re.compile(rf"\b(?:(?:{'|'.join(_HOLD_FIRST)})(?:{_NJ}(?:{'|'.join(_HOLD_MORE)}))*"
+                       rf"(?:{_NJ}(?:{_word_starts(_HOLD_MORE)}))?(?:{_NJ})?"
+                       rf"|{_word_starts(_HOLD_FIRST)}|[89](?:{_ND}\d)*(?:{_ND})?)$", re.I)
+_NINE11_OPEN = re.compile(rf"{_NINE_ELEVEN.pattern}(?![\s\S]*(?:{_NUM_SENTENCE.pattern}))", re.I)
 EMERGENCY_TEXT = {
     "medical": "Please press your call light or call out for staff right now. If it's serious, call 911.",
     "self_harm": "I'm really glad you told me. Please press your call light and tell a nurse how you're feeling, "
@@ -328,8 +377,36 @@ def _plain(text):
     return text.replace("’", "'").replace("‘", "'").replace("ʼ", "'")
 
 
+def _number_fits(form, m, before):  # M4d
+    """False when this match is part of a longer number, or a nine-eleven that means the attacks or a time."""
+    head, tail = before + m.string[:m.start()], m.string[m.end():]
+    if _NUM_BEFORE.search(head) or _NUM_AFTER.search(tail):
+        return False
+    if form is not _NINE_ELEVEN:
+        return True
+    if _NINE11_BEFORE.search(head) or _NINE11_AFTER.search(tail):
+        return False
+    sentence = _NUM_SENTENCE.split(head)[-1] + " " + _NUM_SENTENCE.split(tail)[0]
+    return not _NINE11_TALK.search(_BODY_ATTACK.sub(" ", sentence))
+
+
+def fix_numbers(text, before=""):  # M4d
+    """text with every wrong form of a crisis number put right, for captions, saved words and a voice alike.
+    Digits stay digits. before: the words of this sentence that already went out, when text is part of a stream."""
+    for form, words in _FIX_NUMBERS:
+        text = form.sub(lambda m: words if _number_fits(form, m, before) else m.group(), text)
+    return _PRESS_ONE.sub(lambda m: m.group() if _NUM_AFTER.search(m.string[m.end():]) else "press one", text)
+
+
+def _number_cut(text):  # M4d
+    """Where the end of text could still grow into a number form. What's before the cut can go out now."""
+    tail, open_ = _NUM_TAIL.search(text), _NINE11_OPEN.search(text)
+    return min(tail.start() if tail else len(text), open_.start() if open_ else len(text))
+
+
 def spoken_numbers(text):  # M4a: a voice left alone can say 988 as "nine eighty-eight"
     """text with the crisis numbers written out digit by digit, for a voice to read."""
+    text = fix_numbers(text)  # M4d
     for number, words in SPOKEN_NUMBERS:
         text = number.sub(words, text)
     return text
@@ -746,16 +823,25 @@ class _ReplyStream:
     A [mood: x] tag is handled the moment its "]" arrives and the words after it flow on at once.
     Any other "[" starts a hold: everything from there to the end is kept, so a [remember:] or
     [name:] line is never spoken half-way. speak(piece, after_tag) and mood(value) are callbacks.
+    M4d: the words go out through fix_numbers. number holds a tail that could still grow into a crisis number, since
+    a chunk can end half way through one; sentence is what already went out of the sentence under way.
     """
 
     def __init__(self, speak, mood):
         self.speak, self.mood = speak, mood
-        self.buf = self.held = ""
+        self.buf = self.held = self.number = self.sentence = ""
         self.after_tag = False
 
     def _say(self, piece):
         if not piece:
             return
+        text = self.number + piece
+        cut = _number_cut(text)
+        self.number = text[cut:]
+        piece = fix_numbers(text[:cut], self.sentence)
+        if not piece:
+            return
+        self.sentence = _NUM_SENTENCE.split(self.sentence + piece)[-1]
         self.speak(piece, self.after_tag)
         if piece.strip():
             self.after_tag = False
@@ -788,8 +874,10 @@ class _ReplyStream:
     def finish(self):
         """The held-back text with every tag removed, and nothing from a half-finished tag."""
         held = _MOOD_TAG.sub(lambda m: self.mood(m.group(1)) or "", _TAG.sub("", self.held))
-        self.buf = self.held = ""
-        return _BRACKETS.sub("", held)  # M4a: nothing in brackets is ever spoken, like an [alarm: emergency] of her own
+        held = _BRACKETS.sub("", held)  # M4a: nothing in brackets is ever spoken, like an [alarm: emergency] of her own
+        held, sentence = self.number + held, self.sentence  # M4d: a held number goes first, in its place
+        self.buf = self.held = self.number = self.sentence = ""
+        return fix_numbers(held, sentence)
 
 
 # --- skills hook (M13) ---
@@ -1032,7 +1120,9 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- Your warmth is in paying attention, not in sugar.\n"
                   "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
                   "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
-                  "else. Don't ask about it.")
+                  "else. Don't ask about it.\n"
+                  "- Say the crisis numbers one digit at a time: \"nine, eight, eight\", \"nine one one\", and \"press "
+                  "one\"; never \"ninety-eight-eight\", \"nine eighty-eight\" or \"nine-eleven\".")  # M4d
 
 # M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
 # Narrow on purpose: "you need a nurse" stays out, because whether she names autonomic dysreflexia is Andy's open question.
@@ -1053,7 +1143,7 @@ def _without_steps(text):
         if piece.startswith("["):
             out.append(piece)
         else:
-            out.append(" ".join(s for s in _SENTENCE_GAP.split(piece)
+            out.append(" ".join(s for s in _SENTENCE_GAP.split(fix_numbers(piece))  # M4d: a wrong form repeats it too
                                 if _VETERANS_LINE.search(s) or not _STEP.search(s)))
     return "".join(out)
 

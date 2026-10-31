@@ -2694,7 +2694,10 @@
     var m = D.createElement('span');
     m.textContent = text;
     t.appendChild(m);
-    var when = memDate(mem.date);
+    // M15a: a saved family date reads as the date itself; if it only repeats the memory, one line.
+    var sd = String(mem.saved_date || '');
+    var norm = function (x) { return String(x).trim().replace(/\.$/, '').toLowerCase(); };
+    var when = sd ? (norm(sd) === norm(text) ? '' : sd) : memDate(mem.date);
     if (when) { var s2 = D.createElement('span'); s2.className = 'say'; s2.textContent = when; t.appendChild(s2); }
     var b = D.createElement('button');
     b.type = 'button';

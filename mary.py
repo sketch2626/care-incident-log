@@ -664,8 +664,8 @@ MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
                                                    "the person just mentioned.")}}}},
 ]
 MEMORY_TOOL_NAMES = tuple(tool["name"] for tool in MEMORY_TOOLS)
-REMINDER_NOTE = ("\n\nOne thing to bring up once in this talk, in your own words, at a natural moment soon: {items}. They "  # M15a
-                 "told you this date themselves. Say the name and the occasion plainly so they know who you mean, and "
+REMINDER_NOTE = ("\n\n{opening} to bring up once in this talk, in your own words, at a natural moment soon: {items}. They "  # M15a
+                 "told you {which} themselves. Say the name and the occasion plainly so they know who you mean, and "
                  "say there's still time to call or write.{cards} Keep it to a sentence or two, then go back to what you "
                  "were talking about, and leave it alone whatever they say. It's your own memory: never mention a "
                  "reminder, a note or the app. If they've just said something heavy, wait for a better moment.")
@@ -817,7 +817,7 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
         return ""
 
 
-_SAYS_FORGET = re.compile(r"\bforget\b", _I)  # M15a
+_SAYS_FORGET = re.compile(r"(?<!don't )(?<!dont )(?<!do not )(?<!never )\bforget\b", _I)  # M15a: "don't forget, ..." is a date
 
 
 def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) both learn dates this way
@@ -863,10 +863,13 @@ def reminder_note(memory, cards=False):  # M15a: for either companion, so no nam
     if store is None:
         return ""
     try:
-        items = "; ".join(_reminder_item(item) for item in store.due())
+        due = store.due()
+        items = "; ".join(_reminder_item(item) for item in due)
     except Exception:
         return ""
-    return REMINDER_NOTE.format(items=items, cards=REMINDER_CARDS_LINE if cards else "") if items else ""
+    opening, which = ("One thing", "this date") if len(due) == 1 else ("A few things", "these dates")
+    return REMINDER_NOTE.format(opening=opening, which=which, items=items,
+                                cards=REMINDER_CARDS_LINE if cards else "") if items else ""
 
 
 def can_make_cards(skills):  # M15a: M15b's hook. No messages skill exists yet, so this is False; M15b flips it

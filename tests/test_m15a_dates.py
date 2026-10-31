@@ -541,5 +541,198 @@ class Wiring(unittest.TestCase):
         self.assertEqual(got["memories"][0]["saved_date"], "Mark's birthday, November 7")
 
 
+class Needs(unittest.TestCase):
+    """M15a: the whole list of what must hold, through the real functions."""
+
+    def setUp(self):
+        helpers.reset_db()
+        with closing(server.connect_memories()) as conn, conn:
+            for table in ("dates", "date_done", "no_reminders"):
+                conn.execute(f"DELETE FROM {table}")
+        self.memory = server.mary_memory()
+        self.memory.name, self.memory.recent = "", []
+        self.store = self.memory.store
+
+    def count(self, table):
+        with closing(server.connect_memories()) as conn:
+            return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+    def hear(self, text, day="2026-01-01"):
+        with clock(day):
+            mary.learn_dates(self.memory, text)
+
+    def due_on(self, day, store=None):
+        with clock(day):
+            return [d["who"] for d in (store or self.store).due()]
+
+    def stopped(self):
+        with closing(server.connect_memories()) as conn:
+            return [tuple(r) for r in conn.execute("SELECT who, why FROM no_reminders ORDER BY who")]
+
+    def rows_md(self):
+        with closing(server.connect_memories()) as conn:
+            return [tuple(r) for r in conn.execute("SELECT month, day FROM dates")]
+
+    def test_once_only_and_next_day(self):
+        self.hear("Mark's birthday is November 7")
+        with clock("2026-11-01"):
+            self.assertIn("Mark", mary.reminder_note(self.memory))
+            self.memory.add_turn("model", "Mark's birthday is coming up, so there's time to call.")
+            self.assertEqual(mary.reminder_note(self.memory), "")
+            self.memory.add_turn("user", "Thanks")
+            self.assertEqual(mary.reminder_note(self.memory), "")
+        self.assertEqual(self.due_on("2026-11-02"), [])
+
+    def test_across_a_restart(self):
+        self.hear("Mark's birthday is November 7")
+        self.hear("Lily's birthday is November 6")
+        with clock("2026-11-01"):
+            self.memory.add_turn("model", "Mark's birthday is coming up.")
+        fresh_memory = server.mary_memory()
+        fresh = memory_core.MemoryStore(server.connect_memories)
+        self.assertEqual(self.due_on("2026-11-01", fresh), ["Lily"])
+        self.assertEqual(self.due_on("2026-11-01", fresh_memory.store), ["Lily"])
+
+    def test_a_missed_week(self):
+        self.hear("Mark's birthday is November 7")
+        self.assertEqual(self.due_on("2026-10-29"), [])  # 9 days out
+        self.assertEqual(self.due_on("2026-11-02"), ["Mark"])  # first talk, 5 days out
+        self.assertEqual(self.due_on("2026-11-03"), [])  # 4 days out with no talk before: lost this year
+        self.assertEqual(self.due_on("2027-10-31"), ["Mark"])  # back next year
+
+    def test_new_year(self):
+        self.hear("Mark's birthday is December 30")
+        self.hear("Lily's birthday is January 2")
+        self.assertEqual(self.due_on("2026-12-23"), ["Mark"])
+        with clock("2026-12-26"):
+            self.assertEqual([d["who"] for d in self.store.due()], ["Lily"])
+            self.memory.add_turn("model", "Lily's birthday is coming up.")
+        with closing(server.connect_memories()) as conn:
+            self.assertEqual([r[0] for r in conn.execute("SELECT year FROM date_done")], [2027])
+        self.assertEqual(self.due_on("2026-12-27"), [])
+        self.assertEqual(self.due_on("2027-12-26"), ["Lily"])
+
+    def test_leap_day(self):
+        self.hear("Mark's birthday is February 29")
+        self.assertEqual(self.due_on("2027-02-19"), [])  # 9 days before Feb 28
+        self.assertEqual(self.due_on("2027-02-20"), ["Mark"])  # Feb 28 minus 8: the window opens
+        self.assertEqual(self.due_on("2028-02-20"), [])  # 9 days before Feb 29
+        self.assertEqual(self.due_on("2028-02-21"), ["Mark"])  # Feb 29 minus 8
+
+    def test_the_dead_get_no_note(self):
+        for fact, who in (("my late husband Bob", "Bob"), ("Mark passed in 2019", "Mark"), ("since Ruth died", "Ruth")):
+            with self.subTest(fact):
+                self.store.add(fact)
+                self.hear(f"{who}'s birthday is November 7")
+                self.assertEqual(self.due_on("2026-11-01"), [], fact)
+        self.hear("My late husband's birthday is June 3")
+        self.assertEqual(self.due_on("2026-05-30"), [])
+
+    def test_stopping_and_bringing_back(self):
+        self.hear("Mark's birthday is November 7")
+        with clock("2026-11-01"):
+            self.memory.add_turn("model", "Mark's birthday is coming up.")
+        self.hear("Don't remind me about him", "2026-11-01")
+        self.assertEqual(self.stopped(), [("mark", "asked")])
+        self.hear("Go ahead and remind me about Mark again", "2026-11-02")
+        self.assertEqual(self.stopped(), [])
+        self.hear("Don't remind me about Mark")
+        self.assertEqual(self.stopped(), [("mark", "asked")])
+        self.hear("Go ahead and remind me about Mark again")
+        self.assertEqual(self.stopped(), [])
+        self.hear("Don't remind me about him", "2026-11-10")  # nobody raised lately
+        self.assertEqual(self.stopped(), [])
+
+    def test_forgetting_takes_the_date_and_its_mark(self):
+        def set_up():
+            self.memory.scrubbed = False  # a new turn
+            self.hear("Mark's birthday is November 7")
+            with clock("2026-11-01"):
+                self.store.mark_done(self.store.due()[0]["id"], 2026)
+            self.assertEqual((self.count("dates"), self.count("date_done")), (1, 1))
+
+        def empty():
+            self.assertEqual((self.count("dates"), self.count("date_done")), (0, 0))
+        set_up()
+        mary.forget_everything(self.memory, "Mark's birthday")
+        empty()
+        set_up()
+        mary.forget_name(self.memory, "Mark")
+        empty()
+        set_up()
+        mary.forget_everything(self.memory, "everything")
+        empty()
+        set_up()
+        self.store.remove(self.store.active()[0]["id"])  # the Remove button
+        empty()
+        self.hear("Mark's birthday is November 7")  # said again after a forget: may be raised again
+        self.assertEqual(self.due_on("2026-11-01"), ["Mark"])
+
+    def test_forget_by_the_tool(self):
+        said = "Mark's birthday is November 7"
+        self.memory.add_fact(said, heard=said)
+        self.assertEqual(self.count("dates"), 1)
+        mary.memory_tool(self.memory, "forget_memory", {"about": "Mark's birthday"})
+        mary.memory_tool(self.memory, "forget_memory", {"about": "Mark's birthday", "confirmed": True})
+        self.assertEqual((self.count("dates"), self.count("date_done")), (0, 0))
+
+    def test_unreadable_and_invented_dates(self):
+        said = "Mark's birthday is sometime in the fall"
+        self.hear(said)
+        self.assertTrue(self.memory.add_fact(said + ".", heard=said))
+        self.assertEqual((len(self.store.active()), self.count("dates")), (1, 0))
+        self.assertTrue(self.memory.add_fact("Mark's birthday is November 7", heard="Mark's coming to see me"))
+        self.assertEqual((len(self.store.active()), self.count("dates")), (2, 0))
+
+    def test_correction_keeps_one_date(self):
+        said = "Mark's birthday is November 7"
+        self.hear(said)
+        with clock("2026-11-01"):
+            self.store.mark_done(self.store.due()[0]["id"], 2026)
+        self.memory.add_turn("user", said)
+        self.hear("No, it's the 9th")
+        self.assertEqual((self.count("dates"), self.count("date_done")), (1, 1))
+        self.assertEqual(self.rows_md(), [(11, 9)])
+        self.assertEqual([m["text"] for m in self.store.active()], ["Mark's birthday, November 9"])
+
+    def test_small_fixes(self):
+        self.hear("Don't forget, Mark's birthday is November 7")
+        self.assertEqual(self.count("dates"), 1)
+        self.hear("Forget Lily's birthday, March 12")
+        self.assertEqual(self.count("dates"), 1)
+        # asked about Mark's birthday long ago, a doctor's question last turn: "the 9th" is not a fix
+        for who, text in (("user", "When is Mark's birthday?"), ("model", "Mark's is November 7."), ("user", "Thanks"),
+                          ("model", "Anything else?"), ("user", "What time is my doctor's visit?"),
+                          ("model", "Check with the nurse.")):
+            self.memory.add_turn(who, text)
+        self.hear("It's the 9th")
+        self.assertEqual(self.rows_md(), [(11, 7)])
+
+    def test_one_or_a_few(self):
+        self.hear("Mark's birthday is November 7")
+        with clock("2026-11-01"):
+            note = mary.reminder_note(self.memory)
+        self.assertIn("One thing", note)
+        self.assertIn("this date", note)
+        self.hear("Lily's birthday is November 6")
+        with clock("2026-11-01"):
+            note = mary.reminder_note(self.memory)
+        self.assertIn("A few things", note)
+        self.assertIn("these dates", note)
+
+    def test_never_on_a_heavy_turn_and_no_brackets(self):
+        self.hear("Mark's birthday is November 7")
+        with clock("2026-11-01"):
+            note = mary.reminder_note(self.memory)
+            self.assertTrue(note)
+            self.assertNotIn("[", note)
+            self.assertNotIn("]", note)
+            for text in ("I can't breathe", "An aide hit me"):
+                sent = mary._body(text, self.memory, mary.is_emergency(text))["systemInstruction"]["parts"][0]["text"]
+                self.assertNotIn(note, sent, text)
+            sent = mary._body("Good morning", self.memory, "")["systemInstruction"]["parts"][0]["text"]
+            self.assertIn(note, sent)
+
+
 if __name__ == "__main__":
     unittest.main()

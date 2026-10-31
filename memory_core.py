@@ -546,6 +546,8 @@ class MemoryStore:
         are recent turn texts, newest first. The date's id, or None when nothing fits or the day can't be."""
         if not memory_dates.is_correction(text):
             return None
+        if re.match(r"\W*it(?:'|’)?s\b|\W*it\s+is\b", str(text or ""), re.I):
+            heard_turns = list(heard_turns or ())[:2]  # a bare "it's the 9th" may answer anything: only right after the date
         said, day = memory_dates.loose_dates(text), memory_dates.loose_day(text)
         if len(said) != 1 and day is None:
             return None

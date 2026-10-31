@@ -931,8 +931,11 @@ function memRow(mem, box) {
   const t = document.createElement('div');
   t.className = 'skilltext';
   const h = document.createElement('b'); h.textContent = text;
-  const p = document.createElement('p'); p.className = 'note'; p.textContent = memDate(mem.date);
-  t.append(h, p);
+  const p = document.createElement('p'); p.className = 'note'; // M15a: a saved family date reads as the date itself; if it only repeats the memory, one line.
+  const sd = String(mem.saved_date || '');
+  const norm = (x) => String(x).trim().replace(/\.$/, '').toLowerCase();
+  p.textContent = sd ? (norm(sd) === norm(text) ? '' : sd) : memDate(mem.date);
+  if (p.textContent) t.append(h, p); else t.append(h);
   const btn = skillBtn('Remove', false, false, async () => {
     btn.disabled = true;
     $('#memMsg').textContent = 'Removing…';

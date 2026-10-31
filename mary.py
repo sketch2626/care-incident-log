@@ -6,6 +6,7 @@ without Gemini. Mary only offers to write things down; she never writes to the i
 import base64  # M4a: see_image
 import json
 import os
+import random  # M4d: open_line
 import re
 import sys
 import time
@@ -1110,16 +1111,19 @@ _FEARS_STAFF = re.compile(
 HARM_NOTE = ("\n\nThey may have just said someone hurt, hit, threatened or stole from them. If so, say all of this, in "
              "this order: say plainly that it's not okay, suggest telling a nurse or a person in charge they trust, and "
              "only then offer to write it down. Never promise that you will report it yourself.")
-FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell them that retaliation against residents "
-             "is against the law, that nothing is written or sent without their say, and that the long-term care "
-             "ombudsman can help them in confidence.")
+# M4d: plain words; the meaning of the safety section, which stays as it is
+FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell them in plain words, not \"retaliation\": "
+             "they're not allowed to punish you for speaking up, it's against the law, and nothing is written or sent "
+             "without your say. Name the long-term care ombudsman and say who that is: someone from outside whose job is "
+             "to stand up for residents, and who keeps it private.")
 # M4c: closes Normal's prompt and Live's (voices.LIVE_TOOLS_NOTE), because run 2 showed the manner rules fade mid-prompt.
 # For either companion, so no name. No square brackets: Live's prompt must never hold one.
 CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- No pet names unless they've asked for one: no \"honey\", no \"sugar\", no \"dear\". Any other "
                   "friendly name only the way your own section above allows.\n"
-                  "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\", no "
-                  "\"That's wonderful!\" Take it the way a neighbor your own age would.\n"
+                  "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\" or \"Well, look at that\", no "
+                  "\"That's wonderful!\" Take it the way a neighbor your own age would: told of a finished crossword, "
+                  "skip the applause and go to the thing itself, like \"Those can fight back. What was the hardest word?\"\n"
                   "- \"Bless your heart\" only as real sympathy, never as praise.\n"
                   "- No fussing, no \"we\" when you mean \"you\", and no customer-service lines like \"Is there "
                   "anything else I can help you with?\"\n"
@@ -1127,6 +1131,13 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
                   "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
                   "else. Don't ask about it.\n"
+                  "- When someone confused asks for a person who has passed, don't argue, don't lie and don't announce the death, "
+                  "even when you know it. Meet the feeling, like \"You miss him. Tell me about him,\" and turn gently "
+                  "toward comfort. Tell them only if they ask you straight out, and gently.\n"  # M4d
+                  "- Rights in plain words: not \"retaliation\" but \"They're not allowed to punish you for speaking up.\" "
+                  "With the ombudsman's name, say who that is: someone from outside whose job is to stand up for residents.\n"
+                  "- Asked what you can do, name two or three real things from your instructions and skills. Never offer "
+                  "weather, news, reminders, calls or anything that plays music.\n"
                   "- Say the crisis numbers one digit at a time: \"nine, eight, eight\", \"nine one one\", and \"press "
                   "one\"; never \"ninety-eight-eight\", \"nine eighty-eight\" or \"nine-eleven\".")  # M4d
 
@@ -1266,10 +1277,18 @@ OPEN_NUDGE = "(They opened the app.)"
 OPEN_PROMPT = (
     "They have just opened your screen{clock}. Say hello in one or two short sentences, as one grown-up to another: "
     "plain and easy, no gushing and no fuss over them. Use their name if you know it and, when it fits, something you "
-    "remember about them or from your last talk. Use different words every time. A light \"good morning\", \"good "
+    "remember about them or from your last talk. Use different words every time, and never open the way your last "
+    "hello did. {way} A light \"good morning\", \"good "
     "afternoon\" or \"good evening\" is fine, but never \"good night\", and never comment on the hour or how late it is. "
     "Never ask something they have already answered, and never list what you can do. Just the words you say, with no "
     "tags and no notes in brackets.")
+# M4d: a different way in each time, picked here because a model left alone opens the same way (bench run 3).
+# web/mary/app.js (OPEN_WAYS) has the same list. No companion names and no square brackets.
+OPEN_WAYS = ("This time, open with their name and one plain word.",
+             "This time, open with a light greeting for the time of day.",
+             "This time, open with a plain \"hey\".",
+             "This time, open by saying it's good to talk with them again.",
+             "This time, open with something you remember about them, if you have something; if not, just their name.")
 VISION_DEADLINE_S = 8
 VISION_BYTES_MAX = 700_000  # a bigger picture isn't sent: a look has to stay quick
 
@@ -1305,7 +1324,7 @@ def open_line(memory, api_key, model="", companion="mary", when=""):
     except Exception:
         return ""
     clock = f", and it is {when} where they are" if when in OPEN_TIMES else ""
-    body["systemInstruction"]["parts"][0]["text"] += "\n\n" + OPEN_PROMPT.format(clock=clock)
+    body["systemInstruction"]["parts"][0]["text"] += "\n\n" + OPEN_PROMPT.format(clock=clock, way=random.choice(OPEN_WAYS))
     body["generationConfig"] = {"temperature": 0.9, "maxOutputTokens": 1000}
     text = _short_answer(body, api_key, model, OPEN_DEADLINE_S)
     text = " ".join(re.sub(r"[*#]+", "", re.sub(r"\[[^\]]*\]?", "", text)).split())

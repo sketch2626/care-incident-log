@@ -53,7 +53,8 @@
   var LIVE_HELLO = '(The resident is ready to talk with you, and it is {when} where they are. Greet them in one or ' +
     'two short, warm sentences, like a friend who is glad to see them: use their name if you know it and, when it ' +
     'fits, something you remember about them or from your last talk. Talk as one grown-up to another: plain and ' +
-    'easy, no gushing and no fuss over them. Use different words every time. A light ' +
+    'easy, no gushing and no fuss over them. Use different words every time and never open the way your last ' +
+    'hello did; "Well, hey there" is only one way among many, so most days use another. A light ' +
     '"good morning", "good afternoon" or "good evening" is fine, but never "good night", never comment on the hour ' +
     'or how late it is, and never say you are still here or waiting for them. Never list what you can do.)';
   function timeWord() {   // M4a: the same slots as the scripted greetings in firstrun.js
@@ -61,7 +62,16 @@
     return (h >= 22 || h < 5) ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
   }
   function goodbyeLine() { return MSG.goodbye + ' ' + restLine(false); }   // M4a
-  function liveHello() { return LIVE_HELLO.replace('{when}', timeWord()); }   // M4a
+  // M4d: a different way in each time, because a model left alone opens the same way. mary.py has the same list.
+  var OPEN_WAYS = ['This time, open with their name and one plain word.',
+    'This time, open with a light greeting for the time of day.',
+    'This time, open with a plain "hey".',
+    'This time, open by saying it\'s good to talk with them again.',
+    'This time, open with something you remember about them, if you have something; if not, just their name.'];
+  function liveHello() {   // M4a. M4d: the way in goes inside the closing bracket
+    var way = OPEN_WAYS[Math.floor(Math.random() * OPEN_WAYS.length)];
+    return LIVE_HELLO.replace('{when}', timeWord()).replace(/\)$/, ' ' + way + ')');
+  }
   // M4a: the big Talk button is gone (M4b). The way back in is her name (M6), when it can run here, or Menu.
   function wakeOn() { return !!S.wakeWord && !!S.wakeReady; }
   function restLine(typing) {   // the resting caption and the end of her goodbye: only ways that really work now

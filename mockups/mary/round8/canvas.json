@@ -52,37 +52,44 @@
 "h":800,
 "title":"(d2) The last look"
 },
-"E1-Open-Mary.dc.html":{
+"D3-Sending-Mary.dc.html":{
 "x":0,
 "y":3660,
+"w":1280,
+"h":800,
+"title":"(d3) One saved way: going in 5 seconds, with Stop"
+},
+"E1-Open-Mary.dc.html":{
+"x":0,
+"y":4880,
 "w":1280,
 "h":800,
 "title":"(e1) Messenger: still in her app"
 },
 "E2-Paste.dc.html":{
 "x":1360,
-"y":3660,
+"y":4880,
 "w":1280,
 "h":800,
-"title":"(e2) The chat open, tap Paste"
+"title":"(e2) The chat open in her window, tap Paste"
 },
 "E3-Send.dc.html":{
 "x":0,
-"y":4880,
+"y":6100,
 "w":1280,
 "h":800,
 "title":"(e3) Tap Send in the chat"
 },
 "F-Sent-Mary.dc.html":{
 "x":0,
-"y":6100,
+"y":7320,
 "w":1280,
 "h":800,
 "title":"(f) Sent"
 },
 "G-Message-Mary.dc.html":{
 "x":1360,
-"y":6100,
+"y":7320,
 "w":1280,
 "h":800,
 "title":"(g) A plain message"
@@ -95,6 +102,7 @@
 "C-Card-Mary.dc.html",
 "D1-Who-Mary.dc.html",
 "D2-LastLook-Mary.dc.html",
+"D3-Sending-Mary.dc.html",
 "E1-Open-Mary.dc.html",
 "E2-Paste.dc.html",
 "E3-Send.dc.html",
@@ -124,14 +132,14 @@
 },
 "t3":{
 "x":0,
-"y":3360,
+"y":4580,
 "text":"Messenger: what the resident sees and taps",
 "kind":"title1",
 "maxW":2640
 },
 "t4":{
 "x":0,
-"y":5800,
+"y":7020,
 "text":"Done, and a plain message",
 "kind":"title1",
 "maxW":2640

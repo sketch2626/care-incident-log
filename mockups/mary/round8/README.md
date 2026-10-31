@@ -14,13 +14,14 @@ All names and addresses are made up: Mom, her son Mark Hollis, her daughter Elle
 | `C-Card-Mary` | The card large, with their words printed on it | Here's how it reads. (Then she reads the card aloud.) | Those are your words. |
 | `D1-Who-Mary` | Who gets it, and how it goes; Mark and email are picked | Email or Messenger? | Email or Messenger? |
 | `D2-LastLook-Mary` | The last look: the card, the person and the way | Send it to Mark? | Send it to Mark? |
+| `D3-Sending-Mary` | The smooth path: one saved way, a plain 5, and Stop | To Mark, by email. | To Mark, by email. |
 | `E1-Open-Mary` | Messenger, still in her app: three plain steps | Facebook keeps the Send button for you. I'll get it all ready. | Your hand on this one. |
-| `E2-Paste` | The chat page open, with her slim strip over it and a Paste button | Tap Paste to put the card in. | The strip text: Tap Paste to put the card in. |
+| `E2-Paste` | Facebook inside her own window, with her slim strip over it and a Paste button | Tap Paste to put the card in. | The strip text: Tap Paste to put the card in. |
 | `E3-Send` | The card in the message box, ready; the strip asks if it went | Now tap Send in the chat. | The strip text: Now tap Send in the chat. |
 | `F-Sent-Mary` | Sent by email, when, and whether to keep the address | It's on its way. | It's on its way. |
 | `G-Message-Mary` | A plain message to Tyler, no picture | Here's what I've got. Is that it? | Is that it? |
 
-The brief gave her full line for A, C, E1 and G. On the other boards her line is proposed, and it's the same as the caption.
+The brief gave her full line for A, C, D3, E1 and G. On the other boards her line is proposed, and it's the same as the caption.
 
 ## Sizes
 
@@ -36,6 +37,8 @@ The brief gave her full line for A, C, E1 and G. On the other boards her line is
 | Person and way buttons | Rows at y 140 and y 406 | 236 by 200, 236 by 244, name 32px bold |
 | Bottom row | x 512 to 1252, y 680 to 768 | 88 tall, 28px bold, at most 3 buttons |
 | Mary strip | x 0 to 1280, y 0 to 104, 6px bottom border | Text 28px bold, face 96 |
+| Countdown on D3 | In the panel, beside the small card | 5 at 120px bold, line 28px bold, no movement |
+| Stop on D3 | Centered in the bottom row | 300 wide, 88 tall, 32px bold |
 | Strip buttons | Inside the strip | Paste and It went 200 wide, 84 tall; It didn't go 84 tall; Back to Mary 72 tall |
 | Drawn page | x 0 to 1280, y 104 to 800, dashed outline | Text 22px and up |
 | Board notes | Dashed, on the drawn page only | 20px semi-bold |
@@ -60,7 +63,6 @@ With Segoe UI Bold counted at 0.56em per character, the longest bottom row, "Cha
 | Board notes | #1f1b16 on #fffdf8 | 16.8:1 |
 | Drawn page: grey bubble | #1f1b16 on #e4e6eb | 13.7:1 |
 | Drawn page: blue bubble | #ffffff on #1f5fbf | 6.1:1 |
-| Drawn page: address | #1f1b16 on #ffffff | 17.1:1 |
 | Drawn page: "Type a message" | #544739 on #ffffff | 9.0:1 |
 | Gold ring edge, on gold | #2b1f17 on #f2b632 | 8.8:1 |
 
@@ -72,10 +74,11 @@ The glow colors are worked out from the CSS in `r6.css`, with the glow at full s
 - On Sam's boards, every "Back to Mary" reads "Back to Sam", and "Tell Mary what to draw" reads "Tell Sam what to draw".
 - **The Messenger page is our drawing.** It's a neutral grey-white chat with no Meta logo and no Facebook wordmark. The dashed outline and the note in its corner say so. The real page will look different.
 - The strip belongs to our app, and the page under it is theirs. Mary draws nothing on their page. The gold ring on `E3-Send` is a board note that shows where the Send button is.
-- **The strip's Paste button is a proposal,** pending test 5 in `docs/messaging-plan.md`. If that test fails, this step changes.
+- **The strip's Paste button is a proposal,** pending tests 5 and 9 in `docs/messaging-plan.md`. If they fail, this step changes.
+- **Facebook shows inside Mary's own window,** with no browser bar. That depends on test 9. If sign-in there is refused, the same strip sits above their normal browser (route 6), and `E2-Paste` and `E3-Send` change only by showing the browser bar.
 - **Mary can't see whether it went, so she asks.** The strip's "It went" and "It didn't go" are how she finds out.
-- **The five-second Stop after an email yes isn't drawn.** It comes after the last look, in place of the plain "Sent". It needs its own board if Andy wants to see it.
-- Sending happens only from the last look, and only after a tap or a plain "send it". "Okay" in the middle of a chat doesn't count.
+- **`D3-Sending-Mary` replaces `D1-Who-Mary` and `D2-LastLook-Mary` once that person has one saved way.** The card is on screen, the resident says "Now send it", and Mary just sends it, with five seconds to tap Stop. `D2-LastLook-Mary` stays for a first send, a new person or a choice of ways.
+- Sending needs a tap or a plain "send it". "Okay" in the middle of a chat doesn't count.
 - The card words are the resident's. Mary only helps if asked, and she reads them back.
 - No exclamation marks, emoji, stars, confetti or praise. Grown adults. The card art is drawn inline, with no outside pictures, and no cute faces.
 - The main button is teal, at the end or as the natural next step. On `F-Sent-Mary` that's "Keep it", in the middle, with "Back to Mary" at the end. That's a proposal.

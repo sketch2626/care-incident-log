@@ -679,3 +679,167 @@ class TestForgetRules(Case):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestForgetName(Case):
+    """M9c: "forget my name" really deletes the name, the memories and talk turns that hold it, and she stops asking."""
+
+    def setUp(self):
+        super().setUp()
+        self.marker = "Zeb" + uuid.uuid4().hex[:8].translate(str.maketrans("0123456789", "ghijklmnop"))
+        self.addCleanup(server.MEMORIES_BACKUP.unlink, missing_ok=True)
+        self._real = mary._gemini_stream
+        self.addCleanup(setattr, mary, "_gemini_stream", self._real)
+
+    def seed(self):
+        self.store.add(f"Likes to be called {self.marker}")
+        self.store.add("Likes strong coffee")
+        memory = server.mary_memory()
+        memory.name = self.marker
+        memory.add_turn("user", f"Everyone calls me {self.marker}")
+        memory.add_turn("model", f"Nice to meet you, {self.marker}.")
+        memory.add_turn("user", "The weather is nice today.")
+        memory.add_turn("model", "It sure is.")
+        memory.save()
+        server.backup_memories(fresh=True)
+        hits = walk_hits(self.marker)
+        for want in ("mary/memories.db", "mary/memories_backup.db", "mary/memory.json"):
+            self.assertIn(want, hits)
+        return server.mary_memory()
+
+    def assertForgotten(self, got=None):
+        memory = server.mary_memory()
+        self.assertEqual(memory.name, "")
+        self.assertTrue(memory.name_forgotten)
+        self.assertEqual([m["text"] for m in self.store.active()], ["Likes strong coffee"])
+        self.assertEqual([t["text"] for t in memory.recent], ["The weather is nice today.", "It sure is."])
+        self.assertEqual(walk_hits(self.marker), [])
+        if got is not None:
+            self.assertNotIn(self.marker, json.dumps(got))
+
+    def test_normal_tool(self):
+        memory = self.seed()
+        call = {"functionCall": {"name": "forget_name", "args": {}}}
+        mary._gemini_stream = fake = Fake([mary.ToolCall(call)], ["All right."])
+        out = mary.reply("forget my name", memory, "k")
+        part = fake.bodies[1]["contents"][-1]["parts"][0]["functionResponse"]
+        self.assertEqual(part["name"], "forget_name")
+        self.assertNotIn(self.marker, json.dumps(part))
+        self.assertForgotten(out)
+
+    def test_live_route(self):
+        self.seed()
+        _, got, _ = helpers.api("POST", "/api/mary/skills/call", {"name": "forget_name", "args": {}})
+        self.assertForgotten(got)
+
+    def test_live_emergency_changes_nothing(self):
+        self.seed()
+        _, got, _ = helpers.api("POST", "/api/mary/skills/call",
+                                {"name": "forget_name", "args": {}, "heard": EMERGENCY})
+        self.assertTrue(got.get("emergency"))
+        memory = server.mary_memory()
+        self.assertEqual(memory.name, self.marker)
+        self.assertFalse(memory.name_forgotten)
+        self.assertEqual(self.store.count(), 2)
+        self.assertEqual(len(memory.recent), 4)
+
+    def test_offline_phrases_clear(self):
+        for phrase in ("forget my name", "don't call me that anymore", f"stop calling me {self.marker}"):
+            with self.subTest(phrase):
+                helpers.reset_db()
+                memory = self.seed()
+                out = mary.reply(phrase, memory, "")
+                self.assertEqual(memory.name, "")
+                self.assertTrue(memory.name_forgotten)
+                self.assertNotIn(self.marker, json.dumps(out))
+                memory.save()
+                self.assertEqual(walk_hits(self.marker), [])
+
+    def test_offline_lookalikes_change_nothing(self):
+        for phrase in ("I forget my name sometimes", "don't call me late", "stop calling me honey"):
+            with self.subTest(phrase):
+                memory = self.seed()
+                mary.reply(phrase, memory, "")
+                self.assertEqual(memory.name, self.marker)
+                self.assertFalse(memory.name_forgotten)
+                self.assertEqual(self.store.count(), 2)
+
+    def test_after_forgetting(self):
+        memory = self.seed()
+        before = mary.system_text(memory)
+        self.assertIn("what they'd like to be called", mary.system_text(self.fresh_memory()))
+        self.assertIn(self.marker, before)
+        mary.reply("forget my name", memory, "")
+        memory.save()
+        text = mary.system_text(memory)
+        self.assertNotIn(self.marker, text)
+        self.assertNotIn("what they'd like to be called", text)
+        self.assertIn(mary.NAME_FORGOTTEN_SYSTEM, text)
+        _, status, _ = helpers.api("GET", "/api/mary/status")
+        self.assertEqual(status["name"], "")
+        self.assertIs(status["name_forgotten"], True)
+        self.assertIs(json.loads(self.file.read_text(encoding="utf-8"))["name_forgotten"], True)
+        again = server.mary_memory()
+        self.assertEqual((again.name, again.name_forgotten), ("", True))
+        self.assertIn(mary.NAME_FORGOTTEN_SYSTEM, mary.system_text(again))
+
+    def fresh_memory(self):
+        helpers.reset_db()
+        self.file.unlink(missing_ok=True)
+        return server.mary_memory()
+
+    def forgotten_memory(self):
+        memory = self.seed()
+        mary.reply("forget my name", memory, "")
+        memory.save()
+        self.assertTrue(server.mary_memory().name_forgotten)
+        return server.mary_memory()
+
+    def test_offering_a_name_clears_the_flag(self):
+        memory = self.forgotten_memory()
+        mary.reply("my name is Ann", memory, "")
+        self.assertEqual((memory.name, memory.name_forgotten), ("Ann", False))
+        self.fresh_memory()
+        self.forgotten_memory()
+        helpers.api("POST", "/api/mary/skills/call", {"name": "set_their_name", "args": {"name": "Ann"}})
+        memory = server.mary_memory()
+        self.assertEqual((memory.name, memory.name_forgotten), ("Ann", False))
+        self.fresh_memory()
+        self.forgotten_memory()
+        helpers.api("POST", "/api/mary/hello", {"text": "Ann"})
+        memory = server.mary_memory()
+        self.assertEqual((memory.name, memory.name_forgotten), ("Ann", False))
+
+    def test_learn_name_refusals(self):
+        memory = server.mary_memory()
+        mary.learn_name(memory, "stop calling me Bob")
+        self.assertEqual(memory.name, "")
+        mary.learn_name(memory, "don't call me that, call me Andy")
+        self.assertEqual(memory.name, "Andy")
+
+    def test_name_tag_in_the_forgetting_reply_ignored(self):
+        memory = self.seed()
+        call = {"functionCall": {"name": "forget_name", "args": {}}}
+        mary._gemini_stream = Fake([mary.ToolCall(call)], [f"All right. [name: {self.marker}]"])
+        mary.reply("forget my name", memory, "k")
+        self.assertEqual((memory.name, memory.name_forgotten), ("", True))
+        memory.save()
+        self.assertEqual(walk_hits(self.marker), [])
+        mary._gemini_stream = Fake(["Nice to meet you. [name: Ann]"])
+        mary.reply("hello there", memory, "k")
+        self.assertEqual((memory.name, memory.name_forgotten), ("Ann", False))
+
+    def test_resident_name_setting_untouched(self):
+        helpers.api("PUT", "/api/settings", {"resident_name": "Ruth Smith"})
+        before = settings("resident_name")
+        self.assertEqual(before, ["Ruth Smith"])
+        memory = self.seed()
+        mary.reply("forget my name", memory, "")
+        self.assertEqual(settings("resident_name"), before)
+
+    def test_offline_with_a_note_offer_waiting(self):
+        memory = self.seed()
+        memory.pending_offer = mary._offer(mary._guess("The tray never came"))
+        mary.reply("don't call me that", memory, "")
+        self.assertEqual(memory.name, "")
+        self.assertTrue(memory.name_forgotten)

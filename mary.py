@@ -671,7 +671,8 @@ REMINDER_NOTE = ("\n\n{opening} " + REMINDER_MARK + ", in your own words, at a n
                  "say there's still time to call or write.{cards} Keep it to a sentence or two, then go back to what you "
                  "were talking about, and leave it alone whatever they say. It's your own memory: never mention a "
                  "reminder, a note or the app. If they've just said something heavy, wait for a better moment.")
-REMINDER_CARDS_LINE = " You can offer to help them make a card."  # M15a: M15b turns this on, through can_make_cards
+REMINDER_CARDS_LINE = (" You can offer to help them make a card. If they want to see the date, you can show it with "
+                       "messages show_keepsake.")  # M15a; M15b: on through can_make_cards
 
 
 def fact_source(text, typed=False):  # M9c
@@ -887,7 +888,7 @@ def note_went_out(memory, body):  # M15a
         pass
 
 
-def can_make_cards(skills):  # M15a: M15b's hook. No messages skill exists yet, so this is False; M15b flips it
+def can_make_cards(skills):  # M15a; M15b: true whenever the messages skill is on
     try:
         return bool(skills.enabled("messages"))
     except Exception:

@@ -1,0 +1,1321 @@
+"""Cards and messages (M15b): draws each card, letter and keepsake as one self-contained SVG and saves them.
+Everything is in this one file because a skill can't load a second one. Mary's tools are at the bottom.
+
+Every draw_ function that fits text takes ctx, because the letter widths and the fonts come through it. Sizes are in
+SVG units: a card page is 500x700 units and shows at 370x518 on screen, so 27 units is the 20px floor."""
+import base64
+import datetime
+import functools
+import html
+import json
+import math
+import random
+import re
+import threading
+import unicodedata
+
+SVG_NS = "http://www.w3.org/2000/svg"
+K = 500 / 370  # the board's 370x518 page, stored here at 500x700
+SAFETY = 1.04  # every fit keeps this spare: kerning is ignored and script fonts swash past their advance
+
+SCRIPT = "'Pinyon Script','Edwardian Script ITC','Palace Script MT','Monotype Corsiva','Segoe Script',cursive"
+CAPS = "'Cinzel','Trajan Pro','Times New Roman',serif"
+GARAMOND = "'EB Garamond',Garamond,'Times New Roman',serif"
+CEDARVILLE = "'Cedarville Cursive','Segoe Script',cursive"
+KALAM = "'Kalam','Segoe Print',cursive"
+SEGOE = "'Segoe UI',Arial,sans-serif"
+ESTIMATED = {"segoe": ("garamond-500", 1.08), "segoe-600": ("garamond-700", 1.08)}  # a system face has no metrics here
+
+LATIN = ("U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, "
+         "U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD")
+LATIN_EXT = ("U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, "
+             "U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF")
+FACES = {  # first font-family name: (file stem, weights, style, has an -ext file)
+    "Pinyon Script": ("pinyon", "400", "normal", True),
+    "Cinzel": ("cinzel", "400 900", "normal", True),
+    "EB Garamond": ("garamond", "400 800", "normal", True),
+    "EB Garamond italic": ("garamond-italic", "400", "italic", True),
+    "Cedarville Cursive": ("cedarville", "400", "normal", False),
+    "Kalam": ("kalam", "400", "normal", True),
+}
+
+FRONT_FLOOR = 30
+FRONT_LEAD = 1.2
+FRONT_TOP, FRONT_BOTTOM = 40, 670
+
+WORDS_FLOOR = 27  # 20 board px
+VERSE_FLOOR = 27
+VERSE_SIZE, VERSE_LEAD, VERSE_W = 26 * K, 35 / 26, 322 * K
+HAND_X, HAND_W, SIGN_INDENT = 30 * K, 322 * K, 150 * K
+RULE_ABOVE, RULE_H, RULE_BELOW = 18 * K, 2 * K, 16 * K
+SIGN_GAP, SIGN_LEAD = 6 * K, 48 / 34
+PAGE_TOP, PAGE_BOTTOM = 36, 660
+PAGE_LIFT = .4  # of the page's spare height goes above the block, as on the board
+SNUG_LEAD = 1.3  # the hand's lines set closer, the last try before "doesn't fit"
+HANDS = {
+    "cursive": {"font": "cedarville", "family": CEDARVILLE, "size": 30 * K, "lead": 43 / 30, "sign": 34 / 30},
+    "plain": {"font": "kalam", "family": KALAM, "size": 28 * K, "lead": 40 / 28, "sign": 34 / 28},
+}
+
+LETTER_W, LETTER_PAD, LETTER_MIN_H = 544, 48, 440
+LETTER_TOP, LETTER_FLOOR, LETTER_LEAD, LETTER_GAP = 32, 24, 1.3, 12
+
+NAME_CENTER, NAME_W, NAME_ROOM, NAME_LEAD = 158, 274, 176, 1.05
+MEMORY_X, MEMORY_W, MEMORY_TOP, MEMORY_ROOM = 304, 378, 424, 154
+
+GILT = [(0, "#6e4e10"), (.18, "#b08a34"), (.34, "#f2dd98"), (.5, "#94701f"), (.68, "#e4c878"), (.84, "#9e7a26"), (1, "#6a4a0e")]
+BRASS = [(0, "#55451a"), (.2, "#967a38"), (.36, "#dcc88a"), (.52, "#7e662a"), (.7, "#ccb577"), (.86, "#8a7032"), (1, "#4f4018")]
+SPRIG = ('<path d="M0 0C-8 -7 -20 -8 -33 0C-20 8 -8 7 0 0Z"/><path d="M0 0C8 -7 20 -8 33 0C20 8 8 7 0 0Z"/>'
+         '<path d="M0 -8C-4 -3 -4 3 0 8C4 3 4 -3 0 -8Z"/><path d="M-33 0H-92M33 0H92" stroke-width="1.2" stroke="url(#%s)"/>')
+KEEPSAKE = {
+    "mary": {"deep": "#5e1a2e", "ink": "#2c1c18", "paper": ("#fbf4e4", "#efe2c6", 3), "foil": GILT,
+             "mat": ("#6d1f35", "#3c0c1a"),
+             "bright": [(0, "#a67c22"), (.25, "#f7e6a8"), (.45, "#c49a3c"), (.7, "#fbedb8"), (1, "#a67c22")],
+             "name": [(0, "#5e4009"), (.2, "#a67a24"), (.38, "#e0c070"), (.54, "#7e5a14"), (.72, "#c9a44e"), (1, "#5e4009")]},
+    "sam": {"deep": "#1f3d2b", "ink": "#1e2a1f", "paper": ("#f6f1e0", "#e6dcbf", 5), "foil": BRASS,
+            "mat": ("#2c5a3e", "#14301f"),
+            "bright": [(0, "#8a7030"), (.25, "#efe0a6"), (.45, "#a88c44"), (.7, "#f4e8ba"), (1, "#8a7030")],
+            "name": [(0, "#4a3b12"), (.2, "#8e7230"), (.38, "#cdb574"), (.54, "#685322"), (.72, "#b49a58"), (1, "#463810")]},
+}
+
+# Printed verses. "assumes" names what a verse takes for granted, so a card only gets one that's true of the person:
+# man or woman (who it's for), water (they like the water), faith (they'd welcome a prayer).
+VERSES = {
+    "birthday": [
+        {"lines": ["Wishing you a quiet joy,", "good company and calm water,", "and years ahead as fine",
+                   "as the man you've become."], "assumes": ["man", "water"]},
+        {"lines": ["May this day bring you peace,", "old friends and good news,", "and a year as well spent",
+                   "as the ones gone before."], "assumes": []},
+        {"lines": ["To a woman who has given", "more than she ever asked,", "may this day and all to follow",
+                   "give some of it back."], "assumes": ["woman"]},
+    ],
+    "get_well": [
+        {"lines": ["Thinking of you today,", "and hoping each new morning", "brings back a little strength",
+                   "and a little more ease."], "assumes": []},
+        {"lines": ["May rest come easy to you,", "and strength return in time.", "You are in my thoughts today",
+                   "and in my prayers tonight."], "assumes": ["faith"]},
+        {"lines": ["Take your time and mend well.", "Many are pulling for you,", "and the days ahead will wait",
+                   "until you are ready."], "assumes": []},
+    ],
+    "sympathy": [
+        {"lines": ["May God hold you close", "in this hard and quiet time,", "and may the love you shared",
+                   "be your comfort and peace."], "assumes": ["faith"]},
+        {"lines": ["There are no right words", "for a loss like this one.", "Please know you are held",
+                   "in my heart and my thoughts."], "assumes": []},
+        {"lines": ["The Lord is close", "to the brokenhearted.", "May He give you rest",
+                   "and peace in the days to come."], "assumes": ["faith"]},
+    ],
+    "thank_you": [
+        {"lines": ["Your kindness was noticed,", "and it meant a great deal.", "Please accept my thanks,",
+                   "from a grateful heart."], "assumes": []},
+        {"lines": ["A simple word of thanks", "for all that you have done.", "Good deeds are not forgotten",
+                   "by the ones they were done for."], "assumes": []},
+        {"lines": ["Some debts can't be repaid,", "only gratefully remembered.", "Yours is one of those.",
+                   "Thank you, from the heart."], "assumes": []},
+    ],
+    "christmas": [
+        {"lines": ["May the peace of this night", "rest upon you and your home,", "and the love of our Savior",
+                   "stay with you all the year."], "assumes": ["faith"]},
+        {"lines": ["A quiet Christmas to you,", "a warm house, good company,", "and every good thing",
+                   "in the year to come."], "assumes": []},
+        {"lines": ["Glory to God in the highest,", "and on earth peace, good will.", "May that old promise find you",
+                   "well this Christmas and always."], "assumes": ["faith"]},
+    ],
+    "thanksgiving": [
+        {"lines": ["For the harvest and the table,", "for the faces gathered near,", "for all that we've been given,",
+                   "we give thanks again this year."], "assumes": []},
+        {"lines": ["Counting my blessings today,", "and you are among the first.", "May your table be full",
+                   "and your heart at peace."], "assumes": []},
+        {"lines": ["Give thanks to the Lord,", "for He is good.", "May His mercy and His peace",
+                   "be with you and yours today."], "assumes": ["faith"]},
+    ],
+}
+
+ID_RE = re.compile(r"[a-z0-9_-]{1,40}")
+BROKEN_LINE_RE = re.compile(r"\r\n?|[\x0b\x0c\x85  ]")
+CONTROL_RE = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f\ud800-\udfff￾￿]")
+OPEN_RE = re.compile(r"\s*<svg\b[^>]*>")
+STYLE_RE = re.compile(r"<style>(.*?)</style>", re.S)
+FACE_RE = re.compile(r"@font-face\{[^}]*\}")
+TEXT_RE = re.compile(r"<text\b([^>]*)>(.*?)</text>", re.S)
+FAMILY_RE = re.compile(r'font-family="([^"]*)"')
+VIEW_RE = re.compile(r'viewBox="([^"]+)"')
+TAG_RE = re.compile(r"<[^>]+>")
+REF_RE = re.compile(r'\bid="|url\(#|href="#')  # each is followed by the name of something in the same picture
+SOFT_RE = re.compile(r'<filter id="([^"]+-soft)"')
+
+_metric_cache = {}
+_front_cache = {}
+
+
+# Fitting
+
+def clean(text):
+    """The person's text, safe to draw: control characters go, line breaks stay, every letter stays."""
+    text = unicodedata.normalize("NFC", str(text or ""))
+    text = BROKEN_LINE_RE.sub("\n", text).replace("\t", " ")
+    return "\n".join(line.strip() for line in CONTROL_RE.sub("", text).split("\n")).strip()
+
+
+def _metrics(ctx):
+    if not _metric_cache:
+        _metric_cache.update(json.loads(ctx.asset("metrics.json")))
+    return _metric_cache
+
+
+def width(ctx, font, text, size, spacing=0):
+    """Estimated width of text in units. font is a name in metrics.json, "segoe" or "segoe-600"; "-caps" on the end
+    measures small capitals, each lowercase letter drawn as a capital about .8 as wide."""
+    if font.endswith("-caps"):
+        small = "".join(c.upper() for c in text if c.islower())
+        return width(ctx, font[:-5], text.upper(), size, spacing) - .2 * width(ctx, font[:-5], small, size)
+    font, scale = ESTIMATED.get(font, (font, 1))
+    face = _metrics(ctx)[font]
+    missing = face["average"] * 1.2
+    return sum(face["widths"].get(c, missing) for c in text) * size * scale + spacing * len(text)
+
+
+def _fits(ctx, font, text, size, box, track=0):
+    """track is letter spacing in em, so it shrinks along with the text."""
+    return width(ctx, font, text, size, track * size) * SAFETY <= box
+
+
+def _break_word(ctx, font, word, size, box, track):
+    """A word too wide for any line, in hyphenated pieces. Every letter is kept."""
+    pieces, piece = [], ""
+    for letter in word:
+        if piece and not _fits(ctx, font, piece + letter + "-", size, box, track):
+            pieces.append(piece + "-")
+            piece = ""
+        piece += letter
+    return pieces + [piece]
+
+
+def _wrap(ctx, font, text, size, box, track=0, hyphen=False):
+    """Greedy on spaces, keeping the person's own line breaks. None when a word is wider than the box and hyphen is off."""
+    lines = []
+    for paragraph in text.split("\n"):
+        line = ""
+        for word in paragraph.split():
+            trial = line + " " + word if line else word
+            if _fits(ctx, font, trial, size, box, track):
+                line = trial
+                continue
+            if line:
+                lines.append(line)
+                line = ""
+            if _fits(ctx, font, word, size, box, track):
+                line = word
+            elif not hyphen:
+                return None
+            else:
+                *whole, line = _break_word(ctx, font, word, size, box, track)
+                lines += whole
+        lines.append(line)
+    return lines
+
+
+def _sizes(top, floor):
+    """top, one less each step, ending exactly on floor."""
+    sizes = [top]
+    while sizes[-1] > floor:
+        sizes.append(max(floor, sizes[-1] - 1))
+    return sizes
+
+
+def _fit(ctx, font, text, top, floor, box, room=math.inf, lead=1.3, track=0, most=0):
+    """The largest size at which text wraps inside box and room, as (lines, size), or (None, floor).
+    Words are broken only at the floor. most limits the number of lines."""
+    for size in _sizes(top, floor):
+        lines = _wrap(ctx, font, text, size, box, track, hyphen=size <= floor)
+        if lines and len(lines) * size * lead <= room and (not most or len(lines) <= most):
+            return lines, size
+    return None, floor
+
+
+def _fit_all(ctx, font, text, top, floor, box, room, lead, track=0):
+    """_fit for a picture that has no way to say it didn't fit: past the floor it keeps shrinking, so no letter is lost."""
+    lines, size = _fit(ctx, font, text, top, floor, box, room, lead, track)
+    while lines is None:
+        size *= .92
+        lines = _wrap(ctx, font, text, size, box, track, hyphen=True)
+        lines = lines if len(lines) * size * lead <= room else None
+    return lines, size
+
+
+def _baseline(ctx, font, size, line_height):
+    """From the top of a line box down to where the letters sit, as a browser sets it."""
+    face = _metrics(ctx)[font]
+    return (line_height - (face["ascent"] + face["descent"]) * size) / 2 + face["ascent"] * size
+
+
+# Pieces of SVG
+
+def _n(value):
+    return ("%.2f" % value).rstrip("0").rstrip(".")
+
+
+def _esc(text):
+    return html.escape(str(text), quote=True)
+
+
+def _text(x, y, size, family, fill, body, more=""):
+    return ('<text x="%s" y="%s" font-family="%s" font-size="%s" fill="%s"%s>%s</text>'
+            % (_n(x), _n(y), family, _n(size), fill, more, _esc(body)))
+
+
+def _root(w, h, label, body):
+    return ('<svg xmlns="%s" viewBox="0 0 %s %s" role="img" aria-label="%s">%s</svg>'
+            % (SVG_NS, _n(w), _n(h), _esc(label), body))
+
+
+def _gradient(id_, stops, x1=0, y1=0, x2=1, y2=1, user=False):
+    units = ' gradientUnits="userSpaceOnUse"' if user else ""
+    body = "".join('<stop offset="%s" stop-color="%s"/>' % stop for stop in stops)
+    return '<linearGradient id="%s" x1="%s" y1="%s" x2="%s" y2="%s"%s>%s</linearGradient>' % (id_, x1, y1, x2, y2, units, body)
+
+
+def _sheet(id_, w, h, light, deep, seed, tooth=.3, out_w=None, out_h=None):
+    """Heavy cream stock, with its grain worked at the board's own scale whatever size it's shown."""
+    return ('<svg width="%s" height="%s" viewBox="0 0 %d %d" preserveAspectRatio="none" aria-hidden="true"><defs>'
+            '<radialGradient id="%s-g" cx=".42" cy=".36" r=".9"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></radialGradient>'
+            '<filter id="%s-f" filterUnits="userSpaceOnUse" x="0" y="0" width="%d" height="%d" color-interpolation-filters="sRGB">'
+            '<feTurbulence type="fractalNoise" baseFrequency="1.05" numOctaves="3" seed="%d" result="t"/>'
+            '<feDiffuseLighting in="t" surfaceScale="%s" diffuseConstant="1.155" lighting-color="#ffffff" result="l"><feDistantLight azimuth="225" elevation="60"/></feDiffuseLighting>'
+            '<feBlend in="SourceGraphic" in2="l" mode="multiply"/></filter></defs>'
+            '<rect width="%d" height="%d" fill="url(#%s-g)" filter="url(#%s-f)"/></svg>'
+            % (out_w or w, out_h or h, w, h, id_, light, deep, id_, w, h, seed, tooth, w, h, id_, id_))
+
+
+def _shade(id_, x1, x2, stops):
+    """The page darkening toward the fold, as the board's CSS gradient."""
+    body = "".join('<stop offset="%s" stop-color="%s" stop-opacity="%s"/>' % stop for stop in stops)
+    return ('<defs><linearGradient id="%s" x1="%s" y1="0" x2="%s" y2="0">%s</linearGradient></defs>'
+            '<rect width="500" height="700" fill="url(#%s)"/>' % (id_, x1, x2, body, id_))
+
+
+def _sprig(id_, x, y, scale):
+    return ('<g transform="translate(%s %s) scale(%s)" opacity=".85"><defs>%s</defs><g fill="url(#%s)">'
+            '<path d="M0 0C-7 -6 -17 -7 -28 0C-17 7 -7 6 0 0Z"/><path d="M0 0C7 -6 17 -7 28 0C17 7 7 6 0 0Z"/></g></g>'
+            % (_n(x), _n(y), _n(scale), _gradient(id_, GILT, 0, 0, 1, 0), id_))
+
+
+# Fonts, embedded so a picture needs nothing from outside itself
+
+def _face_rule(ctx, family, stem, weight, style, ranges):
+    try:
+        data = base64.b64encode(ctx.font(stem + ".woff2")).decode("ascii")
+    except Exception:  # a missing font falls back to the next family in the picture's list, and the card still draws
+        return ""
+    return ("@font-face{font-family:'%s';font-style:%s;font-weight:%s;src:url(data:font/woff2;base64,%s) format('woff2');unicode-range:%s}"
+            % (family, style, weight, data, ranges))
+
+
+def _wanted_faces(svg):
+    """{face: needs its -ext file} for every embeddable family this picture draws text in."""
+    wanted = {}
+    for attrs, body in TEXT_RE.findall(svg):
+        found = FAMILY_RE.search(attrs)
+        if not found:
+            continue
+        face = found.group(1).split(",")[0].strip(" '\"")
+        face = face + " italic" if 'font-style="italic"' in attrs else face
+        if face in FACES:
+            wanted[face] = wanted.get(face, False) or any(ord(c) > 0xFF for c in html.unescape(body))
+    return wanted
+
+
+def _font_rules(ctx, svg):
+    rules = []
+    for face, extended in _wanted_faces(svg).items():
+        stem, weight, style, has_ext = FACES[face]
+        family = face.replace(" italic", "")
+        if extended and has_ext:
+            rules.append(_face_rule(ctx, family, stem + "-ext", weight, style, LATIN_EXT))
+        rules.append(_face_rule(ctx, family, stem, weight, style, LATIN))
+    return rules
+
+
+def _with_fonts(ctx, svg):
+    rules = _font_rules(ctx, svg)
+    if not rules:
+        return svg
+    head = OPEN_RE.match(svg).end()
+    return svg[:head] + "<style>" + "".join(rules) + "</style>" + svg[head:]
+
+
+def _nest(svg, prefix, x, y, w, h):
+    """svg's drawing, placed in a box and fitted without stretching. Its ids get prefix, so two pictures can't clash;
+    its fonts stay behind for _joined."""
+    opening = OPEN_RE.match(svg).group(0)
+    body = STYLE_RE.sub("", svg[len(opening):svg.rfind("</svg>")], count=1)
+    body = TAG_RE.sub(lambda tag: REF_RE.sub(lambda ref: ref.group(0) + prefix, tag.group(0)), body)
+    return ('<svg x="%s" y="%s" width="%s" height="%s" viewBox="%s">%s</svg>'
+            % (_n(x), _n(y), _n(w), _n(h), VIEW_RE.search(opening).group(1), body))
+
+
+def _joined(w, h, label, body, sources):
+    """One picture made of others, carrying each font once."""
+    rules = {}
+    for svg in sources:
+        for style in STYLE_RE.findall(svg)[:1]:
+            rules.update(dict.fromkeys(FACE_RE.findall(style)))
+    return _root(w, h, label, ("<style>%s</style>" % "".join(rules) if rules else "") + body)
+
+
+# The card
+
+def fronts(ctx):
+    """Every front in fronts.json, as {key: entry}."""
+    if not _front_cache:
+        _front_cache.update((entry["key"], entry) for entry in json.loads(ctx.asset("fronts.json")))
+    return _front_cache
+
+
+def _front_font(spec):
+    font = "garamond-400" if spec.get("family") == "garamond" else "cinzel-500"
+    return font + "-caps" if spec.get("caps") else font
+
+
+def _fit_front_line(ctx, spec, text):
+    """One line shrinking to about 30, then as many lines at 30 as it takes."""
+    font, top, box = _front_font(spec), spec["size"], spec["width"]
+    track = spec.get("spacing", 0) / top
+    lines, size = _fit(ctx, font, text, top, FRONT_FLOOR, box, lead=FRONT_LEAD, track=track, most=1)
+    if lines:
+        return lines, size
+    room = spec["y"] - FRONT_TOP if spec["y"] > 350 else FRONT_BOTTOM - spec["y"]
+    return _fit_all(ctx, font, text, FRONT_FLOOR, FRONT_FLOOR, box, room, FRONT_LEAD, track)
+
+
+def _engraved(soft, spec, line, y, size):
+    """A soft shadow and the line over it, as paint_card_fronts.engraved() draws the fronts' own words."""
+    family = GARAMOND if spec.get("family") == "garamond" else CAPS
+    more = ' text-anchor="%s"' % spec.get("anchor", "middle")
+    if spec.get("spacing"):
+        more += ' letter-spacing="%s"' % _n(spec["spacing"] * size / spec["size"])
+    if spec.get("caps"):
+        more += ' font-variant="small-caps"'
+    shadow = more + ' fill-opacity=".6" transform="translate(1 1.6)" filter="url(#%s)"' % soft
+    return (_text(spec["x"], y, size, family, "#000000", line, shadow) +
+            _text(spec["x"], y, size, family, spec["fill"], line, more))
+
+
+def _front_line(ctx, art, spec, text):
+    lines, size = _fit_front_line(ctx, spec, text)
+    step = size * FRONT_LEAD
+    first = spec["y"] - (len(lines) - 1) * step if spec["y"] > 350 else spec["y"]  # low on the card it grows upward
+    soft = SOFT_RE.search(art).group(1)
+    return "".join(_engraved(soft, spec, line, first + i * step, size) for i, line in enumerate(lines) if line)
+
+
+def draw_front(ctx, key, line=""):
+    """The front picture with the personal line drawn in. A front with no line in fronts.json ignores it."""
+    entry = fronts(ctx)[key]
+    art = ctx.asset("fronts/%s.svg" % entry["key"]).decode("utf-8")
+    text, spec = clean(line), entry["line"]
+    drawn = _front_line(ctx, art, spec, text) if spec and text else ""
+    return _with_fonts(ctx, art.replace("<!--LINE-->", drawn))
+
+
+def _verse_top(ctx, verse):
+    """The largest size at which every verse line crosses the page, or None."""
+    for size in _sizes(VERSE_SIZE, VERSE_FLOOR):
+        if all(_fits(ctx, "garamond-400", line, size, VERSE_W) for line in verse):
+            return size
+    return None
+
+
+def _fit_signature(ctx, hand, text, size):
+    """Larger than the words as on the board, in two lines at most until the floor forces more."""
+    lines, sign = _fit(ctx, hand["font"], text, size * hand["sign"], WORDS_FLOOR, HAND_W, most=2)
+    return (lines, sign) if lines else _fit(ctx, hand["font"], text, WORDS_FLOOR, WORDS_FLOOR, HAND_W)
+
+
+def _plan_inside(ctx, verse, verse_size, words, signature, hand, size, lead):
+    """One layout try: the lines and sizes and the block's height, or None when it won't go."""
+    lines = _wrap(ctx, hand["font"], words, size, HAND_W, hyphen=size <= WORDS_FLOOR) if words else []
+    if lines is None:
+        return None
+    sign, sign_size = _fit_signature(ctx, hand, signature, size) if signature else ([], size)
+    hand_h = len(lines) * size * lead + (SIGN_GAP if lines and sign else 0) + len(sign) * sign_size * SIGN_LEAD
+    verse_h = len(verse) * verse_size * VERSE_LEAD + (RULE_ABOVE + RULE_H + RULE_BELOW if verse else 0)
+    if verse_h + hand_h > PAGE_BOTTOM - PAGE_TOP:
+        return None
+    return {"verse": verse, "verse_size": verse_size, "lines": lines, "size": size, "lead": lead,
+            "sign": sign, "sign_size": sign_size, "height": verse_h + hand_h, "hand_h": hand_h}
+
+
+def _fit_inside(ctx, verse, words, signature, hand):
+    """Tries in order: the words shrink, then the verse shrinks, then the verse is left out, then the hand's lines
+    close up. None if nothing fits."""
+    top = _verse_top(ctx, verse) if verse else None
+    lead = hand["lead"]
+    tries = []
+    if top:
+        tries += [(verse, top, size, lead) for size in _sizes(hand["size"], WORDS_FLOOR)]
+        tries += [(verse, size, WORDS_FLOOR, lead) for size in _sizes(top, VERSE_FLOOR)[1:]]
+    tries += [([], 0, size, lead) for size in _sizes(hand["size"], WORDS_FLOOR)]
+    tries.append(([], 0, WORDS_FLOOR, SNUG_LEAD))
+    for kept, verse_size, size, line_lead in tries:
+        plan = _plan_inside(ctx, kept, verse_size, words, signature, hand, size, line_lead)
+        if plan:
+            return plan
+    return None
+
+
+def _verse_block(ctx, plan, y):
+    """The verse and the gold rule from y down."""
+    size, step = plan["verse_size"], plan["verse_size"] * VERSE_LEAD
+    drop = _baseline(ctx, "garamond-400", size, step)
+    parts = [_text(250, y + i * step + drop, size, GARAMOND, "#2b2320", line, ' text-anchor="middle"')
+             for i, line in enumerate(plan["verse"])]
+    y += len(plan["verse"]) * step + RULE_ABOVE
+    parts.append('<rect x="%s" y="%s" width="%s" height="%s" fill="url(#ci-rule)"/>' % (_n(125 * K), _n(y), _n(120 * K), _n(RULE_H)))
+    return "".join(parts), y + RULE_H + RULE_BELOW
+
+
+def _hand_block(ctx, plan, hand, y):
+    """Their words and the signature from y down, on the board's slight tilt."""
+    font, family, ink = hand["font"], hand["family"], "#1c2a4a"
+    size, step = plan["size"], plan["size"] * plan["lead"]
+    drop = _baseline(ctx, font, size, step)
+    parts = [_text(HAND_X, y + i * step + drop, size, family, ink, line) for i, line in enumerate(plan["lines"]) if line]
+    top = y + len(plan["lines"]) * step + (SIGN_GAP if plan["lines"] else 0)
+    sign, step = plan["sign_size"], plan["sign_size"] * SIGN_LEAD
+    widest = max([width(ctx, font, line, sign) * SAFETY for line in plan["sign"]] or [0])
+    x = min(HAND_X + SIGN_INDENT, HAND_X + HAND_W - widest)
+    drop = _baseline(ctx, font, sign, step)
+    parts += [_text(x, top + i * step + drop, sign, family, ink, line) for i, line in enumerate(plan["sign"]) if line]
+    return '<g transform="rotate(-.6 %s %s)">%s</g>' % (_n(HAND_X), _n(y + plan["hand_h"] / 2), "".join(parts))
+
+
+INSIDE_DEFS = ('<defs><linearGradient id="ci-rule"><stop offset="0" stop-color="#a67c22" stop-opacity="0"/>'
+               '<stop offset=".2" stop-color="#b08a34"/><stop offset=".5" stop-color="#ecd690"/><stop offset=".8" stop-color="#b08a34"/>'
+               '<stop offset="1" stop-color="#a67c22" stop-opacity="0"/></linearGradient>'
+               '<linearGradient id="ci-fold"><stop offset="0" stop-color="#382414" stop-opacity=".42"/>'
+               '<stop offset="1" stop-color="#fffaeb" stop-opacity=".5"/></linearGradient></defs>')
+
+
+def _inside_svg(ctx, plan, hand):
+    y = max(PAGE_TOP, (700 - plan["height"]) * PAGE_LIFT)
+    verse = ""
+    if plan["verse"]:
+        verse, y = _verse_block(ctx, plan, y)
+    body = (INSIDE_DEFS + _sheet("ci", 370, 518, "#faf3e4", "#f0e4cc", 9, .28, 500, 700) +
+            _shade("ci-sh", 1, 0, [(.74, "#5a4228", 0), (.91, "#5a4228", .06), (1, "#382414", .22)]) +
+            '<rect width="%s" height="700" fill="url(#ci-fold)"/>' % _n(2 * K) + verse + _hand_block(ctx, plan, hand, y))
+    return _with_fonts(ctx, _root(500, 700, "Inside of the card", body))
+
+
+def draw_inside(ctx, verse_lines, words, signature, hand="cursive"):
+    """The right-hand page: printed verse, gold rule, then their words and signature in hand ("cursive" or "plain").
+    Returns {"svg", "fits", "verse_left_out", "size"}; size is the words' size in units, never under 27 (20 board px).
+    When the words can't fit even with the verse out, fits is False and svg is "": they are never drawn cut."""
+    verse = [" ".join(clean(line).split()) for line in verse_lines or []]
+    verse = [line for line in verse if line]
+    style = HANDS.get(hand, HANDS["cursive"])
+    plan = _fit_inside(ctx, verse, clean(words), clean(signature), style)
+    if plan is None:
+        return {"svg": "", "fits": False, "verse_left_out": bool(verse), "size": WORDS_FLOOR}
+    return {"svg": _inside_svg(ctx, plan, style), "fits": True,
+            "verse_left_out": bool(verse) and not plan["verse"], "size": round(plan["size"], 2)}
+
+
+def draw_left():
+    """The blank left page with its gilt sprig, for the card opening."""
+    body = (_sheet("cl", 370, 518, "#f6eedc", "#ecdfc6", 7, .28, 500, 700) + _sprig("cl-sf", 185 * K, 451 * K, K) +
+            _shade("cl-sh", 0, 1, [(.6, "#5a4228", 0), (.84, "#5a4228", .07), (1, "#382414", .24)]))
+    return _root(500, 700, "Left page of the card", body)
+
+
+def draw_both(front_svg, inside_svg):
+    """Front and inside side by side in one 1000x700 picture."""
+    body = _nest(front_svg, "f-", 0, 0, 500, 700) + _nest(inside_svg, "i-", 500, 0, 500, 700)
+    return _joined(1000, 700, "The card, front and inside", body, [front_svg, inside_svg])
+
+
+def draw_print_sheet(front_svg, inside_svg):
+    """A quarter-fold card on one letter sheet. Fold the top half back behind, printed side out, then fold left to
+    right so the bottom panels meet: the front ends up outside with the inside words opposite."""
+    folds = ('<path d="M12 396H600M306 12V780" fill="none" stroke="#b5b5b5" stroke-width=".5" stroke-dasharray="4 4"/>')
+    note = _text(153, 766, 9, "Georgia,'Times New Roman',serif", "#9a9a9a", "Fold along the lines", ' text-anchor="middle"')
+    body = ('<rect width="612" height="792" fill="#ffffff"/>'
+            '<g transform="rotate(180 153 198)">%s</g><g transform="rotate(180 459 198)">%s</g>%s%s%s%s'
+            % (_nest(front_svg, "f-", 18, 18, 270, 360), _sprig("ps-back", 459, 331, .5), _sprig("ps-left", 153, 727, .7),
+               _nest(inside_svg, "i-", 324, 414, 270, 360), folds, note))
+    return _joined(612, 792, "The card laid out to print and fold", body, [front_svg, inside_svg])
+
+
+# The plain letter
+
+def _letter_blocks(ctx, paragraphs, signature, size):
+    """[(lines, weight)] at one size, or None while a word is still wider than the page."""
+    hyphen = size <= LETTER_FLOOR
+    blocks = [(_wrap(ctx, "segoe", p, size, LETTER_W, hyphen=hyphen), "400") for p in paragraphs]
+    if signature:
+        blocks.append((_wrap(ctx, "segoe-600", signature, size, LETTER_W, hyphen=hyphen), "600"))
+    return None if any(lines is None for lines, _ in blocks) else blocks
+
+
+def _letter_height(blocks, size):
+    return sum(len(lines) * size * LETTER_LEAD for lines, _ in blocks) + LETTER_GAP * max(0, len(blocks) - 1)
+
+
+def _fit_letter(ctx, paragraphs, signature):
+    """The largest size that keeps the paper at its usual height; at the floor the paper grows instead."""
+    for size in _sizes(LETTER_TOP, LETTER_FLOOR):
+        blocks = _letter_blocks(ctx, paragraphs, signature, size)
+        if blocks is None:
+            continue
+        height = _letter_height(blocks, size)
+        if size <= LETTER_FLOOR or height + 2 * LETTER_PAD <= LETTER_MIN_H:
+            return blocks, size, height
+
+
+def draw_letter(ctx, words, signature):
+    """Cream paper 640 wide with their words in a plain face. The paper grows from 440 so it always fits."""
+    paragraphs = [p for p in clean(words).split("\n") if p]
+    blocks, size, height = _fit_letter(ctx, paragraphs, clean(signature))
+    paper = max(LETTER_MIN_H, math.ceil(height + 2 * LETTER_PAD))
+    y, step, parts = (paper - height) / 2, size * LETTER_LEAD, []
+    for lines, weight in blocks:
+        for line in lines:
+            more = ' font-weight="600"' if weight == "600" else ""
+            parts.append(_text(LETTER_PAD, y + size * 1.06, size, SEGOE, "#1f1b16", line, more))
+            y += step
+        y += LETTER_GAP
+    return _root(640, paper, "A letter", _sheet("lt", 640, paper, "#fbf6ea", "#f3e9d6", 13, .22) + "".join(parts))
+
+
+# The keepsake page (board A)
+
+def _keep_rules(who, w=724, h=616):
+    foil, stops = "kp-foil", KEEPSAKE[who]["foil"]
+    x0, y0, x1, y1 = 23, 23, w - 23, h - 23
+    if who == "mary":
+        q = 16  # scooped corners
+        inner = ("M%d %dH%dA%d %d 0 0 0 %d %dV%dA%d %d 0 0 0 %d %dH%dA%d %d 0 0 0 %d %dV%dA%d %d 0 0 0 %d %dZ"
+                 % (x0 + q, y0, x1 - q, q, q, x1, y0 + q, y1 - q, q, q, x1 - q, y1, x0 + q, q, q, x0, y1 - q, y0 + q, q, q, x0 + q, y0))
+        ornament = '<g transform="translate(%d 384)" fill="url(#%s)">%s</g>' % (w // 2, foil, SPRIG % foil)
+    else:
+        q = 15  # square notched corners, a touch more ledger than album
+        inner = ("M%d %dH%dV%dH%dV%dH%dV%dH%dV%dH%dV%dH%dZ"
+                 % (x0 + q, y0, x1 - q, y0 + q, x1, y1 - q, x1 - q, y1, x0 + q, y1 - q, x0, y0 + q, x0 + q))
+        ornament = '<g transform="translate(%d 384)">%s</g>' % (w // 2, _pine_sprig(foil))
+    return ('<defs>%s</defs><rect x="1.2" y="1.2" width="%s" height="%s" fill="none" stroke="url(#%s)" stroke-width="2.4"/>'
+            '<rect x="13" y="13" width="%d" height="%d" fill="none" stroke="url(#%s)" stroke-width="3.2"/>'
+            '<path d="%s" fill="none" stroke="url(#%s)" stroke-width="1.3"/>%s'
+            % (_gradient(foil, stops, 0, 0, w, h, True), w - 2.4, h - 2.4, foil, w - 26, h - 26, foil, inner, foil, ornament))
+
+
+def _pine_sprig(foil):
+    """Sam's ornament: a short pine bough with its needles."""
+    needles = ""
+    for i in range(14):
+        x = -40 + i * 6.2
+        reach = 13 - abs(i - 6.5) * 1.1
+        needles += "M%.1f 0L%.1f %.1fM%.1f 0L%.1f %.1f" % (x, x + 6, -reach, x, x + 6, reach)
+    return ('<path d="%s" fill="none" stroke="url(#%s)" stroke-width="1.5" stroke-linecap="round"/>'
+            '<path d="M-48 0H48" fill="none" stroke="url(#%s)" stroke-width="2.2" stroke-linecap="round"/>'
+            '<path d="M-48 0H-98M48 0H98" fill="none" stroke="url(#%s)" stroke-width="1.2"/>' % (needles, foil, foil, foil))
+
+
+def _oval_frame(foil):
+    return ('<ellipse cx="108" cy="128" rx="104" ry="124" fill="url(#%s)"/>'
+            '<ellipse cx="108" cy="128" rx="104" ry="124" fill="none" stroke="#3e2a08" stroke-width="1" opacity=".7"/>'
+            '<ellipse cx="108" cy="128" rx="97" ry="117" fill="none" stroke="#fff2c0" stroke-width="2.6" stroke-dasharray=".1 5.4" stroke-linecap="round" opacity=".92"/>'
+            '<ellipse cx="108" cy="128" rx="91" ry="111" fill="#f4ebd8" stroke="#8a6a26" stroke-width="1.2"/>'
+            '<ellipse cx="108" cy="128" rx="75" ry="95" fill="url(#kf-deep)"/>'
+            '<ellipse cx="108" cy="128" rx="75" ry="95" fill="none" stroke="url(#%s)" stroke-width="2.2"/>' % (foil, foil))
+
+
+def _arch_frame(foil):
+    def arch(i):
+        return "M%d 252V%dA%d %d 0 0 1 %d %dV252Z" % (4 + i, 108, 104 - i, 104 - i, 212 - i, 108)
+    return ('<path d="%s" fill="url(#%s)"/><path d="%s" fill="none" stroke="#2c2206" stroke-width="1" opacity=".7"/>'
+            '<path d="%s" fill="none" stroke="#efe0a6" stroke-width="2" opacity=".85"/>'
+            '<path d="%s" fill="#efe7d2" stroke="#6e5a26" stroke-width="1.2"/><path d="%s" fill="url(#kf-deep)"/>'
+            '<path d="%s" fill="none" stroke="url(#%s)" stroke-width="2.2"/>'
+            % (arch(0), foil, arch(0), arch(7), arch(13), arch(29), arch(29), foil))
+
+
+def _monogram(ctx, who, letter):
+    """Their first initial where a photo will go later, narrowed to stay inside the mat."""
+    font, top, x, y = ("pinyon", 112, 106, 162) if who == "mary" else ("cinzel-500", 84, 108, 166)
+    size = min(top, top * 140 / max(1, width(ctx, font, letter, top) * SAFETY))
+    family, more = (SCRIPT, "") if who == "mary" else (CAPS, ' font-weight="500"')
+    stroke = "#2a1604" if who == "mary" else "#121a0c"
+    return _text(x, y, size, family, "url(#kf-bright)", letter,
+                 ' text-anchor="middle" stroke="%s" stroke-width=".6" paint-order="stroke"%s' % (stroke, more))
+
+
+def _frame(ctx, who, letter):
+    """A gilt frame with a cream mat, the monogram waiting where the photo will go."""
+    look = KEEPSAKE[who]
+    defs = (_gradient("kf-foil", look["foil"], 0, 0, 216, 256, True) + _gradient("kf-bright", look["bright"], 30, 60, 186, 200, True) +
+            '<radialGradient id="kf-deep" cx=".44" cy=".38" r=".8"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></radialGradient>' % look["mat"] +
+            '<filter id="kf-shadow" x="-10%" y="-10%" width="125%" height="125%"><feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="#321e0a" flood-opacity=".45"/></filter>')
+    shape = _oval_frame("kf-foil") if who == "mary" else _arch_frame("kf-foil")
+    label = "A gilt frame with the letter %s, ready for a photo" % letter
+    return ('<g filter="url(#kf-shadow)"><svg x="412" y="30" width="216" height="256" viewBox="0 0 216 256" role="img" aria-label="%s"><defs>%s</defs>%s%s</svg></g>'
+            % (_esc(label), defs, shape, _monogram(ctx, who, letter)))
+
+
+def _fit_name(ctx, name):
+    """Big on one line if it can be, then two lines, then smaller still: a long name is never cut."""
+    for most, floor in ((1, 60), (2, 44)):
+        lines, size = _fit(ctx, "pinyon", name, 124, floor, NAME_W, NAME_ROOM, NAME_LEAD, most=most)
+        if lines:
+            return lines, size
+    return _fit_all(ctx, "pinyon", name, 44, 44, NAME_W, NAME_ROOM, NAME_LEAD)
+
+
+def _foil_name(ctx, who, name):
+    """The name in the same foil as the cards, deep enough to hold on cream paper."""
+    lines, size = _fit_name(ctx, name)
+    step = size * NAME_LEAD
+    first = 514 - (len(lines) - 1) * step
+    more = ' text-anchor="middle" stroke="#2a1a04" stroke-width=".7" paint-order="stroke"'
+    texts = "".join(_text(NAME_CENTER, first + i * step, size, SCRIPT, "url(#kn-foil)", line, more)
+                    for i, line in enumerate(lines))
+    return "<defs>%s</defs>%s" % (_gradient("kn-foil", KEEPSAKE[who]["name"], 50, 436, 260, 536, True), texts)
+
+
+def _embossed(x, y, size, family, fill, body, more="", dark=False):
+    """The board's text-shadow: a line of light under the letters, and a thin dark one over them on the big numeral."""
+    light = _text(x, y, size, family, "#ffffff", body, more + ' fill-opacity=".75" transform="translate(0 1)"')
+    shade = _text(x, y, size, family, "#281010", body, more + ' fill-opacity=".25" transform="translate(0 -1)"') if dark else ""
+    return light + shade + _text(x, y, size, family, fill, body, more)
+
+
+def _date_line(ctx, text, top, deep):
+    """A weekday or month: Cinzel 700, 30/40, spaced .16em, narrowing if it must."""
+    lines, size = _fit_all(ctx, "cinzel-700", text, 30, 20, 300, 41, 40 / 30, track=.16)
+    drop = _baseline(ctx, "cinzel-700", size, 40)
+    more = ' text-anchor="middle" font-weight="700" letter-spacing="%s"' % _n(size * .16)
+    return "".join(_embossed(194, top + i * 40 + drop, size, CAPS, deep, line, more) for i, line in enumerate(lines))
+
+
+def _date_block(ctx, who, weekday, day, month):
+    deep = KEEPSAKE[who]["deep"]
+    lines, size = _fit_all(ctx, "garamond-500", day, 200, 80, 300, 189, 188 / 200)
+    more = ' text-anchor="middle" font-weight="500" style="font-variant-numeric:lining-nums"'
+    numeral = _embossed(194, 96 + _baseline(ctx, "garamond-500", size, 188), size, GARAMOND, deep, " ".join(lines), more, dark=True)
+    return _date_line(ctx, weekday, 56, deep) + numeral + _date_line(ctx, month, 284, deep)
+
+
+def _memory_block(ctx, who, age_line, memory_line):
+    """The age and the memory lines, in the room left under the rule."""
+    look, parts, y = KEEPSAKE[who], [], MEMORY_TOP
+    if age_line:
+        lines, size = _fit_all(ctx, "garamond-500", age_line, 34, 24, MEMORY_W, 89, 44 / 34)
+        step = size * 44 / 34
+        for line in lines:
+            parts.append(_text(MEMORY_X, y + _baseline(ctx, "garamond-500", size, step), size, GARAMOND, look["deep"], line, ' font-weight="500"'))
+            y += step
+    if memory_line:
+        y += 8
+        lines, size = _fit_all(ctx, "garamond-400", memory_line, 28, 22, MEMORY_W, MEMORY_TOP + MEMORY_ROOM - y, 36 / 28)
+        step = size * 36 / 28
+        for line in lines:
+            parts.append(_text(MEMORY_X, y + _baseline(ctx, "garamond-400", size, step), size, GARAMOND, look["ink"], line))
+            y += step
+    return "".join(parts)
+
+
+def draw_keepsake(ctx, who, name, weekday, day, month, age_line="", memory_line=""):
+    """Board A at 724x616 for who ("mary" or "sam"): the date, a framed monogram, the name in foil, age and memory."""
+    who = "sam" if who == "sam" else "mary"
+    name, weekday, day, month = clean(name), clean(weekday), clean(day), clean(month)
+    letter = next((c.upper() for c in name if c.isalpha()), "")
+    light, deep, seed = KEEPSAKE[who]["paper"]
+    body = (_sheet("kp", 724, 616, light, deep, seed) + _keep_rules(who) + _date_block(ctx, who, weekday, day, month) +
+            _frame(ctx, who, letter[:1]) + _foil_name(ctx, who, name) + _memory_block(ctx, who, clean(age_line), clean(memory_line)))
+    label = "A keepsake page for %s, %s %s %s" % (name, weekday, day, month)
+    return _with_fonts(ctx, _root(724, 616, label, body))
+
+
+# Saving
+
+def _file_id(value):
+    text = str(value)
+    if not ID_RE.fullmatch(text):
+        raise ValueError("a card id is 1 to 40 lowercase letters, digits, - or _")
+    return text
+
+
+def save_card(ctx, card):
+    """Writes a card's pictures flat in ctx.files, over any earlier ones. card holds id, front, line, verse (a list of
+    lines), words, signature and hand. Returns {"files": {part: name}, "fits", "verse_left_out", "size"}.
+    When the words can't fit nothing is written and files is empty."""
+    card_id = _file_id(card["id"])
+    inside = draw_inside(ctx, card.get("verse"), card.get("words"), card.get("signature"), card.get("hand", "cursive"))
+    result = {"files": {}, "fits": inside["fits"], "verse_left_out": inside["verse_left_out"], "size": inside["size"]}
+    if not inside["fits"]:
+        return result
+    front = draw_front(ctx, card["front"], card.get("line"))
+    pictures = {"front": front, "inside": inside["svg"], "both": draw_both(front, inside["svg"]), "left": draw_left(),
+                "print": draw_print_sheet(front, inside["svg"])}
+    for part, svg in pictures.items():
+        name = "card-%s-%s.svg" % (card_id, part)
+        ctx.files.write_text(name, svg)
+        result["files"][part] = name
+    return result
+
+
+def save_letter(ctx, letter):
+    """Writes letter-<id>.svg in ctx.files, over any earlier one, and returns {"files": {"letter": name}}."""
+    name = "letter-%s.svg" % _file_id(letter["id"])
+    ctx.files.write_text(name, draw_letter(ctx, letter.get("words"), letter.get("signature")))
+    return {"files": {"letter": name}}
+
+
+# Mary's tools. Every "say" is something she could say aloud as it stands, and "note" carries the same words because
+# Live never sees "say". The facts are in the other fields. A draft lives in ctx.store, so a restart keeps it.
+
+SHOWN_MAX = 4
+WORDS_MAX = 1200
+LINE_MAX = 40
+NAME_MAX = 60
+LIKES_MAX = 200
+AGE_MAX = 60
+MEMORY_MAX = 110
+INDEX_MAX = 400
+READ_MAX = 3000
+PICTURE_MAX = 3_000_000  # one saved jpeg; each piece of it comes in its own event, because an event is 4 KB at most
+PICTURE_PARTS = ("front", "inside", "both")
+JPEG_MAGIC = b"\xff\xd8\xff"
+WATER_TAGS = {"water", "lake", "sea", "ocean", "river", "boat", "boats", "fishing"}
+FAITH_TAGS = {"church", "faith"}
+FAITH_WORDS = {"faith", "church", "god", "lord", "jesus", "prayer", "prayers", "pray", "praying", "bible", "hymn", "hymns"}
+MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
+          "december")
+PICK_NUMBERS = {"first": 1, "1st": 1, "1": 1, "second": 2, "2nd": 2, "2": 2, "two": 2, "third": 3, "3rd": 3, "3": 3,
+                "three": 3, "fourth": 4, "4th": 4, "4": 4, "four": 4}
+PICK_SKIP = {"the", "a", "an", "one", "with", "that", "this", "at", "of", "and", "in", "on", "it", "i", "like", "want",
+             "please", "number", "card", "picture", "small"}
+SAY_NO_CARD = "We haven't started a card yet."
+SAY_PICK_FIRST = "Let's pick a front first."
+SAY_NEEDS_WORDS = "There's nothing saved yet. It needs your words first."
+SAY_TOO_LONG = "That's too long for a card. We can shorten it, or I can make it a plain message."
+SAY_NOT_SENT = "Sending isn't set up yet. It's saved here on your laptop, and I can print it for you."
+SAY_FOLD = ("It prints on one sheet of paper. Fold the top half back behind, printed side out, then fold it left to "
+            "right. Mailing it needs some help from the facility.")
+SAY_SHEET = "It prints on one sheet of paper. Mailing it needs some help from the facility."
+
+_LOCK = threading.RLock()  # a tap, a picture and a spoken line may land together
+
+
+def _locked(fn):
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        with _LOCK:
+            return fn(*args, **kwargs)
+    return run
+
+
+def _reply(say, **facts):
+    for key, value in facts.items():  # a result is 4 KB at most, and letters outside plain English count six times over
+        if isinstance(value, str) and len(json.dumps(value)) > READ_MAX:
+            facts[key] = value[:READ_MAX // 6]
+    return dict(facts, note=say, say=say)
+
+
+def _said(value, limit):
+    return clean(value if isinstance(value, str) else "")[:limit].strip()
+
+
+def _word_set(text):
+    return set(re.findall(r"[a-z0-9']+", clean(text or "").lower()))
+
+
+def _today():
+    return datetime.date.today()
+
+
+def _slug(text, limit):
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:limit].strip("-")
+
+
+def _new_id(person):
+    return "%s-%s-%04x" % (_slug(person, 16) or "card", _today().strftime("%Y%m%d"), random.randrange(16 ** 4))
+
+
+def _draft(ctx):
+    if "draft" not in ctx.state:
+        ctx.state["draft"] = ctx.store.get("draft")
+    return ctx.state["draft"]
+
+
+def _keep(ctx, draft):
+    ctx.state["draft"] = draft
+    ctx.state.pop("keepsake", None)
+    ctx.store.put("draft", draft)
+
+
+def _file_away(ctx, draft):
+    """Keeps a saved card or letter for open_saved: its whole record, and a small list to find it by."""
+    draft["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+    ctx.store.put("saved-" + draft["id"], draft)
+    index = [entry for entry in ctx.store.get("index", []) if entry["id"] != draft["id"]]
+    index.append({"id": draft["id"], "person": draft.get("person", ""), "updated": draft["updated"]})
+    ctx.store.put("index", index[-INDEX_MAX:])
+
+
+def _is_card(draft):
+    return bool(draft) and draft.get("kind") == "card"
+
+
+def _tags(ctx, draft):
+    entry = fronts(ctx).get(draft.get("front")) or {}
+    return {tag.lower() for tag in entry.get("tags", [])}
+
+
+def _verse_true(ctx, draft, assumed):
+    if assumed in ("man", "woman"):
+        return draft.get("person_is") == assumed
+    if assumed == "water":
+        return bool(_tags(ctx, draft) & WATER_TAGS)
+    if assumed == "faith":
+        return bool(_tags(ctx, draft) & FAITH_TAGS) or draft.get("occasion") in ("sympathy", "christmas") \
+            or bool(_word_set(draft.get("likes")) & FAITH_WORDS)
+    return False
+
+
+def _verses(ctx, draft):
+    """The verses that are true of this person and this front, the most particular first."""
+    fitting = [v for v in VERSES.get(draft.get("occasion"), []) if all(_verse_true(ctx, draft, a) for a in v["assumes"])]
+    return [v["lines"] for v in sorted(fitting, key=lambda v: -len(v["assumes"]))]
+
+
+def _reading(draft):
+    verse = [] if draft.get("left_out") else (draft.get("verse") or [])
+    return " ".join(verse + [draft.get("words") or "", draft.get("signature") or ""]).strip()
+
+
+def _when(day):
+    return "%s, %s %d" % (day.strftime("%A"), day.strftime("%B"), day.day)
+
+
+def _save_card(ctx, trial):
+    """Saves a trial copy of the draft and makes it the draft. False, with nothing changed, when it won't fit."""
+    saved = save_card(ctx, trial)
+    if not saved["fits"]:
+        return False
+    for part in PICTURE_PARTS:  # a picture of the old words must not outlive them
+        ctx.files.delete("card-%s-%s.jpg" % (trial["id"], part))
+    trial.update(rev=trial.get("rev", 0) + 1, left_out=saved["verse_left_out"], saved=True, step="open")
+    _file_away(ctx, trial)
+    _keep(ctx, trial)
+    return True
+
+
+def _front_file(key):
+    return "card-draft-%s.svg" % key
+
+
+def _show_card(ctx, draft, opening=False):
+    data = {"id": draft["id"], "rev": draft.get("rev", 0), "stage": draft["step"], "opening": opening}
+    if draft["step"] == "closed":
+        data["front"] = _front_file(draft["front"])
+    else:
+        data.update({part: "card-%s-%s.svg" % (draft["id"], part) for part in ("front", "left", "inside", "both")})
+        data["pictures"] = not all(ctx.files.exists("card-%s-%s.jpg" % (draft["id"], part)) for part in PICTURE_PARTS)
+    ctx.effect("card", data)
+
+
+def _show_fronts(ctx, draft):
+    every = fronts(ctx)
+    ctx.effect("fronts", {"cards": [{"number": number, "name": every[key]["name"], "key": key, "file": _front_file(key)}
+                                    for number, key in enumerate(draft["shown"], 1)]})
+
+
+def _show_letter(ctx, draft):
+    ctx.effect("letter", {"file": "letter-%s.svg" % draft["id"], "rev": draft.get("rev", 0)})
+
+
+def _show(ctx, draft, opening=False):
+    if draft["step"] == "fronts":
+        _show_fronts(ctx, draft)
+    elif draft["step"] == "letter":
+        _show_letter(ctx, draft)
+    else:
+        _show_card(ctx, draft, opening)
+
+
+def _offer(ctx, draft):
+    """The picker: the occasion's fronts, those nearest what they love first, each drawn with the personal line."""
+    every, likes = fronts(ctx), _word_set(draft.get("likes"))
+
+    def match(entry):
+        tags = [tag.lower() for tag in entry["tags"]]
+        return sum(any(w == t or w.rstrip("s") == t or (len(w) >= 4 and t.startswith(w)) for t in tags) for w in likes)
+
+    chosen = sorted((e for e in every.values() if draft["occasion"] in e["occasions"]), key=lambda e: -match(e))[:SHOWN_MAX]
+    for entry in chosen:
+        ctx.files.write_text(_front_file(entry["key"]), draw_front(ctx, entry["key"], draft.get("line")))
+    draft.update(shown=[entry["key"] for entry in chosen], step="fronts")
+    _keep(ctx, draft)
+    ctx.effect("show_screen")
+    _show_fronts(ctx, draft)
+    return [{"number": number, "name": entry["name"]} for number, entry in enumerate(chosen, 1)]
+
+
+@_locked
+def show_fronts(ctx, person="", occasion="birthday", likes="", line="", person_is="unknown"):
+    draft = {"kind": "card", "id": _new_id(_said(person, NAME_MAX)), "person": _said(person, NAME_MAX),
+             "person_is": person_is if person_is in ("man", "woman") else "unknown",
+             "occasion": occasion if occasion in VERSES else "birthday", "likes": _said(likes, LIKES_MAX),
+             "line": _said(line, LINE_MAX), "hand": ctx.store.get("hand", "cursive"), "rev": 0}
+    shown = _offer(ctx, draft)
+    if ctx.heard:
+        return _reply("Here are some fronts. Writing the words takes the internet, so we can finish it when I'm back on.",
+                      fronts=shown)
+    return _reply("These are up. Which one do you like?", fronts=shown, person=draft["person"])
+
+
+def _match_front(ctx, choice, draft):
+    """A number, a name or a word from a front's tags, among those shown. None when it isn't clear which."""
+    shown, every = draft.get("shown", []), fronts(ctx)
+    words = re.findall(r"[a-z0-9']+", clean(str(choice)).lower())
+    wanted = set(words) - PICK_SKIP
+    scores = {}
+    for key in shown:
+        entry = every[key]
+        own = {key} | _word_set(entry["name"]) | _word_set(entry.get("label")) | {tag.lower() for tag in entry["tags"]}
+        scores[key] = len(wanted & own)
+    best = max(scores.values(), default=0)
+    hits = [key for key, score in scores.items() if score == best]
+    if best and len(hits) == 1:
+        return hits[0]
+    if best:
+        return None
+    number = next((PICK_NUMBERS[w] for w in words if w in PICK_NUMBERS), None)
+    if "last" in words:
+        number = len(shown)
+    if number is None and "one" in words and len(words) <= 2 and "the" not in words:
+        number = 1
+    return shown[number - 1] if number and number <= len(shown) else None
+
+
+@_locked
+def pick_front(ctx, choice):
+    draft = _draft(ctx)
+    if not _is_card(draft) or not draft.get("shown"):
+        return _reply(SAY_NO_CARD, picked=None)
+    key = _match_front(ctx, choice, draft)
+    if key is None:
+        return _reply("I'm not sure which one you mean.", picked=None)
+    trial = dict(draft, front=key)
+    fitting = _verses(ctx, trial)
+    if not trial.get("verse_off") and (not trial.get("verse_chosen") or trial.get("verse") not in fitting):
+        trial["verse"] = fitting[0] if fitting else []
+    name = fronts(ctx)[key]["name"]
+    ctx.effect("show_screen")
+    if trial.get("saved") and (_save_card(ctx, trial) or _save_card(ctx, dict(trial, verse=[]))):
+        _show(ctx, _draft(ctx))
+        return _reply("That's on the card now.", picked=name, read_back=_reading(_draft(ctx)))
+    trial["step"] = "closed"
+    _keep(ctx, trial)
+    _show(ctx, trial)
+    return _reply("What do you want to say?", picked=name)
+
+
+@_locked
+def set_words(ctx, words, signature=""):
+    draft = _draft(ctx)
+    if not _is_card(draft):
+        return _reply(SAY_NO_CARD)
+    words, signature = clean(words if isinstance(words, str) else "").strip(), _said(signature, NAME_MAX)
+    if len(words) > WORDS_MAX:
+        return _reply(SAY_TOO_LONG, too_long=True, saved=False)
+    words, signature = words or draft.get("words", ""), signature or draft.get("signature", "")
+    if not draft.get("front"):
+        _keep(ctx, dict(draft, words=words, signature=signature))
+        return _reply(SAY_PICK_FIRST, saved=False)
+    if not words:
+        return _reply("What do you want to say?", saved=False)
+    if not signature:
+        _keep(ctx, dict(draft, words=words))
+        return _reply("How do you want to sign it?", saved=False, words_kept=True, need="signature")
+    first = not draft.get("saved")
+    trial = dict(draft, words=words, signature=signature)
+    if not _save_card(ctx, trial):
+        return _reply(SAY_TOO_LONG, too_long=True, saved=False)
+    _show(ctx, trial, opening=first)
+    facts = {"saved": True, "read_back": _reading(trial)}
+    say = "Here's how it reads."
+    if trial["left_out"]:
+        facts["verse_left_out"] = True
+        say = "The verse won't fit with your words, so I left it out. Here's how it reads."
+    if first and trial["hand"] == "cursive" and not trial.get("mentioned"):
+        facts["mention"] = "Say once: I can write it plainer if cursive's hard to read."
+        trial["mentioned"] = True
+        _keep(ctx, trial)
+    return _reply(say, **facts)
+
+
+@_locked
+def set_hand(ctx, hand=""):
+    draft = _draft(ctx)
+    if ctx.heard:  # the only phrase here is "write it plainer"
+        if not _is_card(draft):
+            return {"not_for_me": True}
+        hand = "plain"
+    current = draft.get("hand") if _is_card(draft) else ctx.store.get("hand", "cursive")
+    hand = hand if hand in ("plain", "cursive") else ("cursive" if current == "plain" else "plain")
+    if _is_card(draft) and draft.get("saved"):
+        trial = dict(draft, hand=hand)
+        if not _save_card(ctx, trial):
+            return _reply("It won't fit on the card that way.", hand=current, too_long=True)
+        _show(ctx, trial)
+    elif _is_card(draft):
+        _keep(ctx, dict(draft, hand=hand))
+    ctx.store.put("hand", hand)
+    return _reply("Written plainer now." if hand == "plain" else "Back in cursive.", hand=hand)
+
+
+@_locked
+def change_verse(ctx, which="next"):
+    draft = _draft(ctx)
+    if not _is_card(draft) or not draft.get("front"):
+        return _reply(SAY_PICK_FIRST if _is_card(draft) else SAY_NO_CARD)
+    if which == "none":
+        trial = dict(draft, verse=[], verse_off=True)
+    else:
+        fitting = _verses(ctx, draft)
+        if not fitting or fitting == [draft.get("verse")]:
+            return _reply("That's the only verse that suits this card.", verse=draft.get("verse") or [])
+        current = fitting.index(draft["verse"]) if draft.get("verse") in fitting else -1
+        trial = dict(draft, verse=fitting[(current + 1) % len(fitting)], verse_off=False, verse_chosen=True)
+    if draft.get("saved"):
+        if not _save_card(ctx, trial):
+            return _reply("That verse won't fit with your words, so I left the card as it was.", changed=False)
+        _show(ctx, trial)
+    else:
+        _keep(ctx, trial)
+    if trial.get("left_out"):
+        return _reply("That verse won't fit with your words, so I left it out.", verse_left_out=True, verse=[])
+    return _reply("The verse is gone." if which == "none" else "Here's the verse now.", verse=trial["verse"])
+
+
+@_locked
+def change_front(ctx):
+    draft = _draft(ctx)
+    if not _is_card(draft):
+        return _reply(SAY_NO_CARD)
+    return _reply("Here are the fronts again. Your words are kept.", fronts=_offer(ctx, dict(draft)))
+
+
+@_locked
+def read_back(ctx):
+    draft = _draft(ctx)
+    if not draft:
+        return _reply(SAY_NO_CARD)
+    verse = [] if draft.get("left_out") else (draft.get("verse") or [])
+    return _reply("Here's how it reads.", verse=verse, words=draft.get("words", ""), signature=draft.get("signature", ""))
+
+
+@_locked
+def save_card_now(ctx):
+    draft = _draft(ctx)
+    if not draft or not draft.get("rev"):
+        return _reply(SAY_NEEDS_WORDS, saved=False)
+    return _reply("It's saved on your laptop, as of %s." % _when(_today()), saved=True)
+
+
+def _print_file(ctx, draft):
+    keepsake = ctx.state.get("keepsake")
+    if keepsake:
+        return keepsake["file"]
+    if not draft or not draft.get("rev"):
+        return None
+    return "letter-%s.svg" % draft["id"] if draft["kind"] == "letter" else "card-%s-print.svg" % draft["id"]
+
+
+@_locked
+def print_card(ctx):
+    file = _print_file(ctx, _draft(ctx))
+    if file is None:
+        return {"not_for_me": True} if ctx.heard else _reply(SAY_NEEDS_WORDS, printing=False)
+    ctx.state.pop("print_failed", None)
+    ctx.effect("print", {"file": file})
+    return _reply(SAY_FOLD if file.endswith("-print.svg") else SAY_SHEET, printing=True)
+
+
+@_locked
+def send_it(ctx):
+    draft = _draft(ctx)
+    if ctx.heard and not draft:
+        return {"not_for_me": True}
+    return _reply(SAY_NOT_SENT, sent=False, saved=bool(draft and draft.get("rev")), can_print=True)
+
+
+@_locked
+def plain_message(ctx, person, words, signature=""):
+    person, signature = _said(person, NAME_MAX), _said(signature, NAME_MAX)
+    words = clean(words if isinstance(words, str) else "").strip()
+    if len(words) > WORDS_MAX:
+        return _reply("That's a lot for one message. Can we shorten it?", too_long=True, saved=False)
+    draft = _draft(ctx)
+    same = bool(draft) and draft.get("kind") == "letter" and (not person or person.lower() == draft["person"].lower())
+    if same:
+        trial = dict(draft)
+    else:
+        trial = {"kind": "letter", "id": _new_id(person), "person": person, "rev": 0, "step": "letter"}
+    words, signature = words or trial.get("words", ""), signature or trial.get("signature", "")
+    trial.update(words=words, signature=signature)
+    if not words:
+        return _reply("What do you want to say?", saved=False)
+    if not signature:
+        _keep(ctx, trial)
+        return _reply("How do you want to sign it?", saved=False, words_kept=True, need="signature")
+    save_letter(ctx, trial)
+    trial["rev"] += 1
+    _file_away(ctx, trial)
+    _keep(ctx, trial)
+    ctx.effect("show_screen")
+    _show(ctx, trial)
+    return _reply("Here's what I've got.", saved=True, read_back=_reading(trial))
+
+
+def _month_number(month):
+    text = clean(str(month)).strip().lower()
+    if text.isdigit():
+        return int(text) if 1 <= int(text) <= 12 else None
+    found = [number for number, name in enumerate(MONTHS, 1) if len(text) >= 3 and name.startswith(text)]
+    return found[0] if len(found) == 1 else None
+
+
+def _next_date(month, day):
+    today = _today()
+    for year in range(today.year, today.year + 9):  # far enough for the next 29 February
+        try:
+            date = datetime.date(year, month, day)
+        except ValueError:
+            continue
+        if date >= today:
+            return date
+    return None
+
+
+@_locked
+def show_keepsake(ctx, name, month, day, age_line="", memory_line="", who=""):
+    name = _said(name, NAME_MAX)
+    number = _month_number(month)
+    date = _next_date(number, day) if number else None
+    if date is None:
+        return _reply("I don't have that date right.", shown=False)
+    if who not in ("mary", "sam"):
+        who = "sam" if ctx.settings_get("companion") == "him" else "mary"
+    file = "keepsake-%s-%02d%02d.svg" % (_slug(name, 30) or "date", date.month, date.day)
+    weekday = date.strftime("%A")
+    ctx.files.write_text(file, draw_keepsake(ctx, who, name, weekday, date.day, date.strftime("%B"),
+                                             _said(age_line, AGE_MAX), _said(memory_line, MEMORY_MAX)))
+    ctx.state["keepsake"] = {"file": file, "name": name, "when": _when(date)}
+    ctx.effect("show_screen")
+    ctx.effect("keepsake", {"file": file})
+    return _reply("It's up.", shown=True, weekday=weekday, date=_when(date))
+
+
+@_locked
+def open_saved(ctx, person=""):
+    wanted = _said(person, NAME_MAX).lower()
+    index = ctx.store.get("index", [])
+    for entry in reversed(index):
+        held = entry["person"].lower()
+        if wanted and not (held and (wanted in held or held in wanted)):
+            continue
+        record = ctx.store.get("saved-" + entry["id"])
+        if record:
+            _keep(ctx, record)
+            ctx.effect("show_screen")
+            _show(ctx, record)
+            return _reply("Here it is.", found=True, kind=record["kind"], person=record.get("person", ""),
+                          read_back=_reading(record))
+    return _reply("I don't have one saved for %s." % _said(person, NAME_MAX) if wanted else "There's nothing saved yet.",
+                  found=False)
+
+
+@_locked
+def close(ctx):
+    """Puts the card away. It stays saved."""
+    ctx.effect("leave_screen")
+    return _reply("All put away. It stays saved.")
+
+
+def _picture(ctx, event):
+    """One piece of a jpeg of the saved card, for sending later. Anything out of step is dropped; the svg stays."""
+    draft, part, seq = _draft(ctx), event.get("part"), event.get("seq")
+    key = [event.get("id"), part, event.get("rev")]
+    if not _is_card(draft) or part not in PICTURE_PARTS or key[0] != draft["id"] or key[2] != draft.get("rev"):
+        return {"ignored": True, "stale": True}
+    if seq == 0:
+        ctx.state["picture"] = {"key": key, "next": 0, "data": bytearray()}
+    job = ctx.state.get("picture")
+    if not job or job["key"] != key or job["next"] != seq:
+        return {"ignored": True, "stale": True}
+    try:
+        job["data"] += base64.b64decode(event.get("data"), validate=True)
+    except (TypeError, ValueError):
+        ctx.state.pop("picture", None)
+        return {"ignored": True, "stale": True}
+    job["next"] += 1
+    if len(job["data"]) > PICTURE_MAX:
+        ctx.state.pop("picture", None)
+        return {"ignored": True, "stale": True}
+    if not event.get("last"):
+        return {"ok": True}
+    ctx.state.pop("picture", None)
+    if not job["data"].startswith(JPEG_MAGIC):
+        return {"ignored": True, "stale": True}
+    ctx.files.write_bytes("card-%s-%s.jpg" % (draft["id"], part), bytes(job["data"]))
+    return {"ok": True, "saved": True}
+
+
+@_locked
+def on_event(ctx, event):
+    kind = event.get("type")
+    if kind == "open":  # from the menu, or after a restart
+        keepsake, draft = ctx.state.get("keepsake"), _draft(ctx)
+        if keepsake:
+            ctx.effect("keepsake", {"file": keepsake["file"]})
+        elif draft:
+            _show(ctx, draft)
+        else:
+            show_fronts(ctx)
+        return {"ok": True}
+    if kind == "pick":
+        draft = _draft(ctx)
+        if _is_card(draft) and event.get("key") in draft.get("shown", []):
+            return pick_front(ctx, event["key"])  # its say comes back, so a tap gets her line as a spoken pick does
+        return {"ignored": True}
+    if kind == "picture":
+        return _picture(ctx, event)
+    if kind == "print_failed":
+        ctx.state["print_failed"] = True
+        return _reply("The print didn't work.")
+    return {"ignored": True}
+
+
+def view(state):
+    """What Mary sees: the step, the person and the words so far, so she never has to describe the screen."""
+    failed = "The print didn't work. " if state.get("print_failed") else ""
+    keepsake = state.get("keepsake")
+    if keepsake:
+        return (failed + "A keepsake page for %s, %s." % (keepsake["name"], keepsake["when"]))[:590]
+    draft = state.get("draft")
+    if not draft:
+        return failed + "No card up."
+    person = draft.get("person") or "someone not named yet"
+    words = (draft.get("words") or "")[:300]
+    if draft.get("kind") == "letter":
+        text = "A plain message to %s. Words so far: %s" % (person, words or "none")
+    elif draft.get("step") == "fronts":
+        text = "Fronts up for %s, not picked yet." % person
+    elif draft.get("step") == "closed":
+        text = "The %s card for %s is up, no words yet. Ask what they want to say." % (draft.get("front"), person)
+    else:
+        text = "The %s card for %s is open, in %s. Words so far: %s" % (draft.get("front"), person, draft.get("hand"), words)
+    return (failed + text)[:590]

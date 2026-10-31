@@ -1,0 +1,82 @@
+/* Cards and messages, side by side with Mary (aside:true; the shared rules are .skill-screen.aside in web/mary/mary.css).
+   The box is the right 60%. The boards are mockups/mary/round8 (r8.css), content x 512-1252 of 1280, which is 0-740 of
+   this 768 wide box. --u is one board pixel: below the Menu row (148px is kept clear) there are 652 of them, so at
+   1280x800 every number here is the board's own, and it scales from there.
+   Rules for residents 65-95: text 20px or more, the tiles far past 64px, nothing else to tap. */
+.skill-screen[data-skill="messages"]{overflow:hidden!important}
+.skill-screen[data-skill="messages"] > .btn{display:none}   /* by voice: no Back */
+.skill-screen[data-skill="messages"] .skill-body{position:absolute;inset:0;container-type:size}
+.skill-screen[data-skill="messages"] .mc{--u:min(calc(100cqw/768),calc((100cqh - 148px)/652));--top:148px;position:absolute;inset:0}
+.skill-screen[data-skill="messages"] .mc img{display:block;width:100%;height:100%;user-select:none;-webkit-user-select:none}
+
+/* (b) the fronts */
+.skill-screen[data-skill="messages"] .mc-grid{position:absolute;left:0;top:calc(var(--top) + 6*var(--u));width:calc(740*var(--u));
+  height:calc(600*var(--u));display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:calc(40*var(--u)) calc(20*var(--u))}
+.skill-screen[data-skill="messages"] .mc-grid.few{top:calc(var(--top) + 166*var(--u));height:calc(280*var(--u));grid-template-rows:1fr}
+.skill-screen[data-skill="messages"] .mc-tile{display:flex;align-items:center;gap:calc(18*var(--u));min-width:0;min-height:64px;
+  margin:0;padding:0;border:0;background:none;color:#5e1a2e;text-align:left;font:inherit;cursor:pointer;touch-action:manipulation}
+.skill-screen[data-skill="messages"] .mc-thumb{position:relative;flex:none;display:block;width:calc(200*var(--u));height:calc(280*var(--u));
+  box-shadow:0 1px 2px rgba(60,38,18,.4),2px 6px 12px rgba(60,38,18,.28),6px 16px 30px rgba(60,38,18,.24)}
+.skill-screen[data-skill="messages"] .mc-label{display:flex;flex-direction:column;min-width:0}
+.skill-screen[data-skill="messages"] .mc-big{font:500 max(40px,calc(96*var(--u)))/1 "EB Garamond",Garamond,"Times New Roman",serif;
+  font-variant-numeric:lining-nums}
+.skill-screen[data-skill="messages"] .mc-name{font:700 max(20px,calc(28*var(--u)))/1.2 "EB Garamond",Garamond,"Times New Roman",serif;color:#2c1c18}
+
+/* (c) the closed card, thick stock at the edge */
+.skill-screen[data-skill="messages"] .mc-closed{position:absolute;left:calc(151*var(--u));top:var(--top);width:calc(437*var(--u));height:calc(612*var(--u));
+  box-shadow:1px 1px 2px rgba(60,38,18,.4),4px 8px 14px rgba(60,38,18,.3),12px 24px 48px rgba(60,38,18,.32)}
+.skill-screen[data-skill="messages"] .mc-stock{position:absolute;right:calc(-7*var(--u));top:2px;bottom:1px;width:calc(7*var(--u));border-radius:0 2px 2px 0;
+  background:linear-gradient(90deg,#b8ab90 0,#f3ebd9 26%,#cbbea3 48%,#fbf4e6 62%,#d3c7ad 100%);box-shadow:1px 1px 3px rgba(60,38,18,.4)}
+
+/* (c3, c2, c4) the card, shut until it's told to open. The opening runs once and stays open. Transform and opacity only. */
+.skill-screen[data-skill="messages"] .mc-stage{--page-w:calc(370*var(--u));--page-h:calc(518*var(--u));position:absolute;left:0;top:calc(var(--top) + 47*var(--u));
+  width:calc(740*var(--u));height:var(--page-h);perspective:calc(2600*var(--u));perspective-origin:50% 50%}
+.skill-screen[data-skill="messages"] .mc-slide{position:absolute;left:var(--page-w);top:0;width:var(--page-w);height:var(--page-h);transform-style:preserve-3d;
+  transform:translateX(calc(-185*var(--u)))}
+.skill-screen[data-skill="messages"] .mc-sh-open{position:absolute;left:calc(-1*var(--page-w));top:0;width:calc(740*var(--u));height:var(--page-h);
+  box-shadow:0 2px 3px rgba(60,38,18,.34),4px 10px 20px rgba(60,38,18,.26),10px 24px 48px rgba(60,38,18,.28);
+  transform-origin:100% 50%;opacity:0;transform:scaleX(.5)}
+.skill-screen[data-skill="messages"] .mc-sh-closed{position:absolute;left:0;top:0;width:var(--page-w);height:var(--page-h);
+  box-shadow:1px 1px 2px rgba(60,38,18,.4),4px 8px 14px rgba(60,38,18,.3),12px 22px 44px rgba(60,38,18,.3)}
+.skill-screen[data-skill="messages"] .mc-page{position:absolute;left:0;top:0;width:var(--page-w);height:var(--page-h);overflow:hidden}
+.skill-screen[data-skill="messages"] .mc-shade{position:absolute;left:0;top:0;width:100%;height:100%}
+.skill-screen[data-skill="messages"] .mc-page.l .mc-shade{background:linear-gradient(90deg,rgba(90,66,40,0) 60%,rgba(90,66,40,.07) 84%,rgba(56,36,20,.24) 100%)}
+.skill-screen[data-skill="messages"] .mc-page.r .mc-shade{background:linear-gradient(270deg,rgba(90,66,40,0) 74%,rgba(90,66,40,.06) 91%,rgba(56,36,20,.22) 100%)}
+.skill-screen[data-skill="messages"] .mc-fold{position:absolute;left:0;top:0;width:2px;height:100%;background:linear-gradient(90deg,rgba(56,36,20,.42),rgba(255,250,235,.5))}
+.skill-screen[data-skill="messages"] .mc-fall{position:absolute;left:0;top:0;width:var(--page-w);height:var(--page-h);
+  background:linear-gradient(90deg,rgba(40,26,14,.62),rgba(40,26,14,.16));opacity:.9}
+.skill-screen[data-skill="messages"] .mc-cover{position:absolute;left:0;top:0;width:var(--page-w);height:var(--page-h);transform-style:preserve-3d;
+  transform-origin:0 50%;transform:translateZ(1px) rotateY(0deg)}
+.skill-screen[data-skill="messages"] .mc-face{position:absolute;left:0;top:0;width:var(--page-w);height:var(--page-h);overflow:hidden;
+  -webkit-backface-visibility:hidden;backface-visibility:hidden}
+.skill-screen[data-skill="messages"] .mc-face.back{transform:rotateY(180deg)}
+.skill-screen[data-skill="messages"] .mc-dim{position:absolute;left:0;top:0;width:100%;height:100%;background:#1c120c;opacity:0}
+.skill-screen[data-skill="messages"] .mc-face.back .mc-dim{opacity:.5}
+
+.skill-screen[data-skill="messages"] .mc-opening .mc-slide{animation:mc-slide 2.4s .6s cubic-bezier(.45,.05,.55,.95) both}
+.skill-screen[data-skill="messages"] .mc-opening .mc-cover{animation:mc-swing 2.4s .6s cubic-bezier(.45,.05,.55,.95) both}
+.skill-screen[data-skill="messages"] .mc-opening .mc-sh-open{animation:mc-open-shadow 2.4s .6s linear both}
+.skill-screen[data-skill="messages"] .mc-opening .mc-sh-closed{animation:mc-closed-shadow 2.4s .6s linear both}
+.skill-screen[data-skill="messages"] .mc-opening .mc-fall{animation:mc-fall 2.4s .6s linear both}
+.skill-screen[data-skill="messages"] .mc-opening .mc-face.front .mc-dim{animation:mc-dim-front 2.4s .6s linear both}
+.skill-screen[data-skill="messages"] .mc-opening .mc-face.back .mc-dim{animation:mc-dim-back 2.4s .6s linear both}
+@keyframes mc-slide{from{transform:translateX(calc(-185*var(--u)))}to{transform:translateX(0)}}
+@keyframes mc-swing{from{transform:translateZ(1px) rotateY(0deg)}to{transform:translateZ(1px) rotateY(-180deg)}}
+@keyframes mc-closed-shadow{0%{opacity:1}66.7%,100%{opacity:0}}
+@keyframes mc-open-shadow{0%,16.7%{opacity:0;transform:scaleX(.5)}100%{opacity:1;transform:scaleX(1)}}
+@keyframes mc-fall{0%{opacity:.9}100%{opacity:0}}
+@keyframes mc-dim-front{0%{opacity:0}50%{opacity:.5}52%,100%{opacity:0}}
+@keyframes mc-dim-back{0%,48%{opacity:.5}100%{opacity:0}}
+
+/* open and staying open: also how it shows for prefers-reduced-motion, which screen.js sends straight here */
+.skill-screen[data-skill="messages"] .mc-open .mc-slide{transform:none}
+.skill-screen[data-skill="messages"] .mc-open .mc-cover{transform:translateZ(1px) rotateY(-180deg)}
+.skill-screen[data-skill="messages"] .mc-open .mc-sh-open{opacity:1;transform:none}
+.skill-screen[data-skill="messages"] .mc-open .mc-sh-closed,
+.skill-screen[data-skill="messages"] .mc-open .mc-fall,
+.skill-screen[data-skill="messages"] .mc-open .mc-face .mc-dim,
+.skill-screen[data-skill="messages"] .mc-open .mc-face.back .mc-dim{opacity:0}
+
+/* (g, a) the plain message and the keepsake, one saved picture at board size */
+.skill-screen[data-skill="messages"] .mc img.mc-sheet{position:absolute;left:0;top:var(--top);width:calc(740*var(--u));height:calc(628*var(--u));object-fit:contain;
+  object-position:50% 0;filter:drop-shadow(2px 8px 16px rgba(60,38,18,.3))}

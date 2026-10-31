@@ -1,17 +1,18 @@
 {
   "state": "North Carolina",
   "abbr": "NC",
-  "verified_on": "2026-10-24",
+  "verified_on": "2026-10-30",
   "survey_agency": {
     "name": "NC Division of Health Service Regulation (DHSR) - Complaint Intake Unit",
     "complaint_phone": "1-800-624-3004",
     "online_form_url": "https://info.ncdhhs.gov/dhsr/ciu/filecomplaint.html",
     "email": null,
+    "email_unconfirmed": "DHSR.ComplaintIntake@dhhs.nc.gov",
     "fax": "919-715-7724",
     "mail_address": "Complaint Intake Unit, 2711 Mail Service Center, Raleigh, NC 27699-2711",
     "hours": "9:00 a.m. - 12:00 p.m. and 1:00 p.m. - 4:00 p.m. weekdays, except holidays.",
-    "accepts_email_complaints": false,
-    "notes": "1-800-624-3004 is the toll-free line for callers within N.C.; the other listed number (local callers and callers outside N.C.) is 919-855-4500. The Complaint Intake Unit takes complaints about nursing homes and other licensed facilities. The online_form_url is the official 'File A Complaint' page: it offers a printable complaint form (English and Spanish; English PDF https://info.ncdhhs.gov/dhsr/ciu/pdf/complaint_form2.pdf) to mail or fax, and it does NOT have a live online submission form. The page lists an 'email' option but shows no email address, so none is given here and accepts_email_complaints is false. The page says complainant identifying information is not shared with the facility, and that the Division can only investigate incidents from the past year. Under NCGS 131E-124(a1) the Department must start investigating a nursing home patient-care or patient-safety complaint immediately if it alleges a life-threatening situation, within 24 hours if it alleges abuse, within 48 hours if it alleges neglect, and within two weeks in all other cases, and must finish within 30 days. For an emergency, call 911."
+    "accepts_email_complaints": null,
+    "notes": "1-800-624-3004 is the toll-free line for callers within N.C.; the other listed number (local callers and callers outside N.C.) is 919-855-4500. The Complaint Intake Unit takes complaints about nursing homes and other licensed facilities. The online_form_url is the official 'File A Complaint' page: it offers a printable complaint form (English and Spanish; English PDF https://info.ncdhhs.gov/dhsr/ciu/pdf/complaint_form2.pdf) to mail or fax, and it does NOT have a live online submission form. The official pages have a 'Send an email' link to DHSR.ComplaintIntake@dhhs.nc.gov (the address is revealed only when the link is used). They don't say whether complaints are accepted by email, so it's held in email_unconfirmed until DHSR confirms (decision D1 in docs/speakup-plan.md). The page says complainant identifying information is not shared with the facility, and that the Division can only investigate incidents from the past year. Under NCGS 131E-124(a1) the Department must start investigating a nursing home patient-care or patient-safety complaint immediately if it alleges a life-threatening situation, within 24 hours if it alleges abuse, within 48 hours if it alleges neglect, and within two weeks in all other cases, and must finish within 30 days. For an emergency, call 911."
   },
   "ombudsman": {
     "name": "North Carolina Long-Term Care Ombudsman Program (Office of the State Long-Term Care Ombudsman, NC Division of Aging, NCDHHS)",
@@ -19,7 +20,7 @@
     "email": null,
     "website": "https://www.ncdhhs.gov/divisions/aging/long-term-care-ombudsman",
     "find_local_url": "https://www.ncdhhs.gov/ombudsman-county-3/open",
-    "notes": "State office mail address: Office of the State Long Term Care Ombudsman, 2101 Mail Service Center, Raleigh, NC 27699-2101. The phone number comes from the state ombudsman contact roster that the program page links to (the program page itself lists no phone number). Regional ombudsmen work out of the regional Area Agencies on Aging / councils of government; find yours by county in the county list at find_local_url (a Word file: county, provider type, ombudsman name, phone, email), which is the file the program page labels 'Find information for your county'. A second roster, 'Ombudsman Listed by Area Agency on Aging', is at https://www.ncdhhs.gov/ombudsman-listed-area-agency-aging-8/open. Those file links are numbered and may change; if one breaks, go to the program page in 'website' and use its county links. No general ombudsman email address was found, only emails for individual staff, so email is null. The NCDHHS Customer Service Center (1-800-662-7030) is a general number, not the ombudsman line."
+    "notes": "State office mail address: Office of the State Long Term Care Ombudsman, 2101 Mail Service Center, Raleigh, NC 27699-2101. The phone number comes from the state ombudsman contact roster that the program page links to (the program page itself lists no phone number). Regional ombudsmen work out of the regional Area Agencies on Aging / councils of government; find yours by county in the county list at find_local_url (a Word file: county, provider type, ombudsman name, phone, email), which is the file the program page labels 'Find information for your county'. A second roster, 'Ombudsman Listed by Area Agency on Aging', is at https://www.ncdhhs.gov/ombudsman-listed-area-agency-aging-8/open. Those file links are numbered and may change; if one breaks, go to the program page in 'website' and use its county links. No general ombudsman email address was found, only emails for individual staff, so email is null. The NCDHHS Customer Service Center (1-800-662-7030) is a general number, not the ombudsman line. Checked against the May 2026 roster on 2026-10-30."
   },
   "other": [
     {
@@ -33,6 +34,12 @@
       "phone": "911",
       "url": null,
       "when_to_use": "If someone is in immediate danger, a crime is happening or just happened (for example, a resident is being hit or threatened), or there is a medical emergency."
+    },
+    {
+      "name": "Disability Rights North Carolina",
+      "phone": "1-877-235-4210",
+      "url": "https://disabilityrightsnc.org/contact-us/",
+      "when_to_use": "The federally designated protection and advocacy organization for North Carolina, for residents with disabilities. Toll-free within N.C.; local 919-856-2195."
     },
     {
       "name": "NCDHHS Customer Service Center",
@@ -59,6 +66,10 @@
       "plain_words": "CMS tells inspectors that a nursing home must not hamper, treat differently, or retaliate against a resident for using their rights, and it lists keeping a resident out of group activities as punishment as an example of a violation."
     },
     {
+      "cite": "42 CFR 483.10(g)(6)-(9) - F-tag F576",
+      "plain_words": "A nursing home resident has the right to reasonable access to a telephone and a place to make calls without being overheard, to keep and use a cell phone at their own expense, to reasonable access to the internet to the extent available to the facility, and to send and receive mail privately."
+    },
+    {
       "cite": "42 CFR 483.12 (freedom from abuse, neglect and exploitation) - CMS State Operations Manual, Appendix PP, guidance for F600",
       "plain_words": "CMS tells inspectors that retaliation by staff is abuse, whether or not the staff member meant to cause harm, and that it must be cited."
     },
@@ -67,15 +78,15 @@
       "plain_words": "The nursing home must prohibit and prevent retaliation against employees who report a reasonable suspicion of a crime against a resident (this protects staff who report, as defined in section 1150B(d)(1) and (2) of the Social Security Act)."
     },
     {
-      "cite": "42 CFR 483.15(c)(1)(i) - F-tag F622 (Transfer and discharge requirements)",
+      "cite": "42 CFR 483.15(c)(1)(i) - F-tag F627 (Inappropriate Transfer and Discharge)",
       "plain_words": "A nursing home may transfer or discharge a resident only for the six reasons listed in this rule (needs cannot be met, health improved, safety of others, health of others, nonpayment, or the facility closes), and complaining about care is not one of them."
     },
     {
-      "cite": "42 CFR 483.15(c)(1)(ii) - F-tag F622",
+      "cite": "42 CFR 483.15(c)(1)(ii) - F-tag F627",
       "plain_words": "If a resident appeals a discharge or transfer notice, the nursing home generally cannot discharge or transfer the resident while the appeal is pending, unless not doing so would endanger the health or safety of the resident or others and the facility documents that danger."
     },
     {
-      "cite": "42 CFR 483.15(c)(3)-(5) - F-tag F623 (Notice before transfer or discharge)",
+      "cite": "42 CFR 483.15(c)(3)-(5) - F-tag F628 (Notice before transfer or discharge)",
       "plain_words": "Before a transfer or discharge the nursing home must give a written notice, generally at least 30 days ahead, that states the reason and date, explains appeal rights, and includes the name, address and phone number of the Office of the State Long-Term Care Ombudsman."
     },
     {
@@ -92,7 +103,7 @@
     },
     {
       "cite": "NCGS 131E-124(c)",
-      "plain_words": "The North Carolina Department of Health and Human Services must keep confidential the identity of every person who registers a complaint with it."
+      "plain_words": "The North Carolina Department of Health and Human Services must keep confidential the identity of every person who registers a complaint with it. A complainant can get information about an investigation involving a specific resident only with written authorization from the resident, their legal representative or their responsible party."
     }
   ],
   "sources": [
@@ -106,8 +117,10 @@
     "https://www.ecfr.gov/current/title-42/section-483.10",
     "https://www.ecfr.gov/current/title-42/section-483.12",
     "https://www.ecfr.gov/current/title-42/section-483.15",
-    "https://www.cms.gov/medicare/provider-enrollment-and-certification/guidanceforlawsandregulations/downloads/appendix-pp-state-operations-manual.pdf",
+    "https://www.cms.gov/Regulations-and-Guidance/Guidance/Manuals/downloads/som107ap_pp_guidelines_ltcf.pdf",
     "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_131E/GS_131E-117.html",
-    "https://www.ncleg.gov/EnactedLegislation/Statutes/PDF/ByChapter/Chapter_131E.pdf"
+    "https://www.ncleg.gov/EnactedLegislation/Statutes/PDF/ByChapter/Chapter_131E.pdf",
+    "https://disabilityrightsnc.org/contact-us/",
+    "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_131E/GS_131E-124.html"
   ]
 }

@@ -752,7 +752,7 @@
     function utter(voice, isRetry) {
       if (settled || Sp.sess !== s) { return; }
       var u;
-      try { u = new window.SpeechSynthesisUtterance(text); } catch (e) { captionOnly(); return; }
+      try { u = new window.SpeechSynthesisUtterance(spokenNumbers(text)); } catch (e) { captionOnly(); return; }
       if (voice) { u.voice = voice; u.lang = voice.lang || 'en-US'; } else { u.lang = 'en-US'; }
       u.rate = S.rate;
       u.pitch = S.companion === 'him' ? 0.95 : 1.05;
@@ -1061,6 +1061,11 @@
   }
   function liveSpeaking() {
     try { return !!(window.MaryLive && window.MaryLive.isSpeaking()); } catch (e) { return false; }
+  }
+  // M4a: the crisis numbers digit by digit for her voice; mary.py has the same list. Captions keep the digits.
+  function spokenNumbers(text) {
+    return String(text).replace(/\b988\b/g, 'nine, eight, eight').replace(/\b911\b/g, 'nine one one')
+      .replace(/\b838[- ]?255\b/g, 'eight three eight, two five five');
   }
   function greetLive(text) {
     try { return !!window.MaryLive.greet(text); } catch (e) { log(e); return false; }
@@ -1523,7 +1528,7 @@
     capLiveEmergency(words);   // M4b: all of it at once (whole), before her voice
     c.saidText = '';                        // M4a: /api/mary/heard saved the emergency words; not saved twice
     c.saidSkip = true;
-    if (!greetLive(LIVE_SAFETY + words + ')')) { c.saidSkip = false; say(words, 'alert'); }
+    if (!greetLive(LIVE_SAFETY + spokenNumbers(words) + ')')) { c.saidSkip = false; say(words, 'alert'); }
   }
 
   // --- M4a: in Live, Live speaks everything. A story comes from the server whole; the page hands it to her in parts,

@@ -122,7 +122,7 @@ Printing at the facility shows staff the complaint, so Mary says that first.
 RETALIATION_REGS = [
     {"tag": "F550", "title": "Resident Rights/Exercise of Rights", "cite": "§483.10(a)(1)-(2),(b)(1)-(2)"},
     {"tag": "F585", "title": "Grievances", "cite": "§483.10(j)(1)-(4)"},
-    {"tag": "F600", "title": "Free from Abuse and Neglect", "cite": "§483.12,§483.12(a)(1)"},  # see D2
+    {"tag": "F600", "title": "Free from Abuse and Neglect", "cite": "§483.12, §483.12(a)(1)"},  # see D2
 ]
 ```
 

@@ -517,7 +517,7 @@ def facts_for(case=None):
 
 def live_system_text(memory, companion):
     """Live's system text, built the way voices.live_token does for her own screen."""
-    system = mary.system_text(memory, companion, facts=True)
+    system = mary.system_text(memory, companion, facts=True, tags=False)  # as voices.live_token sends it
     turns = [t for t in memory.recent[-8:] if str(t.get("text") or "").strip()]
     if turns:
         system += "\n\nYour last talk together (most recent last):\n" + "\n".join(
@@ -526,7 +526,7 @@ def live_system_text(memory, companion):
 
 
 def story_system_text(memory, companion):
-    return mary.system_text(memory, companion) + "\n\n" + mary.STORY_PROMPT
+    return mary.system_text(memory, companion, tags=False) + "\n\n" + mary.STORY_PROMPT
 
 
 def raw_system_text(memory, companion, raw_prompt):

@@ -312,8 +312,9 @@ class TokenTests(VoicesCase):
         self.assertIn("Mary", system)
         self.assertIn("Name: Ruth", system)
         self.assertNotIn("likes tea", system)  # no facts list in a live chat
-        self.assertIn("square brackets", system)  # her tag instructions stay, so the live note switches them off
-        self.assertIn("don't use them here", system)
+        self.assertIn("square brackets", system)
+        self.assertNotIn("[mood", system)  # M4a: no tag rules at all, so nothing for Live to say out loud
+        self.assertNotIn("don't use them here", system)
         self.assertIn("menu of options", system)  # M4a: no more one-to-three-sentence cap
 
     def test_token_tries_v1alpha_when_v1beta_does_not_know_the_fields(self):

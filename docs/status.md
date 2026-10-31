@@ -2,14 +2,21 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-30, about 20:45)
-- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through c89cbcc is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
-- **Second-account workers now** (Andy: use her usage before her weekly reset, Oct 31 5pm):
-  - **M9c truly forget** (`other/M9c`, tab "M9c memory core her acct", peer `m9c-00`): "forget" becomes a real delete, with no copies left in the database, the backups, memory.json or the history.
-  - **M7a word search** (`other/M7a`, tab "M7a word search her acct", brief `docs/handoff/M7a.md`): boards in `mockups/mary/round7/` first, for Andy's canvas, then the skill itself. Merge only after Andy approves the boards.
-  - **Speak-up review** (`other/speakup`, tab "Speak-up review her acct", brief `docs/handoff/speakup.md`): a review of `wip/report-to-state` plus `docs/speakup-plan.md`, with verified citations and decisions for Andy. Doc only.
-  - Idle, waiting for Andy's next findings: M4a (`m4a-70`) and M4b (`m4b-32`).
-- **Brain bench, first real run:** started 20:45 by the hub. 88 runs, about 178 requests to gemini-3.5-flash-lite. The results go in `bench/results/` for the hub to commit.
+## Right now (2026-10-30, about 21:05)
+- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through fd31fe2 is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
+- **Her account hit its 5-hour limit at 21:02,** and its workers resume by themselves at 23:50. Her weekly limit resets Oct 31 at 5pm, and Andy wants her usage used before then.
+  - **M9c truly forget** (`other/M9c`, tab "M9c memory core her acct", peer `m9c-00`): 7 files not committed yet, safe on disk.
+  - **M7a word search** (`other/M7a`, tab "M7a word search her acct", peer `m7a-ec`): boards done (`mockups/mary/round7/`), the generator and skill tools committed, the screen in progress. Merge only after Andy approves the boards.
+  - **M9d2 bench fixes** (`other/M9d`, tab "M9d2 bench fixes her acct", peer `m9d-4b`): the fixes committed, tests in progress. Then the hub does a second real bench run.
+  - **Idle, waiting for Andy:** M4a (`m4a-70`), M4b (`m4b-32`), and speak-up (`speakup-d4`, waiting on decisions D1-D10 in `docs/speakup-plan.md`).
+- **Merged today since 20:30:**
+  - the speak-up review and plan, plus S0 (legal facts fixed against Appendix PP Rev. 232);
+  - M4a's fixes from the bench (no tags in Live, every bracket stripped in Normal, crisis numbers digit by digit, harm before the write-down offer, grown-up stories with no human past);
+  - bench run 1 (`bench/results/2026-10-30_2051.*`, 16/88, a mix of real problems and bench flaws).
+- **Questions for Andy:**
+  - Should Mary name autonomic dysreflexia to the resident? The safety section names it on purpose; the bench judge called it diagnosing.
+  - Speak-up decisions D1-D10.
+  - "Pal" was added to Sam's pet names that wait until asked; keep it?
 - **Merged, waiting on a check:**
   - **M9c memory core** (merged 2026-10-30, 707 tests):
     - Memories are dated entries in the app's database, pulled with a `recall` tool; about 120 words are always sent.
@@ -41,8 +48,8 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 ### Status (from 2026-10-24)
 - Pushed to GitHub: v0.2.0. That's talk-to-log, design C, Talk buttons on detail boxes, formal reports, optional Gemini, and the installer build.
 - Verified research, not yet committed:
-  - `contacts/NC.json`: DHSR complaint line 1-800-624-3004 (no email or online form, printable forms only); state ombudsman (919) 855-3400 (re-check the roster date).
-  - `docs/retaliation.md`: F585, F550, F600, F622/F623, NCGS 131E-117(12), 131E-124(c).
+  - `contacts/NC.json`: DHSR complaint line 1-800-624-3004 (no email or online form, printable forms only); state ombudsman (919) 855-3400 (re-check the roster date). Corrected 2026-10-30: DHSR's pages do list an email, unconfirmed for complaints (see `docs/speakup-review.md`).
+  - `docs/retaliation.md`: F585, F550, F600, F622/F623, NCGS 131E-117(12), 131E-124(c). Corrected 2026-10-30: F622/F623 are now F627/F628.
 - Parked on branch `wip/report-to-state` (commit fddfdbc). It's unreviewed and untested, because helpers were stopped mid-work:
   - Report-to-state backend in `server.py` and `reports.py`: urgency levels via `/api/status`; the send wizard (grievance letter, completeness check, attestation, email/letter/phone from the contacts JSON); the submissions table; the retaliation flag and pattern detection; and quick notes (`/api/quick`). The `web/` screens for `#send` and `#rights` were never started.
   - The floating mic button in `desktop.py` + `web/float.html`, and the installer's "start with Windows" option.

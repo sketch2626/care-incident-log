@@ -489,6 +489,7 @@
 
   MarySkills.register(NAME, {
     aside: true,
+    setAside: true,   // M13b: a picture hides this page as it is, and it comes back where they left off
     enter: function (el) {
       root = el;
       visit++;

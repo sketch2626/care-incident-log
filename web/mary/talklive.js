@@ -665,7 +665,9 @@
       method: 'POST',
       headers: HEADERS,
       // M4a: plain = no language hint on what Live hears, after a start that failed with it
-      body: JSON.stringify(s.opts.plain ? {screen: s.opts.screen || null, plain: true} : {screen: s.opts.screen || null})
+      // M13b: aside goes along when there is one
+      body: JSON.stringify(Object.assign(s.opts.plain ? {screen: s.opts.screen || null, plain: true} : {screen: s.opts.screen || null},
+        s.opts.aside ? {aside: s.opts.aside} : {}))
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (j) {
         return {ok: res.ok, status: res.status, j: j || {}};

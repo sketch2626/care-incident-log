@@ -845,6 +845,10 @@
   function registerScreen(name, handlers) { screens[name] = handlers || {}; }
 
   function show(name, opts) {
+    // M13b: every way back comes through here, so a game set aside comes back instead of her plain face
+    try {
+      if (name === 'everyday' && window.MarySkills && window.MarySkills.comingBack && window.MarySkills.comingBack()) { name = window.MarySkills.comingBack(); }
+    } catch (e) { log(e); }
     var prev = S.screen;
     if (prev && prev !== name && screens[prev] && screens[prev].leave) {
       try { screens[prev].leave(name); } catch (e) { log(e); }
@@ -1345,6 +1349,7 @@
     try {
       p = window.MaryLive.start({
         screen: skillScreen(),
+        aside: asideSkill(),   // M13b
         plain: !!c.plain,   // M4a: no language hint, after a start that failed with it
         onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(t); } },
         // M4a: liveHeardPiece: the story's cut-in, the early goodbye, and garbled lines (true = don't show it)
@@ -1948,10 +1953,16 @@
     return null;
   }
 
+  // M13b: the skill set aside that comes back when this screen closes, if any
+  function asideSkill() {
+    try { return (window.MarySkills && window.MarySkills.comingBack && window.MarySkills.comingBack()) || undefined; } catch (e) { return undefined; }
+  }
+
   // M9c: typed marks words typed in the box in Normal/Offline, so the server can tell them from speech
   function talkBody(text, typed) {
     var b = { text: text, screen: skillScreen() };   // skills hook (M13)
     if (typed) { b.typed = true; }
+    if (asideSkill()) { b.aside = asideSkill(); }   // M13b
     return b;
   }
 

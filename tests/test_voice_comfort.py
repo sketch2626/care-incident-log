@@ -117,9 +117,12 @@ class VoiceComfortTest(unittest.TestCase):
         self.assertIn("vosk==", (ROOT / "packaging" / "requirements.txt").read_text())
 
     def test_gemini_tools(self):
-        text = repr(self.host.gemini_tools())
+        names = [d["name"] for d in self.host.gemini_tools()[0]["functionDeclarations"]]  # M13b
+        self.assertEqual(names, ["open_skill", "use_skill", "set_skill"])
+        opened = [a["name"] for a in self.host.call("open_skill", {"name": "voice_comfort"})["response"]["actions"]]
         for name in ("slower", "faster", "quieter", "louder", "switch_companion"):
-            self.assertIn(f"voice_comfort__{name}", text)
+            self.assertIn(name, opened)
+        self.assertEqual(sorted(a["name"] for _, a in self.host._always()), ["faster", "louder", "quieter", "slower"])
 
     def test_constants_match_server(self):
         import importlib.util

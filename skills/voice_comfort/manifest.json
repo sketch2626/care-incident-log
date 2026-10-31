@@ -11,6 +11,7 @@
     {
       "name": "slower",
       "description": "Make Mary's voice a little slower.",
+      "always": true,
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["slow down", "speak slower", "talk slower", "slower please"]
@@ -18,6 +19,7 @@
     {
       "name": "faster",
       "description": "Make Mary's voice a little faster.",
+      "always": true,
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["speed up", "talk faster", "speak faster"]
@@ -25,6 +27,7 @@
     {
       "name": "quieter",
       "description": "Make Mary's voice a little quieter.",
+      "always": true,
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["quieter", "not so loud", "turn it down"]
@@ -32,6 +35,7 @@
     {
       "name": "louder",
       "description": "Make Mary's voice a little louder.",
+      "always": true,
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["louder", "speak up", "turn it up", "i can't hear you"]

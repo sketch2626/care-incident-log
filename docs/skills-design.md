@@ -129,7 +129,7 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 2. `reply()` runs `skills_core.call()` for each one.
 3. The effects are streamed to the page as NDJSON lines `{"effect": {...}}`.
 4. The call goes back to Gemini as a `functionResponse` part in a second request, for her spoken follow-up.
-5. At most 3 tool rounds per turn. **Gemini 3 note:** every `functionCall` part carries a `thoughtSignature` that must be sent back unchanged in the next request's history, or the API refuses it.
+5. At most 4 tool rounds per turn (opening a group costs one, M13b). **Gemini 3 note:** every `functionCall` part carries a `thoughtSignature` that must be sent back unchanged in the next request's history, or the API refuses it.
 
 **Live mode:**
 1. Google sends `toolCall.functionCalls[]` to the page.
@@ -141,6 +141,8 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 1. Before `OFFLINE_TEXT`, `reply()` asks `skills_core.offline_match(text)`, which checks the `offline_phrases` of enabled, `offline: works` skills.
 2. A match runs the action like any other and says the skill's `say` text (handlers return a short `say` line for this; Gemini words it in the other modes). The handler can read the whole line in `ctx.heard` (M7a; empty in the other modes), so "I found barn" can reach an action with no required inputs. A response with `"not_for_me": true` means the phrase wasn't meant for this skill (no puzzle is up), and her normal offline line runs instead.
 3. "Turn <title> on/off" (and "back on", "stop the <title>") is matched offline too, against each skill's `title`, and runs `set_skill`. Then the voice switch works with no internet.
+
+**Tool groups (M13b):** Gemini never sees a skill's own actions as tools. It calls `open_skill` and `use_skill`, which run the same `skills_core.call()`; see section 14.
 
 **The page:** `web/mary/skills.js` gets `GET /api/mary/skills` (enabled skills, menu entries and page script URLs) and loads each `screen.js`, which calls `MarySkills.register(name, {enter, leave, effect(kind, data)})`. It plugs into the existing `registerScreen()`, and adds menu buttons from `screen.menu_label`. Resident moves on a skill screen go to `POST /api/mary/skills/<name>/event`, which runs `skill.py`'s `on_event(ctx, event)` in the guard.
 
@@ -170,7 +172,7 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 1. `manifest.json` parses and has every required field. `name` = folder name, and `contract` is supported.
 2. Every function name is `<skill>__<action>`, at most 64 characters, unique across all skills, and only uses the allowed characters.
 3. Every `inputSchema` uses only the Gemini-safe subset, and every property has a `description`.
-4. The text size limits: `instructions` at most 400 characters and descriptions at most 200. The total instruction text of all shipped skills stays under a budget (4,000 characters) so her prompt doesn't swell.
+4. The text size limits: `instructions` at most 400 characters and descriptions at most 200. The one-line summaries of all shipped skills stay under a budget (4,000 characters) so her prompt doesn't swell (M13b: a skill's how-to reaches her only when its group is open, so the summaries are what's always there).
 5. `skill.py` imports cleanly, with a handler for every action, and `view` when `sees`.
 6. **Static safety:** `skill.py` doesn't import `server`, `sqlite3`, `mary`, `assist`, `subprocess`, `ctypes`, `multiprocessing`, `importlib`, or anything for the network (`urllib`, `http`, `requests`, `httpx`, `aiohttp`, `socket`, `ssl`, `ftplib`, `smtplib`, `websocket(s)`; change A). It doesn't call `open`, `exec`, `eval` or `__import__`. Checked from its source with `ast`; the loader runs the same check.
 7. **A call smoke test:** each action is called with arguments generated from its schema (the minimal valid ones) against a scratch store. The result is JSON-able, under 4 KB, and `view()` returns a string under 600 characters. It must work with no internet: `ctx.fetch` is replaced by one that refuses, and a `needs_internet` skill must fail politely, not crash. Every `internet_hosts` entry is a valid host pattern.
@@ -198,7 +200,7 @@ The loader runs checks 1-5 and 9 at start too, so a broken folder never loads ev
 - `mary.py`:
   - `_body()` adds `tools` and the instruction text.
   - `_gemini_stream()` yields `functionCall` parts.
-  - `reply()` gets the tool loop, at most 3 rounds, and the offline match before `OFFLINE_TEXT`.
+  - `reply()` gets the tool loop, at most 4 rounds (M13b), and the offline match before `OFFLINE_TEXT`.
   - The result gains `effects`.
 - `server.py`:
   - The routes `GET /api/mary/skills`, `POST /api/mary/skills/call`, `POST /api/mary/skills/<name>/event|broken` and `GET /skills/<name>/screen.js|.css`.
@@ -210,7 +212,7 @@ The loader runs checks 1-5 and 9 at start too, so a broken folder never loads ev
 
 ### 12. Risks
 - **Prompt growth:** every skill adds text and tools. That's handled by the size limits in the contract, and only the on-screen skill sends its view.
-- **Too many tools confuse the model:** stay under about 20 functions in v1. Later, send only the on-screen skill's detailed actions, plus one `open_skill(name)` for the rest.
+- **Too many tools confuse the model:** solved in M13b; see section 14.
 - **Gemini 3 `thoughtSignature`:** forgetting to send it back breaks multi-step calls. A mocked test checks it's sent back.
 - **Live session setup is locked in the token:** switching a skill on or off takes effect at the next Live session. That's fine for residents, and it's written in the how-to.
 - **Not a sandbox:** reviewed, in-repo skills only, for now.
@@ -223,3 +225,21 @@ The loader runs checks 1-5 and 9 at start too, so a broken folder never loads ev
 - Mary's real Live session (M4/M5).
 - Moving incident saving (second port, later).
 - Google Search grounding (a core switch, not a skill).
+
+### 14. Tool groups (M13b, Andy 2026-10-31)
+Andy: "let's group her tools, so she only has access to a certain amount of tools for whatever thing you ask her about." Each skill is one group, so a new game brings its own group with no core change.
+
+**One pattern in every mode.** Gemini gets three skill tools, however many skills are installed: `open_skill(name)`, `use_skill(action, details)` and `set_skill`. Live fixes its tools when the talk starts, so it could never swap real declarations; Normal could, but word search (8 actions) or voice comfort (9) plus her own tools would pass the ceiling of about 12 anyway. Before: 20 skill tools (about 26 with her own). Now: 3 skill tools, so 6 in Normal and 11 in Live, with 1 skill or 100.
+- **The menu:** her prompt lists every group in one line, from the card's `summary`.
+- **In hand:** the skill on screen and the one she opened last. Their how-to and actions are in her prompt, so she needn't open them. `SkillHost.opened` is memory only. A skill showing its screen becomes opened; a skill leaving clears it.
+- **Switching:** `open_skill` answers with the how-to and the actions (`name`, `does`, `needs`), and changes nothing on screen. `use_skill` runs one action. An action of a group not in hand answers `not_open` with the group's name, so she opens it and tries again, and she says nothing about any of it. The prompt tells her to do this in the same turn, without asking.
+- **`details` is text,** because Gemini refuses an OBJECT with empty properties. Plain words go to the action's first text field; several values come as a small JSON object.
+- **Always on hand:** an action marked `"always": true` runs through `use_skill` with no opening. At most 4 per card and 6 across all skills. Only voice comfort's slower, faster, quieter and louder use it, because residents need those in the middle of anything. Keep it rare.
+- **`<skill>__<action>`** names still run through `skills_core.call()`: page buttons, offline phrases and `offline_match` need no group.
+- **Safety:** an emergency line gets no tools at all in Normal, and `/api/mary/skills/call` refuses before any tool in Live. Neither depends on groups.
+
+**One thing beside Mary at a time.** A game's `register` call says `setAside: true`. When another skill's screen takes its place, `web/mary/skills.js` hides the game's page without calling its `leave`, and when that screen closes, `show('everyday')` in `app.js` brings the game back without calling `enter`. So the page stays just as it was. Mary doesn't move, because both stand beside her.
+- A skill without `setAside` (pictures) is simply replaced, as before.
+- A game ended or switched off while hidden doesn't come back. An emergency ends whatever is set aside.
+- The page reports `aside` with every talk, Live start and skill call. The server adds the "Set aside for now" line to her prompt, and `came_back` plus a note to the answer of the action that closed the screen, so she may mention it once.
+- The picture's Back button names the game while one waits ("Back to word search").

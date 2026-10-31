@@ -38,12 +38,12 @@ _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 REQUIRED_FIELDS = ("contract", "name", "version", "title", "summary", "instructions", "actions",
                    "storage", "needs", "offline", "default_on")
 OPTIONAL_FIELDS = ("screen", "sees", "settings", "slow", "vision", "memory")  # M4a: vision, M7a: memory
-ACTION_KEYS = {"name", "description", "inputSchema", "annotations", "offline_phrases"}
-MCP_ONLY_KEYS = {"annotations", "offline_phrases"}
+ACTION_KEYS = {"name", "description", "inputSchema", "annotations", "offline_phrases", "always"}  # M13b: always
+MCP_ONLY_KEYS = {"annotations", "offline_phrases", "always"}  # M13b: always
 SCREEN_KEYS = {"menu_label", "menu_icon", "full_screen"}
 NEEDS_KEYS = {"internet_hosts", "mic", "modes"}
 MODES = {"live", "normal", "offline"}
-RESERVED_ACTIONS = {"view", "on_event", "set_skill"}
+RESERVED_ACTIONS = {"view", "on_event", "set_skill", "open_skill", "use_skill"}  # M13b: open_skill, use_skill
 
 SCHEMA_TYPES = {"object", "string", "integer", "number", "boolean", "array"}
 SCHEMA_KEYS = {"type", "properties", "items", "enum", "required", "description", "maxLength", "minimum", "maximum"}
@@ -59,6 +59,8 @@ SUMMARY_MAX = 200
 INSTRUCTIONS_MAX = 400
 DESCRIPTION_MAX = 200
 TOTAL_INSTRUCTIONS_MAX = 4000
+ALWAYS_SKILL_MAX = 4  # M13b: "always" actions on one skill's card
+ALWAYS_MAX = 6  # M13b: across the host; only the first ones count
 VIEW_MAX = 600
 RESULT_MAX = 4096
 SAY_MAX = 300
@@ -77,11 +79,26 @@ SAY_NOT_WORKING = "That's not working right now."
 SAY_NEEDS_INTERNET = "I need the internet for that."
 SAY_LOCKED = "The person who set up your laptop chose that."
 
-INSTRUCTIONS_HEAD = "Things you can do (use these tools when they fit; never mention tool names):"
+INSTRUCTIONS_HEAD = "Things you can do, in groups (never mention tools or groups):"  # M13b
+GROUPS_LINE = ("To use a group, call open_skill with its name, and then use_skill with one of the actions it gives "  # M13b
+               "you. Do it the moment the talk turns to that group, in the same turn: don't ask first, and don't say "
+               "anything about it. Opening a group changes nothing on the screen.")
 SWITCH_LINE = ("- Turning these on or off: when they ask (\"stop the crossword\", \"turn it back on\"), "
                "use set_skill for them.")
 ERRORS_LINE = ("If a tool answers not_working, say kindly that that's not working right now, and carry on. "
-               "If set_skill answers locked, say kindly that the person who set up your laptop chose that.")
+               "If set_skill answers locked, say kindly that the person who set up your laptop chose that. "
+               "If use_skill answers not_open, open that group and try again, without a word about it.")  # M13b
+ASIDE_LINE = ("Set aside for now: {title}, just as they left it. When they want it back, or they're done with what's "  # M13b
+              "on the screen, put what's on the screen away and it comes back. You may mention that once, in one line.")
+OPEN_NOTE = ("Nothing changed on the screen. Now use use_skill for what they asked, in this same turn. "  # M13b
+             "Say nothing about this.")
+NOT_OPEN_NOTE = "Open that group first, then try again."  # M13b
+CAME_BACK_NOTE = "{title} is back on the screen, just as they left it. You may say so once, in one line."  # M13b
+OPEN_SKILL_DESCRIPTION = ("Open one group of things you can do. It answers with how to use that group and its actions, "  # M13b
+                          "for use_skill. It changes nothing on the screen.")
+USE_SKILL_DESCRIPTION = "Do one action from a group you have open, or one you can do any time."  # M13b
+DETAILS_DESCRIPTION = ("What the action needs. Just the word or words when it needs one thing; a small JSON object when "  # M13b
+                       "it needs several. Leave it out when it needs nothing.")
 
 SET_SKILL_DESCRIPTION = ("Turn one of your skills on or off when the resident asks, "
                          "for example 'stop the crossword' or 'turn the crossword back on'.")
@@ -348,6 +365,8 @@ def manifest_problems(manifest, folder_name):
     seen = set()
     for i, action in enumerate(actions):
         problems += _action_problems(action, i, name, seen)
+    if sum(1 for a in actions if isinstance(a, dict) and a.get("always") is True) > ALWAYS_SKILL_MAX:  # M13b
+        problems.append(f"at most {ALWAYS_SKILL_MAX} actions can be always")
     return problems
 
 
@@ -400,6 +419,8 @@ def _action_problems(action, i, skill_name, seen):
     problems += schema_problems(schema, f"{act}.inputSchema")
     if "annotations" in action and not isinstance(action["annotations"], dict):
         problems.append(f"action {act} annotations must be an object")
+    if "always" in action and not _bool_ok(action["always"]):  # M13b
+        problems.append(f"action {act} always must be true or false")
     phrases = action.get("offline_phrases", [])
     if not isinstance(phrases, list) or not all(isinstance(p, str) and _plain(p) and len(p) <= PHRASE_MAX
                                                 for p in phrases):
@@ -711,6 +732,8 @@ class SkillHost:
         self._fetcher = fetcher
         self.vision = None  # M4a: set by the app: vision(image_bytes, mime, question) -> text or ""
         self.recall = None  # M7a: set by the app: recall(words, limit=6) -> list of fact texts
+        self.opened = None  # M13b: the group she opened last (memory only)
+        self.aside = None  # M13b: the skill the page has set aside (memory only)
         self._table_ready = False
         self._log_lock = threading.Lock()
         self._settings_lock = threading.Lock()
@@ -780,7 +803,7 @@ class SkillHost:
                 self._log("load_failed", skill=folder.name[:40], reason=str(err))
                 continue
             self.skills[skill.name] = skill
-            budget += len(skill.manifest["instructions"])
+            budget += len(skill.manifest["summary"])  # M13b: only the one-line menu is always in her prompt
             for phrase, _ in skill.phrases():
                 taken[phrase] = skill.name
 
@@ -790,7 +813,7 @@ class SkillHost:
         if problems:
             raise SkillLoadError("; ".join(problems[:3]))
         name = manifest["name"]
-        if budget + len(manifest["instructions"]) > TOTAL_INSTRUCTIONS_MAX:
+        if budget + len(manifest["summary"]) > TOTAL_INSTRUCTIONS_MAX:  # M13b
             raise SkillLoadError("instruction budget is full")
         skill = Skill(name, folder, manifest, None)
         for phrase, _ in skill.phrases():
@@ -896,6 +919,40 @@ class SkillHost:
 
     # ----- what Gemini sees -----
 
+    def set_aside(self, name):  # M13b
+        """The page's word on which skill it has set aside: a loaded skill's name, anything else for none."""
+        self.aside = name if isinstance(name, str) and name in self.skills else None
+
+    def _in_hand(self, screen=None):  # M13b
+        """The groups she holds with no opening: the skill on screen, then the one she opened last, if they're on."""
+        return [self.skills[name] for name in dict.fromkeys((screen, self.opened)) if self.enabled(name)]
+
+    def _always(self):  # M13b
+        """(skill, action) she can use with no opening, from the skills that are on; only the first ALWAYS_MAX count."""
+        found = [(skill, action) for skill in self._sorted() if self.enabled(skill.name)
+                 for action in skill.manifest["actions"] if action.get("always")]
+        return found[:ALWAYS_MAX]
+
+    @staticmethod
+    def _action_line(action):  # M13b
+        """One action for her system prompt: "name (param, param): description"."""
+        params = action.get("inputSchema", {}).get("properties")
+        head = f"{action['name']} ({', '.join(params)})" if params else action["name"]
+        return f"{head}: {action['description']}"
+
+    def _open_skill_declaration(self):  # M13b
+        return {"name": "open_skill", "description": OPEN_SKILL_DESCRIPTION, "parameters": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "enum": sorted(self.skills), "description": "Which group"}},
+            "required": ["name"]}}
+
+    def _use_skill_declaration(self):  # M13b: details is text because Gemini refuses an OBJECT with empty properties
+        return {"name": "use_skill", "description": USE_SKILL_DESCRIPTION, "parameters": {
+            "type": "object",
+            "properties": {"action": {"type": "string", "description": "The action's name"},
+                           "details": {"type": "string", "description": DETAILS_DESCRIPTION}},
+            "required": ["action"]}}
+
     def _set_skill_declaration(self):
         return {"name": "set_skill", "description": SET_SKILL_DESCRIPTION, "parameters": {
             "type": "object",
@@ -904,33 +961,38 @@ class SkillHost:
             "required": ["name", "on"]}}
 
     def gemini_tools(self):
-        """[{"functionDeclarations": [...]}] for enabled skills plus the core set_skill; [] when no skill is loaded."""
-        decls = []
-        for skill in self._sorted():
-            if not self.enabled(skill.name):
-                continue
-            for action in skill.manifest["actions"]:
-                decl = {"name": f"{skill.name}__{action['name']}", "description": action["description"]}
-                params = gemini_schema(action.get("inputSchema", {"type": "object"}))
-                if params.get("properties"):
-                    decl["parameters"] = params
-                decls.append(decl)
-        if self.skills:
-            decls.append(self._set_skill_declaration())
-        return [{"functionDeclarations": decls}] if decls else []
+        """[{"functionDeclarations": [...]}]: M13b: open_skill and use_skill while any skill is on, so the count stays
+        the same however many skills exist, plus the core set_skill; [] when no skill is loaded."""
+        if not self.skills:
+            return []
+        decls = [self._set_skill_declaration()]
+        if any(self.enabled(skill.name) for skill in self._sorted()):
+            decls = [self._open_skill_declaration(), self._use_skill_declaration()] + decls
+        return [{"functionDeclarations": decls}]
 
     def instruction_text(self, on_screen=None):
-        """The "Things you can do" text for her system prompt, and "What's on the screen now" for the skill on
-        screen. Empty when no skill is loaded."""
+        """The "Things you can do" text for her system prompt: M13b: one line per group, the how-to and actions of the
+        groups in hand and the any-time actions; then "What's on the screen now" for the skill on screen, and what's
+        set aside. Empty when no skill is loaded."""
         if not self.skills:
             return ""
         on = [s for s in self._sorted() if self.enabled(s.name)]
-        lines = [INSTRUCTIONS_HEAD] + [f"- {s.title}: {s.manifest['instructions']}" for s in on]
+        lines = [INSTRUCTIONS_HEAD] + [f"- {s.title}: {s.manifest['summary']}" for s in on]  # M13b: summary
+        if on:  # M13b
+            lines.append(GROUPS_LINE)
+        for skill in self._in_hand(on_screen):  # M13b
+            lines.append(f"Open now ({skill.title}): {skill.manifest['instructions']}")
+            lines.append("Its actions: " + "; ".join(self._action_line(a) for a in skill.manifest["actions"]))
+        always = self._always()  # M13b
+        if always:
+            lines.append("Any time, with use_skill and no opening: " + "; ".join(self._action_line(a) for _, a in always))
         lines += [SWITCH_LINE, ERRORS_LINE]
         if on_screen in self.skills and self.enabled(on_screen):
             seen = self.view(on_screen)
             if seen:
                 lines.append(f"What's on the screen now ({self.skills[on_screen].title}): {seen}")
+        if self.aside != on_screen and self.enabled(self.aside):  # M13b
+            lines.append(ASIDE_LINE.format(title=self.skills[self.aside].title))
         return "\n".join(lines)
 
     # ----- running skill code -----
@@ -989,12 +1051,17 @@ class SkillHost:
             return self._result({"error": "not_working"}, say=SAY_NOT_WORKING)
         return self._result(response, ctx.effects, say)
 
-    def call(self, fn_name, args=None, heard=""):  # M7a: heard
-        """Runs one tool call from Gemini, the page or offline mode: "<skill>__<action>" or "set_skill".
+    def call(self, fn_name, args=None, heard="", screen=None):  # M7a: heard  # M13b: screen
+        """Runs one tool call from Gemini, the page or offline mode: "<skill>__<action>", "set_skill", or (M13b)
+        "open_skill" / "use_skill"; screen is the skill on screen, which use_skill needs no opening for.
         Returns {"response": {...}, "effects": [...], "say": str | None}; never raises for a skill's fault."""
         args = {} if args is None else args
         if fn_name == "set_skill":
             return self._call_set_skill(args)
+        if fn_name == "open_skill":  # M13b
+            return self._call_open(args)
+        if fn_name == "use_skill":  # M13b
+            return self._call_use(args, heard, screen)
         name, sep, action = str(fn_name).partition("__")
         skill = self.skills.get(name)
         if not sep or skill is None or action not in skill.actions:
@@ -1011,7 +1078,11 @@ class SkillHost:
         ctx = self.context(name)
         ctx.heard = str(heard or "")  # M7a
         handler = getattr(skill.module, action)
-        return self._finish(skill, action, ctx, self._guard(skill, action, lambda: handler(ctx, **clean)))
+        result = self._finish(skill, action, ctx, self._guard(skill, action, lambda: handler(ctx, **clean)))  # M13b
+        back = self._track(skill, result)  # M13b
+        if back:
+            result["response"].update(came_back=back, note=CAME_BACK_NOTE.format(title=back))
+        return result
 
     def _call_set_skill(self, args):
         clean, problem = check_args(self._set_skill_declaration()["parameters"], args)
@@ -1028,6 +1099,88 @@ class SkillHost:
         title = self.skills[clean["name"]].title
         effects = [{"kind": "settings", "data": {"skills": {clean["name"]: response["on"]}}}]
         return self._result(response, effects, f"{title} is {'on' if response['on'] else 'off'} now.")
+
+    def _call_open(self, args):  # M13b
+        """open_skill: the how-to and actions of one group. Opening changes nothing on the screen."""
+        name = args.get("name") if isinstance(args, dict) else None
+        if isinstance(name, str) and name not in self.skills:  # before check_args, whose enum would say bad_input
+            return self._result({"error": "unknown_skill"})
+        clean, problem = check_args(self._open_skill_declaration()["parameters"], args)
+        if problem:
+            return self._result({"error": "bad_input", "detail": problem})
+        skill = self.skills[clean["name"]]
+        if skill.tripped:
+            return self._result({"error": "not_working"}, say=SAY_NOT_WORKING)
+        if not self.enabled(skill.name):
+            return self._result({"error": "off"})
+        self.opened = skill.name
+        actions = []
+        for action in skill.manifest["actions"]:
+            item = {"name": action["name"], "does": action["description"]}
+            params = action.get("inputSchema", {}).get("properties")
+            if params:
+                item["needs"] = {key: prop.get("description") or prop.get("type", "") for key, prop in params.items()}
+            actions.append(item)
+        return self._result({"opened": skill.title, "how": skill.manifest["instructions"], "actions": actions,
+                             "note": OPEN_NOTE})
+
+    def _call_use(self, args, heard, screen):  # M13b
+        """use_skill: one action of a group in hand or an "always" one, by its name or as "skill__action"."""
+        clean, problem = check_args(self._use_skill_declaration()["parameters"], args)
+        if problem:
+            return self._result({"error": "bad_input", "detail": problem})
+        first, sep, rest = clean["action"].partition("__")
+        group, act = (first, rest) if sep else (None, first)
+        hand, always = self._in_hand(screen), self._always()
+        skill = next((s for s in hand if act in s.actions and group in (None, s.name)), None)
+        if skill is None:
+            skill = next((s for s, a in always if a["name"] == act and group in (None, s.name)), None)
+        if skill is None:
+            for other in self._sorted():
+                if act in other.actions and group in (None, other.name):
+                    if other.tripped:  # so she gets not_working and its kind line
+                        return self._result({"error": "not_working"}, say=SAY_NOT_WORKING)
+                    if self.enabled(other.name):
+                        return self._result({"error": "not_open", "open": other.name, "note": NOT_OPEN_NOTE})
+            names = [n for s in hand for n in s.actions] + [a["name"] for _, a in always]
+            return self._result({"error": "no_such_action", "actions": list(dict.fromkeys(names))})
+        schema = skill.actions[act].get("inputSchema", {"type": "object"})
+        return self.call(f"{skill.name}__{act}", self._details_args(schema, clean.get("details")), heard=heard)
+
+    @staticmethod
+    def _details_args(schema, details):  # M13b
+        """use_skill's details text as an action's args: a JSON object if it is one, else the first text field gets it.
+        With no text field the args stay empty, and check_args or the handler reports what's missing."""
+        props = schema.get("properties")
+        text = (details or "").strip()
+        if not text or not props:
+            return {}
+        if text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                return parsed
+        first = next((key for key, prop in props.items() if prop.get("type") == "string"), None)
+        return {first: text} if first else {}
+
+    def _track(self, skill, result):  # M13b
+        """Keeps opened and aside in step with a skill's own screen (core stamps every show_screen / leave_screen with
+        the skill's own name, so the kind is enough). Returns the title of a set-aside skill that's now back, or None."""
+        try:
+            kinds = {effect.get("kind") for effect in result["effects"]}
+            if "show_screen" in kinds:
+                self.opened = skill.name
+            if "leave_screen" not in kinds:
+                return None
+            back = self.aside if self.aside and self.aside != skill.name else None
+            self.opened = back
+            if self.aside == skill.name:
+                self.aside = None
+            return self.skills[back].title if back and self.enabled(back) else None
+        except Exception:
+            return None
 
     def view(self, name):
         """The live "what Mary sees" text of a skill on screen (view(state), at most 600 characters), or None."""
@@ -1059,7 +1212,9 @@ class SkillHost:
         if not ok:
             return self._result({"error": "bad_input", "detail": "event must be a small object"})
         ctx = self.context(name)
-        return self._finish(skill, "on_event", ctx, self._guard(skill, "on_event", lambda: handler(ctx, event)))
+        result = self._finish(skill, "on_event", ctx, self._guard(skill, "on_event", lambda: handler(ctx, event)))  # M13b
+        self._track(skill, result)  # M13b
+        return result
 
     def broken(self, name):
         """The page half failed (screen.js threw): counts as one failure toward the trip rule."""

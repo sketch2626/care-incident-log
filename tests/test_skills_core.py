@@ -386,9 +386,10 @@ class GeminiTest(SkillsTestCase):
         tools = host.gemini_tools()
         self.assertEqual(len(tools), 1)
         decls = {d["name"]: d for d in tools[0]["functionDeclarations"]}
-        self.assertEqual(sorted(decls), ["coin_flip__flip", "coin_flip__set_coin", "set_skill"])
-        self.assertNotIn("parameters", decls["coin_flip__flip"])
-        self.assertEqual(decls["coin_flip__set_coin"]["parameters"]["required"], ["coin"])
+        self.assertEqual(list(decls), ["open_skill", "use_skill", "set_skill"])  # M13b
+        self.assertEqual(decls["open_skill"]["parameters"]["properties"]["name"]["enum"], ["coin_flip"])  # M13b
+        self.assertEqual(decls["use_skill"]["parameters"]["required"], ["action"])  # M13b
+        self.assertEqual(decls["use_skill"]["parameters"]["properties"]["details"]["type"], "string")  # M13b
         self.assertEqual(decls["set_skill"]["parameters"]["properties"]["name"]["enum"], ["coin_flip"])
         text = json.dumps(tools)
         for key in ("annotations", "offline_phrases", "readOnlyHint"):
@@ -411,15 +412,94 @@ class GeminiTest(SkillsTestCase):
         host = self.host()
         text = host.instruction_text()
         self.assertTrue(text.startswith(skills_core.INSTRUCTIONS_HEAD))
-        self.assertIn("- Coin flip: Offer it when", text)
+        self.assertIn(f"- Coin flip: {host.skills['coin_flip'].manifest['summary']}", text)  # M13b
+        self.assertNotIn("Offer it when", text)  # M13b: the how-to waits until the group is in hand
+        self.assertIn(skills_core.GROUPS_LINE, text)  # M13b
         self.assertIn("not_working", text)
         self.assertIn("locked", text)
         self.assertNotIn("What's on the screen now", text)
         side = host.call("coin_flip__flip")["response"]["side"]
         self.assertIn(f"What's on the screen now (Coin flip): A quarter showing {side}.",
                       host.instruction_text(on_screen="coin_flip"))
+        self.assertIn("Open now (Coin flip): Offer it when", host.instruction_text(on_screen="coin_flip"))  # M13b
         host.set_skill("coin_flip", False)
         self.assertNotIn("- Coin flip", host.instruction_text(on_screen="coin_flip"))
+
+    def test_open_then_use(self):  # M13b
+        self.add_coin()
+        host = self.host()
+        refused = host.call("use_skill", {"action": "flip"})
+        self.assertEqual((refused["response"]["error"], refused["response"]["open"], refused["effects"]),
+                         ("not_open", "coin_flip", []))
+        out = host.call("open_skill", {"name": "coin_flip"})
+        self.assertEqual((out["response"]["opened"], out["effects"]), ("Coin flip", []))
+        self.assertIn("Offer it when", out["response"]["how"])
+        actions = {a["name"]: a for a in out["response"]["actions"]}
+        self.assertNotIn("needs", actions["flip"])
+        self.assertIn("coin", actions["set_coin"]["needs"])
+        self.assertIn("side", host.call("use_skill", {"action": "flip"})["response"])
+        self.assertIn("side", host.call("use_skill", {"action": "coin_flip__flip"})["response"])
+        missing = host.call("use_skill", {"action": "nope"})["response"]
+        self.assertEqual((missing["error"], missing["actions"]), ("no_such_action", ["flip", "set_coin"]))
+        self.assertEqual(host.call("open_skill", {"name": "nope"})["response"], {"error": "unknown_skill"})
+        self.assertEqual(host.call("open_skill", {})["response"]["error"], "bad_input")
+        self.assertEqual(host.call("use_skill", {})["response"]["error"], "bad_input")
+
+    def test_screen_needs_no_opening(self):  # M13b
+        self.add_coin()
+        host = self.host()
+        self.assertIn("side", host.call("use_skill", {"action": "flip"}, screen="coin_flip")["response"])
+        host.set_skill("coin_flip", False)
+        self.assertEqual(host.call("use_skill", {"action": "flip"}, screen="coin_flip")["response"]["error"],
+                         "no_such_action")
+        self.assertEqual(host.call("open_skill", {"name": "coin_flip"})["response"], {"error": "off"})
+
+    def test_details_args(self):  # M13b
+        schema = {"type": "object", "properties": {"size": {"type": "integer"}, "word": {"type": "string"}}}
+        args = skills_core.SkillHost._details_args
+        self.assertEqual(args(schema, None), {})
+        self.assertEqual(args(schema, "  "), {})
+        self.assertEqual(args(schema, "cardinal"), {"word": "cardinal"})
+        self.assertEqual(args(schema, '{"size": 2, "word": "a"}'), {"size": 2, "word": "a"})
+        self.assertEqual(args(schema, "{not json"), {"word": "{not json"})
+        self.assertEqual(args({"type": "object", "properties": {}}, "cardinal"), {})
+        self.assertEqual(args({"type": "object", "properties": {"size": {"type": "integer"}}}, "2"), {})
+
+    def test_always_limits(self):  # M13b
+        def card(count):
+            return [dict(action(f"a{i}"), always=True) for i in range(count)]
+        source = "".join(f"def a{i}(ctx):\n    return {{'did': {i}}}\n" for i in range(5))
+        self.write_skill("too_many", source, card(5))
+        self.write_skill("not_bool", source, [dict(action("a0"), always="yes")])
+        self.write_skill("first", source, card(4))
+        self.write_skill("second", source, card(4))
+        host = self.host()
+        self.assertTrue({"too_many", "not_bool"} <= set(host.load_errors))
+        self.assertEqual([(s.name, a["name"]) for s, a in host._always()][-1], ("second", "a1"))
+        self.assertEqual(len(host._always()), skills_core.ALWAYS_MAX)
+        self.assertEqual(host.call("use_skill", {"action": "a0"})["response"], {"did": 0})
+        self.assertIn("Any time, with use_skill and no opening: a0: ", host.instruction_text())
+
+    def test_screen_tracking_and_coming_back(self):  # M13b
+        source = "def go(ctx):\n    ctx.effect('show_screen')\n\ndef end(ctx):\n    ctx.effect('leave_screen')\n"
+        self.write_skill("game", source, [action("go"), action("end")])
+        self.write_skill("photo", source, [action("go"), action("end")])
+        host = self.host()
+        host.call("game__go")
+        self.assertEqual(host.opened, "game")
+        host.set_aside("game")
+        host.call("photo__go")
+        self.assertEqual(host.opened, "photo")
+        title = host.skills["game"].title
+        self.assertIn(f"Set aside for now: {title},", host.instruction_text(on_screen="photo"))
+        out = host.call("photo__end")["response"]
+        self.assertEqual(out["came_back"], title)
+        self.assertEqual(out["note"], skills_core.CAME_BACK_NOTE.format(title=title))
+        self.assertEqual(host.opened, "game")
+        host.call("game__end")
+        self.assertEqual((host.opened, host.aside), (None, None))
+        host.set_aside("nope")
+        self.assertIsNone(host.aside)
 
 
 if __name__ == "__main__":

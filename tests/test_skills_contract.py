@@ -176,7 +176,7 @@ class ShippedSkillsTest(unittest.TestCase):
         names = [f"{m['name']}__{a['name']}" for m in manifests for a in m.get("actions", [])]
         self.assertEqual(len(names), len(set(names)))
         self.assertTrue(all(len(n) <= 64 for n in names))
-        total = sum(len(m.get("instructions", "")) for m in manifests)
+        total = sum(len(m.get("summary", "")) for m in manifests)  # M13b: the menu is what's always in her prompt
         self.assertLessEqual(total, skills_core.TOTAL_INSTRUCTIONS_MAX)
         phrases = [skills_core._plain(p) for m in manifests for a in m.get("actions", [])
                    for p in a.get("offline_phrases", [])]

@@ -7,6 +7,11 @@
      handleLiveToolCall(tc, heard)  Live mode: runs each functionCall, resolves with a toolResponse {functionResponses: [...]}
      list()                     the skills the server listed
      isSkillScreen(name)        true when name is a skill's screen
+     comingBack()               M13b: the skill set aside that comes back when this screen closes, or null
+     backLabel()                M13b: that skill's menu label in lower case ("word search"), or null
+   M13b: one thing beside Mary at a time. A game's handlers say setAside:true: when another skill's screen takes its place
+   its page is hidden just as it is (not ended), Mary stays side by side, and it comes back where they left off when that
+   screen closes. A screen's optional backChanged() hears that the skill behind it was ended, so its Back goes elsewhere.
    Every skill handler runs in try/catch; a throw tells the server (POST /api/mary/skills/<name>/broken). */
 (function () {
   'use strict';
@@ -16,6 +21,7 @@
   var boxes = {};         // name -> the screen's container element
   var screenNames = {};
   var broke = {};
+  var setAside = [];      // M13b: names of skills set aside, last on top; their pages wait hidden, just as they were
 
   function log(e) { try { console.log('[skills]', e); } catch (x) { /* nothing */ } }
   function app() { return window.MaryApp; }
@@ -60,6 +66,37 @@
     return el;
   }
 
+  // M13b: true when name is a skill's screen that stands side by side with Mary
+  function isAsideScreen(name) { return !!(screenNames[name] && handlers[name] && handlers[name].aside); }
+
+  function comingBack() { return setAside.length ? setAside[setAside.length - 1] : null; }
+
+  // M13b: what the Back button calls the skill that comes back
+  function backLabel() {
+    var top = comingBack();
+    for (var i = 0; top && i < skills.length; i++) {
+      if (skills[i].name === top) { return (skills[i].menu && skills[i].menu.label) ? String(skills[i].menu.label).toLowerCase() : null; }
+    }
+    return null;
+  }
+
+  // M13b: ends a skill that was set aside, for real: it won't come back
+  function endAside(name) {
+    var i = setAside.indexOf(name);
+    if (i >= 0) { setAside.splice(i, 1); }
+    var el = boxFor(name);
+    guard(name, function () { if (handlers[name].leave) { handlers[name].leave(el.firstChild); } });
+    el.hidden = true;
+  }
+
+  // M13b: a skill ended or switched off while hidden: it won't come back, and what's on top hears where Back goes now
+  function dropAside(name) {
+    if (setAside.indexOf(name) < 0) { return; }
+    endAside(name);
+    var a = app(), onTop = a && a.currentScreen && a.currentScreen();
+    if (onTop && handlers[onTop] && handlers[onTop].backChanged) { guard(onTop, function () { handlers[onTop].backChanged(); }); }
+  }
+
   function register(name, h) {
     handlers[name] = h || {};
     if (!screenNames[name] && app() && app().registerScreen) {
@@ -67,16 +104,31 @@
       app().registerScreen(name, {
         enter: function (opts) {
           var el = boxFor(name);
+          var waiting = setAside.indexOf(name);   // M13b
+          if (waiting >= 0) {   // M13b: back where they left off: its page was only hidden, so nothing is redrawn
+            setAside.splice(waiting, 1);
+            if (handlers[name].aside && app() && app().sideBySide) { app().sideBySide(true); }
+            el.hidden = false;
+            return;
+          }
           el.classList.toggle('aside', !!handlers[name].aside);
           if (handlers[name].aside && app() && app().sideBySide) { app().sideBySide(true); }
           el.hidden = false;
           guard(name, function () { if (handlers[name].enter) { handlers[name].enter(el.firstChild, opts || {}); } });
         },
-        leave: function () {
+        leave: function (next) {
           var el = boxFor(name);
+          if (handlers[name].setAside && next !== name && screenNames[next] && setAside.indexOf(next) < 0) {   // M13b: set aside, not ended; Mary stays put; not when the one waiting comes back, so two games never swap forever
+            if (setAside.indexOf(name) < 0) { setAside.push(name); }
+            el.hidden = true;
+            return;
+          }
           guard(name, function () { if (handlers[name].leave) { handlers[name].leave(el.firstChild); } });
           el.hidden = true;
-          if (handlers[name].aside && app() && app().sideBySide) { app().sideBySide(false); }
+          // M13b: emergency and the like: nothing waits behind them
+          if (!screenNames[next] && next !== 'everyday') { setAside.slice().forEach(function (n) { endAside(n); }); }
+          // M13b: not when the next screen stands beside her too, so she doesn't slide out and back
+          if (handlers[name].aside && !isAsideScreen(next) && app() && app().sideBySide) { app().sideBySide(false); }
         }
       });
     }
@@ -89,6 +141,7 @@
     try {
       if (kind === 'settings') {
         if (a && a.applySettings && data.values) { a.applySettings(data.values); }
+        Object.keys(data.skills || {}).forEach(function (n) { if (data.skills[n] === false) { dropAside(n); } });   // M13b: switched off while hidden
         return;
       }
       if (kind === 'show_screen') {
@@ -97,6 +150,7 @@
       }
       if (kind === 'leave_screen') {
         if (a && a.currentScreen && a.currentScreen() === data.screen) { a.show('everyday'); }
+        else { dropAside(data.screen); }   // M13b: a game ended while hidden must not come back
         return;
       }
       var name = effect.skill;
@@ -109,6 +163,9 @@
   function call(name, args, heard) {
     var body = { name: name, args: args || {} };
     if (heard) { body.heard = String(heard); }  // M4a: the server refuses tools on an emergency line
+    var a = app(), at = a && a.currentScreen ? a.currentScreen() : null;   // M13b
+    if (at && screenNames[at]) { body.screen = at; }   // M13b
+    if (comingBack()) { body.aside = comingBack(); }   // M13b: a call without it clears the server's note
     return tell('/api/mary/skills/call', 'POST', body).then(function (res) {
       var effects = (res && res.effects) || [];
       for (var i = 0; i < effects.length; i++) { apply(effects[i]); }
@@ -167,7 +224,9 @@
     call: call,
     handleLiveToolCall: handleLiveToolCall,
     list: function () { return skills.slice(); },
-    isSkillScreen: function (name) { return !!screenNames[name]; }
+    isSkillScreen: function (name) { return !!screenNames[name]; },
+    comingBack: comingBack,   // M13b
+    backLabel: backLabel      // M13b
   };
 
   if (D.readyState === 'loading') { D.addEventListener('DOMContentLoaded', load); } else { load(); }

@@ -1398,8 +1398,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send(mary_live_story_call(body.get("args")))
             screen = body.get("screen") if isinstance(body.get("screen"), str) else None  # M13b
             host.set_aside(body.get("aside"))  # M13b
-            # M13b: heard stays out of it: word_search's check and start would read it as the resident's offline line
-            return self._send(host.call(name, body.get("args"), screen=screen))
+            # M4c: heard goes through as in Normal talk; skills only fall back on it (word_search's check and start)
+            return self._send(host.call(name, body.get("args"), heard=heard[:2000] if isinstance(heard, str) else "", screen=screen))
         m = re.fullmatch(r"/api/mary/skills/([^/]+)/image/([a-z0-9_-]{1,40}\.(jpg|png|gif|webp))", path)
         if m and method == "GET":  # an image a skill saved in its own ctx.files (any skill, images only)
             try:

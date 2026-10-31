@@ -1348,7 +1348,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                     if store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
                         result = memory_tool(memory, call.get("name"), call.get("args"), offer_waiting=bool(prior))
                     elif skills is not None:
-                        result = skills.call(call.get("name"), call.get("args"), screen=screen)  # M13b: screen
+                        result = skills.call(call.get("name"), call.get("args"), heard=text, screen=screen)  # M13b: screen  # M4c: heard
                     else:  # M9c: she has only her memory tools here
                         result = {"response": {"error": "unknown_tool"}, "effects": [], "say": None}
                     for effect in result["effects"]:

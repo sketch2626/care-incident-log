@@ -294,6 +294,11 @@ Andy's words: "Mary says, I see that it's your son's birthday coming up next wee
 - **Getting it to him:** the hard part. Options to talk through: save or print it, email it, a link or QR code he opens on his phone, or a text message (that needs the future backend and costs money).
 - **Privacy:** a family member's phone number or email is kept only if the resident wants, and "forget" really removes it. Anything sent for image generation goes to Google.
 - **More than birthdays:** holidays, get-well cards, sympathy cards, and thank-you notes (staff included).
+- **Andy's decisions (2026-10-31):**
+  - **Email, plus Facebook Messenger and other online messaging apps.** "That's where any elderly people that have a social profile, that's usually where it's at."
+  - **It's messaging in general, not only cards:** "will you please help me send a message to my grandson?" Phone calls from the computer are out.
+  - **Image generation** is fine because residents will be on a paid tier for privacy anyway ("this is going to have to be on a paid tier once it gets into the hands of the other people… for the privacy concerns").
+- **Hub's caution, to check in research:** Facebook gives businesses (Pages) a way to send messages, but as far as the hub knows there's no official way for a personal account to send to a friend. Tools that drive Messenger automatically break Meta's rules and could get a resident's account locked. The likely honest route: Mary writes the message and opens Messenger to that person, and the resident taps Send. Email can be fully sent by Mary once a helper connects the account.
 - Boards first, then a skill of its own (after M13b's tool groups).
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)

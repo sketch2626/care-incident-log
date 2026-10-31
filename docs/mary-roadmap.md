@@ -287,6 +287,15 @@ Andy (2026-10-29): "I want Gemini to be able to control the app totally. Pull up
 - Look into the open-source, free voice Andy found, which reproduces how ElevenLabs works. Ask Andy for its name or link first. Check whether it runs on the laptop (privacy, offline) and what it needs, then audition it for Andy by ear as in M2. Andy's laptop is new (Ryzen 5 7520U, integrated Radeon), but most residents get refurbished ones, so also check the speed on weaker hardware, or a CPU limit that imitates it.
 - Paid options (Gemini paid tier, ElevenLabs' API) are the other route.
 
+### M15. Cards for family: birthdays and more (idea; Andy, 2026-10-31, still being talked through)
+Andy's words: "Mary says, I see that it's your son's birthday coming up next week. Would you like for me to help you make him a card that we can send to him? On his phone… we need to have some kind of little way for her to be able to help make a card. Even if we use image generation, and we just set the style to cartoon-type birthday card. Or maybe more than that, let's talk about it."
+- **Knowing the date:** birthdays and other dates the resident mentions go in her memory core (M9c) as dated memories. She brings one up about a week ahead, once.
+- **Making the card:** the resident picks the look and says the words; Mary helps with wording in their voice, never hers. The picture could be image generation in a set cartoon birthday-card style, or designs drawn in the app that work offline and cost nothing. To decide.
+- **Getting it to him:** the hard part. Options to talk through: save or print it, email it, a link or QR code he opens on his phone, or a text message (that needs the future backend and costs money).
+- **Privacy:** a family member's phone number or email is kept only if the resident wants, and "forget" really removes it. Anything sent for image generation goes to Google.
+- **More than birthdays:** holidays, get-well cards, sympathy cards, and thank-you notes (staff included).
+- Boards first, then a skill of its own (after M13b's tool groups).
+
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
 - **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.
 - **M11. Reporting portal overhaul,** the incident log screens (`web/`): a complete visual redo, with boards first. Also decide **how much of it each resident sees**: whether they get the full-screen portal at all, which parts make sense for them, and what stays behind Mary. Decide this with Andy when we get there.

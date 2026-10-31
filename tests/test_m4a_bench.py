@@ -126,7 +126,7 @@ class Rules(unittest.TestCase):
         for line in ('"nine, eight, eight" for 988', "An offer alone is never enough", "always name the long-term care ombudsman",
                      'no "my cousin"', "never as praise", "A polite steer changes the subject"):
             self.assertIn(line, text)
-        self.assertEqual(text.count("Until they've said yes"), 2)
+        self.assertEqual(text.count("Until they've said yes"), 1)  # M4c: Sam's friendly names; Mary has none unless asked
         self.assertIn('no \\"my cousin\\"'.replace("\\", ""), mary.STORY_PROMPT)
         self.assertIn("never more than 300", mary.STORY_PROMPT)
 

@@ -930,6 +930,15 @@ def _app_facts_text(companion):  # M9b
 
 def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     system = system_text(memory, companion)
+    # --- skills hook (M13) --- an emergency line gets no skills at all
+    tools = []
+    if skills is not None and not kind:
+        extra = skills.instruction_text(screen)
+        if extra:
+            system += "\n\n" + extra
+        tools = skills.gemini_tools()
+    # --- end skills hook ---
+    system += CHARACTER_NOTE  # M4c: late in the prompt, where it holds; only the turn notes come after it
     if kind:  # M4a: the bench heard the same instruction twice in a row
         system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} They heard it, so don't "
                    "say any of it again, in any words. Add only one short, calm line of your own, to keep them company.")
@@ -940,14 +949,6 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
             system += HARM_NOTE
         if _FEARS_STAFF.search(_plain(text)):
             system += FEAR_NOTE
-    # --- skills hook (M13) --- an emergency line gets no skills at all
-    tools = []
-    if skills is not None and not kind:
-        extra = skills.instruction_text(screen)
-        if extra:
-            system += "\n\n" + extra
-        tools = skills.gemini_tools()
-    # --- end skills hook ---
     if not kind and getattr(memory, "store", None) is not None:  # M9c: one functionDeclarations entry, shared with the skills
         tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + MEMORY_TOOLS}]
     # M4a: her scripted hello is her turn too, so a talk may start with hers, or follow her last line of the talk before
@@ -983,6 +984,20 @@ HARM_NOTE = ("\n\nThey may have just said someone hurt, hit, threatened or stole
 FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell them that retaliation against residents "
              "is against the law, that nothing is written or sent without their say, and that the long-term care "
              "ombudsman can help them in confidence.")
+# M4c: closes Normal's prompt and Live's (voices.LIVE_TOOLS_NOTE), because run 2 showed the manner rules fade mid-prompt.
+# For either companion, so no name. No square brackets: Live's prompt must never hold one.
+CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
+                  "- No pet names unless they've asked for one: no \"honey\", no \"sugar\", no \"dear\". Any other "
+                  "friendly name only the way your own section above allows.\n"
+                  "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\", no "
+                  "\"That's wonderful!\" Take it the way a neighbor your own age would.\n"
+                  "- \"Bless your heart\" only as real sympathy, never as praise.\n"
+                  "- No fussing, no \"we\" when you mean \"you\", and no customer-service lines like \"Is there "
+                  "anything else I can help you with?\"\n"
+                  "- Your warmth is in paying attention, not in sugar.\n"
+                  "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
+                  "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
+                  "else. Don't ask about it.")
 
 
 def not_english(text):  # M4a: Live's transcript sometimes comes back in another script

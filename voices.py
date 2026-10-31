@@ -104,7 +104,8 @@ LIVE_TOOLS_NOTE = ("When they tell you what they like to be called, call set_the
                    "yourself. "
                    # M4a: Live says the goodbye itself and the talk closes; the page's word check can miss a mishearing
                    "When they say goodbye, tell you to go to sleep or rest, or say they're done talking, say one short "
-                   "goodbye and call end_talk. Never call end_talk for anything else.")
+                   "goodbye and call end_talk. Never call end_talk for anything else."
+                   + mary.CHARACTER_NOTE)  # M4c: last, where it holds
 TIMING_WORDS = ("timestamp", "offset", "word_info", "alignment", "timing")
 LOG_MAX = 200_000
 
@@ -755,6 +756,8 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
         system += "\n\n" + LIVE_EXTRA
         if memory is not None:  # M4a: her memory tools
             system += " " + LIVE_TOOLS_NOTE
+        else:  # M4c: the voice tryout has no tools note, so the character note goes here
+            system += mary.CHARACTER_NOTE
         try:  # M4a: Live can't take a speed setting, so the saved speed is asked for in words
             r = float(rate) if rate is not None else None
         except (TypeError, ValueError):

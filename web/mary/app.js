@@ -1757,6 +1757,7 @@
     }).then(function (r) {
       return storyFromTool(c, r);   // M4a: the first part of a story, answered at once
     }).then(function (r) {
+      if (calls.some(function (fc) { return /^(forget_name|set_their_name|forget_memory)$/.test(fc.name); })) { refreshName(); }   // M9c
       c.toolBusy--;
       c.lastAct = Date.now();
       return r;
@@ -2089,6 +2090,7 @@
     } finally {
       clearTimeout(timer);
       if (turn === S.turn && S.phase === 'thinking') { setPhase('idle'); }
+      refreshName();   // M9c: the turn may have forgotten or changed their name
     }
   }
 
@@ -2694,6 +2696,13 @@
 
   function refreshStatus() {
     return api('GET', '/api/mary/status').then(function (st) { applyStatus(st); return st; });
+  }
+
+  // M9c: "forget my name" or a new name changes the saved name; reload only the name, so a scripted line never uses the old one
+  function refreshName() {
+    return api('GET', '/api/mary/status').then(function (st) {
+      if (st && typeof st === 'object') { S.name = st.name ? String(st.name) : ''; S.nameForgotten = st.name_forgotten === true; }
+    }).catch(noop);
   }
 
   function checkListen() {

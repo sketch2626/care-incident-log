@@ -1,0 +1,103 @@
+{
+"v": 3,
+"createdOnFiles": {
+"v": 1,
+"at": "2026-10-30T18:00:00Z"
+},
+"title": "Mary round 7: word search",
+"launch": {
+"view": "canvas"
+},
+"pages": [],
+"boards": {
+"A-Fresh-Mary.dc.html": {
+"x": 0,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a) A fresh puzzle · Mary"
+},
+"A-Fresh-Sam.dc.html": {
+"x": 1360,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a) A fresh puzzle · Sam"
+},
+"B-Found-Mary.dc.html": {
+"x": 0,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(b) The moment a word is found"
+},
+"C-Hint-Mary.dc.html": {
+"x": 1360,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(c) A hint: the row, then the first letter"
+},
+"D-Done-Mary.dc.html": {
+"x": 0,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(d) Finished: plain and quiet"
+},
+"E-Sizes-Mary.dc.html": {
+"x": 1360,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "Compare sizes: 8 by 8 with bigger letters"
+},
+"F-Picked.dc.html": {
+"x": 0,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "Detail: the first letter tapped"
+}
+},
+"order": [
+"A-Fresh-Mary.dc.html",
+"A-Fresh-Sam.dc.html",
+"B-Found-Mary.dc.html",
+"C-Hint-Mary.dc.html",
+"D-Done-Mary.dc.html",
+"E-Sizes-Mary.dc.html",
+"F-Picked.dc.html"
+],
+"notes": {
+"t0": {
+"x": 0,
+"y": -300,
+"text": "A fresh puzzle: Mary aside, the game beside her",
+"kind": "title1",
+"maxW": 2640
+},
+"t1": {
+"x": 0,
+"y": 920,
+"text": "Finding a word, and asking for a hint",
+"kind": "title1",
+"maxW": 2640
+},
+"t2": {
+"x": 0,
+"y": 2140,
+"text": "The end of a puzzle, and a bigger size",
+"kind": "title1",
+"maxW": 2640
+},
+"t3": {
+"x": 0,
+"y": 3360,
+"text": "Detail: how a word gets marked",
+"kind": "title1",
+"maxW": 2640
+}
+},
+"designSystems": []
+}

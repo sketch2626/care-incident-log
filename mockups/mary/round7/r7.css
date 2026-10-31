@@ -1,0 +1,58 @@
+/* Mary round 7: word search. Game classes only; every board also links r6.css (an unchanged copy of round 6).
+   Screen 1280x800. Mary sits aside in the left 40%, the game fills x 512 to 1252 on her warm background.
+   Positions come from classes, so a mark is ws-mark + h or v + ws-rowN + ws-colN + ws-nLENGTH. */
+
+/* her real aside move, from web/mary/face.css (.mf-fit and .mf-aside .mf-stage); perspective 110vw is 1408px here */
+.ws-fit{position:absolute;inset:0;perspective:1408px}
+.ws-aside{position:absolute;inset:0;transform:translate(-29%,0) scale(.7) rotateY(16deg)}
+
+/* her caption, under her in the left 40% */
+.cap.ws-cap{left:24px;right:792px;font-size:44px}
+
+/* top row, beside the Menu button; 290px stays clear on the right */
+.ws-title{position:absolute;left:512px;top:24px;width:450px;margin:0;display:flex;flex-direction:column;font:700 34px/1.25 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+
+/* the grid: 540 square at 54px cells. The dark border is drawn on top, so the cells stay exactly 54 */
+.ws-grid{--cell:54px;position:absolute;left:512px;top:124px;box-sizing:border-box;display:grid;grid-template-columns:repeat(10,var(--cell));grid-auto-rows:var(--cell);width:calc(var(--cell)*10);height:calc(var(--cell)*10);border-radius:20px;overflow:hidden;font:700 34px/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background-color:#ffffff;background-image:linear-gradient(to right,#f1ebe1 1px,transparent 1px),linear-gradient(to bottom,#f1ebe1 1px,transparent 1px);background-size:var(--cell) var(--cell)}
+.ws-grid::after{content:"";position:absolute;inset:0;z-index:3;box-sizing:border-box;border:4px solid #2b1f17;border-radius:20px;pointer-events:none}
+.ws-grid.big{--cell:66px;grid-template-columns:repeat(8,var(--cell));width:calc(var(--cell)*8);height:calc(var(--cell)*8);font-size:42px}
+.ws-c{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+.ws-c.on{color:#ffffff}
+
+/* found: a capsule behind the letters, teal with white letters. It's a shape, so it reads for weak and colorblind eyes.
+   The thin white edge keeps two crossing or neighboring words apart. */
+.ws-mark{position:absolute;z-index:1;box-sizing:border-box;left:calc(var(--c)*var(--cell) + 5px);top:calc(var(--r)*var(--cell) + 5px);width:calc(var(--cell) - 10px);height:calc(var(--cell) - 10px);border-radius:calc(var(--cell)/2);background:#0f5560;box-shadow:0 0 0 2px #ffffff}
+.ws-mark.h{width:calc(var(--n)*var(--cell) - 10px)}
+.ws-mark.v{height:calc(var(--n)*var(--cell) - 10px)}
+.ws-col0{--c:0}.ws-col1{--c:1}.ws-col2{--c:2}.ws-col3{--c:3}.ws-col4{--c:4}.ws-col5{--c:5}.ws-col6{--c:6}.ws-col7{--c:7}.ws-col8{--c:8}.ws-col9{--c:9}
+.ws-row0{--r:0}.ws-row1{--r:1}.ws-row2{--r:2}.ws-row3{--r:3}.ws-row4{--r:4}.ws-row5{--r:5}.ws-row6{--r:6}.ws-row7{--r:7}.ws-row8{--r:8}.ws-row9{--r:9}
+.ws-n3{--n:3}.ws-n4{--n:4}.ws-n5{--n:5}.ws-n6{--n:6}.ws-n7{--n:7}
+
+/* the new mark settles once: a soft glow that fades, nothing bouncy. Reduced motion skips it (the rule in r6.css). */
+.ws-mark.fresh{animation:ws-settle 1.6s ease-out 1}
+@keyframes ws-settle{0%{box-shadow:0 0 0 2px #ffffff,0 0 0 14px rgba(15,85,96,.38)}100%{box-shadow:0 0 0 2px #ffffff,0 0 0 14px rgba(15,85,96,0)}}
+
+/* hint: step 1 is the pale gold row, step 2 the solid gold first letter with a thick dark ring */
+.ws-band{position:absolute;z-index:0;left:0;right:0;top:calc(var(--r)*var(--cell));height:var(--cell);background:#ffe7a3}
+.ws-c.lit{background:#f2b632;border-radius:10px;box-shadow:inset 0 0 0 5px #2b1f17}
+
+/* picked letter: a thick ring in her color */
+.ws-c.picked{border-radius:12px;box-shadow:inset 0 0 0 5px var(--ink)}
+
+/* the word list, right of the grid. Each word lines up with a row of the grid */
+.ws-list{position:absolute;left:1068px;top:124px;width:184px;margin:0;padding:0;list-style:none}
+.ws-word{display:flex;align-items:center;height:54px;font:700 26px/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16;white-space:nowrap}
+.ws-list.big .ws-word{height:66px}
+.ws-word svg{flex:none;width:26px;height:26px;margin-right:6px;visibility:hidden}
+.ws-word.found{color:#544739}
+.ws-word.found svg{visibility:visible}
+.ws-word.found span{text-decoration:line-through 4px}
+
+/* bottom row: three buttons share 740px (the .ans look from round 6); four at the end, each as wide as its words need */
+.ws-bar{position:absolute;left:512px;top:680px;width:740px;height:88px;display:flex;gap:16px}
+.ws-bar .ans{flex:1 1 0;min-width:0;min-height:88px;height:88px;padding:0 8px;box-sizing:border-box;font-size:28px;white-space:nowrap}
+.ws-bar.four{gap:12px}
+.ws-bar.four .ans{flex:1 1 auto;padding:0 16px}
+
+/* board label, bottom left where her caption would be (not part of the app) */
+.tag.ws-tag{top:auto;bottom:34px;max-width:464px;box-sizing:border-box}

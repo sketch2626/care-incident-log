@@ -514,7 +514,7 @@ class Wiring(unittest.TestCase):
             voices.live_token("live:Achird", KEY, "mary", "", server.DATA, memory=self.memory)
         sent = net.body()["bidiGenerateContentSetup"]["systemInstruction"]["parts"][0]["text"]
         self.assertGreater(sent.index(self.NOTE), sent.index(voices.LIVE_TOOLS_NOTE))
-        self.assertFalse(server.mary_live_skill_setup()["cards"])  # no messages skill yet; M15b flips this
+        self.assertTrue(server.mary_live_skill_setup()["cards"])  # M15b: the messages skill is here
 
     def test_once_she_says_it(self):
         self.son_due()

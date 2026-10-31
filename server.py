@@ -1423,7 +1423,7 @@ class Handler(SimpleHTTPRequestHandler):
             host.set_aside(body.get("aside"))  # M13b
             # M4c: heard goes through as in Normal talk; skills only fall back on it (word_search's check and start)
             return self._send(host.call(name, body.get("args"), heard=heard[:2000] if isinstance(heard, str) else "", screen=screen))
-        m = re.fullmatch(r"/api/mary/skills/([^/]+)/image/([a-z0-9_-]{1,40}\.(jpg|png|gif|webp))", path)
+        m = re.fullmatch(r"/api/mary/skills/([^/]+)/image/([a-z0-9_-]{1,60}\.(jpg|png|gif|webp|svg))", path)
         if m and method == "GET":  # an image a skill saved in its own ctx.files (any skill, images only)
             try:
                 data = (skills_core.SkillFiles(Path(host.data_dir) / "skills" / m.group(1)).read_bytes(m.group(2))
@@ -1432,8 +1432,13 @@ class Handler(SimpleHTTPRequestHandler):
                 data = None
             if data is None:
                 return self._send({"error": "That picture isn't here."}, 404)
-            ctype = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}[m.group(3)]
-            return self._send(data, 200, ctype, {"X-Content-Type-Options": "nosniff"})  # end_headers adds no-store
+            ctype = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp",
+                     "svg": "image/svg+xml"}[m.group(3)]
+            extra = {"X-Content-Type-Options": "nosniff"}
+            if m.group(3) == "svg":  # M15b: a card holds what the resident said, so it may never run or reach out
+                extra["Content-Security-Policy"] = ("sandbox; default-src 'none'; style-src 'unsafe-inline'; "
+                                                    "font-src data:; img-src data:")
+            return self._send(data, 200, ctype, extra)  # end_headers adds no-store
         m = re.fullmatch(r"/api/mary/skills/([^/]+)(/event|/broken|/view|/lock)?", path)
         if not m:
             return None

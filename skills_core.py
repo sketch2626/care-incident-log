@@ -32,6 +32,7 @@ FUNCTION_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")        # Gemini function names
 KIND_RE = re.compile(r"^[a-z][a-z0-9_]{0,30}$")          # a skill's own effect kinds
 SETTING_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+FONT_RE = re.compile(r"[a-z0-9-]+\.woff2")                # a bundled font, for ctx.font
 _PROTECTED_SETTING = re.compile(r"key|token|secret|password|^skills_|^andyflow")
 _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
@@ -610,7 +611,8 @@ class SkillFiles:
 
 
 class SkillContext:
-    """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch() and look() (M4a)."""
+    """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch(), look() (M4a),
+    asset() and font() (M15b)."""
 
     def __init__(self, host, skill):
         self._host = host
@@ -658,6 +660,28 @@ class SkillContext:
         text = value if isinstance(value, str) else json.dumps(value)
         self._host.put_settings({self._setting(key): text})
         self.effects.append({"kind": "settings", "data": {"values": {key: text}}})
+
+    def asset(self, name):  # M15b
+        """Read-only bytes of a file the skill ships in its own assets folder. Subfolders are fine; outside it isn't."""
+        if not isinstance(name, str) or not name:
+            raise SkillError("bad file name")
+        root = (Path(self._skill.folder) / "assets").resolve()
+        full = (root / name).resolve()
+        if full == root or not full.is_relative_to(root):
+            raise SkillError("that file is outside the skill's assets")
+        try:
+            return full.read_bytes()
+        except OSError:
+            raise SkillError("no such asset") from None
+
+    def font(self, file):  # M15b
+        """Read-only bytes of a font bundled with Mary (web/mary/fonts), by bare file name."""
+        if not isinstance(file, str) or not FONT_RE.fullmatch(file):
+            raise SkillError("bad font name")
+        try:
+            return (Path(self._host.skills_dir).parent / "web" / "mary" / "fonts" / file).read_bytes()
+        except OSError:
+            raise SkillError("no such font") from None
 
     def fetch(self, url, method="GET", params=None, headers=None, max_bytes=2_000_000, timeout=6):
         """The only way to the internet: https GET to the card's internet_hosts. Returns {status, content_type, body}."""

@@ -1,0 +1,20 @@
+{
+  "contract": 1,
+  "name": "messages",
+  "version": "0.1.0",
+  "title": "Cards and messages",
+  "summary": "Makes greeting cards and short letters in the resident's own words, ready to print or send.",
+  "instructions": "Help them make a card or a short message for someone. The words are theirs: write down what they say and read it back before anything is saved. When they're done, put the card away.",
+  "actions": [
+    {
+      "name": "close",
+      "description": "Put the card away and go back to Mary.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    }
+  ],
+  "storage": true,
+  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
+  "offline": "works",
+  "default_on": true
+}

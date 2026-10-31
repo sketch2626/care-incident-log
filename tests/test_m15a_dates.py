@@ -734,5 +734,51 @@ class Needs(unittest.TestCase):
             self.assertIn(note, sent)
 
 
+    # M15a: one person saved twice gives one reminder
+    def due_items(self, day):
+        with clock(day):
+            return self.store.due()
+
+    def test_twice_saved_person_one_reminder(self):
+        self.hear("my son's birthday is November 7")
+        self.hear("my son Mark's birthday is November 7")
+        items = self.due_items("2026-11-01")
+        self.assertEqual(len(items), 1)
+        self.assertIn("Mark", items[0]["label"])
+        self.assertEqual(len(items[0]["also"]), 1)
+        with clock("2026-11-01"):
+            ids = self.store.said_due("Mark's birthday is coming up")
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(self.count("date_done"), 2)
+        self.assertEqual(self.due_items("2026-11-02"), [])
+
+    def test_memory_ties_plain_name_to_relation(self):
+        self.store.add("Mark is my son")
+        self.hear("my son's birthday is November 7")
+        self.hear("Mark's birthday is November 7")
+        items = self.due_items("2026-11-01")
+        self.assertEqual([i["who"] for i in items], ["Mark"])
+
+    def test_done_twin_silences_later_learned_date(self):
+        self.hear("my son Mark's birthday is November 7")
+        with clock("2026-11-01"):
+            self.store.said_due("Mark")
+        self.hear("my son's birthday is November 7", day="2026-11-02")
+        self.assertEqual(self.due_items("2026-11-02"), [])
+
+    def test_not_the_same_person(self):
+        cases = (("my son's birthday is November 7", "my son Mark's birthday is November 9"),
+                 ("Mark's birthday is November 7", "Lily's birthday is November 7"),
+                 ("my son Mark's birthday is November 7", "my son Luke's birthday is November 7"),
+                 ("my son's birthday is November 7", "my daughter's birthday is November 7"))
+        for first, second in cases:
+            with self.subTest(first=first, second=second):
+                with closing(server.connect_memories()) as conn, conn:
+                    conn.execute("DELETE FROM dates")
+                self.hear(first)
+                self.hear(second)
+                self.assertEqual(len(self.due_items("2026-11-02" if "9" in second else "2026-11-01")), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

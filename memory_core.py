@@ -371,6 +371,31 @@ def _named(text, row):  # M15a
     return any(says_name(text, name) for name in _names_of(row))
 
 
+def _same_person(a, b, texts):  # M15a
+    """Two date rows (same month, day and what) for one person: a bare relation and that relation with a name, one name
+    inside the other ("Mark", "Mark Smith"), or a bare relation and a plain name that a memory ties together ("Mark is
+    my son"). Two named people never merge on relation alone."""
+    if (a["month"], a["day"], a["what"]) != (b["month"], b["day"], b["what"]):
+        return False
+    wa, wb = _who_words(a["who"]), _who_words(b["who"])
+    if wa and wb and (wa <= wb or wb <= wa):
+        return True
+    for bare, other in ((a, b), (b, a)):
+        rel = bare["relation"].lower()
+        if not rel or bare["who"].lower() != rel:
+            continue
+        if other["relation"].lower() == rel:
+            return True
+        if not other["relation"] and other["who"]:
+            names = _who_words(other["who"])
+            for text in texts:
+                words = re.findall(r"\w+", text.lower())
+                rels = [i for i, w in enumerate(words) if w == rel]
+                if any(abs(i - j) <= 3 for i in rels for j, w in enumerate(words) if w in names):
+                    return True
+    return False
+
+
 def _touched_last(rows, turns, text):  # M15a
     """The date a correction means: the one named with its birthday or anniversary word, or its day, in the turn nearest
     the newest. Two in that turn: the one the correction names, or None, since a wrong guess spoils a good date."""
@@ -595,9 +620,23 @@ class MemoryStore:
             quiet = [row[0] for row in conn.execute("SELECT who FROM no_reminders")]
         quiet += [name for memory in self.active() for name in memory_dates.passed(memory["text"])]
         quiet = {word for name in quiet for word in name.split()}
-        out = [{**{k: row[k] for k in ("id", "who", "relation", "what", "month", "day")}, "on": on,
-                "days": (on - today).days, "label": memory_dates.label(row)}
-               for row, on in soon if (row["id"], on.year) not in done and not _people(row) & quiet]
+        texts = [memory["text"] for memory in self.active()]
+        groups = []  # one list of (row, on) per person; a twin that is done, stopped or dead silences them all
+        for pair in soon:
+            for group in groups:
+                if any(_same_person(pair[0], other[0], texts) for other in group):
+                    group.append(pair)
+                    break
+            else:
+                groups.append([pair])
+        out = []
+        for group in groups:
+            if any((row["id"], on.year) in done or _people(row) & quiet for row, on in group):
+                continue
+            row, on = min(group, key=lambda p: (p[0]["who"].lower() == p[0]["relation"].lower(), p[0]["id"]))
+            out.append({**{k: row[k] for k in ("id", "who", "relation", "what", "month", "day")}, "on": on,
+                        "days": (on - today).days, "label": memory_dates.label(row),
+                        "also": sorted(r["id"] for r, _ in group if r["id"] != row["id"])})
         return sorted(out, key=lambda item: (item["days"], item["id"]))[:3]
 
     def mark_done(self, date_id, year):  # M15a
@@ -612,8 +651,9 @@ class MemoryStore:
         "once" promise."""
         said = [row for row in self.due(today) if _named(text, row)]
         for row in said:
-            self.mark_done(row["id"], row["on"].year)
-        return [row["id"] for row in said]
+            for date_id in [row["id"], *row["also"]]:
+                self.mark_done(date_id, row["on"].year)
+        return [date_id for row in said for date_id in [row["id"], *row["also"]]]
 
     def stop_reminders(self, who):  # M15a
         """No more reminders about this person or relation."""

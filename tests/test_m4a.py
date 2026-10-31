@@ -238,7 +238,7 @@ class LiveBrain(M4aCase):
         tools = net.body()["bidiGenerateContentSetup"]["tools"]
         self.assertEqual(len(tools), 1)
         names = [d["name"] for d in tools[0]["functionDeclarations"]]
-        for want in ("voice_comfort__louder", "set_skill", "remember_fact", "set_their_name"):
+        for want in ("open_skill", "use_skill", "set_skill", "remember_fact", "set_their_name"):  # M13b
             self.assertIn(want, names)
 
     def test_system_text_has_the_last_talk(self):

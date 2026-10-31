@@ -79,10 +79,13 @@ class MaryCase(unittest.TestCase):
         self.say("Hello there", ["Hello!"], screen="coin_flip")
         body = self.fake.bodies[0]
         names = [d["name"] for d in body["tools"][0]["functionDeclarations"]]
-        self.assertIn("coin_flip__flip", names)
+        self.assertIn("open_skill", names)  # M13b
+        self.assertIn("use_skill", names)  # M13b
+        self.assertNotIn("coin_flip__flip", names)  # M13b
         self.assertIn("set_skill", names)
         system = body["systemInstruction"]["parts"][0]["text"]
         self.assertIn(skills_core.INSTRUCTIONS_HEAD, system)
+        self.assertIn("Open now (Coin flip): ", system)  # M13b
         self.assertIn("What's on the screen now (Coin flip): A coin, not flipped yet.", system)
 
     def test_without_skills_the_body_is_as_before(self):
@@ -107,6 +110,11 @@ class MaryCase(unittest.TestCase):
         self.assertEqual([e["kind"] for e in r["effects"]], ["show_screen", "coin"])
         self.assertEqual(self.seen, r["effects"])
         self.assertEqual((r["text"], r["mood"]), ("Let me see. It came up nicely!", "happy"))
+
+    def test_use_skill_gets_the_screen(self):  # M13b: what's on screen needs no opening
+        use = {"functionCall": {"name": "use_skill", "args": {"action": "flip"}}}
+        r = self.say("Flip a coin", [call(use)], screen="coin_flip")
+        self.assertIn("coin", [e["kind"] for e in r["effects"]])
 
     def test_three_round_cap(self):
         r = self.say("Flip a coin", [call(FLIP)])  # she keeps asking for another flip

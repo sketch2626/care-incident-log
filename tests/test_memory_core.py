@@ -413,7 +413,8 @@ class TestRoutes(Case):
 
     def test_key_never_leaks(self):
         helpers.api("PUT", "/api/settings", {"gemini_key": KEY})
-        self.assertEqual(settings("gemini_key"), [KEY])
+        self.assertEqual(server.SECRETS.get("gemini_key"), KEY)  # M15d: kept in the store
+        self.assertEqual(settings("gemini_key"), [])  # and never in the table
         self.store.add("Likes tea")
         _, listed, _ = helpers.api("GET", "/api/mary/memories")
         _, called, _ = helpers.api("POST", "/api/mary/skills/call", {"name": "recall", "args": {"words": "tea"}})

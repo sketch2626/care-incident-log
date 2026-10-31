@@ -97,6 +97,20 @@ class HomePageTests(unittest.TestCase):
         self.assertIn("$('#backToMary').hidden = !FROM_MARY", js)
         self.assertIn("s.companion === 'him' ? 'Sam' : 'Mary'", js)
 
+    def test_mail_card_stays_out_of_save_and_keeps_the_password_in_its_box(self):
+        html, js, css = read("index.html"), read("app.js"), read("styles.css")
+        form_end = html.index("</form>", html.index('id="infoForm"'))
+        self.assertLess(form_end, html.index('id="mailCard"'))
+        self.assertLess(html.index('id="mailCard"'), html.index('id="skillsCard"'))
+        self.assertIn('type="password" id="mailPass" autocomplete="new-password" spellcheck="false"', html)
+        self.assertRegex(css, r"\[hidden\]\{display:none!important\}")  # hides .bigbtn too
+        self.assertIn("loadMail();", js)
+        mail = js[js.index("/* ---------- Connect email"):js.index("/* ---------- What Mary remembers")]
+        for banned in ("innerHTML", "localStorage", "console.", "state.", "toast("):
+            self.assertNotIn(banned, mail)
+        self.assertEqual(mail.count("box.value = '';"), 2)  # emptied whether it worked or not
+        self.assertNotIn("mail", js[js.index("INFO_FIELDS"):js.index("]", js.index("INFO_FIELDS"))].lower())
+
 
 if __name__ == "__main__":
     unittest.main()

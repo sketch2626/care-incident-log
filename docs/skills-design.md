@@ -77,7 +77,7 @@ tests/test_skills_contract.py # runs the contract on every folder in skills/
     }
   ],
   "storage": true,
-  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
+  "needs": {"internet_hosts": [], "mic": false, "send_mail": false, "modes": ["live", "normal", "offline"]},
   "offline": "works",
   "default_on": true
 }
@@ -91,6 +91,7 @@ tests/test_skills_contract.py # runs the contract on every folder in skills/
 - **`vision`** (optional, M4a): true lets the skill ask Gemini about a picture with `ctx.look(image_bytes, mime, question)`. The host makes the call, so the skill never holds the key. It answers `""` without this field, or when anything goes wrong.
 - **`memory`** (optional, M7a): true lets the skill read her memory with `ctx.recall(words, limit=6)`, which returns plain fact texts. It's read-only, and it answers `[]` without this field, or when anything goes wrong. A skill must keep those facts out of its responses, `view()` and logs. Word search uses it only to choose a theme.
 - **`needs.internet_hosts`** (change A): the only hosts `ctx.fetch` may reach, as exact names or one leading wildcard label (`"*.wikipedia.org"`, `"upload.wikimedia.org"`). An empty list means no internet at all.
+- **`needs.send_mail`** (optional, M15d): true lets the skill use `ctx.send_mail`. Without it the answer is `not_on_card` and nothing goes out.
 
 **`ctx.fetch(url, method="GET", params=None, headers=None, max_bytes=2_000_000, timeout=6)`** (change A) is the only way a skill reaches the internet:
 - `https` only. The host must match `internet_hosts`, and the check runs again after every redirect.
@@ -98,6 +99,12 @@ tests/test_skills_contract.py # runs the contract on every folder in skills/
 - No request body: it's GET with query `params`. The core adds nothing of the resident's (no memory, no transcript, no key), so resident text goes out only when the action's own arguments carry it.
 - Every fetch is logged in `skills.log` as the skill, the host, the status and the byte count. It never logs the path, the query or the response.
 - It returns `{status, content_type, body: bytes}` and raises `SkillFetchError` on anything refused or failed. Offline mode refuses it at once.
+
+**`ctx.send_mail(ticket, to, subject, body, pictures=())`** (M15d) sends from the resident's own Gmail or Yahoo account:
+- The skill never sees the password. The core keeps it in the secret store and logs in itself.
+- Every email needs a one-time ticket, bound to the skill and the exact content. Only the core can mint one, from the resident's own "send it" (M15c). Nothing mints yet. A ticket lasts two minutes and is good for one try, so a retry needs a new one.
+- The card needs `"slow": true`. A send ends within 12 s, inside the 18 s limit of a slow skill. A call past its limit keeps running in the background, so an email could go out after Mary said it hadn't. Make the send the last thing the action does.
+- It returns `{"ok": true}` or `{"ok": false, "code", "message"}` and never raises. `skills.log` keeps the skill and the result. `mail.log` also keeps the address. Neither keeps the subject, the body, the pictures or the password.
 
 ### 4. The core loader (`skills_core.py`)
 1. At start, scan `skills/*/manifest.json`. For each one: validate the manifest (the contract checks in section 8 that can run fast), import `skill.py` as module `skills.<name>.skill`, and check that every declared action has a handler `def <action>(ctx, **args)`. Any failure means the skill isn't loaded, with a line in `DATA\skills.log`.
@@ -150,7 +157,7 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 
 ### 6. Error boundaries
 - **Every call into skill code** (load, handler, `view`, `on_event`) runs through `guard()`:
-  - It runs on a worker thread with a time limit (2 s default; up to 8 s if the manifest declares `"slow": true`, for example fetching a picture).
+  - It runs on a worker thread with a time limit (2 s default; up to 18 s if the manifest declares `"slow": true`, for example fetching a picture).
   - Any exception or timeout records a failure in `skills.log`, with the skill, the action, the error type and a short message. It never holds resident text or keys.
   - It returns `{"error": "not_working"}`.
 - **The trip rule:** a crash on load, or 2 failures within 10 minutes, switches the skill off until the app restarts. Its tools are dropped from the next Gemini request and the next Live session.

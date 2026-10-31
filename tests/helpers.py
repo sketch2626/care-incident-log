@@ -27,6 +27,11 @@ os.environ["TRACKER_PORT"] = "0"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import secret_store  # noqa: E402
+
+SECRETS = secret_store.MemoryBackend()  # M15d: set before the server loads, so no test can reach real Credential Manager
+secret_store.set_backend(SECRETS)
+
 import server  # noqa: E402
 
 server._speech = False  # speech_engine() returns None; never loads the mic or the model
@@ -133,6 +138,9 @@ def reset_db():
     server.MEMORIES_BACKUP.with_suffix(".tmp").unlink(missing_ok=True)
     server._memory_backup_stale = False
     server._live_forgot_at = None
+    secret_store.set_backend(SECRETS)  # M15d: also undoes a test that swapped it
+    SECRETS.clear()
+    (server.DATA / "secret_move.log").unlink(missing_ok=True)
     try:
         server.ANDYFLOW_DB.unlink()
     except FileNotFoundError:

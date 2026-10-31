@@ -24,6 +24,8 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+import mail_core  # M15d: only for its plain words; skills may not import it
+
 SUPPORTED_CONTRACTS = {1}
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")          # skill (folder) names
@@ -41,7 +43,7 @@ OPTIONAL_FIELDS = ("screen", "sees", "settings", "slow", "vision", "memory")  # 
 ACTION_KEYS = {"name", "description", "inputSchema", "annotations", "offline_phrases", "always"}  # M13b: always
 MCP_ONLY_KEYS = {"annotations", "offline_phrases", "always"}  # M13b: always
 SCREEN_KEYS = {"menu_label", "menu_icon", "full_screen"}
-NEEDS_KEYS = {"internet_hosts", "mic", "modes"}
+NEEDS_KEYS = {"internet_hosts", "mic", "modes", "send_mail"}  # M15d: send_mail
 MODES = {"live", "normal", "offline"}
 RESERVED_ACTIONS = {"view", "on_event", "set_skill", "open_skill", "use_skill"}  # M13b: open_skill, use_skill
 
@@ -51,8 +53,10 @@ SCHEMA_KEYS = {"type", "properties", "items", "enum", "required", "description",
 CORE_EFFECT_KINDS = {"show_screen", "leave_screen", "settings"}
 FORBIDDEN_IMPORTS = {"server", "sqlite3", "mary", "assist", "subprocess", "ctypes", "multiprocessing", "importlib",
                      "urllib", "http", "requests", "httpx", "aiohttp", "socket", "ssl", "ftplib", "smtplib",
-                     "websocket", "websockets", "skills_core"}
-FORBIDDEN_NAMES = {"open", "exec", "eval", "__import__", "__builtins__"}
+                     "websocket", "websockets", "skills_core",
+                     "mail_core", "secret_store", "sys", "builtins", "gc", "inspect"}  # M15d
+FORBIDDEN_NAMES = {"open", "exec", "eval", "__import__", "__builtins__",
+                   "mint_ticket", "vars", "__dict__", "__self__", "__globals__", "__getattribute__"}  # M15d: from these on
 
 TITLE_MAX = 40
 SUMMARY_MAX = 200
@@ -354,6 +358,8 @@ def manifest_problems(manifest, folder_name):
     if manifest["offline"] not in ("works", "needs_internet"):
         problems.append("offline must be works or needs_internet")
     problems += _needs_problems(manifest["needs"])
+    if isinstance(manifest["needs"], dict) and manifest["needs"].get("send_mail") is True and manifest.get("slow") is not True:
+        problems.append("a skill with needs.send_mail must also have \"slow\": true")  # M15d: or a send outlives its guard
     problems += _screen_problems(manifest.get("screen"))
     settings = manifest.get("settings", [])
     if not isinstance(settings, list) or not all(
@@ -379,6 +385,8 @@ def _needs_problems(needs):
         problems.append("needs.internet_hosts must be host names like api.example.org or *.example.org")
     if "mic" in needs and not _bool_ok(needs["mic"]):
         problems.append("needs.mic must be true or false")
+    if "send_mail" in needs and not _bool_ok(needs["send_mail"]):  # M15d
+        problems.append("needs.send_mail must be true or false")
     modes = needs.get("modes", list(MODES))
     if not isinstance(modes, list) or not set(modes) <= MODES:
         problems.append("needs.modes must list live, normal or offline")
@@ -450,7 +458,7 @@ def source_problems(path):
                 problems.append(f"imports {root}")
         if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
             problems.append(f"uses {node.id}")
-        elif isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_NAMES:
+        elif isinstance(node, ast.Attribute) and (node.attr in FORBIDDEN_NAMES or node.attr == "_host"):  # M15d: _host
             problems.append(f"uses {node.attr}")
     return sorted(set(problems))
 
@@ -610,7 +618,8 @@ class SkillFiles:
 
 
 class SkillContext:
-    """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch() and look() (M4a)."""
+    """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch(), look() (M4a) and
+    send_mail() (M15d)."""
 
     def __init__(self, host, skill):
         self._host = host
@@ -663,6 +672,12 @@ class SkillContext:
         """The only way to the internet: https GET to the card's internet_hosts. Returns {status, content_type, body}."""
         return self._host._fetch(self._skill, url, method, params, headers, max_bytes, timeout)
 
+    def send_mail(self, ticket, to, subject, body, pictures=()):  # M15d
+        """Sends from her own email account through the host, so a skill never sees the password. The card needs
+        needs.send_mail true and "slow": true, and each email needs a one-time ticket only the core can mint.
+        Returns {"ok": True} or {"ok": False, "code": ..., "message": ...}, and never raises."""
+        return self._host._send_mail(self._skill, ticket, to, subject, body, pictures)
+
     def look(self, image_bytes, mime, question):  # M4a
         """Asks what a picture shows, through the host, so a skill never holds the key. Text, or "" when the card has no
         "vision": true, the host has no vision, or anything went wrong."""
@@ -714,7 +729,8 @@ class SkillHost:
     """Loads the skills in skills_dir and runs them. Backends come from the caller, so tests need no server:
     connect() -> sqlite3 connection, get_settings() -> {str: str}, put_settings({str: str}), online() -> bool.
     timeout / slow_timeout bound every call into skill code; clock is for tests of the trip rule;
-    fetcher(skill_name, url, **kw), when given, replaces every skill's ctx.fetch (contract tests)."""
+    fetcher(skill_name, url, **kw), when given, replaces every skill's ctx.fetch (contract tests).
+    mailer, set by the app, is the only way a skill's email leaves (M15d); it checks the one-time ticket."""
 
     def __init__(self, skills_dir, data_dir, connect, get_settings, put_settings, online=lambda: True,
                  log_path=None, timeout=GUARD_TIMEOUT, slow_timeout=GUARD_SLOW_TIMEOUT, clock=time.monotonic,
@@ -731,6 +747,7 @@ class SkillHost:
         self._clock = clock
         self._fetcher = fetcher
         self.vision = None  # M4a: set by the app: vision(image_bytes, mime, question) -> text or ""
+        self.mailer = None  # M15d: set by the app: mailer(skill_name, ticket, to, subject, body, pictures) -> result
         self.recall = None  # M7a: set by the app: recall(words, limit=6) -> list of fact texts
         self.opened = None  # M13b: the group she opened last (memory only)
         self.aside = None  # M13b: the skill the page has set aside (memory only)
@@ -1256,6 +1273,23 @@ class SkillHost:
             return None
         out = self.call(best[1], {}, heard=text)  # M7a
         return None if out["response"].get("not_for_me") else out  # M7a: her normal offline line runs instead
+
+    # ----- email (M15d) -----
+
+    def _send_mail(self, skill, ticket, to, subject, body, pictures):
+        """ctx.send_mail. This checks the card and the mailer checks the ticket. Logs no address and no content."""
+        if not skill.manifest.get("needs", {}).get("send_mail"):
+            self._log("mail_refused", skill=skill.name, reason="not_on_card")
+            return {"ok": False, "code": "not_on_card", "message": "This skill isn't allowed to send email."}
+        if self.mailer is None:
+            result = {"ok": False, "code": "no_email", "message": mail_core.MESSAGES["no_email"]}
+        else:
+            try:
+                result = self.mailer(skill.name, ticket, to, subject, body, pictures)
+            except Exception:  # noqa: BLE001 (a send that fails is a refusal, never the skill's crash)
+                result = {"ok": False, "code": "refused", "message": mail_core.MESSAGES["refused"]}
+        self._log("mail", skill=skill.name, ok=result["ok"], code=result.get("code", ""))
+        return result
 
     # ----- the internet -----
 

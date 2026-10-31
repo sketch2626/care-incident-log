@@ -18,69 +18,18 @@
 /* the white panel, y 140 to 664; the Menu button's shadow ends at y 130 */
 .m8-panel{position:absolute;left:512px;top:140px;width:740px;height:524px;box-sizing:border-box;display:flex;gap:28px;align-items:center;padding:24px;background:#fff;color:#1f1b16;border:3px solid #2b1f17;border-radius:26px;box-shadow:0 6px 0 rgba(43,31,23,.22);overflow:hidden}
 .m8-panel.col{flex-direction:column;align-items:stretch;justify-content:center;gap:22px}
-.m8-panel.tall{justify-content:center;flex-direction:column;gap:20px}
 .m8-rowin{display:flex;gap:28px;align-items:center}
 
-/* the card */
-.m8-art{display:block;width:100%}
-.m8-card{padding:0;gap:0;flex-direction:column;align-items:stretch;justify-content:flex-start}
-.m8-card .m8-art{flex:none;height:280px}
-.m8-words{flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:0 32px;font:400 32px/1.3 "Segoe UI",system-ui,sans-serif}
-.m8-words p,.m8-say p{margin:0}
+/* the words of a plain message */
+.m8-say p{margin:0}
 .m8-sign{font-weight:600}
-.m8-mini{flex:none;box-sizing:border-box;overflow:hidden;background:#fff;border:3px solid #2b1f17;border-radius:16px}
-.m8-mini.s{width:240px}
-.m8-mini.m{width:320px}
-.m8-mini .m8-art{height:auto}
-.m8-miniw{padding:7px 4px;font:400 20px/1.3 "Segoe UI",system-ui,sans-serif;text-align:center;white-space:nowrap;color:#1f1b16}
-.m8-mini.m .m8-miniw{font-size:24px}
-
-/* board A: the calendar page */
-.m8-cal{box-sizing:border-box;width:230px;height:270px;overflow:hidden;background:#fff;border:4px solid #2b1f17;border-radius:20px;text-align:center}
-.m8-cal b{display:block;height:72px;font:700 40px/72px "Segoe UI",system-ui,sans-serif;color:#fff;background:var(--ink)}
-.m8-cal span{display:block;font:700 150px/190px "Segoe UI",system-ui,sans-serif;color:#1f1b16}
-.m8-who{font:700 34px/1.25 "Segoe UI",system-ui,sans-serif}
-.m8-when{font:400 26px/1.3 "Segoe UI",system-ui,sans-serif}
-
-/* board B: the picture tiles, 240 by 258 */
-.m8-tiles{position:absolute;left:512px;top:134px;width:740px;display:grid;grid-template-columns:240px 240px 240px;grid-template-rows:258px 258px;column-gap:10px;row-gap:14px}
-.m8-tile{position:relative;box-sizing:border-box;display:flex;flex-direction:column;padding:0;overflow:hidden;background:#fff;color:#1f1b16;border:3px solid #2b1f17;border-radius:22px;box-shadow:0 5px 0 rgba(43,31,23,.2);cursor:pointer}
-.m8-tile .m8-art{flex:none;height:206px}
-.m8-name{flex:1;display:flex;align-items:center;justify-content:center;font:700 24px/1.2 "Segoe UI",system-ui,sans-serif;white-space:nowrap}
-.m8-tile.new{align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:#fffdf8;text-align:center}
-.m8-tile.new svg{flex:none;width:72px;height:72px}
-.m8-new1{font:700 24px/1.2 "Segoe UI",system-ui,sans-serif}
-.m8-new2{font:400 21px/1.25 "Segoe UI",system-ui,sans-serif}
-
-/* picked: the thick ring and the check */
-.m8-tile.on,.m8-pick.on{outline:8px solid var(--ink)}
-.m8-check{position:absolute;top:8px;right:8px;box-sizing:border-box;width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:var(--ink);color:#fff;border:4px solid #fff;border-radius:50%}
-.m8-check svg{width:32px;height:32px}
-
-/* board D1: who and how */
-.m8-row{position:absolute;left:512px;width:740px;display:grid;grid-template-columns:236px 236px 236px;column-gap:16px}
-.m8-row.who{top:140px;grid-template-rows:200px}
-.m8-row.way{top:406px;grid-template-rows:244px}
-.m8-ask{position:absolute;left:512px;top:354px;width:740px;height:44px;margin:0;display:flex;align-items:center;font:700 30px/1.25 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
-.m8-pick{position:relative;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:8px;background:#fffdf8;color:#1f1b16;border:4px solid #2b1f17;border-radius:26px;box-shadow:0 6px 0 rgba(43,31,23,.22);cursor:pointer}
-.m8-pick svg.ic{width:72px;height:72px;flex:none}
-.m8-init{box-sizing:border-box;width:92px;height:92px;display:flex;align-items:center;justify-content:center;font:700 44px/1 "Segoe UI",system-ui,sans-serif;color:#fff;background:#544739;border-radius:50%}
-.m8-pick.on .m8-init{background:var(--ink)}
-.m8-pname{font:700 32px/1.2 "Segoe UI",system-ui,sans-serif}
-.m8-psub{font:400 22px/1.3 "Segoe UI",system-ui,sans-serif}
 
 /* labelled lines and plain lines */
-.m8-facts{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;font:400 26px/1.3 "Segoe UI",system-ui,sans-serif}
-.m8-facts b{font-weight:700}
 .m8-plain{font:400 24px/1.35 "Segoe UI",system-ui,sans-serif}
 .m8-rule{padding-top:16px;border-top:3px solid #d9d0c2}
-.m8-keep{font:600 26px/1.3 "Segoe UI",system-ui,sans-serif}
 .m8-done{flex:none;display:block;width:110px;height:110px}
-.m8-small{font-size:24px}
 
-/* board D3: the plain countdown and its one button */
-.m8-count{font:700 120px/1 "Segoe UI",system-ui,sans-serif}
-.m8-going{font:700 28px/1.25 "Segoe UI",system-ui,sans-serif}
+/* one button alone in the bottom row */
 .m8-bar.one{justify-content:center}
 .m8-bar.one .ans{flex:none;width:300px;font-size:32px}
 
@@ -89,7 +38,6 @@
 .m8-steps li{display:flex;align-items:center;gap:14px}
 .m8-num{flex:none;width:52px;height:52px;display:flex;align-items:center;justify-content:center;font:700 28px/1 "Segoe UI",system-ui,sans-serif;color:#fff;background:var(--ink);border-radius:50%}
 
-/* board G: the words of a plain message */
 .m8-say{display:flex;flex-direction:column;gap:12px;font:400 32px/1.3 "Segoe UI",system-ui,sans-serif}
 
 /* our own neutral drawing of one chat, in the panel beside Mary; the dark frame and page grey keep it apart from her controls */
@@ -102,8 +50,6 @@
 .m8-bub.me{align-self:flex-end;background:#1f5fbf;color:#fff}
 .m8-box{position:absolute;left:12px;right:12px;bottom:12px;min-height:84px;box-sizing:border-box;display:flex;align-items:center;gap:16px;padding:8px 12px;background:#fff;border:2px solid #c8cdd4;border-radius:24px}
 .m8-ph{flex:1;color:#544739}
-.m8-pasted{flex:none;width:204px;overflow:hidden;border:2px solid #c8cdd4;border-radius:12px}
-.m8-pasted .m8-art{height:auto}
 .m8-send{position:relative;flex:none;width:64px;height:64px;color:#1f5fbf}
 .m8-send svg{display:block;width:64px;height:64px}
 .m8-ring{position:absolute;left:-18px;top:-18px;box-sizing:border-box;width:100px;height:100px;border:8px solid #f2b632;border-radius:50%;box-shadow:0 0 0 3px #2b1f17,inset 0 0 0 3px #2b1f17}
@@ -111,7 +57,6 @@
 /* board notes: dashed, not part of the app */
 .m8-note{position:absolute;box-sizing:border-box;padding:6px 14px;font:600 20px/1.3 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fffdf8;border:3px dashed #544739;border-radius:10px}
 .m8-note.corner{left:48px;top:262px;white-space:nowrap}
-.m8-note.where{left:232px;top:47px;width:368px}
 
 
 /* ---- M15b: the card art boards, built by round8-src/build.py. New classes are .c8-; nothing here goes under 20px. ---- */
@@ -191,3 +136,61 @@
 .c8-sh-closed,.c8-fall,.c8-face .c8-dim{opacity:0}
 .c8-cover{transform:translateZ(1px) rotateY(-180deg)}
 }
+
+/* (d2, d2b, d3, f) the card over its envelope; d3 is the same picture smaller */
+.c8-look{position:absolute;left:512px;top:200px;width:740px;height:420px}
+.c8-look.small{left:627px;top:150px;width:510px;height:280px}
+.c8-env{position:absolute;left:208px;top:24px;width:532px;height:372px;box-shadow:0 1px 2px rgba(60,38,18,.38),3px 7px 14px rgba(60,38,18,.26),8px 18px 38px rgba(60,38,18,.26)}
+.c8-look.small .c8-env{left:130px;top:7px;width:380px;height:266px}
+.c8-lookcard{position:absolute;left:8px;top:0;width:300px;height:420px;transform:rotate(-1.5deg);box-shadow:1px 1px 2px rgba(60,38,18,.4),4px 8px 14px rgba(60,38,18,.3),10px 20px 40px rgba(60,38,18,.32)}
+.c8-look.small .c8-lookcard{left:0;width:200px;height:280px}
+.c8-addr{position:absolute;left:124px;top:166px;color:#1c2a4a;white-space:nowrap;font-family:"Cedarville Cursive","Segoe Script",cursive;transform:rotate(-.6deg);transform-origin:0 50%}
+.c8-addr-name{font-size:38px;line-height:54px}
+.c8-addr-mail{font-size:26px;line-height:42px}
+.c8-look.small .c8-addr{left:88px;top:112px}
+.c8-look.small .c8-addr-name{font-size:26px;line-height:38px}
+.c8-look.small .c8-addr-mail{font-size:20px;line-height:30px}
+
+/* (d2b) the one quiet fallback: an outline on her glow, not the main teal */
+.ans.c8-quiet{background:transparent;box-shadow:none;border:4px solid #1f1b16}
+
+/* (d3, g2) five seconds, 1s per digit, then the sent line for 3s. Digits stack and only their opacity changes. */
+.c8-going{position:absolute;left:512px;top:466px;width:740px;text-align:center;font:600 32px/44px "Segoe UI",system-ui,sans-serif;color:#1f1b16;animation:c8-goes 8s steps(1,end) infinite}
+.c8-undo{position:absolute;left:512px;top:530px;width:740px;height:184px;min-height:0;padding:0;display:flex;align-items:center;justify-content:center;gap:36px;font:700 56px/1 "Segoe UI",system-ui,sans-serif;animation:c8-goes 8s steps(1,end) infinite}
+.c8-count{position:relative;display:block;width:64px;height:96px;font:700 96px/96px "Segoe UI",system-ui,sans-serif}
+.c8-d{position:absolute;left:0;top:0;width:100%;text-align:center;opacity:0;animation:c8-digit 8s steps(1,end) infinite}
+.c8-d.n5{opacity:1}
+.c8-d.n4{animation-delay:1s}
+.c8-d.n3{animation-delay:2s}
+.c8-d.n2{animation-delay:3s}
+.c8-d.n1{animation-delay:4s}
+.c8-sentline{position:absolute;left:512px;top:586px;width:740px;text-align:center;font:700 56px/72px "Segoe UI",system-ui,sans-serif;color:#1f1b16;opacity:0;animation:c8-arrive 8s steps(1,end) infinite}
+@keyframes c8-digit{0%{opacity:1}12.5%{opacity:0}100%{opacity:0}}
+@keyframes c8-goes{0%{opacity:1}62.5%{opacity:0}100%{opacity:0}}
+@keyframes c8-arrive{0%{opacity:0}62.5%{opacity:1}100%{opacity:1}}
+@media (prefers-reduced-motion: reduce){
+.c8-going,.c8-undo,.c8-d,.c8-sentline{animation:none}
+}
+
+/* (f) sent */
+.c8-sentnote{position:absolute;left:356px;top:70px;width:384px;color:#1f1b16}
+.c8-sentname{margin-top:22px;font:700 44px/56px "Segoe UI",system-ui,sans-serif}
+.c8-senttime{margin-top:10px;font:400 30px/40px "Segoe UI",system-ui,sans-serif}
+
+/* (e1) the panel takes the whole area now that the bottom row is gone */
+.m8-panel.c8-full{height:628px}
+.c8-full .m8-steps{font-size:32px}
+.c8-full .m8-plain{font-size:28px}
+.c8-smallcard{position:relative;flex:none;width:200px;height:280px;box-shadow:0 1px 2px rgba(60,38,18,.4),2px 6px 12px rgba(60,38,18,.28),6px 14px 26px rgba(60,38,18,.22)}
+
+/* (e3) one picture in the box: the front beside the inside page, 248 by 174 */
+.c8-pasted{flex:none;display:flex;box-sizing:content-box;width:248px;height:174px;overflow:hidden;border:2px solid #c8cdd4;border-radius:12px}
+.c8-pasted-half{position:relative;flex:none;width:124px;height:174px;overflow:hidden}
+.c8-pasted-scale{width:370px;height:518px;transform:scale(.3351);transform-origin:0 0}
+.c8-pasted-scale .c8-page.r{left:0}
+.m8-note.c8-where{left:276px;top:36px;width:328px}
+
+/* (g, g2) plain stationery: not a card, just her words on cream paper */
+.c8-letter{position:absolute;left:562px;top:190px;width:640px;height:440px;box-sizing:border-box;padding:0 48px;display:flex;flex-direction:column;justify-content:center;color:#1f1b16;box-shadow:0 1px 2px rgba(60,38,18,.34),3px 7px 14px rgba(60,38,18,.24),8px 18px 36px rgba(60,38,18,.24)}
+.c8-letter.small{top:150px;height:280px}
+.c8-letter .m8-say{position:relative}

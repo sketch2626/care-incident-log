@@ -4,8 +4,9 @@ changes flow to every board. Stdlib only. Run paint.py first if a scene changed.
 
 To add a board, call board(file, title, who, body, caption_lines). The face SVGs in
 face-*.svg are byte-identical copies from the original boards; leave them alone.
-New CSS belongs in ../round8/r8.css in the .c8- section."""
+New CSS belongs in ../round8/r8.css in the .c8- section. canvas.json is laid out from ROWS."""
 import html
+import json
 import math
 import os
 
@@ -232,6 +233,133 @@ def opening():
             % (page_right('c8r', 'pen'), art('lake'), page_left('c8l')))
 
 
+# ---- sending: the card with its envelope ---------------------------------------------------
+
+def envelope():
+    """The cream envelope: grain from sheet(), a trace of its folds, a turned edge and a plain stamp."""
+    w, h = 532, 372
+    foil = 'c8e-foil'
+    x, y, sw, sh = 438, 24, 70, 88
+    lines = ('<svg class="c8-rules" viewBox="0 0 %d %d" aria-hidden="true"><defs>%s'
+             '<linearGradient id="c8e-wine" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7a2540"></stop><stop offset="1" stop-color="#4a1020"></stop></linearGradient></defs>'
+             '<path d="M2 3 266 196 530 3M2 369 214 152M530 369 318 152" fill="none" stroke="#7a5c34" stroke-width="1.4" opacity=".12"></path>'
+             '<rect x="1.5" y="1.5" width="%d" height="%d" fill="none" stroke="#fffaf0" stroke-width="1.6" opacity=".85"></rect>'
+             '<path d="M1 %dH%dV1" fill="none" stroke="#8a6e46" stroke-width="1.6" opacity=".55"></path>'
+             '<rect x="%d" y="%d" width="%d" height="%d" fill="#5a4020" opacity=".22"></rect>'
+             '<rect x="%d" y="%d" width="%d" height="%d" fill="#fffaf0" stroke="#fffaf0" stroke-width="7" stroke-dasharray=".1 9" stroke-linecap="round"></rect>'
+             '<rect x="%d" y="%d" width="%d" height="%d" fill="url(#c8e-wine)"></rect>'
+             '<rect x="%d" y="%d" width="%d" height="%d" fill="none" stroke="url(#%s)" stroke-width="1"></rect>'
+             '<g transform="translate(%d %d) scale(.3)" fill="url(#%s)">%s</g></svg>'
+             % (w, h, gradient(foil, GILT, -90, 0, 90, 0, True), w - 3, h - 3, h - 1, w - 1,
+                x + 3, y + 4, sw, sh, x, y, sw, sh, x + 5, y + 5, sw - 10, sh - 10, x + 9, y + 9, sw - 18, sh - 18, foil,
+                x + sw // 2, y + sh // 2, foil, SPRIG % foil))
+    return '<div class="c8-env">\n%s\n%s\n<div class="c8-addr"><div class="c8-addr-name">Mark Hollis</div><div class="c8-addr-mail">mark.hollis@example.com</div></div>\n</div>' % (
+        sheet('c8e', w, h, '#fbf3e2', '#efe2c9', 11, .3), lines)
+
+
+def last_look(size=''):
+    """The Lake front over the envelope. The same picture on D2, D2b and, smaller, on D3."""
+    return ('<div class="c8-look%s">\n%s\n<div class="c8-lookcard">\n<div class="c8-stock"></div>\n%s\n</div>\n</div>'
+            % (' small' if size else '', envelope(), art('lake')))
+
+
+def undo(person):
+    """The five seconds: Undo and its count, then the sent line. Pure CSS, see c8-digit in r8.css."""
+    digits = ''.join('<span class="c8-d n%d">%d</span>' % (n, n) for n in (5, 4, 3, 2, 1))
+    return ('<div class="c8-going">Going to %s\'s email</div>\n'
+            '<button class="ans yes c8-undo" type="button"><span>Undo</span><span class="c8-count">%s</span></button>\n'
+            '<div class="c8-sentline">Sent to %s.</div>' % (person, digits, person))
+
+
+def title(words):
+    return '<h1 class="m8-title"><span>%s</span></h1>\n' % words
+
+
+def sent():
+    tick = ('<svg class="m8-done" viewBox="0 0 110 110" aria-hidden="true"><circle cx="55" cy="55" r="55" fill="#0f5560"></circle>'
+            '<path d="M28 58l19 19 36-42" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"></path></svg>')
+    return (title('Sent') + '<div class="c8-look">\n<div class="c8-lookcard">\n<div class="c8-stock"></div>\n%s\n</div>\n'
+            '<div class="c8-sentnote">%s<div class="c8-sentname">Sent to Mark</div><div class="c8-senttime"><div>Today at 2:14</div><div>in the afternoon</div></div></div>\n</div>' % (art('lake'), tick))
+
+
+def small_card():
+    return '<div class="c8-smallcard">\n%s\n</div>' % art('lake')
+
+
+def messenger_steps():
+    return (title('Sending by Messenger') + '<div class="m8-panel col c8-full">\n<div class="m8-rowin">\n%s\n<ol class="m8-steps">\n'
+            '<li><span class="m8-num">1</span>I open Mark\'s chat</li>\n<li><span class="m8-num">2</span>You tap Paste</li>\n<li><span class="m8-num">3</span>You tap Send</li>\n</ol>\n</div>\n'
+            '<div class="m8-plain m8-rule">Messenger doesn\'t let me press Send. That part is yours.</div>\n</div>' % small_card())
+
+
+CHAT = ('<div class="m8-chead"><span class="m8-cinit">M</span>Mark Hollis</div>\n'
+        '<div class="m8-bubs"><div class="m8-bub them">How are you feeling this week?</div><div class="m8-bub me">Better, thank you.</div><div class="m8-bub them">Good. I\'ll call you Sunday.</div></div>\n'
+        '<div class="m8-note corner">Facebook\'s page, in the panel beside Mary, drawn by us</div>\n')
+SEND = '<svg viewBox="0 0 56 56" aria-hidden="true" fill="currentColor"><path d="M8 48 50 28 8 8l4 16 20 4-20 4Z"></path></svg>'
+
+
+def paste_page():
+    return ('<div class="m8-page">\n%s<div class="m8-box"><span class="m8-ph">Type a message</span><span class="m8-send">%s</span></div>\n</div>\n'
+            '<div class="m8-bar"><button class="ans yes" type="button">Paste</button></div>' % (CHAT, SEND))
+
+
+def pasted_page():
+    """One picture in the box: the Lake front beside the inside page."""
+    picture = ('<div class="c8-pasted" role="img" aria-label="The card, front and inside">\n<div class="c8-pasted-half">\n%s\n</div>\n'
+               '<div class="c8-pasted-half"><div class="c8-pasted-scale">\n%s\n</div></div>\n</div>' % (art('lake'), page_right('c8r', 'pen')))
+    return ('<div class="m8-page">\n%s<div class="m8-box">%s<span class="m8-ph"></span><span class="m8-send">%s<span class="m8-ring"></span></span>'
+            '<div class="m8-note c8-where">Board note: where the Send button is. Mary draws nothing on their page.</div></div>\n</div>\n'
+            '<div class="m8-bar"><button class="ans" type="button">It didn\'t go</button><button class="ans yes" type="button">It went</button></div>' % (CHAT, picture, SEND))
+
+
+def letter(size=''):
+    """A plain message: cream paper with her words in a plain face, no card and no picture."""
+    return ('<div class="c8-letter%s">\n%s\n<div class="m8-say"><p>Tyler, I saw your game on Friday night.</p><p>I\'m proud of you.</p><p class="m8-sign">Love, Grandma</p></div>\n</div>'
+            % (' small' if size else '', sheet('c8m', 640, 280 if size else 440, '#fbf6ea', '#f3e9d6', 13, .22)))
+
+
+# file, board title on the canvas; one row per stretch of the journey, each under a title note
+ROWS = [
+    ('Her reminder, once', [
+        ('A-Reminder-Mary.dc.html', '(a) The reminder · Mary'),
+        ('A-Reminder-Sam.dc.html', '(a) The reminder · Sam')]),
+    ('Choosing and the card', [
+        ('B-Design-Mary.dc.html', '(b) Four fronts, or one to order'),
+        ('C-Card-Mary.dc.html', '(c) The front, for their words'),
+        ('C3-Opens-Mary.dc.html', '(c3) The card opens, moving'),
+        ('C2-Inside-Mary.dc.html', '(c2) Inside, in cursive'),
+        ('C4-Plain-Mary.dc.html', '(c4) Inside, plainer handwriting')]),
+    ('Sending', [
+        ('D2-LastLook-Mary.dc.html', '(d2) Before it goes, by voice'),
+        ('D2b-Tap-Mary.dc.html', '(d2b) After two misheard tries: Send it'),
+        ('D3-Sending-Mary.dc.html', '(d3) Five seconds to Undo, moving'),
+        ('F-Sent-Mary.dc.html', '(f) Sent, and she offers the other routes')]),
+    ('Messenger', [
+        ('E1-Open-Mary.dc.html', '(e1) Messenger: still in her app'),
+        ('E2-Paste.dc.html', '(e2) The chat beside her: tap Paste'),
+        ('E3-Send.dc.html', '(e3) Tap Send in the chat')]),
+    ('A plain message', [
+        ('G-Message-Mary.dc.html', '(g) A plain message'),
+        ('G2-Undo-Mary.dc.html', '(g2) Five seconds to Undo, moving')]),
+]
+
+
+def write_canvas():
+    path = os.path.join(OUT, 'canvas.json')
+    with open(path, encoding='utf-8') as f:
+        canvas = json.load(f)
+    canvas['boards'], canvas['order'], canvas['notes'] = {}, [], {}
+    for r, (heading, boards) in enumerate(ROWS):
+        y = r * 1220
+        canvas['notes']['t%d' % r] = {'x': 0, 'y': y - 300, 'text': heading, 'kind': 'title1', 'maxW': 2640}
+        for c, (file, name) in enumerate(boards):
+            canvas['boards'][file] = {'x': c * 1360, 'y': y, 'w': 1280, 'h': 800, 'title': name}
+            canvas['order'].append(file)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        json.dump(canvas, f, ensure_ascii=False, indent=0)
+        f.write('\n')
+
+
 def main():
     board('A-Reminder-Mary.dc.html', 'Birthday reminder, Mary', 'mary', keepsake('mary'), ('Want to make', 'him a card?'))
     board('A-Reminder-Sam.dc.html', 'Birthday reminder, Sam', 'sam', keepsake('sam'), ('Want to send', 'him a card?'))
@@ -240,7 +368,18 @@ def main():
     board('C2-Inside-Mary.dc.html', 'Inside the card', 'mary', spread('pen'), ('Anything to', 'change?'))
     board('C3-Opens-Mary.dc.html', 'The card opens', 'mary', opening(), ("Here's how", 'it reads.'))
     board('C4-Plain-Mary.dc.html', 'Inside the card, plainer writing', 'mary', spread('plain'), ('Easier to', 'read?'))
-    print('built 7 boards')
+    board('D2-LastLook-Mary.dc.html', 'Before it goes', 'mary', title('Before it goes') + last_look(), ('Five seconds', 'to stop it.'))
+    board('D2b-Tap-Mary.dc.html', 'Before it goes, one tap', 'mary',
+          title('Before it goes') + last_look() + '\n<div class="m8-bar one"><button class="ans c8-quiet" type="button">Send it</button></div>', ('Say it again,', 'or tap here.'))
+    board('D3-Sending-Mary.dc.html', 'Sending', 'mary', title('Sending') + last_look('small') + '\n' + undo('Mark'), ('Going to', "Mark's email."))
+    board('F-Sent-Mary.dc.html', 'Sent', 'mary', sent(), ('Messenger', 'or printed?'))
+    board('E1-Open-Mary.dc.html', 'Sending by Messenger', 'mary', messenger_steps(), ('Your hand on', 'this one.'))
+    board('E2-Paste.dc.html', 'Tap Paste', 'mary', paste_page(), ('Tap Paste.',))
+    board('E3-Send.dc.html', 'Tap Send', 'mary', pasted_page(), ('Now tap Send.',))
+    board('G-Message-Mary.dc.html', 'Message to Tyler', 'mary', title('Message to Tyler') + letter(), ('Five seconds', 'to stop it.'))
+    board('G2-Undo-Mary.dc.html', 'Message to Tyler, sending', 'mary', title('Message to Tyler') + letter('small') + '\n' + undo('Tyler'), ("To Tyler's", 'email.'))
+    write_canvas()
+    print('built %d boards' % sum(len(b) for _, b in ROWS))
 
 
 if __name__ == '__main__':

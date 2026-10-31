@@ -1,173 +1,182 @@
 {
-"v":3,
-"createdOnFiles":{
-"v":1,
-"at":"2026-10-31T18:00:00Z"
+"v": 3,
+"createdOnFiles": {
+"v": 1,
+"at": "2026-10-31T18:00:00Z"
 },
-"title":"Mary round 8: cards and messages",
-"launch":{
-"view":"canvas"
+"title": "Mary round 8: cards and messages",
+"launch": {
+"view": "canvas"
 },
-"pages":[],
-"boards":{
-"A-Reminder-Mary.dc.html":{
-"x":0,
-"y":0,
-"w":1280,
-"h":800,
-"title":"(a) The reminder · Mary"
+"pages": [],
+"boards": {
+"A-Reminder-Mary.dc.html": {
+"x": 0,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a) The reminder · Mary"
 },
-"A-Reminder-Sam.dc.html":{
-"x":1360,
-"y":0,
-"w":1280,
-"h":800,
-"title":"(a) The reminder · Sam"
+"A-Reminder-Sam.dc.html": {
+"x": 1360,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a) The reminder · Sam"
 },
-"B-Design-Mary.dc.html":{
-"x":0,
-"y":1220,
-"w":1280,
-"h":800,
-"title":"(b) Pick a picture"
+"B-Design-Mary.dc.html": {
+"x": 0,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(b) Four fronts, or one to order"
 },
-"C-Card-Mary.dc.html":{
-"x":1360,
-"y":1220,
-"w":1280,
-"h":800,
-"title":"(c) The card with their words"
+"C-Card-Mary.dc.html": {
+"x": 1360,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(c) The front, for their words"
 },
-"C2-Inside-Mary.dc.html":{
-"x":2720,
-"y":1220,
-"w":1280,
-"h":800,
-"title":"(c2) Inside, her words in her handwriting font"
+"C3-Opens-Mary.dc.html": {
+"x": 2720,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(c3) The card opens, moving"
 },
-"C3-Opens-Mary.dc.html":{
-"x":4080,
-"y":1220,
-"w":1280,
-"h":800,
-"title":"(c3) The card opens, moving"
+"C2-Inside-Mary.dc.html": {
+"x": 4080,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(c2) Inside, in cursive"
 },
-"C4-Plain-Mary.dc.html":{
-"x":5440,
-"y":1220,
-"w":1280,
-"h":800,
-"title":"(c4) Inside, plainer handwriting"
+"C4-Plain-Mary.dc.html": {
+"x": 5440,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(c4) Inside, plainer handwriting"
 },
-"D1-Who-Mary.dc.html":{
-"x":0,
-"y":2440,
-"w":1280,
-"h":800,
-"title":"(d1) Who gets it, and how"
+"D2-LastLook-Mary.dc.html": {
+"x": 0,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(d2) Before it goes, by voice"
 },
-"D2-LastLook-Mary.dc.html":{
-"x":1360,
-"y":2440,
-"w":1280,
-"h":800,
-"title":"(d2) The last look"
+"D2b-Tap-Mary.dc.html": {
+"x": 1360,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(d2b) After two misheard tries: Send it"
 },
-"D3-Sending-Mary.dc.html":{
-"x":0,
-"y":3660,
-"w":1280,
-"h":800,
-"title":"(d3) One saved way: going in 5 seconds, with Stop"
+"D3-Sending-Mary.dc.html": {
+"x": 2720,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(d3) Five seconds to Undo, moving"
 },
-"E1-Open-Mary.dc.html":{
-"x":0,
-"y":4880,
-"w":1280,
-"h":800,
-"title":"(e1) Messenger: still in her app"
+"F-Sent-Mary.dc.html": {
+"x": 4080,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(f) Sent, and she offers the other routes"
 },
-"E2-Paste.dc.html":{
-"x":1360,
-"y":4880,
-"w":1280,
-"h":800,
-"title":"(e2) The chat in the panel beside her, tap Paste"
+"E1-Open-Mary.dc.html": {
+"x": 0,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "(e1) Messenger: still in her app"
 },
-"E3-Send.dc.html":{
-"x":0,
-"y":6100,
-"w":1280,
-"h":800,
-"title":"(e3) Tap Send in the chat"
+"E2-Paste.dc.html": {
+"x": 1360,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "(e2) The chat beside her: tap Paste"
 },
-"F-Sent-Mary.dc.html":{
-"x":0,
-"y":7320,
-"w":1280,
-"h":800,
-"title":"(f) Sent"
+"E3-Send.dc.html": {
+"x": 2720,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "(e3) Tap Send in the chat"
 },
-"G-Message-Mary.dc.html":{
-"x":1360,
-"y":7320,
-"w":1280,
-"h":800,
-"title":"(g) A plain message"
+"G-Message-Mary.dc.html": {
+"x": 0,
+"y": 4880,
+"w": 1280,
+"h": 800,
+"title": "(g) A plain message"
+},
+"G2-Undo-Mary.dc.html": {
+"x": 1360,
+"y": 4880,
+"w": 1280,
+"h": 800,
+"title": "(g2) Five seconds to Undo, moving"
 }
 },
-"order":[
+"order": [
 "A-Reminder-Mary.dc.html",
 "A-Reminder-Sam.dc.html",
 "B-Design-Mary.dc.html",
 "C-Card-Mary.dc.html",
-"C2-Inside-Mary.dc.html",
 "C3-Opens-Mary.dc.html",
+"C2-Inside-Mary.dc.html",
 "C4-Plain-Mary.dc.html",
-"D1-Who-Mary.dc.html",
 "D2-LastLook-Mary.dc.html",
+"D2b-Tap-Mary.dc.html",
 "D3-Sending-Mary.dc.html",
+"F-Sent-Mary.dc.html",
 "E1-Open-Mary.dc.html",
 "E2-Paste.dc.html",
 "E3-Send.dc.html",
-"F-Sent-Mary.dc.html",
-"G-Message-Mary.dc.html"],
-"notes":{
-"t0":{
-"x":0,
-"y":-300,
-"text":"Her reminder, once",
-"kind":"title1",
-"maxW":2640
+"G-Message-Mary.dc.html",
+"G2-Undo-Mary.dc.html"
+],
+"notes": {
+"t0": {
+"x": 0,
+"y": -300,
+"text": "Her reminder, once",
+"kind": "title1",
+"maxW": 2640
 },
-"t1":{
-"x":0,
-"y":920,
-"text":"Choosing and writing the card",
-"kind":"title1",
-"maxW":2640
+"t1": {
+"x": 0,
+"y": 920,
+"text": "Choosing and the card",
+"kind": "title1",
+"maxW": 2640
 },
-"t2":{
-"x":0,
-"y":2140,
-"text":"Who, how, and the last look",
-"kind":"title1",
-"maxW":2640
+"t2": {
+"x": 0,
+"y": 2140,
+"text": "Sending",
+"kind": "title1",
+"maxW": 2640
 },
-"t3":{
-"x":0,
-"y":4580,
-"text":"Messenger: what the resident sees and taps",
-"kind":"title1",
-"maxW":2640
+"t3": {
+"x": 0,
+"y": 3360,
+"text": "Messenger",
+"kind": "title1",
+"maxW": 2640
 },
-"t4":{
-"x":0,
-"y":7020,
-"text":"Done, and a plain message",
-"kind":"title1",
-"maxW":2640
+"t4": {
+"x": 0,
+"y": 4580,
+"text": "A plain message",
+"kind": "title1",
+"maxW": 2640
 }
 },
-"designSystems":[]
+"designSystems": []
 }

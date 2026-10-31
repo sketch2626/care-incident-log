@@ -1,0 +1,141 @@
+{
+"v":3,
+"createdOnFiles":{
+"v":1,
+"at":"2026-10-31T18:00:00Z"
+},
+"title":"Mary round 8: cards and messages",
+"launch":{
+"view":"canvas"
+},
+"pages":[],
+"boards":{
+"A-Reminder-Mary.dc.html":{
+"x":0,
+"y":0,
+"w":1280,
+"h":800,
+"title":"(a) The reminder · Mary"
+},
+"A-Reminder-Sam.dc.html":{
+"x":1360,
+"y":0,
+"w":1280,
+"h":800,
+"title":"(a) The reminder · Sam"
+},
+"B-Design-Mary.dc.html":{
+"x":0,
+"y":1220,
+"w":1280,
+"h":800,
+"title":"(b) Pick a picture"
+},
+"C-Card-Mary.dc.html":{
+"x":1360,
+"y":1220,
+"w":1280,
+"h":800,
+"title":"(c) The card with their words"
+},
+"D1-Who-Mary.dc.html":{
+"x":0,
+"y":2440,
+"w":1280,
+"h":800,
+"title":"(d1) Who gets it, and how"
+},
+"D2-LastLook-Mary.dc.html":{
+"x":1360,
+"y":2440,
+"w":1280,
+"h":800,
+"title":"(d2) The last look"
+},
+"E1-Open-Mary.dc.html":{
+"x":0,
+"y":3660,
+"w":1280,
+"h":800,
+"title":"(e1) Messenger: still in her app"
+},
+"E2-Paste.dc.html":{
+"x":1360,
+"y":3660,
+"w":1280,
+"h":800,
+"title":"(e2) The chat open, tap Paste"
+},
+"E3-Send.dc.html":{
+"x":0,
+"y":4880,
+"w":1280,
+"h":800,
+"title":"(e3) Tap Send in the chat"
+},
+"F-Sent-Mary.dc.html":{
+"x":0,
+"y":6100,
+"w":1280,
+"h":800,
+"title":"(f) Sent"
+},
+"G-Message-Mary.dc.html":{
+"x":1360,
+"y":6100,
+"w":1280,
+"h":800,
+"title":"(g) A plain message"
+}
+},
+"order":[
+"A-Reminder-Mary.dc.html",
+"A-Reminder-Sam.dc.html",
+"B-Design-Mary.dc.html",
+"C-Card-Mary.dc.html",
+"D1-Who-Mary.dc.html",
+"D2-LastLook-Mary.dc.html",
+"E1-Open-Mary.dc.html",
+"E2-Paste.dc.html",
+"E3-Send.dc.html",
+"F-Sent-Mary.dc.html",
+"G-Message-Mary.dc.html"],
+"notes":{
+"t0":{
+"x":0,
+"y":-300,
+"text":"Her reminder, once",
+"kind":"title1",
+"maxW":2640
+},
+"t1":{
+"x":0,
+"y":920,
+"text":"Choosing and writing the card",
+"kind":"title1",
+"maxW":2640
+},
+"t2":{
+"x":0,
+"y":2140,
+"text":"Who, how, and the last look",
+"kind":"title1",
+"maxW":2640
+},
+"t3":{
+"x":0,
+"y":3360,
+"text":"Messenger: what the resident sees and taps",
+"kind":"title1",
+"maxW":2640
+},
+"t4":{
+"x":0,
+"y":5800,
+"text":"Done, and a plain message",
+"kind":"title1",
+"maxW":2640
+}
+},
+"designSystems":[]
+}

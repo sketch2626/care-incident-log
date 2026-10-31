@@ -58,3 +58,5 @@ the thick line say "found" more clearly than the color does.
 - The found mark is a shape, so it reads for weak eyes and colorblind eyes. Its thin white edge keeps neighboring words apart.
 - The `Same` button is the teal one at the end, as the likely next step. That's a proposal.
 - On Sam's boards, every "Back to Mary" reads "Back to Sam".
+
+**Approved by Andy, 2026-10-31,** with one change after these boards: the resident picks the size. Three sizes (8x8, 10x10, 12x12), by voice or tap. On board D, "Easier" and "Harder" became "Bigger letters" and "More letters".

@@ -318,6 +318,15 @@ Andy's words: "Mary says, I see that it's your son's birthday coming up next wee
   - **Print and mail:** yes, but the facilities have to be on board to help.
   - **Muse does handle Messenger (Andy uses it himself):** "I can open Muse and say, tell me who all sent me new messages, summarize them… and reply to all of them… Muse is actually pretty good at it." The open question is whether an app can hand Muse a task (an API). See M16.
   - **Later, once there's funding:** write to the companies (Meta, Google and others) about the mission and ask for access and help.
+- **Andy on the round 8 boards (2026-10-31, 3am):** all 12 recommendations taken ("yes, on the other 12 recommendations"). The boards need a lot of work:
+  - **The reminder:** "a very generic looking November 7th, Mark's birthday. That doesn't look cool. We need to make that look better." Later, once Facebook can be connected, "put pictures of their kids and stuff."
+  - **No question buttons** like "Not this year / Just a message / Make a card": "We're literally doing this by voice, so there's no need in any of that."
+  - **The cards:** "These look like something that a three-year-old would send." It must look like a traditional card: "the card needs to open up and have a front and then it needs to open and say something in there and then under the saying, then you put your own words." Their words in cursive, "so it makes it look like you just wrote it out yourself. Or if not cursive, at least in normal handwriting look."
+  - **Sending:** "We've already said we're sending a birthday card. It's going to go whatever method works… if there's email hooked up… we're going to just send them. And then we'll ask, would you like to send this through Messenger or would you like to print this and make it a card?"
+  - **No "who gets it" list** ("We already said we're making a birthday card for my son, so why are we going to send it to Ellen and Tyler?") and no Back and Next. Keep a button only when there's a real reason: "If there's a reason for it that I'm missing, and there may be, so I don't know everything."
+  - **Five seconds to undo:** before sending, Mary explains there'll be five seconds to cancel. After Send comes an Undo button counting "5 4 3 2 1".
+  - **Messenger in the panel** "looks okay."
+  - Redraw: M15b (`docs/handoff/M15b.md`), on her account after its weekly reset.
 - Boards first, then a skill of its own (after M13b's tool groups).
 
 ### M16. Which brain for the pilot (idea; Andy, 2026-10-31, speculation for now)

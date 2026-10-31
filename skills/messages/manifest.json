@@ -1,10 +1,10 @@
 {
   "contract": 1,
   "name": "messages",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "title": "Cards and messages",
   "summary": "Makes greeting cards and short letters in the resident's own words, ready to print and saved on their laptop.",
-  "instructions": "Their words, never yours. Help only if asked, in their voice, adding no feeling they didn't express. Read it back. Changes are by voice. If the person is unclear, ask aloud. Never describe the screen. A card: show_fronts, pick_front, set_words. A note: plain_message. Nothing sends yet: send_it says so, then offer to print. A date to look at: show_keepsake.",
+  "instructions": "Their words, never yours. Help only if asked, in their voice, adding no feeling. Read it back. Changes by voice. Unclear who: ask aloud. Never describe the screen. Card: show_fronts, pick_front, set_words. Note: plain_message. send_it when they want it sent or seem done. Never say it went unless told. Silent during the count. Spell addresses, never read them. Never write anyone unasked.",
   "screen": {"menu_label": "Make a card", "menu_icon": "card", "full_screen": true},
   "sees": true,
   "slow": true,
@@ -84,10 +84,56 @@
     },
     {
       "name": "send_it",
-      "description": "When they ask to send a card or message. It never sends: sending isn't set up, so offer to print.",
-      "inputSchema": {"type": "object", "properties": {}},
-      "annotations": {"readOnlyHint": true, "destructiveHint": false},
+      "description": "When they want it sent, or you think they're done. Shows the last look and gives you the line to say. It can't send: the app hears their yes itself.",
+      "inputSchema": {"type": "object", "properties": {
+        "person": {"type": "string", "description": "Only when they just told you who it's for"}
+      }},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["send it"]
+    },
+    {
+      "name": "give_address",
+      "description": "An email address they said aloud. Read spelled back letter by letter, ask if that's right, then call address_right.",
+      "inputSchema": {"type": "object", "properties": {
+        "address": {"type": "string", "description": "As they said it, like mark dot hollis at gmail dot com", "maxLength": 400},
+        "person": {"type": "string", "description": "Whose address it is, if they said"}
+      }, "required": ["address"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "address_right",
+      "description": "Their answer after you spelled the address back: true if it's right.",
+      "inputSchema": {"type": "object", "properties": {
+        "right": {"type": "boolean", "description": "true if they said it's right"}
+      }, "required": ["right"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "keep_address",
+      "description": "Their answer when you asked about keeping the address for next time: true to keep it.",
+      "inputSchema": {"type": "object", "properties": {
+        "keep": {"type": "boolean", "description": "true if they want it kept"}
+      }, "required": ["keep"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "save_contact",
+      "description": "Remember someone they write to. Never for an email address: give_address handles those.",
+      "inputSchema": {"type": "object", "properties": {
+        "name": {"type": "string", "description": "Their name"},
+        "relationship": {"type": "string", "description": "Like son or neighbor"},
+        "facebook": {"type": "string", "description": "Their Facebook name"},
+        "phone": {"type": "string", "description": "Their phone number"}
+      }, "required": ["name"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "find_contact",
+      "description": "Whether you know this person: relationship, and whether an email is saved. Never the address itself.",
+      "inputSchema": {"type": "object", "properties": {
+        "name": {"type": "string", "description": "A name, first name or relationship"}
+      }, "required": ["name"]},
+      "annotations": {"readOnlyHint": true, "destructiveHint": false}
     },
     {
       "name": "plain_message",
@@ -128,7 +174,7 @@
     }
   ],
   "storage": true,
-  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
+  "needs": {"internet_hosts": [], "mic": false, "send_mail": true, "modes": ["live", "normal", "offline"]},
   "offline": "works",
   "default_on": true
 }

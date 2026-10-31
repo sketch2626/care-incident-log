@@ -382,41 +382,95 @@ def tapered(pts, w0, w1):
     return poly(left + right[::-1])
 
 
-BUCK_BODY = [
-    # chest, back, rump, belly: a heavy-bodied buck in his prime
-    [(60, 130), (66, 112), (84, 99), (104, 98), (128, 106), (150, 110), (172, 105), (192, 106), (208, 120), (212, 140),
-     (204, 160), (180, 162), (152, 156), (126, 164), (100, 174), (78, 170), (64, 152)],
-    # neck, thick for the rut
-    [(62, 84), (74, 78), (86, 88), (100, 98), (122, 112), (106, 160), (76, 162), (62, 134), (58, 110), (56, 94)],
-    # head
-    [(25, 103), (25, 99), (31, 95), (41, 88), (53, 81), (66, 76), (74, 84), (70, 96), (60, 102), (47, 106), (35, 109), (28, 108)],
-    # ears
-    [(70, 78), (82, 66), (100, 60), (98, 68), (86, 82), (74, 86)],
-    [(62, 76), (68, 62), (77, 55), (77, 63), (71, 76)],
-    # tail
-    [(202, 118), (217, 128), (220, 142), (212, 148), (204, 138)],
-    # near hind leg
-    [(172, 134), (208, 132), (209, 160), (205, 174), (211, 188), (204, 199), (200, 216), (202, 226), (189, 226), (189, 208), (187, 192), (177, 178), (158, 164)],
-    # far hind leg, stepping
-    [(148, 150), (176, 152), (170, 178), (174, 192), (164, 212), (166, 226), (153, 226), (155, 208), (158, 192), (147, 172)],
-    # near foreleg
-    [(74, 150), (102, 150), (99, 178), (96, 192), (95, 212), (98, 226), (85, 226), (86, 210), (85, 192), (80, 174)],
-    # far foreleg
-    [(100, 152), (120, 154), (120, 178), (118, 192), (122, 212), (126, 226), (113, 226), (111, 208), (108, 192), (106, 172)],
+def outline(*runs):
+    """One closed shape from smooth runs; where two runs meet the corner stays sharp."""
+    d = smooth(runs[0])
+    for run in runs[1:]:
+        s = smooth(run)
+        d += s[s.index('C'):]
+    return d + 'Z'
+
+
+def fur(edge, r, dx, dy, gap=2.4):
+    """Short hairs hanging off a drawn edge, one small wedge each."""
+    out = ''
+    for (ax, ay), (bx, by) in zip(edge, edge[1:]):
+        c = max(1, int(math.hypot(bx - ax, by - ay) / gap))
+        for j in range(c):
+            t = (j + r.random() * .7) / c
+            x, y, k = ax + (bx - ax) * t, ay + (by - ay) * t, r.uniform(.55, 1.2)
+            out += 'M%s %sL%s %sL%s %sZ' % (n(x - 1.2), n(y - 1.2), n(x + dx * k), n(y + dy * k), n(x + 1.2), n(y - 1.2))
+    return out
+
+
+# A whitetail plotted by hand, facing left. Ground is y=300 and the withers stand at 146,
+# so the leg below the chest is about as long as the chest is deep.
+BUCK_LIT = [(70, 95), (80, 101), (91, 113), (102, 127), (112, 137), (122, 142), (134, 147), (150, 153), (170, 155),
+            (190, 152), (208, 149), (226, 153), (241, 162), (251, 173)]
+BUCK_BELLY = [(206, 199), (192, 206), (172, 213), (150, 218), (134, 220), (121, 220)]
+BUCK_BRISKET = [(98, 226), (88, 221), (79, 212), (75, 201), (76, 189)]
+BUCK_HIDE = [
+    # nose, bridge, brow, poll
+    [(29, 117), (29.5, 114), (32, 111.5), (39, 108.7), (47, 105), (53, 101.5), (61, 97), (70, 95)],
+    # thick rut neck, withers, back, croup, buttock, down the thigh to the point of the hock
+    BUCK_LIT + [(256, 186), (256, 200), (253, 214), (249, 227), (249, 235), (254, 242)],
+    # back of the hind cannon, fetlock, heel, hoof
+    [(254, 242), (251, 250), (249, 262), (248, 276), (248.5, 285), (246, 292), (245, 299)],
+    [(245, 299), (235, 300)],
+    # front of the hind leg, hock, gaskin, stifle, up into the flank
+    [(235, 300), (238, 292), (241, 284), (241, 270), (242, 256), (240, 246), (233, 235), (222, 224), (213, 213), (206, 199)],
+    # belly, deep at the girth and tucked at the flank
+    BUCK_BELLY,
+    # back of the forearm, knee, cannon, heel, hoof
+    [(121, 220), (116, 236), (113.5, 246), (112.5, 251), (114, 257), (112, 264), (111, 276), (111, 285), (109, 292), (107.5, 299)],
+    [(107.5, 299), (96, 300)],
+    # front of the foreleg, knee, forearm, up into the brisket and the point of the breast
+    [(96, 300), (99, 292), (102, 284), (103.5, 272), (103.5, 264), (101.5, 257), (102, 251), (103, 245), (102, 236)] + BUCK_BRISKET,
+    # swollen throat
+    [(76, 189), (72, 177), (67, 162), (62, 146), (58.5, 131)],
+    # jaw, chin, lip
+    [(58.5, 131), (57, 127), (50, 125), (42, 123), (35, 121.5), (31.5, 120.5), (30, 119), (29, 117)],
+]
+BUCK_EAR_NEAR = [[(67, 97), (75, 91), (84, 88), (92, 88), (95, 90), (90, 96), (83, 102), (76, 107), (67, 97)]]
+BUCK_EAR_FAR = [[(71, 96), (75, 87), (81, 78), (88, 71), (91, 72), (91, 80), (87, 90), (82, 100), (71, 96)]]
+BUCK_TAIL = [[(238, 160), (249, 164), (258, 176), (262, 190), (263, 197)], [(263, 197), (257, 193), (251, 184), (244, 174)], [(244, 174), (238, 160)]]
+BUCK_LEGS_FAR = [
+    # foreleg reaching a little ahead
+    [[(114, 212), (106, 232), (99, 246), (96, 254), (93, 264), (89, 278), (86.5, 287), (85, 293), (83.5, 299)],
+     [(83.5, 299), (73, 300)],
+     [(73, 300), (76.5, 292), (80, 283), (83, 270), (86, 258), (86, 252), (87, 242), (88, 228), (88, 208)],
+     [(88, 208), (114, 212)]],
+    # hind leg set forward under him
+    [[(238, 190), (230, 220), (225, 233), (227, 240), (231, 245)],
+     [(231, 245), (227, 254), (222, 268), (218, 282), (216, 289), (213, 295), (212, 299)],
+     [(212, 299), (202, 300)],
+     [(202, 300), (206, 292), (210, 285), (213, 272), (216, 258), (217, 248), (212, 240), (203, 228), (193, 216), (187, 194)],
+     [(187, 194), (238, 190)]],
+]
+# Eight points: on each side a main beam, a brow tine and two tines rising off the beam. His head
+# is turned a touch toward us and we look up from the field, so the far side sits forward and lower.
+BUCK_RACK_NEAR = [
+    ([(58, 97), (68, 87), (74, 75), (73, 64), (63, 57), (49, 53), (34, 51), (19, 44)], 8.8, 3),
+    ([(62, 94), (63, 83), (65, 72)], 5, 1.3),
+    ([(73, 65), (73, 48), (69, 25)], 6.6, 1.4),
+    ([(52, 55), (50, 39), (45, 24)], 6, 1.4),
+]
+BUCK_RACK_FAR = [
+    ([(54, 98), (58, 89), (56, 79), (46, 72), (32, 68), (18, 66), (5, 59)], 7.2, 2.6),
+    ([(55, 96), (49, 88), (47, 78)], 4.2, 1.1),
+    ([(46, 73), (41, 56), (34, 39)], 5.2, 1.2),
+    ([(22, 68), (18, 54), (12, 41)], 4.8, 1.2),
 ]
 
 
 def buck_shape():
-    parts = [smooth(b, closed=True) for b in BUCK_BODY]
-    parts.append(tapered([(64, 80), (76, 54), (78, 28), (60, 8), (34, 4), (13, 15)], 7.4, 1.6))
-    for tine, w in [([(73, 60), (60, 50), (50, 33)], 4.8), ([(78, 36), (76, 14), (66, -12)], 5),
-                    ([(62, 10), (56, -8), (46, -26)], 4.4), ([(40, 5), (34, -10), (26, -20)], 3.4)]:
-        parts.append(tapered(tine, w, 1))
-    far = [tapered([(58, 80), (62, 52), (56, 30), (38, 14), (16, 14), (0, 26)], 6, 1.4)]
-    for tine, w in [([(59, 58), (48, 50), (38, 38)], 3.6), ([(58, 34), (54, 14), (46, -2)], 4),
-                    ([(42, 18), (36, 2), (28, -12)], 3.4)]:
-        far.append(tapered(tine, w, 1))
-    return parts, far
+    near = [outline(*BUCK_EAR_NEAR), outline(*BUCK_TAIL)]
+    far = [outline(*leg) for leg in BUCK_LEGS_FAR] + [outline(*BUCK_EAR_FAR)]
+    near += [tapered(*b) for b in BUCK_RACK_NEAR]
+    far += [tapered(*b) for b in BUCK_RACK_FAR]
+    hair = random.Random(8)
+    near += [fur(BUCK_BELLY, hair, 2, 2.8), fur(BUCK_BRISKET, hair, -1.2, 2.8)]
+    return outline(*BUCK_HIDE), near, far
 
 
 def canopy(r, x0, x1, top_at, base, step=15):
@@ -447,13 +501,12 @@ def buck():
         lin(p + '-wood', [(0, '#1c2e22'), (.7, '#17261c'), (1, '#2c382b')], 0, 100, 0, 424, user=True),
         lin(p + '-field', [(0, '#d9bd7a'), (.08, '#ab9458'), (.22, '#6c6a3c'), (.42, '#343b24'), (.68, '#171d12'), (1, '#0a0e09')],
             0, HZ, 0, 700, user=True),
-        lin(p + '-coat', [(0, '#2e2216'), (.5, '#1c150e'), (1, '#110d08')], 240, 300, 480, 400, user=True),
+        lin(p + '-coat', [(0, '#1a120b'), (.55, '#140e08'), (1, '#0f0a06')], 0, 60, 0, 300, user=True),
         lin(p + '-foot', [(0, '#0a0e09', 0), (.42, '#0a0e09', .74), (1, '#060906', .97)]),
         rad(p + '-vig', [(.52, '#070a06', 0), (1, '#070a06', .74)], .5, .44, .84),
         wc(p + '-wc', 3, '.03 .05', 1.6, .55, 3, (.02, .04, .02), 6),
         wc(p + '-wcf', 5, '.03 .05', 2.4, .4, 3, (.2, .2, .13), 17),
         wc(p + '-wcn', 1.6, '.06', 1.1, .3, 2, (.01, .01, 0), 24),
-        rim(p + '-rim', 1.1, 1.4, (.97, .85, .58), .62),
         cloud(p + '-c1', '.0036 .032', 3.5, 1.78, 8, '1.8 1'),
         cloud(p + '-c2', '.007 .05', 3.6, 1.7, 15, '1 .6'),
         blur(p + '-b1', .7), blur(p + '-b2', 2.4), blur(p + '-b6', 6), blur(p + '-m', 11), blur(p + '-soft', 1.1),
@@ -496,20 +549,32 @@ def buck():
         dabs[k] += blade(r.uniform(-10, 510), y, 3 + t * 20, r.uniform(-5, 6), .9 + t * 1.7)
     for k, col in enumerate(['#8f7f4b', '#56542f', '#2d3420']):
         a.append('<path d="%s" fill="%s" opacity=".8"></path>' % (dabs[k], col))
-    # the buck
-    parts, far = buck_shape()
-    bx, by, sc = 190, 241, 1.12
-    d.append('<clipPath id="%s-buck">%s</clipPath>' % (p, ''.join('<path d="%s"></path>' % x for x in parts)))
-    a.append('<ellipse cx="%d" cy="%d" rx="150" ry="10" fill="#0d110a" opacity=".6" filter="url(#%s-b6)"></ellipse>' % (bx + 130, by + sc * 226, p))
-    a.append('<g transform="translate(%d %d) scale(%s)" filter="url(#%s-rim)">'
-             '<g fill="#3a2d1c">%s</g><g fill="url(#%s-coat)">%s</g>' % (
-                 bx, by, sc, p, ''.join('<path d="%s"></path>' % x for x in far), p, ''.join('<path d="%s"></path>' % x for x in parts)))
-    a.append('<g clip-path="url(#%s-buck)">'
-             '<ellipse cx="112" cy="128" rx="28" ry="24" fill="#6e5030" opacity=".22" filter="url(#%s-b6)"></ellipse>'
-             '<ellipse cx="188" cy="136" rx="22" ry="26" fill="#6e5030" opacity=".2" filter="url(#%s-b6)"></ellipse>'
-             '<ellipse cx="84" cy="116" rx="14" ry="30" transform="rotate(-34 84 116)" fill="#5e432a" opacity=".22" filter="url(#%s-b6)"></ellipse>'
-             '<path d="M30 110Q42 113 58 106" fill="none" stroke="#b6a586" stroke-width="3" opacity=".26" filter="url(#%s-b1)"></path>'
-             '</g></g>' % (p, p, p, p, p))
+    # the buck: near black against the glow, with light only along his back and neck
+    hide, near, far = buck_shape()
+    bx, by, sc = 184, 202, .96
+    d.append('<clipPath id="%s-buck"><path d="%s"></path></clipPath>' % (p, hide))
+    a.append('<ellipse cx="%d" cy="%d" rx="136" ry="9" fill="#0d110a" opacity=".6" filter="url(#%s-b6)"></ellipse>' % (bx + sc * 150, by + sc * 300, p))
+    a.append('<g filter="url(#%s-wcn)"><g transform="translate(%d %d) scale(%s)">'
+             '<g fill="#211810">%s</g><g fill="url(#%s-coat)">%s<path d="%s"></path></g>' % (
+                 p, bx, by, sc, ''.join('<path d="%s"></path>' % x for x in far), p,
+                 ''.join('<path d="%s"></path>' % x for x in near), hide))
+    a.append('<g clip-path="url(#{0}-buck)">'
+             '<ellipse cx="102" cy="180" rx="18" ry="34" transform="rotate(14 102 180)" fill="#5c4229" opacity=".18" filter="url(#{0}-b6)"></ellipse>'
+             '<ellipse cx="226" cy="190" rx="24" ry="33" transform="rotate(-12 226 190)" fill="#5c4229" opacity=".2" filter="url(#{0}-b6)"></ellipse>'
+             '<ellipse cx="92" cy="148" rx="12" ry="30" transform="rotate(-34 92 148)" fill="#523a24" opacity=".14" filter="url(#{0}-b6)"></ellipse>'
+             '<ellipse cx="160" cy="178" rx="32" ry="14" fill="#4a3522" opacity=".1" filter="url(#{0}-b6)"></ellipse>'
+             '<path d="M122 150Q140 188 120 220" fill="none" stroke="#080503" stroke-width="5" opacity=".3" filter="url(#{0}-b6)"></path>'
+             '<path d="M204 152Q190 180 208 204" fill="none" stroke="#080503" stroke-width="5" opacity=".26" filter="url(#{0}-b6)"></path>'
+             '<path d="{1}" fill="none" stroke="#f3d391" stroke-width="1.9" opacity=".8" filter="url(#{0}-b1)"></path>'
+             '</g></g></g>'.format(p, smooth(BUCK_LIT)))
+    # a few blades of his own right at the feet, seeded apart so the field stays as it was
+    tuft = random.Random(3)
+    tufts = ['', '']
+    for fx in (78, 102, 207, 240):
+        for i in range(8):
+            tufts[i % 2] += blade(bx + sc * fx + tuft.uniform(-12, 12), by + sc * 300 + tuft.uniform(2, 9), tuft.uniform(15, 28), tuft.uniform(-6, 6), 1.4)
+    for k, col in enumerate(['#3f4027', '#6b6138']):
+        a.append('<path d="%s" fill="%s" filter="url(#%s-b1)"></path>' % (tufts[k], col, p))
     # grass over his feet, then the dark foreground
     near = ['', '', '']
     for i in range(380):

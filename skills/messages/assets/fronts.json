@@ -1,0 +1,275 @@
+[
+ {
+  "key": "lake",
+  "name": "Lake",
+  "label": "Lake at dawn, one small boat",
+  "occasions": [
+   "birthday"
+  ],
+  "tags": [
+   "fishing",
+   "lake",
+   "boat",
+   "water",
+   "outdoors"
+  ],
+  "line": {
+   "x": 250,
+   "y": 306,
+   "size": 50,
+   "width": 420,
+   "fill": "#ecdcb0",
+   "spacing": 3
+  }
+ },
+ {
+  "key": "buck",
+  "name": "Buck",
+  "label": "A buck at the edge of a field at dusk",
+  "occasions": [
+   "birthday"
+  ],
+  "tags": [
+   "hunting",
+   "deer",
+   "buck",
+   "woods",
+   "outdoors"
+  ],
+  "line": {
+   "x": 250,
+   "y": 664,
+   "size": 50,
+   "width": 420,
+   "fill": "#ecdcb0",
+   "spacing": 2,
+   "family": "garamond",
+   "caps": true
+  }
+ },
+ {
+  "key": "lighthouse",
+  "name": "Lighthouse",
+  "label": "A lighthouse on a rocky point at evening",
+  "occasions": [
+   "birthday"
+  ],
+  "tags": [
+   "sea",
+   "ocean",
+   "coast",
+   "beach",
+   "lighthouse",
+   "boats"
+  ],
+  "line": {
+   "x": 36,
+   "y": 262,
+   "size": 50,
+   "width": 310,
+   "fill": "#ecdcb0",
+   "spacing": 2,
+   "anchor": "start",
+   "family": "garamond",
+   "caps": true
+  }
+ },
+ {
+  "key": "magnolia",
+  "name": "Magnolia",
+  "label": "A magnolia branch in the style of a botanical plate",
+  "occasions": [
+   "birthday"
+  ],
+  "tags": [
+   "flowers",
+   "garden",
+   "magnolia",
+   "trees",
+   "south"
+  ],
+  "line": {
+   "x": 250,
+   "y": 655,
+   "size": 50,
+   "width": 420,
+   "fill": "#ecdcb0",
+   "spacing": 2,
+   "family": "garamond",
+   "caps": true
+  }
+ },
+ {
+  "key": "barn",
+  "name": "Barn",
+  "label": "An old red tobacco barn in a field at evening",
+  "occasions": [
+   "birthday"
+  ],
+  "tags": [
+   "farm",
+   "farming",
+   "tobacco",
+   "barn",
+   "country",
+   "outdoors"
+  ],
+  "line": {
+   "x": 250,
+   "y": 292,
+   "size": 50,
+   "width": 400,
+   "fill": "#ecdcb0",
+   "spacing": 3
+  }
+ },
+ {
+  "key": "porch",
+  "name": "Porch",
+  "label": "A rocking chair on a porch looking out on morning hills",
+  "occasions": [
+   "get_well"
+  ],
+  "tags": [
+   "home",
+   "porch",
+   "mountains",
+   "hills",
+   "country",
+   "morning"
+  ],
+  "line": {
+   "x": 250,
+   "y": 664,
+   "size": 50,
+   "width": 400,
+   "fill": "#ecdcb0",
+   "spacing": 3
+  }
+ },
+ {
+  "key": "dogwood",
+  "name": "Dogwood",
+  "label": "A dogwood branch in bloom",
+  "occasions": [
+   "get_well"
+  ],
+  "tags": [
+   "flowers",
+   "garden",
+   "dogwood",
+   "spring",
+   "trees",
+   "carolina"
+  ],
+  "line": {
+   "x": 250,
+   "y": 656,
+   "size": 50,
+   "width": 400,
+   "fill": "#ecdcb0",
+   "spacing": 3
+  }
+ },
+ {
+  "key": "chapel",
+  "name": "Chapel",
+  "label": "A small white country church among trees at evening",
+  "occasions": [
+   "sympathy"
+  ],
+  "tags": [
+   "church",
+   "faith",
+   "prayer",
+   "country",
+   "trees"
+  ],
+  "line": null
+ },
+ {
+  "key": "lily",
+  "name": "Lilies",
+  "label": "White lilies on a dark, quiet ground",
+  "occasions": [
+   "sympathy"
+  ],
+  "tags": [
+   "flowers",
+   "lily",
+   "lilies",
+   "faith",
+   "peace"
+  ],
+  "line": null
+ },
+ {
+  "key": "hydrangea",
+  "name": "Hydrangea",
+  "label": "A hydrangea in a plain crock",
+  "occasions": [
+   "thank_you"
+  ],
+  "tags": [
+   "flowers",
+   "garden",
+   "hydrangea",
+   "home"
+  ],
+  "line": {
+   "x": 250,
+   "y": 190,
+   "size": 50,
+   "width": 400,
+   "fill": "#ecdcb0",
+   "spacing": 3
+  }
+ },
+ {
+  "key": "snowchurch",
+  "name": "Snowy Church",
+  "label": "A country church in the snow on a Christmas evening",
+  "occasions": [
+   "christmas"
+  ],
+  "tags": [
+   "church",
+   "faith",
+   "christmas",
+   "snow",
+   "winter"
+  ],
+  "line": {
+   "x": 250,
+   "y": 270,
+   "size": 50,
+   "width": 400,
+   "fill": "#ecdcb0",
+   "spacing": 3
+  }
+ },
+ {
+  "key": "harvest",
+  "name": "Harvest",
+  "label": "Corn shocks and pumpkins at a fence",
+  "occasions": [
+   "thanksgiving"
+  ],
+  "tags": [
+   "farm",
+   "harvest",
+   "pumpkins",
+   "corn",
+   "autumn",
+   "fall"
+  ],
+  "line": {
+   "x": 250,
+   "y": 262,
+   "size": 50,
+   "width": 400,
+   "fill": "#ecdcb0",
+   "spacing": 3
+  }
+ }
+]

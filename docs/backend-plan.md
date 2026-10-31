@@ -48,11 +48,11 @@ Every send screen asks one question: "Put your name on this?"
 - **Anonymous, one click:** the app removes names and room numbers it finds and shows a preview with a single Send button. Above the button, a plain-words note says: "Details like your room number, your condition or the exact time can still point to you." Our relay sends it from a project address. After delivery, the server keeps only a receipt code that the resident holds, and the relay doesn't log IP addresses.
 - **Confirmed delivery:** the resident sees "Delivered" with the time.
   - Email goes from an authenticated project domain (SPF, DKIM, DMARC) through a mail service with delivery tracking, so it doesn't land in spam.
-  - Recipients without email get it by fax or tracked mail, whichever they accept. NC DHSR takes complaints by phone and printed form only.
+  - Recipients without email get it by fax or tracked mail, whichever they accept. NC DHSR confirms phone, mail and fax. Its pages also list DHSR.ComplaintIntake@dhhs.nc.gov, but whether it takes complaints by email is unconfirmed (decision D1 in `docs/speakup-plan.md`).
   - If a send fails, the relay retries. The app tells the resident plainly and offers to print the complaint or show the phone number.
 - Hidden metadata is stripped from attachments, such as photo location and document author.
 - **Later:** anonymous replies. The recipient answers the relay address, and the reply shows up in the resident's app without revealing who they are.
-- **To verify and tell residents:** the long-term care ombudsman generally can't reveal a resident's identity without consent (45 CFR 1324). Also check whether NC DHSR accepts anonymous complaints.
+- **Tell residents:** the long-term care ombudsman can't reveal a resident's or complainant's identity without consent or a court order (45 CFR 1324.11(e)(3), verified 2026-10-30). NC DHSR must keep a complainant's identity confidential (NCGS 131E-124(c)). **Still to verify:** whether NC DHSR accepts complaints with no name at all (D1).
 - **Abuse limits:** only enrolled residents can send, there's a daily cap, and there's no bulk sending.
 
 ### Facility first (recommended, never required)

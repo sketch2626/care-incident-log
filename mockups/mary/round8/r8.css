@@ -1,0 +1,196 @@
+/* Mary round 8: cards and messages to family (M15). New classes only; every board also links r6.css (an unchanged copy).
+   Screen 1280x800. Mary sits aside in the left 40%, the content fills x 512 to 1252 on her warm background. */
+
+/* her real aside move, from web/mary/face.css (.mf-fit and .mf-aside .mf-stage); perspective 110vw is 1408px here */
+.m8-fit{position:absolute;inset:0;perspective:1408px}
+.m8-aside{position:absolute;inset:0;transform:translate(-29%,0) scale(.7) rotateY(16deg)}
+
+/* her caption, under her in the left 40% */
+.cap.m8-cap{left:24px;right:792px;font-size:44px}
+
+/* top row, beside the Menu button; 290px stays clear on the right */
+.m8-title{position:absolute;left:512px;top:28px;width:450px;height:96px;margin:0;display:flex;align-items:center;font:700 36px/1.25 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+
+/* bottom row; widths follow the words so the longest label fits at 28px */
+.m8-bar{position:absolute;left:512px;top:680px;width:740px;height:88px;display:flex;gap:16px}
+.m8-bar .ans{flex:1 1 auto;min-width:0;min-height:88px;height:88px;padding:0 12px;box-sizing:border-box;font-size:28px;white-space:nowrap}
+
+/* the white panel, y 140 to 664; the Menu button's shadow ends at y 130 */
+.m8-panel{position:absolute;left:512px;top:140px;width:740px;height:524px;box-sizing:border-box;display:flex;gap:28px;align-items:center;padding:24px;background:#fff;color:#1f1b16;border:3px solid #2b1f17;border-radius:26px;box-shadow:0 6px 0 rgba(43,31,23,.22);overflow:hidden}
+.m8-panel.col{flex-direction:column;align-items:stretch;justify-content:center;gap:22px}
+.m8-rowin{display:flex;gap:28px;align-items:center}
+
+/* the words of a plain message */
+.m8-say p{margin:0}
+.m8-sign{font-weight:600}
+
+/* labelled lines and plain lines */
+.m8-plain{font:400 24px/1.35 "Segoe UI",system-ui,sans-serif}
+.m8-rule{padding-top:16px;border-top:3px solid #d9d0c2}
+.m8-done{flex:none;display:block;width:110px;height:110px}
+
+/* one button alone in the bottom row */
+.m8-bar.one{justify-content:center}
+.m8-bar.one .ans{flex:none;width:300px;font-size:32px}
+
+/* board E1: the numbered steps */
+.m8-steps{flex:1;min-width:0;margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:18px;font:400 28px/1.25 "Segoe UI",system-ui,sans-serif}
+.m8-steps li{display:flex;align-items:center;gap:14px}
+.m8-num{flex:none;width:52px;height:52px;display:flex;align-items:center;justify-content:center;font:700 28px/1 "Segoe UI",system-ui,sans-serif;color:#fff;background:var(--ink);border-radius:50%}
+
+.m8-say{display:flex;flex-direction:column;gap:12px;font:400 32px/1.3 "Segoe UI",system-ui,sans-serif}
+
+/* our own neutral drawing of one chat, in the panel beside Mary; the dark frame and page grey keep it apart from her controls */
+.m8-page{position:absolute;left:512px;top:134px;width:740px;height:530px;box-sizing:border-box;overflow:hidden;background:#e9ebef;color:#1f1b16;font:400 22px/1.3 "Segoe UI",system-ui,sans-serif;border:3px solid #2b1f17;border-radius:14px}
+.m8-chead{position:absolute;left:0;right:0;top:0;height:72px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 24px;font:700 26px/1.2 "Segoe UI",system-ui,sans-serif;background:#fff;border-bottom:2px solid #c8cdd4}
+.m8-cinit{flex:none;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font:700 24px/1 "Segoe UI",system-ui,sans-serif;background:#e4e6eb;border-radius:50%}
+.m8-bubs{position:absolute;left:24px;right:24px;top:82px;display:flex;flex-direction:column;gap:10px}
+.m8-bub{max-width:520px;padding:10px 20px;border-radius:22px}
+.m8-bub.them{align-self:flex-start;background:#fff;color:#1f1b16}
+.m8-bub.me{align-self:flex-end;background:#1f5fbf;color:#fff}
+.m8-box{position:absolute;left:12px;right:12px;bottom:12px;min-height:84px;box-sizing:border-box;display:flex;align-items:center;gap:16px;padding:8px 12px;background:#fff;border:2px solid #c8cdd4;border-radius:24px}
+.m8-ph{flex:1;color:#544739}
+.m8-send{position:relative;flex:none;width:64px;height:64px;color:#1f5fbf}
+.m8-send svg{display:block;width:64px;height:64px}
+.m8-ring{position:absolute;left:-18px;top:-18px;box-sizing:border-box;width:100px;height:100px;border:8px solid #f2b632;border-radius:50%;box-shadow:0 0 0 3px #2b1f17,inset 0 0 0 3px #2b1f17}
+
+/* board notes: dashed, not part of the app */
+.m8-note{position:absolute;box-sizing:border-box;padding:6px 14px;font:600 20px/1.3 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fffdf8;border:3px dashed #544739;border-radius:10px}
+.m8-note.corner{left:48px;top:262px;white-space:nowrap}
+
+
+/* ---- M15b: the card art boards, built by round8-src/build.py. New classes are .c8-; nothing here goes under 20px. ---- */
+.c8-art{display:block;width:100%;height:100%}
+.c8-sheet,.c8-rules{position:absolute;left:0;top:0;display:block;width:100%;height:100%}
+
+/* (a) the keepsake leaf */
+.c8-leaf{position:absolute;left:520px;top:146px;width:724px;height:616px;--deep:#5e1a2e;--ink:#2c1c18;box-shadow:0 1px 2px rgba(64,40,20,.4),3px 8px 16px rgba(64,40,20,.26),10px 22px 44px rgba(64,40,20,.28)}
+.c8-leaf.sam{--deep:#1f3d2b;--ink:#1e2a1f}
+.c8-date{position:absolute;left:44px;top:56px;width:300px;text-align:center;color:var(--deep)}
+.c8-day,.c8-month{font:700 30px/40px "Cinzel","Times New Roman",serif;letter-spacing:.16em;text-shadow:0 1px 0 rgba(255,255,255,.75)}
+.c8-seven{height:188px;font:500 200px/188px "EB Garamond",Garamond,"Times New Roman",serif;font-variant-numeric:lining-nums;text-shadow:0 1px 0 rgba(255,255,255,.75),0 -1px 0 rgba(40,16,16,.25)}
+.c8-frame{position:absolute;left:412px;top:30px;width:216px;height:256px;overflow:visible;filter:drop-shadow(1px 3px 3px rgba(50,30,10,.45))}
+.c8-photo-note{left:352px;top:296px;width:336px;padding:6px 12px}
+.c8-mark{position:absolute;left:30px;top:406px;width:250px;height:150px;overflow:visible}
+.c8-memory{position:absolute;left:304px;top:424px;width:378px;color:var(--ink);font-family:"EB Garamond",Garamond,"Times New Roman",serif}
+.c8-age{font-weight:500;font-size:34px;line-height:44px;color:var(--deep)}
+.c8-lines{margin-top:8px;font-size:28px;line-height:36px}
+
+/* (b) the four fronts */
+.c8-title{position:absolute;left:512px;top:28px;width:450px;height:96px;display:flex;flex-direction:column;justify-content:center;font:600 28px/1.3 "EB Garamond",Garamond,"Times New Roman",serif;color:#2c1c18}
+.c8-grid{position:absolute;left:512px;top:154px;width:740px;display:grid;grid-template-columns:360px 360px;grid-auto-rows:280px;gap:40px 20px}
+.c8-tile{display:flex;align-items:center;gap:18px;margin:0;padding:0;border:0;background:none;color:#5e1a2e;text-align:left;font:inherit;cursor:pointer}
+.c8-thumb{position:relative;flex:none;display:block;width:200px;height:280px;box-shadow:0 1px 2px rgba(60,38,18,.4),2px 6px 12px rgba(60,38,18,.28),6px 16px 30px rgba(60,38,18,.24)}
+.c8-label{display:flex;flex-direction:column;width:142px}
+.c8-big{font:500 96px/1 "EB Garamond",Garamond,"Times New Roman",serif;font-variant-numeric:lining-nums}
+.c8-name{font:700 28px/1.2 "EB Garamond",Garamond,"Times New Roman",serif;color:#2c1c18}
+
+/* (c) the front, folded, thick stock showing at the right */
+.c8-closed{position:absolute;left:663px;top:148px;width:437px;height:612px;box-shadow:1px 1px 2px rgba(60,38,18,.4),4px 8px 14px rgba(60,38,18,.3),12px 24px 48px rgba(60,38,18,.32)}
+.c8-stock{position:absolute;right:-7px;top:2px;bottom:1px;width:7px;border-radius:0 2px 2px 0;background:linear-gradient(90deg,#b8ab90 0,#f3ebd9 26%,#cbbea3 48%,#fbf4e6 62%,#d3c7ad 100%);box-shadow:1px 1px 3px rgba(60,38,18,.4)}
+
+/* (c2, c4) open flat from above */
+.c8-spread{position:absolute;left:512px;top:195px;width:740px;height:518px}
+.c8-spread-shadow,.c8-sh-open{position:absolute;left:0;top:0;width:740px;height:518px;box-shadow:0 2px 3px rgba(60,38,18,.34),4px 10px 20px rgba(60,38,18,.26),10px 24px 48px rgba(60,38,18,.28)}
+.c8-page{position:absolute;top:0;width:370px;height:518px;overflow:hidden}
+.c8-page.l{left:0}
+.c8-page.r{left:370px}
+.c8-shade{position:absolute;left:0;top:0;width:100%;height:100%}
+.c8-page.l .c8-shade{background:linear-gradient(90deg,rgba(90,66,40,0) 60%,rgba(90,66,40,.07) 84%,rgba(56,36,20,.24) 100%)}
+.c8-page.r .c8-shade{background:linear-gradient(270deg,rgba(90,66,40,0) 74%,rgba(90,66,40,.06) 91%,rgba(56,36,20,.22) 100%)}
+.c8-fold{position:absolute;left:0;top:0;width:2px;height:100%;background:linear-gradient(90deg,rgba(56,36,20,.42),rgba(255,250,235,.5))}
+.c8-inside-sprig{position:absolute;left:125px;top:436px;width:120px;height:30px;opacity:.85}
+.c8-verse{position:absolute;left:24px;top:46px;width:322px;text-align:center;font:400 26px/35px "EB Garamond",Garamond,"Times New Roman",serif;color:#2b2320;white-space:nowrap}
+.c8-gold{position:absolute;left:125px;top:204px;width:120px;height:2px;background:linear-gradient(90deg,rgba(166,124,34,0),#b08a34 20%,#ecd690 50%,#b08a34 80%,rgba(166,124,34,0))}
+.c8-hand{position:absolute;left:30px;top:222px;width:322px;color:#1c2a4a;white-space:nowrap;transform:rotate(-.6deg);transform-origin:0 50%}
+.c8-pen{font:400 30px/43px "Cedarville Cursive","Segoe Script",cursive}
+.c8-plainhand{font:400 28px/40px "Kalam","Segoe Print",cursive}
+.c8-love{margin:6px 0 0 150px;font-size:34px;line-height:48px}
+
+/* (c3) the card opens: 2s closed, 2.4s opening, 7s open, then a quick fade. Transform and opacity only. */
+.c8-stage{position:absolute;left:512px;top:195px;width:740px;height:518px;perspective:2600px;perspective-origin:50% 50%;animation:c8-fade 12s linear infinite}
+.c8-sh-open{left:-370px;transform-origin:100% 50%;opacity:0;transform:scaleX(.5);animation:c8-open-shadow 12s linear infinite}
+.c8-slide{position:absolute;left:370px;top:0;width:370px;height:518px;transform-style:preserve-3d;transform:translateX(-185px);animation:c8-slide 12s linear infinite}
+.c8-slide .c8-page.r{left:0}
+.c8-sh-closed{position:absolute;left:0;top:0;width:370px;height:518px;box-shadow:1px 1px 2px rgba(60,38,18,.4),4px 8px 14px rgba(60,38,18,.3),12px 22px 44px rgba(60,38,18,.3);animation:c8-closed-shadow 12s linear infinite}
+.c8-fall{position:absolute;left:0;top:0;width:370px;height:518px;background:linear-gradient(90deg,rgba(40,26,14,.62),rgba(40,26,14,.16));opacity:.9;animation:c8-fall 12s linear infinite}
+.c8-cover{position:absolute;left:0;top:0;width:370px;height:518px;transform-style:preserve-3d;transform-origin:0 50%;transform:translateZ(1px) rotateY(0deg);animation:c8-swing 12s linear infinite}
+.c8-face{position:absolute;left:0;top:0;width:370px;height:518px;overflow:hidden;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.c8-face.back{transform:rotateY(180deg)}
+.c8-face .c8-page.l{left:0}
+.c8-dim{position:absolute;left:0;top:0;width:100%;height:100%;background:#1c120c;opacity:0}
+.c8-face.front .c8-dim{animation:c8-dim-front 12s linear infinite}
+.c8-face.back .c8-dim{animation:c8-dim-back 12s linear infinite}
+@keyframes c8-swing{0%,16.667%{transform:translateZ(1px) rotateY(0deg);animation-timing-function:cubic-bezier(.45,.05,.55,.95)}36.667%,97.5%{transform:translateZ(1px) rotateY(-180deg)}97.51%,100%{transform:translateZ(1px) rotateY(0deg)}}
+@keyframes c8-slide{0%,16.667%{transform:translateX(-185px);animation-timing-function:cubic-bezier(.45,.05,.55,.95)}36.667%,97.5%{transform:translateX(0)}97.51%,100%{transform:translateX(-185px)}}
+@keyframes c8-fade{0%,95%{opacity:1}97.5%,97.51%{opacity:0}100%{opacity:1}}
+@keyframes c8-closed-shadow{0%,16.667%{opacity:1}30%,97.5%{opacity:0}97.51%,100%{opacity:1}}
+@keyframes c8-open-shadow{0%,20%{opacity:0;transform:scaleX(.5)}36.667%,97.5%{opacity:1;transform:scaleX(1)}97.51%,100%{opacity:0;transform:scaleX(.5)}}
+@keyframes c8-fall{0%,16.667%{opacity:.9}36.667%,97.5%{opacity:0}97.51%,100%{opacity:.9}}
+@keyframes c8-dim-front{0%,16.667%{opacity:0}26.667%{opacity:.5}27%,97.5%{opacity:0}100%{opacity:0}}
+@keyframes c8-dim-back{0%,26.3%{opacity:.5}36.667%,97.5%{opacity:0}97.51%,100%{opacity:.5}}
+@media (prefers-reduced-motion: reduce){
+.c8-stage,.c8-sh-open,.c8-slide,.c8-sh-closed,.c8-fall,.c8-cover,.c8-face .c8-dim{animation:none}
+.c8-sh-open{opacity:1;transform:none}
+.c8-slide{transform:none}
+.c8-sh-closed,.c8-fall,.c8-face .c8-dim{opacity:0}
+.c8-cover{transform:translateZ(1px) rotateY(-180deg)}
+}
+
+/* (d2, d2b, d3, f) the card over its envelope; d3 is the same picture smaller */
+.c8-look{position:absolute;left:512px;top:200px;width:740px;height:420px}
+.c8-look.small{left:627px;top:150px;width:510px;height:280px}
+.c8-env{position:absolute;left:208px;top:24px;width:532px;height:372px;box-shadow:0 1px 2px rgba(60,38,18,.38),3px 7px 14px rgba(60,38,18,.26),8px 18px 38px rgba(60,38,18,.26)}
+.c8-look.small .c8-env{left:130px;top:7px;width:380px;height:266px}
+.c8-lookcard{position:absolute;left:8px;top:0;width:300px;height:420px;transform:rotate(-1.5deg);box-shadow:1px 1px 2px rgba(60,38,18,.4),4px 8px 14px rgba(60,38,18,.3),10px 20px 40px rgba(60,38,18,.32)}
+.c8-look.small .c8-lookcard{left:0;width:200px;height:280px}
+.c8-addr{position:absolute;left:124px;top:166px;color:#1c2a4a;white-space:nowrap;font-family:"Cedarville Cursive","Segoe Script",cursive;transform:rotate(-.6deg);transform-origin:0 50%}
+.c8-addr-name{font-size:38px;line-height:54px}
+.c8-addr-mail{font-size:26px;line-height:42px}
+.c8-look.small .c8-addr{left:88px;top:112px}
+.c8-look.small .c8-addr-name{font-size:26px;line-height:38px}
+.c8-look.small .c8-addr-mail{font-size:20px;line-height:30px}
+
+/* (d2b) the one quiet fallback: an outline on her glow, not the main teal */
+.ans.c8-quiet{background:transparent;box-shadow:none;border:4px solid #1f1b16}
+
+/* (d3, g2) five seconds, 1s per digit, then the sent line for 3s. Digits stack and only their opacity changes. */
+.c8-going{position:absolute;left:512px;top:466px;width:740px;text-align:center;font:600 32px/44px "Segoe UI",system-ui,sans-serif;color:#1f1b16;animation:c8-goes 8s steps(1,end) infinite}
+.c8-undo{position:absolute;left:512px;top:530px;width:740px;height:184px;min-height:0;padding:0;display:flex;align-items:center;justify-content:center;gap:36px;font:700 56px/1 "Segoe UI",system-ui,sans-serif;animation:c8-goes 8s steps(1,end) infinite}
+.c8-count{position:relative;display:block;width:64px;height:96px;font:700 96px/96px "Segoe UI",system-ui,sans-serif}
+.c8-d{position:absolute;left:0;top:0;width:100%;text-align:center;opacity:0;animation:c8-digit 8s steps(1,end) infinite}
+.c8-d.n5{opacity:1}
+.c8-d.n4{animation-delay:1s}
+.c8-d.n3{animation-delay:2s}
+.c8-d.n2{animation-delay:3s}
+.c8-d.n1{animation-delay:4s}
+.c8-sentline{position:absolute;left:512px;top:586px;width:740px;text-align:center;font:700 56px/72px "Segoe UI",system-ui,sans-serif;color:#1f1b16;opacity:0;animation:c8-arrive 8s steps(1,end) infinite}
+@keyframes c8-digit{0%{opacity:1}12.5%{opacity:0}100%{opacity:0}}
+@keyframes c8-goes{0%{opacity:1}62.5%{opacity:0}100%{opacity:0}}
+@keyframes c8-arrive{0%{opacity:0}62.5%{opacity:1}100%{opacity:1}}
+@media (prefers-reduced-motion: reduce){
+.c8-going,.c8-undo,.c8-d,.c8-sentline{animation:none}
+}
+
+/* (f) sent */
+.c8-sentnote{position:absolute;left:356px;top:70px;width:384px;color:#1f1b16}
+.c8-sentname{margin-top:22px;font:700 44px/56px "Segoe UI",system-ui,sans-serif}
+.c8-senttime{margin-top:10px;font:400 30px/40px "Segoe UI",system-ui,sans-serif}
+
+/* (e1) the panel takes the whole area now that the bottom row is gone */
+.m8-panel.c8-full{height:628px}
+.c8-full .m8-steps{font-size:32px}
+.c8-full .m8-plain{font-size:28px}
+.c8-smallcard{position:relative;flex:none;width:200px;height:280px;box-shadow:0 1px 2px rgba(60,38,18,.4),2px 6px 12px rgba(60,38,18,.28),6px 14px 26px rgba(60,38,18,.22)}
+
+/* (e3) one picture in the box: the front beside the inside page, 248 by 174 */
+.c8-pasted{flex:none;display:flex;box-sizing:content-box;width:248px;height:174px;overflow:hidden;border:2px solid #c8cdd4;border-radius:12px}
+.c8-pasted-half{position:relative;flex:none;width:124px;height:174px;overflow:hidden}
+.c8-pasted-scale{width:370px;height:518px;transform:scale(.3351);transform-origin:0 0}
+.c8-pasted-scale .c8-page.r{left:0}
+.m8-note.c8-where{left:276px;top:36px;width:328px}
+
+/* (g, g2) plain stationery: not a card, just her words on cream paper */
+.c8-letter{position:absolute;left:562px;top:190px;width:640px;height:440px;box-sizing:border-box;padding:0 48px;display:flex;flex-direction:column;justify-content:center;color:#1f1b16;box-shadow:0 1px 2px rgba(60,38,18,.34),3px 7px 14px rgba(60,38,18,.24),8px 18px 36px rgba(60,38,18,.24)}
+.c8-letter.small{top:150px;height:280px}
+.c8-letter .m8-say{position:relative}

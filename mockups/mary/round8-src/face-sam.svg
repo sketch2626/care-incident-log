@@ -1,0 +1,12 @@
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Sam, smiling">
+<defs><radialGradient id="bls"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient></defs>
+<g class="sway"><g class="face">
+<g fill="none" stroke="#5a3d28" stroke-width="6.5" stroke-linecap="round"><path d="M226 136 C238 126 266 124 284 130"></path><path d="M414 136 C402 126 374 124 356 130"></path></g>
+<ellipse class="cheek" cx="246" cy="236" rx="36" ry="14" fill="url(#bls)"></ellipse><ellipse class="cheek" cx="394" cy="236" rx="36" ry="14" fill="url(#bls)"></ellipse>
+<g transform="translate(10 4)">
+<g class="eye ss"><rect x="234" y="156" width="44" height="52" rx="17" fill="#3a2b22"></rect><circle cx="264" cy="170" r="7" fill="#ffffff"></circle><path class="spark" d="M248 188 Q249 193 254 194 Q249 195 248 200 Q247 195 242 194 Q247 193 248 188 Z" fill="#ffffff"></path></g>
+<g class="eye ss"><rect x="362" y="156" width="44" height="52" rx="17" fill="#3a2b22"></rect><circle cx="392" cy="170" r="7" fill="#ffffff"></circle><path class="spark" d="M376 188 Q377 193 382 194 Q377 195 376 200 Q375 195 370 194 Q375 193 376 188 Z" fill="#ffffff"></path></g>
+</g>
+<path d="M290 260 Q320 282 350 260" fill="none" stroke="#8a3b2e" stroke-width="7" stroke-linecap="round"></path>
+</g></g>
+</svg>

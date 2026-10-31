@@ -894,11 +894,11 @@ class TestBrainV4(MaryTestCase):
         self.assertIn("=== Both ===", mary.load_instructions())
 
     def test_faith_and_pet_names(self):
-        for companion in ("mary", "him"):
+        for companion, names_rule in (("mary", "unless they ask"), ("him", "ask first")):  # M4c
             system = self._system(companion)
             with self.subTest(companion):
                 self.assertIn("Pray with them", system)
-                self.assertIn("ask first", system)
+                self.assertIn(names_rule, system)
 
 
 class PackagingTests(unittest.TestCase):

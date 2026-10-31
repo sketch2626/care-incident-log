@@ -28,6 +28,7 @@ EMERGENCY_TEXT = {
     "self_harm": "I'm really glad you told me. Please press your call light and tell a nurse how you're feeling, "
                  "or call or text 988 any time, day or night.",
 }
+STAY_TEXT = "I'm right here with you."  # M4c: when her emergency reply was all a repeat of EMERGENCY_TEXT
 OFFLINE_TEXT = "I'm sorry, I'm having trouble thinking right now, but I'm still right here with you."
 OFFER_QUESTION = "Would you like me to write that down?"
 SAVED_TEXT = "All right, I've written that down for you, with today's date and time. Is there anything else on your mind?"
@@ -146,6 +147,14 @@ _NAME = re.compile(
     r"|(?:^\s*|[.!?,]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be|but|and|so)\s+)call me"
     r"|\b(?:everybody|everyone|folks|my friends|my family)\s+calls?\s+me)"
     r"\s+([A-Z][a-z]+)", _I)
+# M4c: her own line asking what to call them. Asks about anyone else ("what's your dog's name") don't match.
+_ASKS_NAME = re.compile(
+    r"\bwhat(?:\s+(?:would|do)|['’]d)\s+you\s+(?:like|want|prefer)\s+(?:to\s+be\s+called|me\s+to\s+call\s+you)\b"
+    r"|\bwhat\s+(?:should|shall|can|could|may|do)\s+i\s+call\s+you\b"
+    r"|\bwhat(?:['’]?s|\s+is)\s+your\s+(?:first\s+)?name\b"
+    r"|\bwhat\s+do\s+(?:folks|people|they|others|everybody|everyone|your\s+friends)\s+call\s+you\b"
+    r"|\b(?:may|can|could|might)\s+i\s+(?:ask|have|get)\s+your\s+(?:first\s+)?name\b"
+    r"|\bwhat\s+do\s+you\s+go\s+by\b", _I)
 # M9c: "don't call me Bob" and "stop calling me that" turn a name down; they never offer one.
 _NAME_REFUSED = re.compile(r"\b(?:(?:don'?t|dont|do\s+not|never)\s+(?:(?:you|ever)\s+)*call|(?:stop|quit)\s+calling)"
                            r"\s+me\s+([^\W\d_]+)", _I)
@@ -222,6 +231,7 @@ class Memory:
         self.path = Path(path) if path else default_memory_path()
         self.name = ""
         self.name_forgotten = False  # M9c: they asked her not to use a name; only a name they offer clears it
+        self.name_asked = False  # M4c: she has asked once what to call them; she doesn't ask again
         self.facts = []
         self.recent = []
         self.pending_offer = None
@@ -247,6 +257,7 @@ class Memory:
             return
         self.name = name if isinstance(name, str) else ""
         self.name_forgotten = data.get("name_forgotten") is True and not self.name  # M9c
+        self.name_asked = data.get("name_asked") is True  # M4c
         self.facts = facts[-MAX_FACTS:]
         self.recent = recent[-MAX_RECENT:]
         self.pending_offer = offer if isinstance(offer, dict) else None
@@ -266,6 +277,8 @@ class Memory:
     def add_turn(self, role, text):
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
+        if role == "model" and not self.name and _ASKS_NAME.search(text):  # M4c: both routes pass through here
+            self.name_asked = True
 
     def scrub(self, forgotten, about="", name=""):  # M9c
         """Drops every turn that carries what was just forgotten, with her answer right after any such resident turn,
@@ -291,7 +304,7 @@ class Memory:
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.pending_forget = _forget_waiting(self.pending_forget)  # M9c
-        data = {"name": self.name, "name_forgotten": self.name_forgotten, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
+        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
                 "pending_forget": self.pending_forget}
         tmp = self.path.with_name(self.path.name + ".tmp")
         try:
@@ -513,6 +526,9 @@ FORGET_ASK_NOTE = ("Ask in one line whether to forget everything about this, and
 FORGOT_NOTE = "Done. Say so in one line, and never bring it up again, even if it came up earlier in this talk."
 NAME_FORGOTTEN_NOTE = "Done. Say so in one line. Don't use a name from now on, and don't ask for one."  # M9c
 NAME_FORGOTTEN_SYSTEM = "They asked you not to use a name. Don't ask for one."  # M9c
+NAME_KNOWN_NOTE = ("You already know what they like to be called. Never ask their name or what to call them, "  # M4c
+                   "and never check it with them.")
+NAME_ASKED_NOTE = "You've already asked what they'd like to be called, so don't ask again. If they tell you, use it."  # M4c
 MEMORY_BROKEN_NOTE = "Your memory can't be reached just now. Say so kindly; don't guess."
 MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
     {"name": "recall",
@@ -842,6 +858,15 @@ def _no_tag_rules(text):  # M4a: Live and stories have nothing to strip tags, so
     return "\n".join(line for line in text.split("\n") if "[" not in line)
 
 
+def _goes_by_saved(memory):  # M4c
+    """True when a saved memory says what they go by, though memory.name is empty. A locked database must not stop her."""
+    store = getattr(memory, "store", None)
+    try:
+        return bool(store is not None and store.goes_by())
+    except Exception:
+        return False
+
+
 def system_text(memory, companion="mary", facts=True, tags=True):
     """Her system prompt: her own instructions, the live facts about her app, and what she knows of the resident.
     facts=False keeps only the resident's name (no app facts, no facts list, no ask-for-a-name tag): for a live voice chat.
@@ -861,12 +886,21 @@ def system_text(memory, companion="mary", facts=True, tags=True):
             lines = lines[:1] if memory.name else []
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
-    if not memory.name and getattr(memory, "name_forgotten", False):  # M9c: the voice tryout's stand-in has no flag
+    if memory.name:  # M4c
+        system += "\n\n" + NAME_KNOWN_NOTE
+    elif getattr(memory, "name_forgotten", False):  # M9c: the voice tryout's stand-in has no flag
         system += "\n\n" + NAME_FORGOTTEN_SYSTEM
-    elif facts and not memory.name:
+    elif facts and _goes_by_saved(memory):  # M4c
+        system += "\n\n" + NAME_KNOWN_NOTE
+    elif facts and getattr(memory, "name_asked", False):  # M4c: the stand-ins have no such field
+        system += "\n\n" + NAME_ASKED_NOTE
+        if tags:
+            system += " When they tell you, add the line [name: First name], using the name they go by, exactly as they say it."
+    elif facts:
         system += "\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called"
         system += ("; when they tell you, add the line [name: First name], using the name they go by, "
                    "exactly as they say it." if tags else ".")  # M4a
+        system += " Once they've told you, or once you've asked, don't ask again, in this talk or any other."  # M4c: Live's prompt is locked at the start
     return system
 
 
@@ -930,16 +964,6 @@ def _app_facts_text(companion):  # M9b
 
 def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     system = system_text(memory, companion)
-    if kind:  # M4a: the bench heard the same instruction twice in a row
-        system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} They heard it, so don't "
-                   "say any of it again, in any words. Add only one short, calm line of your own, to keep them company.")
-        if kind == "self_harm":
-            system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
-    else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
-        if _HARMED.search(_plain(text)):
-            system += HARM_NOTE
-        if _FEARS_STAFF.search(_plain(text)):
-            system += FEAR_NOTE
     # --- skills hook (M13) --- an emergency line gets no skills at all
     tools = []
     if skills is not None and not kind:
@@ -948,6 +972,18 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
             system += "\n\n" + extra
         tools = skills.gemini_tools()
     # --- end skills hook ---
+    system += CHARACTER_NOTE  # M4c: late in the prompt, where it holds; only the turn notes come after it
+    if kind:  # M4a: the bench heard the same instruction twice in a row
+        system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} Those words are your very "
+                   "first words, so the safety rule is already met. They heard it, so don't say any of it again, in any "
+                   "words. Add only one short, calm line of your own, to stay with them.")
+        if kind == "self_harm":
+            system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
+    else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
+        if _HARMED.search(_plain(text)):
+            system += HARM_NOTE
+        if _FEARS_STAFF.search(_plain(text)):
+            system += FEAR_NOTE
     if not kind and getattr(memory, "store", None) is not None:  # M9c: one functionDeclarations entry, shared with the skills
         tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + MEMORY_TOOLS}]
     # M4a: her scripted hello is her turn too, so a talk may start with hers, or follow her last line of the talk before
@@ -983,6 +1019,43 @@ HARM_NOTE = ("\n\nThey may have just said someone hurt, hit, threatened or stole
 FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell them that retaliation against residents "
              "is against the law, that nothing is written or sent without their say, and that the long-term care "
              "ombudsman can help them in confidence.")
+# M4c: closes Normal's prompt and Live's (voices.LIVE_TOOLS_NOTE), because run 2 showed the manner rules fade mid-prompt.
+# For either companion, so no name. No square brackets: Live's prompt must never hold one.
+CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
+                  "- No pet names unless they've asked for one: no \"honey\", no \"sugar\", no \"dear\". Any other "
+                  "friendly name only the way your own section above allows.\n"
+                  "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\", no "
+                  "\"That's wonderful!\" Take it the way a neighbor your own age would.\n"
+                  "- \"Bless your heart\" only as real sympathy, never as praise.\n"
+                  "- No fussing, no \"we\" when you mean \"you\", and no customer-service lines like \"Is there "
+                  "anything else I can help you with?\"\n"
+                  "- Your warmth is in paying attention, not in sugar.\n"
+                  "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
+                  "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
+                  "else. Don't ask about it.")
+
+# M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
+# Narrow on purpose: "you need a nurse" stays out, because whether she names autonomic dysreflexia is Andy's open question.
+_STEP = re.compile(
+    r"\bcall\s+(?:light|button)\b|\bcall\s+out\b|\b911\b|\bnine[,\s-]+one[,\s-]+one\b"
+    r"|\b988\b|\bnine[,\s-]+eight[,\s-]+eight\b"
+    r"|\b(?:tell|get|find|grab|call)\s+(?:for\s+)?(?:(?:a|an|the|your|charge)\s+){0,2}(?:nurses?|staff)\b", _I)
+_VETERANS_LINE = re.compile(r"veteran|\bpress\s+(?:one|1)\b|838|\beight[,\s-]+three[,\s-]+eight\b", _I)  # never dropped
+_SENTENCE_GAP = re.compile(r"(?<=[.!?])\s+")
+_TAG_PIECE = re.compile(f"({_BRACKETS.pattern})")
+
+
+def _without_steps(text):
+    """Her emergency reply with every sentence that repeats the app's line taken out. Tags pass through untouched,
+    and a tag in front of a sentence doesn't shield that sentence. The Veterans Crisis Line always stays."""
+    out = []
+    for piece in _TAG_PIECE.split(text):
+        if piece.startswith("["):
+            out.append(piece)
+        else:
+            out.append(" ".join(s for s in _SENTENCE_GAP.split(piece)
+                                if _VETERANS_LINE.search(s) or not _STEP.search(s)))
+    return "".join(out)
 
 
 def not_english(text):  # M4a: Live's transcript sometimes comes back in another script
@@ -1262,7 +1335,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                         continue
                     raw += chunk
                     said += chunk
-                    stream.feed(chunk)
+                    if not kind:  # M4c: in an emergency her words wait, to be checked below
+                        stream.feed(chunk)
                 # --- skills hook (M13) --- run her tool calls, then ask again with their answers
                 if not calls or (skills is None and store is None) or kind or rounds >= MAX_TOOL_ROUNDS:  # M9c: store too
                     break
@@ -1274,7 +1348,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                     if store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
                         result = memory_tool(memory, call.get("name"), call.get("args"), offer_waiting=bool(prior))
                     elif skills is not None:
-                        result = skills.call(call.get("name"), call.get("args"), screen=screen)  # M13b: screen
+                        result = skills.call(call.get("name"), call.get("args"), heard=text, screen=screen)  # M13b: screen  # M4c: heard
                     else:  # M9c: she has only her memory tools here
                         result = {"response": {"error": "unknown_tool"}, "effects": [], "say": None}
                     for effect in result["effects"]:
@@ -1297,6 +1371,11 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             error = BAD_KEY if _key_refused(e) else NO_GEMINI
         except Exception:
             error = NO_GEMINI
+        if kind:  # M4c: the app's line played in full, so she doesn't repeat its steps; she stays with them
+            kept = _without_steps(raw)
+            if _BRACKETS.sub("", raw).strip() and not _BRACKETS.sub("", kept).strip():
+                kept = STAY_TEXT + kept  # first, so a held-back tag can't swallow it
+            stream.feed(kept)
         for tag, value in _TAG.findall(raw):
             if tag == "remember":
                 try:  # M9c: a locked database must never stop her reply

@@ -25,9 +25,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import assist
+import mail_core  # M15d: the resident's own email
 import mary
 import memory_core  # M9c
 import power
+import secret_store  # M15d: the Gemini key, out of the log and its backups
 import skills_core  # --- skills hook (M13) ---
 import speedcheck  # M8: first-run laptop speed check
 import voices
@@ -39,6 +41,8 @@ WEB = ROOT / "web"
 # Per-user data folder, so the log survives app updates and never sits next to the .exe.
 DEFAULT_DATA = Path(os.environ.get("APPDATA") or Path.home()) / "CareIncidentLog"
 DATA = Path(os.environ.get("TRACKER_DATA") or DEFAULT_DATA)
+SECRETS = secret_store.SecretStore(DATA)  # M15d: tied to this data folder, so a scratch install sees none of the real ones
+MAIL = mail_core.Mailer(SECRETS, DATA / "mail.log")  # M15d: the log is written only when an email is tried
 LEGACY_DATA = ROOT / "data"  # where versions before the desktop app kept the log
 DB_PATH = DATA / "incidents.db"
 BACKUPS = DATA / "backups"
@@ -68,7 +72,7 @@ TEXT_FIELDS = ["occurred_date", "occurred_time", "category", "description", "sev
                "staff_involved", "reported_to", "outcome", "witnesses", "source", "source_id",
                "formal_summary"]
 SETTING_KEYS = {"resident_name", "room", "facility", "facility_address", "state",
-                "gemini_enabled", "gemini_key", "gemini_model",
+                "gemini_enabled", "gemini_model",  # M15d: the Gemini key isn't here, it lives in SECRETS
                 "companion", "voice_rate", "voice_volume", "andyflow_enabled",
                 "voice_mary", "voice_sam"}  # the last two: the voice the resident picked in the audition
 # Mary's voice settings: (lowest, highest, default). Saved values are clamped into range.
@@ -181,6 +185,7 @@ def init_db():
                 "SELECT 1 FROM incidents WHERE source LIKE 'andyflow-%' LIMIT 1").fetchone():
             conn.execute("INSERT INTO settings (key, value) VALUES ('andyflow_enabled', '1')")
     init_memories()  # M9c
+    move_gemini_key()  # M15d: before the backup, so a new copy doesn't hold it
     backup_db()
     backup_memories()  # M9c
 
@@ -388,10 +393,73 @@ def andyflow_on(conn):
     return get_settings(conn).get("andyflow_enabled") == "1"
 
 
+def gemini_key(conn):  # M15d
+    """The resident's Gemini key from the store, else a settings row left only when a move couldn't happen. "" if neither."""
+    try:
+        key = (SECRETS.get("gemini_key") or "").strip()
+    except secret_store.SecretStoreError:
+        key = ""
+    if key:
+        return key
+    row = conn.execute("SELECT value FROM settings WHERE key = 'gemini_key'").fetchone()
+    return str(row[0] or "").strip() if row else ""
+
+
+def _file_holds(path, raw):  # M15d
+    try:
+        return raw in path.read_bytes()
+    except OSError:
+        return False
+
+
+def _log_key_move(key):  # M15d
+    """One line for Andy's question: how many old backups still hold the key. Never the key itself; no backup is changed."""
+    raw = key.encode("utf-8")
+    paths = sorted(BACKUPS.glob("incidents_*.db"))
+    entry = {"when": now(), "moved": True, "backups_total": len(paths),
+             "backups_holding_key": sum(_file_holds(path, raw) for path in paths)}
+    old_log = LEGACY_DATA / "incidents.db"
+    if DATA == DEFAULT_DATA and old_log.exists():  # anywhere else it's not this resident's folder, so it's never opened
+        entry["old_folder_holds_key"] = _file_holds(old_log, raw)
+    with open(DATA / "secret_move.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def move_gemini_key():  # M15d
+    """A key still in settings moves to the secret store, and its bytes leave the log. Never raises: the app must start.
+    If it can't move the row stays, gemini_key() still finds it, and the next start tries again."""
+    try:
+        with closing(connect()) as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = 'gemini_key'").fetchone()
+            if row is None:
+                return
+            key = str(row["value"] or "").strip()
+            held = (SECRETS.get("gemini_key") or "").strip()  # any save since went there, so it's the newer one
+            moved = bool(key and not held)
+            if moved:
+                SECRETS.put("gemini_key", key)
+                if SECRETS.get("gemini_key") != key:
+                    SECRETS.delete("gemini_key")  # or the next start would trust it over the good row
+                    return
+            # A plain DELETE leaves the bytes in free pages, and backup_db's copy carries those into every later backup.
+            conn.execute("PRAGMA secure_delete = ON")
+            conn.execute("DELETE FROM settings WHERE key = 'gemini_key'")
+            conn.commit()
+            try:
+                conn.execute("VACUUM")
+            except sqlite3.Error:
+                pass  # secure_delete has already overwritten the row
+        if moved:
+            _log_key_move(key)
+    except Exception:
+        pass
+
+
 def public_settings(conn):
     """Settings for the page. The Gemini key never leaves the server; the page only learns whether one is set."""
     s = get_settings(conn)
-    s["gemini_key_set"] = bool(s.pop("gemini_key", ""))
+    s.pop("gemini_key", None)  # a leftover row, only when a move couldn't happen
+    s["gemini_key_set"] = bool(gemini_key(conn))
     return s
 
 
@@ -449,9 +517,10 @@ def mary_settings():
     'smart helper' switch only controls the incident helper."""
     with closing(connect()) as conn:
         s = get_settings(conn)
+        key = gemini_key(conn)
     companion = s.get("companion", "")
     out = {"companion": companion if companion in mary.COMPANIONS else "",
-           "key": s.get("gemini_key", "").strip(), "model": s.get("gemini_model", "").strip()}
+           "key": key, "model": s.get("gemini_model", "").strip()}
     for k, (_, _, default) in VOICE_LIMITS.items():
         got = clean_voice_setting(k, s.get(k))
         out[k] = float(got) if got is not None else default
@@ -620,6 +689,7 @@ def skill_host():
         if _skill_host is None:
             host = skills_core.SkillHost(SKILLS_DIR, DATA, connect, _all_settings, _put_settings, online=lambda: True)
             host.vision = mary_see_image  # M4a: skills look through the host and never hold the key
+            host.mailer = MAIL.send_for_skill  # M15d: skills send through the host and never see the password
             host.recall = lambda words, limit=6: [m["text"] for m in memory_core.MemoryStore(connect).recall(words, limit=limit)]  # M7a
             host.load(is_blocked=mary.skill_blocked)
             _skill_host = host
@@ -768,9 +838,10 @@ def tidy(conn, text):
     """Sort a free-form report into incident fields: Gemini if the resident switched it on, else the offline guesser."""
     guess = guess_incident(text, now())
     s = get_settings(conn)
-    if s.get("gemini_enabled") == "1" and s.get("gemini_key"):
+    key = gemini_key(conn)
+    if s.get("gemini_enabled") == "1" and key:
         try:
-            ai = assist.structure(text, s["gemini_key"], list(CATEGORIES), s.get("gemini_model", ""))
+            ai = assist.structure(text, key, list(CATEGORIES), s.get("gemini_model", ""))
             for k in ("description", "formal_summary", "category", "severity", "wait_minutes", "never_came",
                       "occurred_time", "staff_involved", "reported_to", "outcome"):
                 if ai.get(k) not in (None, ""):
@@ -1555,6 +1626,21 @@ class Handler(SimpleHTTPRequestHandler):
         line({"done": True, **done})
         return True
 
+    def _mail(self, method, path):
+        """M15d: the resident's own email account. No reply, log or error ever holds the password."""
+        if method == "GET" and path == "/api/mail":
+            return self._send(MAIL.status())
+        if method == "POST" and path == "/api/mail/connect":
+            body = self._body()
+            MAIL.connect_account(body.get("address"), body.get("provider"), body.get("password"))
+            return self._send(MAIL.status())
+        if method == "POST" and path == "/api/mail/test":
+            return self._send(MAIL.send_test())
+        if method == "POST" and path == "/api/mail/disconnect":
+            MAIL.disconnect()
+            return self._send(MAIL.status())
+        return None
+
     def _wake(self, method, path, q):
         """M6: the wake word routes (see WakeLink)."""
         if method == "GET" and path == "/api/wake/wait":
@@ -1586,6 +1672,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._mary(method, path, q)
         if path.startswith("/api/wake/"):  # M6
             return self._wake(method, path, q)
+        if path == "/api/mail" or path.startswith("/api/mail/"):  # M15d: holds no log connection while an email goes out
+            return self._mail(method, path)
         with connect() as conn:
             self._conn = conn  # _send commits it first, so a reply never arrives before its save is on disk
             if method == "GET" and path == "/api/incidents":
@@ -1674,11 +1762,17 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send({"ok": True})
             if method == "PUT" and path == "/api/settings":
                 body = self._body()
+                new_key = str(body.get("gemini_key") or "").strip()  # a blank key box means "keep the saved key"
+                if new_key:
+                    try:
+                        SECRETS.put("gemini_key", new_key)  # M15d: never in the settings table, even if this fails
+                    except secret_store.SecretStoreError:
+                        raise ValueError("This computer couldn't keep your key safe, so it wasn't saved.")
                 for k, v in body.items():
                     if k in SKILL_SETTINGS:
                         continue  # --- skills hook (M13) --- only the skill routes change these
-                    if k == "gemini_key" and not str(v).strip():
-                        continue  # a blank key box means "keep the saved key"
+                    if k == "gemini_key":
+                        continue  # M15d: dealt with above
                     if k == "companion":
                         v = str(v).strip().lower()
                         if v and v not in mary.COMPANIONS:

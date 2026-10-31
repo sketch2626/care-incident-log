@@ -840,6 +840,7 @@ function fillInfo() {
   $('#backToMary').hidden = !FROM_MARY;
   loadSkills();
   loadMemories(); // M9c
+  loadMail(); // M15d
 }
 
 /* ---------- Things Mary can do ---------- */
@@ -901,6 +902,144 @@ async function skillChange(path, body) {
     $('#skillsMsg').textContent = "That didn't change. " + err.message;
   }
 }
+
+/* ---------- Connect email (M15d) ---------- */
+
+// The app password lives only in its own box until Connect sends it, and the box is then emptied.
+const MAIL_NAMES = { gmail: 'Gmail', yahoo: 'Yahoo' };
+let mailDraws = 0; // an older /api/mail answer must not undo a newer connect or disconnect
+let mailGuessed = null; // what the address last pointed to, so a tile they changed by hand stays changed
+
+function mailPick() {
+  const on = document.querySelector('input[name="mail_provider"]:checked');
+  return on ? on.value : '';
+}
+
+function mailShowSteps() {
+  const pick = mailPick();
+  $('#mailStepsGmail').hidden = pick !== 'gmail';
+  $('#mailStepsYahoo').hidden = pick !== 'yahoo';
+}
+
+function mailGuess(address) {
+  const a = address.trim().toLowerCase();
+  if (/@(gmail|googlemail)\.com$/.test(a)) return 'gmail';
+  if (/@yahoo\.[a-z.]*[a-z]$/.test(a)) return 'yahoo';
+  return null;
+}
+
+function drawMail(st) {
+  mailDraws += 1;
+  $('#mailMsg').textContent = '';
+  $('#mailNone').hidden = !!st.available;
+  $('#mailOff').hidden = !st.available || !!st.connected;
+  $('#mailOn').hidden = !st.available || !st.connected;
+  const name = MAIL_NAMES[st.provider];
+  $('#mailLine').textContent = `Connected: ${st.address || ''}` + (name ? ` (${name})` : '');
+}
+
+async function loadMail() {
+  const draw = mailDraws;
+  try {
+    const st = await api('/api/mail');
+    if (draw === mailDraws) drawMail(st);
+  } catch (err) {
+    if (draw !== mailDraws) return;
+    ['#mailNone', '#mailOff', '#mailOn'].forEach(id => { $(id).hidden = true; });
+    $('#mailMsg').textContent = "I couldn't check the email setup just now. " + err.message;
+  }
+}
+
+function mailError(text) {
+  $('#mailError').textContent = text;
+  $('#mailError').hidden = false;
+}
+
+$('#mailAddress').addEventListener('input', () => {
+  const guess = mailGuess($('#mailAddress').value);
+  if (guess && guess !== mailGuessed) {
+    document.querySelector(`input[name="mail_provider"][value="${guess}"]`).checked = true;
+    mailShowSteps();
+  }
+  mailGuessed = guess;
+});
+document.querySelectorAll('input[name="mail_provider"]').forEach(r => r.addEventListener('change', mailShowSteps));
+$('#mailCard').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
+
+$('#pasteMail').addEventListener('click', async () => {
+  const btn = $('#pasteMail'), say = $('#mailPassState');
+  btn.disabled = true;
+  try {
+    const text = await readClipboard();
+    if (!text) {
+      say.textContent = 'There is nothing to paste yet. Copy the app password first, then tap Paste.';
+    } else if (/[\r\n]/.test(text) || text.length > 200) { // spaces are fine: Google shows groups of four
+      say.textContent = "That doesn't look like an app password. Copy just the letters, then tap Paste.";
+    } else {
+      $('#mailPass').value = text;
+      say.textContent = 'Password pasted. Tap Connect email.';
+    }
+  } catch {
+    say.textContent = "I couldn't reach what you copied. Right-click the box and choose Paste, then tap Connect email.";
+  } finally { btn.disabled = false; }
+});
+
+$('#mailConnect').addEventListener('click', async () => {
+  const btn = $('#mailConnect'), box = $('#mailPass');
+  const address = $('#mailAddress').value.trim(), provider = mailPick();
+  $('#mailError').hidden = true;
+  $('#mailPassState').textContent = '';
+  if (!address) { mailError('Type the email address first.'); return; }
+  if (!provider) { mailError('Choose Gmail or Yahoo first.'); return; }
+  if (!box.value) { mailError('Paste the app password first.'); return; }
+  btn.disabled = true;
+  btn.textContent = 'Connecting…';
+  try {
+    const st = await post('/api/mail/connect', { address, provider, password: box.value });
+    box.value = '';
+    $('#mailTestMsg').textContent = '';
+    drawMail(st);
+    if (st.connected) $('#mailTest').focus(); // the button they tapped has just gone
+  } catch (err) {
+    box.value = '';
+    mailError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Connect email';
+  }
+});
+
+$('#mailTest').addEventListener('click', async () => {
+  const btn = $('#mailTest'), off = $('#mailDisconnect'), say = $('#mailTestMsg');
+  btn.disabled = true;
+  off.disabled = true; // a send can take 12 seconds
+  btn.textContent = 'Sending…';
+  say.textContent = '';
+  try {
+    const r = await post('/api/mail/test');
+    say.textContent = r.ok ? 'Test sent. Check your inbox.' : (r.message || "That test didn't go out. Please try again.");
+  } catch (err) {
+    say.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    off.disabled = false;
+    btn.textContent = 'Send a test to myself';
+  }
+});
+
+$('#mailDisconnect').addEventListener('click', async () => {
+  if (!(await askConfirm("Disconnect this email? Mary won't be able to send email until it's connected again."))) return;
+  const btn = $('#mailDisconnect'), say = $('#mailTestMsg');
+  btn.disabled = true;
+  say.textContent = '';
+  try {
+    const st = await post('/api/mail/disconnect');
+    drawMail(st);
+    if (!st.connected && st.available) $('#mailAddress').focus(); // the button they tapped has just gone
+  } catch (err) {
+    say.textContent = err.message;
+  } finally { btn.disabled = false; }
+});
 
 /* ---------- What Mary remembers (M9c) ---------- */
 

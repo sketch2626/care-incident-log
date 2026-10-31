@@ -2,10 +2,10 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-30, about 21:05)
-- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through fd31fe2 is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
-- **Her account hit its 5-hour limit at 21:02,** and its workers resume by themselves at 23:50. Her weekly limit resets Oct 31 at 5pm, and Andy wants her usage used before then.
-  - **M9c truly forget** (`other/M9c`, tab "M9c memory core her acct", peer `m9c-00`): 7 files not committed yet, safe on disk.
+## Right now (2026-10-31, about 00:05)
+- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
+- **Her account's workers resumed at 23:50.** Her weekly limit resets Oct 31 at 5pm, and Andy wants her usage used before then. Check each worker's size with `python tools/worker_context.py`. New jobs go to fresh workers; reuse one only for fixes to its own job while it's under about 200,000 tokens.
+  - **M9c truly forget: merged 2026-10-31** (811 tests). It's a real delete: memories live in their own `mary/memories.db` with secure_delete, so incident backups never hold them, and the old table is wiped from every backup. Peer `m9c-00` (about 201K) is doing one follow-up: "forget my name" clears the saved name. It commits `DONE: M9c forget my name`.
   - **M7a word search** (`other/M7a`, tab "M7a word search her acct", peer `m7a-ec`): boards done (`mockups/mary/round7/`), the generator and skill tools committed, the screen in progress. Merge only after Andy approves the boards.
   - **M9d2 bench fixes** (`other/M9d`, tab "M9d2 bench fixes her acct", peer `m9d-4b`): the fixes committed, tests in progress. Then the hub does a second real bench run.
   - **Idle, waiting for Andy:** M4a (`m4a-70`), M4b (`m4b-32`), and speak-up (`speakup-d4`, waiting on decisions D1-D10 in `docs/speakup-plan.md`).
@@ -17,11 +17,12 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - Should Mary name autonomic dysreflexia to the resident? The safety section names it on purpose; the bench judge called it diagnosing.
   - Speak-up decisions D1-D10.
   - "Pal" was added to Sam's pet names that wait until asked; keep it?
+  - **wake.log keeps Whisper's words** from around each wake, and forget can't reach them. They're kept for tuning the wake word. M9c's suggestion: replace them with a word count before the pilot.
 - **Merged, waiting on a check:**
   - **M9c memory core** (merged 2026-10-30, 707 tests):
     - Memories are dated entries in the app's database, pulled with a `recall` tool; about 120 words are always sent.
     - "What do you remember about me?", "forget that", and a "What Mary remembers" list in My info.
-    - Andy tries it after M4a and M4b land. It's open whether "forget" should really erase.
+    - Andy tries it after M4a and M4b land. "Forget" really erases since the 2026-10-31 merge.
   - **M9d brain bench:** the hub's first live run waits until Andy is done with Mary for the day, because it shares his free Gemini allowance. Commands are in the M9d merge commit body:
     - `python tools/brain_bench.py --key-from-app --delay 4` (about 168 requests);
     - add `--raw --variant bench/variants/lean-mary.md --variant bench/variants/lean-sam.md` for the full side-by-side (about 349 requests).
@@ -30,7 +31,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 - **Decisions waiting on Andy:**
   - **Politics:** decided 2026-10-30 (Andy's answer 10). Merged into her instructions and bench (bd7cc85).
   - **M9f, threats against others:** the safety-section gap. A draft is in the roadmap, waiting on Andy.
-  - **"Forget that":** decided 2026-10-30: truly erase (Andy: "forget that means forget that"). It's with M9c.
+  - **"Forget that":** decided 2026-10-30: truly erase (Andy: "forget that means forget that"). Merged 2026-10-31.
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**

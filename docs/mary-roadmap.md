@@ -350,6 +350,8 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
     - a painted setting with real depth, in the cards' style: a porch, a sitting room or a kitchen window for Mary; a workshop or a dock for Sam. Layered, with light that follows the real time of day;
     - a grown-up drawn face: natural eye size, no sparkles, blush or hops, quieter movement. Stylized, not lifelike, because a too-real face feels false for an AI;
     - a grown-up caption font.
+  - **Andy, a minute later:** "I've only ever tested Mary where she's been very condescending and talking down to them. So that might affect how I'm seeing it too… once I get to test it with the better personality, then maybe it won't seem like that as much." When he first asked for this overhaul, he mainly meant the reporting side (M11), but now "it's going to have to be a total" overhaul, Mary and the reporting screens both.
+  - **Order:** Andy talks with the improved Mary first (after bench run 5), then looks at her again with fresh eyes. Boards come after that.
 - **M11. Reporting portal overhaul,** the incident log screens (`web/`): a complete visual redo, with boards first. Also decide **how much of it each resident sees**: whether they get the full-screen portal at all, which parts make sense for them, and what stays behind Mary. Decide this with Andy when we get there.
 
 ## Order and dependencies

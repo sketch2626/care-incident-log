@@ -4,10 +4,11 @@
   "version": "0.1.0",
   "title": "Word search",
   "summary": "A big-print word search on a topic they like, played by voice or by touch, with hints when they ask.",
-  "instructions": "Enjoy this with them like a friend. Never describe the screen. Never give a word or where it is unless they ask. When they say they found one, call check with that word. If they don't name a topic, use one from what you know about them. For a topic of your own, pass 10 to 14 plain fitting words in words. When they're done, call end.",
+  "instructions": "Enjoy this like a friend. Never describe the screen. Never give a word or where it is unless they ask. When they say they found one, call check with that word. If they name no topic, use one you know they like. For your own topic, pass 10 to 14 plain fitting words in words. Say mention once when a result has it; after that bring up sizes only if they struggle. When they're done, call end.",
   "screen": {"menu_label": "Word search", "menu_icon": "grid", "full_screen": true},
   "sees": true,
   "memory": true,
+  "settings": ["word_search_size"],
   "actions": [
     {
       "name": "start",
@@ -19,8 +20,8 @@
                                                "description": "10 to 14 plain single words that fit the topic.",
                                                "items": {"type": "string", "maxLength": 40,
                                                          "description": "One plain word."}},
-                                     "level": {"type": "integer", "minimum": 1, "maximum": 5,
-                                               "description": "How hard, from 1 (easiest) to 5. Leave it out to keep the level they're on."},
+                                     "level": {"type": "integer", "minimum": 1, "maximum": 3,
+                                               "description": "The size, from 1 (biggest letters) to 3 (most letters). Leave it out to keep the size they chose."},
                                      "diagonal": {"type": "boolean",
                                                   "description": "True to put words on the diagonal too."},
                                      "backward": {"type": "boolean",
@@ -64,17 +65,17 @@
     },
     {
       "name": "easier",
-      "description": "Start an easier word search on the same topic.",
+      "description": "Bigger letters, fewer of them: a fresh puzzle on the same subject.",
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
-      "offline_phrases": ["make it easier", "easier one"]
+      "offline_phrases": ["make it easier", "easier one", "bigger letters", "larger letters", "letters bigger", "make it bigger", "bigger print"]
     },
     {
       "name": "harder",
-      "description": "Start a harder word search on the same topic.",
+      "description": "Smaller letters, more of them: a fresh puzzle on the same subject.",
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
-      "offline_phrases": ["make it harder", "harder one"]
+      "offline_phrases": ["make it harder", "harder one", "smaller letters", "more letters", "bigger puzzle", "more words"]
     },
     {
       "name": "end",

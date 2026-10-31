@@ -79,7 +79,7 @@ class PuzzleTest(Base):
                     self.check_puzzle(made, words, directions)
 
     def test_filler_is_clean(self):
-        size, count, longest, *_ = self.module.LEVELS[5]
+        size, count, longest, *_ = self.module.LEVELS[3]
         words = self.module.THEMES["fishing"]["words"][:count]
         for seed in range(20):
             made = self.module.make_puzzle(words, size, True, True, random.Random(seed))
@@ -200,7 +200,7 @@ class ActionsTest(Base):
         self.assertEqual([f["word"] for f in self.effect(out, "puzzle")["found"]], [word])
 
     def test_biggest_page_fits_an_effect(self):
-        self.call("start", topic="boats", level=5, words=["abcdefghijkl", "bcdefghijklm", "cdefghijklmn", "defghijklmno",
+        self.call("start", topic="boats", level=3, diagonal=True, backward=True, words=["abcdefghijkl", "bcdefghijklm", "cdefghijklmn", "defghijklmno",
                                                           "efghijklmnop", "fghijklmnopq", "ghijklmnopqr", "hijklmnopqrs",
                                                           "ijklmnopqrst", "jklmnopqrstu", "klmnopqrstuv", "lmnopqrstuvw"])
         puzzle = self.puzzle()

@@ -123,10 +123,10 @@ const names = () => qa('.ans').map(b => b.textContent).join('|');
   h.effect('shown', { word: 'TROUT', cells: [[3, 0], [4, 0], [5, 0], [6, 0], [7, 0]] });
   assert.ok(!q('.ws-band')); assert.ok(!q('.ws-c.lit')); assert.ok(q('.ws-mark.v.fresh')); assert.ok(qa('.ws-word')[1].classList.contains('shown'));
 
-  btn('New puzzle').fire('click'); assert.equal(names(), 'Easier|Same|Harder|Back');
+  btn('New puzzle').fire('click'); assert.equal(names(), 'Bigger letters|Same|More letters|Back');
   btn('Back').fire('click'); assert.equal(names(), 'Give me a hint|New puzzle|Back to Mary');
   calls.length = 0; script = () => ({ response: { ok: true, at_end: true }, say: 'This is the easiest one I have.' });
-  btn('New puzzle').fire('click'); btn('Easier').fire('click'); await flush();
+  btn('New puzzle').fire('click'); btn('Bigger letters').fire('click'); await flush();
   assert.deepEqual(calls[0], { type: 'new', level: 'easier' }); assert.equal(names(), 'Give me a hint|New puzzle|Back to Mary'); said.pop();
 
   h.effect('found', { word: 'DIAG', cells: [[4, 4], [3, 5], [2, 6]] });
@@ -136,7 +136,7 @@ const names = () => qa('.ans').map(b => b.textContent).join('|');
   h.effect('found', { word: 'ZZZ', cells: [null] });   // a broken effect is caught
 
   h.effect('done', { found: 1, shown: 1 });
-  assert.equal(names(), 'Easier|Same|Harder|Back to Mary'); assert.ok(q('.ws-title').textContent.endsWith("That's all of them."));
+  assert.equal(names(), 'Bigger letters|Same|More letters|Back to Mary'); assert.ok(q('.ws-title').textContent.endsWith("That's all of them."));
   calls.length = 0; tap(1, 1); assert.ok(!q('.ws-c.picked'), 'no picking when finished');
   script = ev => ev.type === 'new' ? { effects: [{ kind: 'puzzle', data: P({ grid: Array(8).fill('ABCDEFGH'), size: 8, level: 1 }) }] } : { ok: true };
   btn('Same').fire('click'); await flush();

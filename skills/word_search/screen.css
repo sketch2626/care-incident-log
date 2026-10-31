@@ -94,12 +94,12 @@
 .skill-screen[data-skill="word_search"] .ws-word.found .ws-w{text-decoration:line-through 4px}
 .skill-screen[data-skill="word_search"] .ws-word.shown .ws-w{outline:3px dashed #544739;outline-offset:3px;border-radius:6px}
 
-/* bottom row: three buttons share the width; four at the end, each as wide as its words need */
+/* bottom row: three buttons share the width; four share it too, and a two-word label takes two lines in the 88px */
 .skill-screen[data-skill="word_search"] .ws-bar{grid-column:1 / -1;grid-row:4;display:flex;gap:16px;min-width:0}
 .skill-screen[data-skill="word_search"] .ws-bar .ans{flex:1 1 0;min-width:0;min-height:0;height:var(--bar);padding:0 8px;
   box-sizing:border-box;font-size:clamp(22px,3.646cqw,34px);white-space:nowrap}
 .skill-screen[data-skill="word_search"] .ws-bar.four{gap:12px}
-.skill-screen[data-skill="word_search"] .ws-bar.four .ans{flex:1 1 auto;padding:0 16px}
+.skill-screen[data-skill="word_search"] .ws-bar.four .ans{padding:0 16px;line-height:1.15;white-space:normal}
 
 /* no puzzle yet: plain words where the grid would be */
 .skill-screen[data-skill="word_search"] .ws-wait{grid-column:1 / -1;grid-row:2;align-self:center;margin:0;

@@ -11,10 +11,13 @@ import re
 import threading
 
 SMALLEST = 3
-# level: (grid size, words, longest word, diagonal, backward). Change DEFAULT_LEVEL to 1 to open on the 8x8.
-LEVELS = {1: (8, 6, 6, False, False), 2: (10, 10, 8, False, False), 3: (12, 14, 10, False, False),
-          4: (12, 14, 12, True, False), 5: (12, 14, 12, True, True)}
+# level: (grid size, words, longest word, diagonal, backward). The resident picks: 1 has the biggest letters, 3 the most.
+# Diagonal and backward are start options on any size. Change DEFAULT_LEVEL to 1 to open on the 8x8.
+LEVELS = {1: (8, 6, 6, False, False), 2: (10, 10, 8, False, False), 3: (12, 14, 10, False, False)}
 DEFAULT_LEVEL = 2
+SIZE_SETTING = "word_search_size"  # the size they chose, kept as a real setting; unset means DEFAULT_LEVEL
+OFFER_SIZES = "I can make the letters bigger, or fit more on. Three sizes. Just say so."  # the first puzzle ever
+NUDGE_SIZES = "Bigger letters might help. Just say so."  # once a puzzle, at the last hint
 
 # Placing words is a search that gives up and starts over; these bound it well inside the 2 second skill limit.
 SEARCH_STEPS = 4000       # steps of one try
@@ -414,20 +417,30 @@ def _page(puzzle):
 
 # ---------- doing things ----------
 
+def _saved_level(ctx):
+    """The size they chose, or the first-time one."""
+    try:
+        level = int(ctx.settings_get(SIZE_SETTING, DEFAULT_LEVEL))
+    except (TypeError, ValueError):
+        return DEFAULT_LEVEL
+    return level if level in LEVELS else DEFAULT_LEVEL
+
+
 def _start(ctx, topic="", words=None, level=None, diagonal=None, backward=None, theme=None, show=True, say=None):
     """A new puzzle, saved and sent to the page. Returns the response."""
-    if isinstance(level, int) and level in LEVELS:
-        ctx.store.put("level", level)
-    else:
-        level = ctx.store.get("level", DEFAULT_LEVEL)
-        level = level if level in LEVELS else DEFAULT_LEVEL
+    saved = _saved_level(ctx)
+    if not (isinstance(level, int) and level in LEVELS):
+        level = saved
+    elif level != saved:
+        ctx.settings_put(SIZE_SETTING, str(level))
     size, count, longest, level_diagonal, level_backward = LEVELS[level]
     diagonal = level_diagonal if diagonal is None else diagonal
     backward = level_backward if backward is None else backward
 
     title = _clean_title(topic)
     key = theme or _find_theme(topic)
-    custom = [] if key and not theme else _clean_words(words, size)[:count]
+    pool = [] if key and not theme else _clean_words(words, LEVELS[max(LEVELS)][0])  # all of them, for a later size
+    custom = [word for word in pool if len(word) <= size][:count]
     if key is None and not topic:
         key = _find_theme(ctx.heard)  # offline: "a word search on birds"
     enough = len(custom) * 2 >= count
@@ -449,32 +462,41 @@ def _start(ctx, topic="", words=None, level=None, diagonal=None, backward=None, 
     ctx.store.put("recent", recent)
     ctx.store.put("last_theme", key)
 
-    puzzle = dict(made, theme=key, title=title, level=level, topic=str(topic or "")[:60], custom=custom,
+    puzzle = dict(made, theme=key, title=title, level=level, topic=str(topic or "")[:60], custom=pool,
                   found=[], shown=[], hint=None, finished=False, closed=False, tap_finds=0)
     ctx.state["puzzle"] = puzzle
     _save(ctx, puzzle)
     if show:
         ctx.effect("show_screen")
     ctx.effect("puzzle", _page(puzzle))
-    return {"ok": True, "theme": title, "size": size, "level": level, "words_left": len(puzzle["placed"]),
-            "say": say or f"Here's one on {title.lower()}."}
+    answer = {"ok": True, "theme": title, "size": size, "level": level, "words_left": len(puzzle["placed"]),
+              "say": say or f"Here's one on {title.lower()}."}
+    if not ctx.store.get("sizes_offered"):  # say is her offline line; Gemini reads mention
+        ctx.store.put("sizes_offered", True)
+        answer["say"] += " " + OFFER_SIZES
+        answer["mention"] = OFFER_SIZES
+    return answer
 
 
 def _again(ctx, puzzle, level, show, say=None):
     """A new puzzle on the same theme or the same words."""
-    return _start(ctx, topic=puzzle["topic"], words=puzzle["custom"], level=level, theme=puzzle["theme"], show=show,
-                  say=say)
+    return _start(ctx, topic=puzzle["topic"], words=puzzle["custom"], level=level, diagonal=puzzle["diagonal"],
+                  backward=puzzle["backward"], theme=puzzle["theme"], show=show, say=say)
 
 
 def _step(ctx, puzzle, change, show):
-    """One level easier or harder; at the ends she says so and a puzzle in play stays as it is."""
+    """One size bigger letters or more letters; at the ends she says so and a puzzle in play stays as it is."""
     level = puzzle["level"] + change
     if level not in LEVELS:
-        end = "This is the easiest one I have." if change < 0 else "This is as hard as they come."
+        end = "That's as big as the letters go." if change < 0 else "That's as many letters as I've got."
         if puzzle["finished"]:
             return _again(ctx, puzzle, puzzle["level"], show, say=end + " Here's another.")
         return {"ok": True, "level": puzzle["level"], "at_end": True, "say": end}
-    return _again(ctx, puzzle, level, show, say="Here's an easier one." if change < 0 else "Here's a harder one.")
+    which = "Bigger letters" if change < 0 else "More letters"
+    fresh = _again(ctx, puzzle, level, show, say=f"{which}, same subject.")
+    if fresh["theme"] != puzzle["title"]:  # their own words didn't fit this size
+        fresh["say"] = f"{which}. Those words won't fit, so here's one on {fresh['theme'].lower()}."
+    return fresh
 
 
 def _finish(ctx, puzzle):
@@ -609,7 +631,12 @@ def _hint(ctx, word=None):
     if hint["step"] == 2:
         ctx.effect("hint", {"step": 2, "word": hint["word"], "cell": cells[0], "line": line})
         return {"ok": True, "step": 2, "say": f"I lit up the first letter. It's {hint['word'][0]}."}
-    return {"ok": True, "step": 3, "say": "That's about all the hints I've got. Say show me where and I'll show you."}
+    say = "That's about all the hints I've got. Say show me where and I'll show you."
+    if puzzle["level"] > min(LEVELS) and not puzzle.get("nudged"):
+        puzzle["nudged"] = True
+        _save(ctx, puzzle)
+        say += " " + NUDGE_SIZES
+    return {"ok": True, "step": 3, "say": say}
 
 
 @_locked

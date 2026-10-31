@@ -27,7 +27,7 @@
   var pick = null;      // the letters picked so far: {from, to, cells}
   var sending = false;  // a line is on its way to the server
   var queue = [];       // taps that came in while one was on its way
-  var chooser = false;  // the bar shows Easier, Same, Harder during play
+  var chooser = false;  // the bar shows Bigger letters, Same, More letters during play
   var barBusy = false;  // a button's tap is on its way
   var down = null;      // the finger that is down: {id, r, c}
   var tappedAt = 0;     // when the last pointer tap was taken
@@ -324,9 +324,9 @@
     var bar = make('div', 'ws-bar');
     if (data.finished || chooser) {
       bar.classList.add('four');
-      bar.appendChild(barButton('', 'Easier', function () { choose('easier'); }));
+      bar.appendChild(barButton('', 'Bigger letters', function () { choose('easier'); }));
       bar.appendChild(barButton('yes', 'Same', function () { choose('same'); }));
-      bar.appendChild(barButton('', 'Harder', function () { choose('harder'); }));
+      bar.appendChild(barButton('', 'More letters', function () { choose('harder'); }));
       if (data.finished) {
         bar.appendChild(barButton('', 'Back to ' + who(), goBack));
       } else {
@@ -399,7 +399,7 @@
     });
   }
 
-  // Easier, Same or Harder. A choice always returns to the usual bar; a new puzzle redraws everything anyway.
+  // Bigger letters, Same or More letters. A choice always returns to the usual bar; a new puzzle redraws everything anyway.
   function choose(level) {
     if (barBusy) { return; }
     barBusy = true;

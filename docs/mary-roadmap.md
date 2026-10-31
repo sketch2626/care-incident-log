@@ -176,6 +176,7 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - Word search first, then tic-tac-toe, then solitaire. She suggests a game, scoots aside, and helps by voice.
 - Add a **crossword** (Andy, 2026-10-29). She plays along live: "this hint is too hard, give me an easier one", and she rewrites the clue on screen on the spot. She can also give a letter, explain a word, or check an answer. Every game follows the rule under M12.
 - Mock-up boards first, then the build.
+- **Progress (second account, branch `other/M7a`, 2026-10-31):** M7a word search boards are in `mockups/mary/round7/`, waiting for Andy. The skill `skills/word_search/` is built and tested (Opus for the generator, skill and screen; Sonnet for the word lists and tests). Not yet seen in a real window.
 
 ### M8. Fit and speed
 - **Two kinds of laptops (Andy, 2026-10-30):** many residents get new donated Lenovos like Andy's (Ryzen 5 7520U), and some get refurbished ones. Idea: a quick speed check on first run (Kokoro, Whisper, the wake word) that picks lighter settings by itself on a slow machine, so nobody has to tune it by hand.

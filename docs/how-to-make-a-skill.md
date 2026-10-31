@@ -71,6 +71,8 @@ The full example is in `tests/skill_fixtures/coin_flip/`. It uses a screen, stor
 - `offline_phrases` are short phrases that work with no internet.
 - `storage: true` gives the skill a private store. `needs` lists its internet hosts, mic and modes.
 - `offline` is `works` or `needs_internet`. `default_on` sets the start state.
+- `vision: true` (optional) lets the skill ask Gemini about a picture with `ctx.look(image_bytes, mime, question)`.
+- `memory: true` (optional) lets the skill read her memory with `ctx.recall(words)`. It gives back plain facts and can't change them. Never put those facts in a reply, in `view()` or in a log.
 
 ### skill.py
 
@@ -163,7 +165,7 @@ MarySkills.register('my_game', { aside: true, enter(el) { /* draw */ }, leave(el
 - **Settings only those listed.** A skill may change only the settings its card names.
 - **No risky calls.** No `subprocess`, `sqlite3`, `importlib`, `open`, `exec`, `eval` or `__import__`.
 - **Text limits.** `instructions` is 400 characters at most. Each description is 200 at most. `view()` is 600 at most.
-- **Offline phrases.** Only on actions with no required inputs. No phrase may clash with another skill, or with the emergency or yes/no words.
+- **Offline phrases.** Only on actions with no required inputs. No phrase may clash with another skill, or with the emergency or yes/no words. An action can read the whole line in `ctx.heard`, and it can answer `{"not_for_me": True}` when the phrase wasn't meant for it, so her normal offline line runs.
 
 ## 5. How Mary learns it
 

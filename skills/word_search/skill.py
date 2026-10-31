@@ -83,8 +83,8 @@ THEMES = {
                 "words": [
                     "RALEIGH", "DURHAM", "BOONE", "COAST", "BEACH", "PINE", "PIEDMONT", "DOGWOOD", "TARHEEL",
                     "CARDINAL", "BARBECUE", "HATTERAS", "ASHEVILLE", "CHARLOTTE", "MOUNTAIN", "PEANUT", "WILMINGTON",
-                    "GREENSBORO", "FAYETTEVILLE", "CHAPEL", "TOBACCO", "BLUEGRASS", "SWEETPOTATO", "LIGHTHOUSE",
-                    "WRIGHT", "BROTHERS", "KITTYHAWK", "OCRACOKE", "NASCAR", "BLUERIDGE", "SMOKIES", "APPALACHIAN",
+                    "GREENSBORO", "FAYETTEVILLE", "CHAPEL", "TOBACCO", "BLUEGRASS", "LIGHTHOUSE",
+                    "WRIGHT", "BROTHERS", "OCRACOKE", "NASCAR", "SMOKIES", "APPALACHIAN",
                     "CAROLINA", "PECAN", "HUSHPUPPY", "MOREHEAD", "CAPE", "FARMS", "MARSH"]},
     "holidays": {"title": "Holidays",
                 "keywords": ["holidays", "holiday", "christmas", "thanksgiving", "easter", "fourth of july"],
@@ -107,7 +107,7 @@ THEMES = {
                 "words": [
                     "PITCHER", "CATCHER", "BATTER", "UMPIRE", "INNING", "STRIKE", "HOMERUN", "DUGOUT", "MOUND",
                     "GLOVE", "BASES", "DIAMOND", "OUTFIELD", "INFIELD", "SHORTSTOP", "FASTBALL", "CURVEBALL", "BUNT",
-                    "STEAL", "SLIDE", "SINGLE", "DOUBLE", "TRIPLE", "WALK", "FOUL", "FLY", "GRANDSLAM", "BULLPEN",
+                    "STEAL", "SLIDE", "SINGLE", "DOUBLE", "TRIPLE", "WALK", "FOUL", "FLY", "BULLPEN",
                     "STADIUM", "PENNANT", "HOTDOG", "PEANUTS", "ROOKIE", "COACH", "SCORE", "TEAM", "LEAGUE",
                     "BATTING", "HELMET"]},
     "old_cars": {"title": "Old Cars",

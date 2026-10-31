@@ -317,5 +317,125 @@ class CoreHooksTest(Base):
             self.assertNotRegex(line, r"[A-Za-z.]!")
 
 
+class SizesTest(Base):
+    OWN = ["trout", "marlin", "bowfin", "anchor", "harbor", "rudder", "sailor", "galley", "keels", "masts",
+           "decks", "cabin", "lagoon", "pilot", "rigging"]
+
+    def resp(self, out):
+        return dict(out["response"], say=out["say"]) if "say" in out else out["response"]
+
+    def test_three_levels_and_default(self):
+        self.assertEqual({k: v[:2] for k, v in self.module.LEVELS.items()}, {1: (8, 6), 2: (10, 10), 3: (12, 14)})
+        out = self.call("start", topic="fishing")
+        self.assertEqual((self.resp(out)["size"], self.resp(out)["level"]), (10, 2))
+        self.assertEqual(self.resp(out)["words_left"], 10)
+
+    def test_easier_and_harder_keep_the_theme(self):
+        self.call("start", topic="fishing")
+        for action, size, count, line in (("easier", 8, 6, "Bigger letters"), ("harder", 10, 10, "More letters"),
+                                          ("harder", 12, 14, "More letters")):
+            out = self.resp(self.call(action))
+            self.assertEqual((out["size"], out["words_left"]), (size, count), action)
+            self.assertEqual(self.puzzle()["theme"], "fishing")
+            self.assertTrue(out["say"].startswith(line) and "same subject" in out["say"], out["say"])
+            self.assertNotIn("\n", out["say"])
+
+    def test_own_words_and_title_survive_every_size(self):
+        self.call("start", topic="boats", words=self.OWN, level=1)
+        self.assertEqual(self.puzzle()["title"], "Boats")
+        for action in ("harder", "harder", "easier", "easier"):
+            self.call(action)
+            made = self.puzzle()
+            self.assertEqual(made["title"], "Boats", action)
+            self.assertEqual(made["theme"], self.puzzle()["theme"])
+            self.assertTrue(all(p["word"].lower() in self.OWN for p in made["placed"]), action)
+            self.assertEqual(len(made["grid"]), made["size"])
+
+    def test_the_ends_say_so_and_change_nothing(self):
+        self.call("start", topic="fishing", level=1)
+        grid = self.puzzle()["grid"]
+        out = self.resp(self.call("easier"))
+        self.assertEqual(out["say"], "That's as big as the letters go.")
+        self.assertEqual(self.puzzle()["grid"], grid)
+        self.call("start", topic="fishing", level=3)
+        grid = self.puzzle()["grid"]
+        out = self.resp(self.call("harder"))
+        self.assertEqual(out["say"], "That's as many letters as I've got.")
+        self.assertEqual(self.puzzle()["grid"], grid)
+        self.assertEqual(self.puzzle()["level"], 3)
+
+    def test_size_is_saved_and_used_next_time(self):
+        self.assertEqual(self.scratch.settings.get("word_search_size"), None)
+        self.call("start", topic="fishing")
+        self.assertIsNone(self.scratch.settings.get("word_search_size"))
+        self.call("harder")
+        self.assertEqual(str(self.scratch.settings["word_search_size"]), "3")
+        self.assertEqual(self.resp(self.call("new_puzzle"))["size"], 12)
+        host = self.scratch.host()  # a restart: new state, same settings
+        out = host.call("word_search__start", {"topic": "birds"})["response"]
+        self.assertEqual((out["size"], out["level"]), (12, 3))
+        self.scratch.settings["word_search_size"] = "1"
+        self.assertEqual(self.resp(self.call("new_puzzle"))["size"], 8)
+        self.scratch.settings["word_search_size"] = "nonsense"
+        self.assertEqual(self.resp(self.call("new_puzzle"))["level"], 2)
+
+    def test_offer_once_by_voice(self):
+        first = self.resp(self.call("start", topic="fishing"))
+        self.assertEqual(first["mention"], self.module.OFFER_SIZES)
+        self.assertTrue(first["say"].endswith(self.module.OFFER_SIZES))
+        again = self.resp(self.call("new_puzzle"))
+        self.assertNotIn("mention", again)
+        self.assertNotIn(self.module.OFFER_SIZES, again["say"])
+        host = self.scratch.host()
+        later = self.resp(host.call("word_search__start", {"topic": "birds"}))
+        self.assertNotIn("mention", later)
+        self.assertNotIn(self.module.OFFER_SIZES, later["say"])
+
+    def test_offer_once_by_tap_open(self):
+        first = self.resp(self.host.on_event("word_search", {"type": "open"}))
+        self.assertEqual(first["mention"], self.module.OFFER_SIZES)
+        self.assertIn(self.module.OFFER_SIZES, first["say"])
+        again = self.resp(self.call("new_puzzle"))
+        self.assertNotIn("mention", again)
+        host = self.scratch.host()
+        self.assertNotIn("mention", host.call("word_search__start", {"topic": "birds"})["response"])
+
+    def test_nudge_at_step_three_once_not_at_level_one(self):
+        self.call("start", topic="fishing")
+        said = [self.resp(self.call("hint"))["say"] for _ in range(5)]
+        self.assertNotIn(self.module.NUDGE_SIZES, " ".join(said[:2]))
+        self.assertIn(self.module.NUDGE_SIZES, said[2])
+        self.assertNotIn(self.module.NUDGE_SIZES, said[3] + said[4])
+        self.call("start", topic="fishing", level=1)
+        said = [self.resp(self.call("hint"))["say"] for _ in range(4)]
+        self.assertNotIn(self.module.NUDGE_SIZES, " ".join(said))
+
+    def test_offline_phrases_change_the_size(self):
+        for line, size in (("bigger letters", 8), ("make the letters bigger", 8), ("make it bigger", 8),
+                           ("smaller letters", 12), ("more letters", 12), ("a bigger puzzle", 12),
+                           ("more words", 12)):
+            self.scratch.settings["word_search_size"] = "2"
+            self.call("start", topic="fishing")
+            self.assertEqual(self.puzzle()["size"], 10)
+            out = self.host.offline_match(line)
+            self.assertIsNotNone(out, line)
+            self.assertEqual(self.puzzle()["size"], size, line)
+
+    def test_offline_phrases_do_nothing_without_a_puzzle(self):
+        for line in ("bigger letters", "make the letters bigger", "make it bigger", "smaller letters", "more letters",
+                     "a bigger puzzle", "more words"):
+            self.assertIsNone(self.host.offline_match(line), line)
+
+    def test_diagonal_and_backward_carry_through(self):
+        self.call("start", topic="fishing", diagonal=True, backward=True)
+        for action in ("harder", "easier", "easier"):
+            self.call(action)
+            self.assertTrue(self.puzzle()["diagonal"] and self.puzzle()["backward"], action)
+
+    def test_manifest_instructions_are_short(self):
+        manifest = json.loads((ROOT / "skills" / "word_search" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertLessEqual(len(manifest["instructions"]), 400)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -61,7 +61,7 @@ Sources: [Google app passwords](https://support.google.com/mail/answer/185833) (
 1. Mary writes it with them. They say yes to the words.
 2. She puts the card, or the words, on the Windows clipboard.
 3. She opens that person's chat at `facebook.com/messages`.
-4. A slim Mary strip stays at the top of the screen, with one big **Paste** button.
+4. Her bar stays beside the page, with one big **Paste** button.
 5. They tap Paste. The card lands in the chat.
 6. **They tap Send themselves.** Mary never touches Facebook's page and never reads it.
 7. She can't see whether it went, so she asks: "Did it go?"
@@ -69,7 +69,7 @@ Sources: [Google app passwords](https://support.google.com/mail/answer/185833) (
 **Why a Paste button:** paste normally needs a key combo or a right-click, and both are out for our residents. The words are printed on the card picture, so a card needs one paste, not two. A plain message also needs one.
 
 ### Messenger inside Mary's window (Andy's idea, 2026-10-31)
-The resident signs in to Facebook once, inside Mary's app, and stays signed in. Mary opens it straight to the right person, with her strip above the page. **This is the best Messenger route if sign-in works.** There's no browser to hunt for, and the Paste button no longer has to work across two programs. **Andy's choice (2026-10-31):** it opens "where everything else goes, the pictures and stuff", the panel beside her that games and pictures use. Facebook's page is unlikely to load inside our own page (our expectation, untested), so the build places a separate web view exactly over that panel. That panel is narrower than a full screen, so check that Facebook's chat fits in it. **Boards E2 and E3 still show Facebook across the whole screen, with the strip above it.** They need a redraw to match before M15e.
+The resident signs in to Facebook once, inside Mary's app, and stays signed in. Mary opens it straight to the right person, with her Paste button beside the page. **This is the best Messenger route if sign-in works.** There's no browser to hunt for, and the Paste button no longer has to work across two programs. **Andy's choice (2026-10-31):** it opens "where everything else goes, the pictures and stuff", the panel beside her that games and pictures use. Facebook's page is unlikely to load inside our own page (our expectation, untested), so the build places a separate web view exactly over that panel. That panel is narrower than a full screen, so check that Facebook's chat fits in it. Boards E2 and E3 now show this. Mary's Paste button sits in her own bar under the panel, not on Facebook's page. If test 9 fails, Facebook opens in their normal browser instead, and those two boards need redrawing for that (a slim strip over the browser).
 
 | What Mary's app does | Meta's rules | Our call |
 |---|---|---|
@@ -168,13 +168,14 @@ Sources: [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) (2026-1
 |---|---|---|
 | 1 | Does `facebook.com/messages/t/<username>` or `m.me/<username>` open the chat with a friend today? | Open `facebook.com/messages`, and Mary says who to look for. |
 | 2 | Does `m.me/<username>?text=hello` prefill for a friend? (Likely not.) | Paste, as planned. |
-| 3 | Does the typing cursor land in the chat's message box on arrival? | The strip tells them to tap the box first. One more tap. |
+| 3 | Does the typing cursor land in the chat's message box on arrival? | Her caption tells them to tap the box first. One more tap. |
 | 4 | Does a picture pasted from Windows land in the chat ready to send? | Save the card, and open the picture picker. Harder. |
-| 5 | Can a strip take a tap without pulling focus off the browser? (`WS_EX_NOACTIVATE`, tested by a coder on a scratch page.) | Fall back to Windows Voice Access: say "paste", then "click Send". |
+| 5 | Can a tap on Mary's Paste button put the paste into the Facebook pane beside it? (A coder tests this on a scratch page; in the browser fallback, `WS_EX_NOACTIVATE`.) | Fall back to Windows Voice Access: say "paste", then "click Send". |
 | 6 | Does Gmail's app password keep working across many sends? Google's page has one odd line, "can only be checked once"; we read that as "you enter it once". Long experience says it's fine. | Test once with a throwaway account before building. |
 | 7 | Do personal Outlook.com accounts accept consent for an app that isn't publisher-verified? The evidence is from 2020 and about work accounts. | Outlook.com residents use the open-in-webmail way until it's settled. |
 | 8 | Do Gmail, Outlook and Yahoo compose links still take a prefilled address and text? (From memory, not checked.) | Open plain webmail. |
 | 9 | **Does Facebook let a person sign in inside Mary's window, and keep them signed in?** A coder builds a tiny test window from the app's own WebView2, with no scripts on the page. Try one account, once. | Use their normal browser (route 6). Never disguise the window. |
+| 10 | Does Facebook's real chat lay out properly about 740px wide, the panel's size? | Widen the panel for this one screen. |
 
 **A note on the Paste button and Meta's rules.** The terms say nothing about a resident-tapped paste. It's the same thing the Windows On-Screen Keyboard does. The resident does the tap, one message at a time, and the resident taps Send. Mary reads nothing from Facebook. We think that's on the right side of the line, but that's our reading, not Meta's word.
 
@@ -262,7 +263,7 @@ Two core gaps come first. **`ctx.fetch` is GET-only, with no request body, and n
 | **M15b** Cards | The `messages` skill, the screen, 12 drawn designs, words printed on the card, saved as a picture, print | Boards A to C matched; offline works; long words fit; Andy approves | Opus for code; Sonnet for tests |
 | **M15c** Contacts and last look | The contact store, the hard-wired yes, Stop, real forget | A test proves nothing sends without the yes, and a chatty "okay" doesn't count | Opus, `xhigh` |
 | **M15d** Mail | Credential Manager, `ctx.send_mail`, Gmail and Yahoo, helper setup in My info | Sends to a scratch mailbox; the secret isn't in the database, backups, logs or the page | Opus, `xhigh` |
-| **M15e** Messenger | Answers to the tests in section 2, Facebook in its own walled-off window, clipboard, open the chat, the Paste strip, "Did it go?"; fallback to their browser | Andy sends a real card to a friend in under a minute, with no key combo. No script touches Facebook's page. | Opus, after Andy's five-minute test |
+| **M15e** Messenger | Answers to the tests in section 2, Facebook in its own walled-off pane over the panel, clipboard, open the chat, the Paste button, "Did it go?"; fallback to their browser | Andy sends a real card to a friend in under a minute, with no key combo. No script touches Facebook's page. | Opus, after Andy's five-minute test |
 | **M15f** Picture making | `ctx.make_picture`, a set cartoon style, plain lines for refusals, a cost line in My info | A picture lands in a card; a refusal fails politely; no names in the prompt | Opus for code; Sonnet for tests |
 | **M15g** Outlook | Register the app, device-code sign-in, Graph send | A helper connects a test Outlook.com account | Opus, once test 7 is settled |
 | **M15h** WhatsApp | The `wa.me` link, phone numbers in contacts | The chat opens with the words ready | Sonnet |
@@ -288,7 +289,7 @@ Order: a, b, c, d, then e, then the rest. A helper-free resident gets cards, pri
 ### Still open
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | How do residents paste in Messenger? | **Mary's big Paste button,** on the strip. It needs test 5. Voice Access is the fallback. |
+| 1 | How do residents paste in Messenger? | **Mary's big Paste button,** in her bar under the panel. It needs test 5. Voice Access is the fallback. |
 | 2 | Which email company first? | **Gmail and Yahoo now,** then Outlook.com, then Google sign-in to retire the Gmail app password. |
 | 3 | Drawn cards, made-to-order, or both? | **Both.** Drawn is the default, because it's free and offline. A new picture is one choice among them, and only with a paid key. |
 | 4 | Does a spoken yes count, or must they tap? | **Either:** a tap or "send it", then five seconds to stop. Many residents can't tap well. |

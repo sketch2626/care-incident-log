@@ -162,15 +162,26 @@
     },
     {
       "id": "app-what-can-you-do",
-      "note": "Brief: no recital",
+      "note": "Brief: no recital. Naming a few real things is the answer; offering what she can't do yet fails. Name that tune is real (mary/instructions.md, What you can do).",
       "turns": [
         "What can you do?"
       ],
       "companion": "mary",
       "mode": "live",
+      "rubric": [
+        "only_real_features"
+      ],
       "checks": {
         "max_words": 90,
         "must_not_contain": [
+          "play music",
+          "play you a song",
+          "check the weather",
+          "check the news",
+          "set a reminder",
+          "set reminders",
+          "make a call",
+          "make calls",
           "as an"
         ]
       }

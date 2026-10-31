@@ -2,7 +2,7 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 11:00)
+## Right now (2026-10-31, about 12:45)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
   - M13b: merged at 05:10 (see below).
@@ -87,10 +87,11 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **M4f**, the threat-tone fix above, on her fresh week (after 4:59pm, small). Then bench run 5 in full after 3am.
+  1. **Running on her account since 12:40, each in its own worktree with a watcher and a 20-minute check:** **M4f** (`other/M4f`, tab "M4f threat tone her acct", brief `docs/handoff/M4f.md`) and **M15a** (`other/M15a`, tab "M15a dates her acct", brief `docs/handoff/M15a.md`, the first M15 build piece). Merge M4f first. Her week resets at 4:59pm; the hub nudges them after any limit stop. Then bench run 5 in full after 3am.
+     - **Andy (2026-10-31, 12:40): his own account is hub only for now,** so it lasts until its Nov 4 reset. No workers or helpers there; everything goes to her account, watched closely so nothing strands mid-job.
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
-  4. M15, cards and messages: plan and boards approved; build next, after M4f, on her fresh week (after 4:59pm).
+  4. M15, cards and messages: plan and boards approved; M15a running; then M15b to M15d, in order, on her account.
   5. M16, which brain for the pilot (Gemini paid tier, Meta's models, Muse): run the candidates through the brain bench when it's time.
   5. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
   6. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.

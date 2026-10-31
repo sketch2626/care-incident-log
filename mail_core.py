@@ -1,7 +1,7 @@
 """The resident's own email (M15d): SMTP to Gmail or Yahoo, and the one-time tickets a skill needs to use it.
 
-Nothing goes out without a ticket. Later (M15c) the core mints one from the resident's spoken "send it", after a
-five-second Undo; for now nothing outside tests mints. The only send without a ticket is send_test: fixed words, to the
+Nothing goes out without a ticket. The core mints one (M15c: send_gate.py and SkillContext.send_now), one per try, only
+after the resident's own "send it" and a five-second Undo. The only send without a ticket is send_test: fixed words, to the
 resident's own address. TLS runs from the first byte and there's no plain-text path. Stdlib only.
 """
 
@@ -49,6 +49,7 @@ MESSAGES = {
     "refused": "Your email account wouldn't send that message.",
     "no_ticket": "That message wasn't sent because you hadn't said to send it.",
     "bad_message": "Something is wrong with that message, so it wasn't sent.",
+    "unsure": "I'm not sure that went.",  # M15c: it started going and we never heard back, so nobody retries by themselves
 }
 
 _ATOM = r"[A-Za-z0-9_%+-]+"
@@ -224,8 +225,8 @@ class Mailer:
     # ----- tickets -----
 
     def mint_ticket(self, skill, to, subject, body, pictures=(), ttl=TICKET_TTL):
-        """Only the core calls this, from the resident's own "send it"; nothing does yet. The ticket is good for one
-        try, by this skill, with exactly this content."""
+        """Only the core calls this (SkillContext.send_now), after the resident's own "send it" and the count. The ticket
+        is good for one try, by this skill, with exactly this content."""
         digest = _digest(*_freeze(to, subject, body, pictures))
         token = secrets.token_urlsafe(32)
         now = self._clock()
@@ -284,22 +285,26 @@ class Mailer:
 
     def _hand_over(self, account, message, to, started):
         """None when the server took the message, else the code. The order matters: SMTPException and ssl.SSLError are
-        both OSErrors. The exceptions' text is never kept."""
+        both OSErrors. The exceptions' text is never kept. M15c: once the message has started going, only a clear no from
+        the server is refused. Any other failure is unsure, because it may have arrived."""
+        going = []  # M15c: not empty once the message has started up to the server
         try:
-            self._smtp_send(account, message, to, started)
+            self._smtp_send(account, message, to, started, going)
         except smtplib.SMTPAuthenticationError:
             return "wrong_password"
         except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected):
-            return "offline"
+            return "unsure" if going else "offline"
+        except (smtplib.SMTPResponseException, smtplib.SMTPRecipientsRefused):  # M15c: a clear no from the server
+            return "refused"
         except smtplib.SMTPException:
-            return "refused"
+            return "unsure" if going else "refused"
         except OSError:  # sockets, timeouts, gaierror and ssl.SSLError: a wifi sign-in page fails the certificate
-            return "offline"
+            return "unsure" if going else "offline"
         except Exception:  # noqa: BLE001
-            return "refused"
+            return "unsure" if going else "refused"
         return None
 
-    def _smtp_send(self, account, message, to, started):
+    def _smtp_send(self, account, message, to, started, going):
         """TLS from the first byte, and local_hostname so the laptop's name isn't sent. No `with` block: its exit raises
         on a bad reply to QUIT, which would report a delivered message as failed, and a retry would send it twice."""
         host, port = self._servers[account["provider"]]
@@ -313,6 +318,7 @@ class Mailer:
             # Every step from here gets what's left of the deadline: a slow upload or a slow "OK" isn't a failure, and a
             # write stuck on a full connection ends in time even if the watchdog can't wake it.
             smtp.sock.settimeout(max(0.1, started + SEND_DEADLINE - time.monotonic()))
+            going.append(True)  # M15c: from here on a failure can't say whether it arrived
             smtp.send_message(message, from_addr=account["address"], to_addrs=[to])
             try:
                 smtp.quit()
@@ -343,3 +349,34 @@ class Mailer:
                     fh.write(line + "\n")
         except Exception:  # noqa: BLE001
             pass
+
+    def scrub_log(self, addresses=None):  # M15c
+        """Blanks "to" on the lines with these addresses, in any case, or on every line with None. The swap is atomic, so
+        a crash leaves the old log or the new one. Never raises, and no log file is fine."""
+        temp = self._log_path.with_name(self._log_path.name + ".tmp")
+        try:
+            wanted = None if addresses is None else {str(address).strip().lower() for address in addresses}
+            with self._log_lock:
+                if not self._log_path.is_file():
+                    return
+                kept = []
+                for line in self._log_path.read_text(encoding="utf-8").splitlines():
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        row = None
+                    if not isinstance(row, dict):  # a torn line: keep it only if it can't hold the address
+                        if wanted is not None and not any(address in line.lower() for address in wanted):
+                            kept.append(line)
+                        continue
+                    if row.get("to") and (wanted is None or str(row["to"]).lower() in wanted):
+                        row["to"] = ""
+                        line = json.dumps(row)
+                    kept.append(line)
+                temp.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
+                temp.replace(self._log_path)
+        except Exception:  # noqa: BLE001
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass

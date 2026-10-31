@@ -57,7 +57,7 @@ The full example is in `tests/skill_fixtures/coin_flip/`. It uses a screen, stor
     }
   ],
   "storage": true,
-  "needs": {"internet_hosts": [], "mic": false, "modes": ["live", "normal", "offline"]},
+  "needs": {"internet_hosts": [], "mic": false, "send_mail": false, "modes": ["live", "normal", "offline"]},
   "offline": "works",
   "default_on": true
 }
@@ -70,10 +70,11 @@ The full example is in `tests/skill_fixtures/coin_flip/`. It uses a screen, stor
 - `actions` lists what Mary can call. Each one has a description and an input schema. Give the text your action needs most as the first text field: when she passes plain words, that's where they go.
 - `"always": true` on an action lets her use it from any group, with no opening. It's only for what residents need in the middle of anything, like louder and quieter. At most 4 on a card; keep it rare.
 - `offline_phrases` are short phrases that work with no internet.
-- `storage: true` gives the skill a private store. `needs` lists its internet hosts, mic and modes.
+- `storage: true` gives the skill a private store. `needs` lists its internet hosts, mic, modes and whether it may send email.
 - `offline` is `works` or `needs_internet`. `default_on` sets the start state.
 - `vision: true` (optional) lets the skill ask Gemini about a picture with `ctx.look(image_bytes, mime, question)`.
 - `memory: true` (optional) lets the skill read her memory with `ctx.recall(words)`. It gives back plain facts and can't change them. Never put those facts in a reply, in `view()` or in a log.
+- `needs.send_mail: true` (optional) lets the skill send an email from the resident's own account with `ctx.send_mail(ticket, to, subject, body, pictures=())`. The skill never sees the password. Each email needs a one-time ticket, and only the core can mint one, from the resident's own "send it". Set `"slow": true` as well, because a send can take up to 12 seconds, and make the send the last thing the action does.
 
 ### skill.py
 
@@ -161,6 +162,7 @@ MarySkills.register('my_game', { aside: true, enter(el) { /* draw */ }, leave(el
 - **A crash is contained.** If a skill crashes or hangs, it is switched off. Mary says "That's not working right now."
 - **No network imports.** Skill code may not import `urllib`, `http`, `requests`, `socket` or similar.
 - **Internet only through `ctx.fetch`.** It reaches only hosts in `needs.internet_hosts`. An empty list means no internet.
+- **Email only through `ctx.send_mail`.** The card needs `needs.send_mail` and `"slow": true`, and every email needs a one-time ticket from the core. A skill can't mint a ticket, never sees the password, and may not import `mail_core` or `secret_store`.
 - **Storage only through `ctx.store`** (small JSON values) **and `ctx.files`** (the skill's own folder). Do not open files or databases yourself. No skill can read another skill's data.
 - **Showing a saved image.** A skill can show an image it saved in `ctx.files` at `/api/mary/skills/<name>/image/<file>` (jpg, png, gif or webp).
 - **Settings only those listed.** A skill may change only the settings its card names.

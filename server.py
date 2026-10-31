@@ -25,6 +25,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import assist
+import mail_core  # M15d: the resident's own email
 import mary
 import memory_core  # M9c
 import power
@@ -41,6 +42,7 @@ WEB = ROOT / "web"
 DEFAULT_DATA = Path(os.environ.get("APPDATA") or Path.home()) / "CareIncidentLog"
 DATA = Path(os.environ.get("TRACKER_DATA") or DEFAULT_DATA)
 SECRETS = secret_store.SecretStore(DATA)  # M15d: tied to this data folder, so a scratch install sees none of the real ones
+MAIL = mail_core.Mailer(SECRETS, DATA / "mail.log")  # M15d: the log is written only when an email is tried
 LEGACY_DATA = ROOT / "data"  # where versions before the desktop app kept the log
 DB_PATH = DATA / "incidents.db"
 BACKUPS = DATA / "backups"
@@ -687,6 +689,7 @@ def skill_host():
         if _skill_host is None:
             host = skills_core.SkillHost(SKILLS_DIR, DATA, connect, _all_settings, _put_settings, online=lambda: True)
             host.vision = mary_see_image  # M4a: skills look through the host and never hold the key
+            host.mailer = MAIL.send_for_skill  # M15d: skills send through the host and never see the password
             host.recall = lambda words, limit=6: [m["text"] for m in memory_core.MemoryStore(connect).recall(words, limit=limit)]  # M7a
             host.load(is_blocked=mary.skill_blocked)
             _skill_host = host
@@ -1618,6 +1621,21 @@ class Handler(SimpleHTTPRequestHandler):
         line({"done": True, **done})
         return True
 
+    def _mail(self, method, path):
+        """M15d: the resident's own email account. No reply, log or error ever holds the password."""
+        if method == "GET" and path == "/api/mail":
+            return self._send(MAIL.status())
+        if method == "POST" and path == "/api/mail/connect":
+            body = self._body()
+            MAIL.connect_account(body.get("address"), body.get("provider"), body.get("password"))
+            return self._send(MAIL.status())
+        if method == "POST" and path == "/api/mail/test":
+            return self._send(MAIL.send_test())
+        if method == "POST" and path == "/api/mail/disconnect":
+            MAIL.disconnect()
+            return self._send(MAIL.status())
+        return None
+
     def _wake(self, method, path, q):
         """M6: the wake word routes (see WakeLink)."""
         if method == "GET" and path == "/api/wake/wait":
@@ -1649,6 +1667,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._mary(method, path, q)
         if path.startswith("/api/wake/"):  # M6
             return self._wake(method, path, q)
+        if path == "/api/mail" or path.startswith("/api/mail/"):  # M15d: holds no log connection while an email goes out
+            return self._mail(method, path)
         with connect() as conn:
             self._conn = conn  # _send commits it first, so a reply never arrives before its save is on disk
             if method == "GET" and path == "/api/incidents":

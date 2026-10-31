@@ -38,6 +38,27 @@
 "h":800,
 "title":"(c) The card with their words"
 },
+"C2-Inside-Mary.dc.html":{
+"x":2720,
+"y":1220,
+"w":1280,
+"h":800,
+"title":"(c2) Inside, her words in her handwriting font"
+},
+"C3-Opens-Mary.dc.html":{
+"x":4080,
+"y":1220,
+"w":1280,
+"h":800,
+"title":"(c3) The card opens, moving"
+},
+"C4-Plain-Mary.dc.html":{
+"x":5440,
+"y":1220,
+"w":1280,
+"h":800,
+"title":"(c4) Inside, plainer handwriting"
+},
 "D1-Who-Mary.dc.html":{
 "x":0,
 "y":2440,
@@ -100,6 +121,9 @@
 "A-Reminder-Sam.dc.html",
 "B-Design-Mary.dc.html",
 "C-Card-Mary.dc.html",
+"C2-Inside-Mary.dc.html",
+"C3-Opens-Mary.dc.html",
+"C4-Plain-Mary.dc.html",
 "D1-Who-Mary.dc.html",
 "D2-LastLook-Mary.dc.html",
 "D3-Sending-Mary.dc.html",

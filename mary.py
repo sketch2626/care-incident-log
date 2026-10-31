@@ -146,6 +146,10 @@ _NAME = re.compile(
     r"|(?:^\s*|[.!?,]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be|but|and|so)\s+)call me"
     r"|\b(?:everybody|everyone|folks|my friends|my family)\s+calls?\s+me)"
     r"\s+([A-Z][a-z]+)", _I)
+# M9c: "don't call me Bob" and "stop calling me that" turn a name down; they never offer one.
+_NAME_REFUSED = re.compile(r"\b(?:(?:don'?t|dont|do\s+not|never)\s+(?:(?:you|ever)\s+)*call|(?:stop|quit)\s+calling)"
+                           r"\s+me\s+([^\W\d_]+)", _I)
+_FORGET_MY_NAME = re.compile(r"(?<!\bi )\bforget my name\b", _I)
 _NOT_NAMES = {"back", "when", "if", "later", "please", "crazy", "maybe", "sometime", "tomorrow", "tonight", "today", "again", "not", "a", "an", "the",
               "names", "on", "for", "about", "anything", "whatever", "anytime",
               "at", "in", "to", "by", "after", "before", "now", "soon",
@@ -217,6 +221,7 @@ class Memory:
     def __init__(self, path=None):
         self.path = Path(path) if path else default_memory_path()
         self.name = ""
+        self.name_forgotten = False  # M9c: they asked her not to use a name; only a name they offer clears it
         self.facts = []
         self.recent = []
         self.pending_offer = None
@@ -241,6 +246,7 @@ class Memory:
         except (OSError, ValueError, TypeError, AttributeError, KeyError):
             return
         self.name = name if isinstance(name, str) else ""
+        self.name_forgotten = data.get("name_forgotten") is True and not self.name  # M9c
         self.facts = facts[-MAX_FACTS:]
         self.recent = recent[-MAX_RECENT:]
         self.pending_offer = offer if isinstance(offer, dict) else None
@@ -261,27 +267,31 @@ class Memory:
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
 
-    def scrub(self, forgotten, about=""):  # M9c
+    def scrub(self, forgotten, about="", name=""):  # M9c
         """Drops every turn that carries what was just forgotten, with her answer right after any such resident turn,
-        and a waiting note offer that carries it. An incident already saved in the log stays: that is evidence."""
+        and a waiting note offer that carries it. An incident already saved in the log stays: that is evidence.
+        name: a turn holding this name as a whole word, in any case, goes too."""
+        def holds(words):
+            return memory_core.carries(words, forgotten, about) or memory_core.says_name(words, name)
+
         kept = []
         answer_goes = False
         for turn in self.recent:
-            if memory_core.carries(turn["text"], forgotten, about) or (answer_goes and turn["role"] == "model"):
+            if holds(turn["text"]) or (answer_goes and turn["role"] == "model"):
                 answer_goes = turn["role"] == "user"
                 continue
             answer_goes = False
             kept.append(turn)
         self.recent = kept
         incident = self.pending_offer.get("incident") if isinstance(self.pending_offer, dict) else None
-        if isinstance(incident, dict) and memory_core.carries(" ".join(str(v) for v in incident.values()), forgotten, about):
+        if isinstance(incident, dict) and holds(" ".join(str(v) for v in incident.values())):
             self.pending_offer = None
         self.scrubbed = True
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.pending_forget = _forget_waiting(self.pending_forget)  # M9c
-        data = {"name": self.name, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
+        data = {"name": self.name, "name_forgotten": self.name_forgotten, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
                 "pending_forget": self.pending_forget}
         tmp = self.path.with_name(self.path.name + ".tmp")
         try:
@@ -445,15 +455,28 @@ def learn_name(memory, text):  # M4a: Normal talk and Live (/api/mary/heard) bot
     """Sets memory.name from "my name is X" or "call me X" in what the resident said. A "call me" name wins over
     "my name is" ("my name is Andrew but call me Andy" is Andy). Returns the name, or "" when there was none."""
     found = ""
-    for m in _NAME.finditer(_plain(str(text or ""))):
+    said = _plain(str(text or ""))
+    refused = list(_NAME_REFUSED.finditer(said))  # M9c: "my name is Bob, but stop calling me Bob" offers no name
+    words = {r.group(1).lower() for r in refused}
+    that_at = max((r.start() for r in refused if r.group(1).lower() in ("that", "it")), default=-1)
+    for m in _NAME.finditer(said):
         word = m.group(1)
-        if word.lower() in _NOT_NAMES:
+        if word.lower() in _NOT_NAMES or word.lower() in words or m.start() < that_at:
             continue
         if not found or "call" in m.group(0)[:m.start(1) - m.start(0)].lower():
             found = word.capitalize()
     if found:
         memory.name = found
+        memory.name_forgotten = False  # M9c
     return found
+
+
+def asks_no_name(text):  # M9c
+    """True when they asked her to forget their name or stop calling them it: "don't call me Bob", "forget my name".
+    Not "don't call me late", and not "I forget my name sometimes"."""
+    said = _plain(str(text or ""))
+    return bool(_FORGET_MY_NAME.search(said)) or any(
+        r.group(1)[0].isupper() or r.group(1).lower() in ("that", "it") for r in _NAME_REFUSED.finditer(said))
 
 
 def clean_name(name):  # M4a: Live's set_their_name tool
@@ -470,9 +493,13 @@ _ONLY_LEAD = r"(?:(?:please|mary|sam)[\s,.!]+)*"
 _ONLY_TAIL = r"(?:[\s,.!]+(?:please|mary|sam))*[\s.!?]*"
 _OFFLINE_RECALL = re.compile(rf"{_ONLY_LEAD}what do you remember about me{_ONLY_TAIL}", _I)
 _OFFLINE_FORGET = re.compile(rf"{_ONLY_LEAD}forget (?:that|about my ([^,.!?]+?)){_ONLY_TAIL}", _I)
+_OFFLINE_FORGET_NAME = re.compile(  # M9c
+    rf"{_ONLY_LEAD}(?:forget my name|(?:don'?t|do not) call me that|stop calling me (?:that|([^\W\d_]+)))"
+    rf"(?:\s+any ?more)?{_ONLY_TAIL}", _I)
 OFFLINE_SUMMARY_ITEMS = 5
 NOTHING_SAVED_TEXT = "I don't have anything saved about you yet."
 FORGOT_TEXT = "All right, I've forgotten that."
+NAME_FORGOTTEN_TEXT = "All right, I won't use a name."  # M9c
 NOTHING_TO_FORGET_TEXT = "I don't have anything saved about that."
 OFFER_DROPPED_TEXT = "All right, I won't write that down."
 FORGET_ASK_TEXT = "Should I forget everything about your {}?"
@@ -484,6 +511,8 @@ FORGET_OFFER_NOTE = "They meant the note you just offered to write. Nothing was 
 FORGET_ASK_NOTE = ("Ask in one line whether to forget everything about this, and call forget_memory again with confirmed "
                    "true if they say yes.")
 FORGOT_NOTE = "Done. Say so in one line, and never bring it up again, even if it came up earlier in this talk."
+NAME_FORGOTTEN_NOTE = "Done. Say so in one line. Don't use a name from now on, and don't ask for one."  # M9c
+NAME_FORGOTTEN_SYSTEM = "They asked you not to use a name. Don't ask for one."  # M9c
 MEMORY_BROKEN_NOTE = "Your memory can't be reached just now. Say so kindly; don't guess."
 MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
     {"name": "recall",
@@ -501,6 +530,10 @@ MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
      "parameters": {"type": "object", "properties": {
          "about": {"type": "string", "description": "What to forget, for example: my son's job."},
          "confirmed": {"type": "boolean", "description": "True only after they said yes to your question."}}}},
+    {"name": "forget_name",  # M9c: no arguments, and no yes first: the words are plain, and they can say it again
+     "description": ("They asked you to forget their name or to stop calling them it. It's gone for good at once, with "
+                     "no question first. Not for a pet name like honey: just stop using that. Not when they give a new "
+                     "name to use instead: use the new name.")},
 ]
 MEMORY_TOOL_NAMES = tuple(tool["name"] for tool in MEMORY_TOOLS)
 
@@ -534,7 +567,24 @@ def forget_everything(memory, about):  # M9c
     return gone
 
 
-def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall and forget_memory
+def forget_name(memory, word=""):  # M9c
+    """Really deletes their name: each memory holding it, what her talk history holds of it, and the name itself. She
+    then neither uses a name nor asks for one (memory.name_forgotten) until they offer one. word: the name they said in
+    "stop calling me <word>", gone too. Returns the texts removed. The caller must save memory."""
+    names = [n for n in dict.fromkeys((" ".join(memory.name.split()), " ".join(str(word or "").split()))) if n]
+    gone = []
+    for name in names:
+        gone += memory.store.forget_name(name) if memory.store is not None else []
+        memory.facts = [f for f in memory.facts if not memory_core.holds_name(f, name)]
+    memory.scrub(gone)  # also marks the turn as one that truly forgot, even with nothing saved
+    for name in names:
+        memory.scrub(gone, about=name, name=name)
+    memory.name = ""
+    memory.name_forgotten = True
+    return gone
+
+
+def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall, forget_memory and forget_name
     """Runs one of her memory tools. The same shape as skills.call ({"response", "effects", "say"}), and never raises.
     Takes no lock: reply already holds server._mary_lock. offer_waiting: a note offer is open, so a bare "forget that"
     means the note, not her newest memory. forget_memory with words deletes only on a second call, confirmed, about the
@@ -547,6 +597,10 @@ def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall and for
             found = memory.store.recall(str(args.get("words") or ""), str(args.get("kind") or ""))
             response = ({"memories": found, "total": memory.store.count(), "note": RECALL_NOTE} if found
                         else {"memories": [], "note": RECALL_EMPTY_NOTE})
+        elif name == "forget_name":  # M9c: the name itself never goes back to Gemini
+            forget_name(memory)
+            response = {"done": True, "note": NAME_FORGOTTEN_NOTE}
+            say = NAME_FORGOTTEN_TEXT
         else:
             about = " ".join(str(args.get("about") or "").split())
             if about.lower().rstrip(".!") in ("that", "this", "it"):  # she passed "forget that" along word for word
@@ -576,6 +630,12 @@ def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall and for
     return {"response": response, "effects": [], "say": say}
 
 
+def _is_name_word(word, name):  # M9c
+    """True when the word in "stop calling me <word>" is a name, not "late" or a pet name."""
+    lower = word.lower()
+    return lower not in _NOT_NAMES and lower != "anymore" and (word[0].isupper() or lower == name.lower())
+
+
 def offline_memory(memory, text, offer_waiting=False):  # M9c
     """What she says to an exact memory phrase when Gemini can't be reached, or "" when text isn't one."""
     said = " ".join(_plain(str(text or "")).split())
@@ -585,6 +645,10 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
             if not found:
                 return NOTHING_SAVED_TEXT
             return "Here's some of what I remember: " + " ".join(m["text"].rstrip(" .") + "." for m in found)
+        hit = _OFFLINE_FORGET_NAME.fullmatch(said)
+        if hit and (not hit.group(1) or _is_name_word(hit.group(1), memory.name)):
+            forget_name(memory, hit.group(1))
+            return NAME_FORGOTTEN_TEXT
         hit = _OFFLINE_FORGET.fullmatch(said)
         if not hit:
             return ""
@@ -797,7 +861,9 @@ def system_text(memory, companion="mary", facts=True, tags=True):
             lines = lines[:1] if memory.name else []
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
-    if facts and not memory.name:
+    if not memory.name and getattr(memory, "name_forgotten", False):  # M9c: the voice tryout's stand-in has no flag
+        system += "\n\n" + NAME_FORGOTTEN_SYSTEM
+    elif facts and not memory.name:
         system += "\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called"
         system += ("; when they tell you, add the line [name: First name], using the name they go by, "
                    "exactly as they say it." if tags else ".")  # M4a
@@ -1161,6 +1227,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
 
     error = ""
     remembered = []
+    name_dropped = False  # M9c: forget_name ran, so a [name:] in the same reply is ignored
     if confirmed:
         try:
             new_id = write(prior["incident"])
@@ -1203,6 +1270,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                 answers = []
                 for part in calls:
                     call = part.get("functionCall") or {}
+                    name_dropped = name_dropped or call.get("name") == "forget_name"  # M9c
                     if store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
                         result = memory_tool(memory, call.get("name"), call.get("args"), offer_waiting=bool(prior))
                     elif skills is not None:
@@ -1237,8 +1305,9 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                         remembered.append(" ".join(value.split()))
                 except Exception:
                     pass
-            elif value.strip():
+            elif value.strip() and not name_dropped:
                 memory.name = value.strip()[:40]
+                memory.name_forgotten = False  # M9c
         tail = stream.finish()
         if tail.strip():
             speak(tail)

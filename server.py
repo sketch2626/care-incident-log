@@ -463,10 +463,11 @@ def mary_settings():
 
 def mary_status():
     s = mary_settings()
-    name = mary_memory().name
+    memory = mary_memory()
+    name = memory.name
     offline_ready = voices.kokoro_ready()  # M4a
     return {"companion": s["companion"], "first_run": not s["companion"],
-            "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name,
+            "companions": mary.COMPANIONS, "has_key": bool(s["key"]), "name": name, "name_forgotten": memory.name_forgotten,  # M9c
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
             # M4a: talk modes, the order the page tries them in, and the voice for each
             "talk_mode": s["talk_mode"], "listen_wait": s["listen_wait"], "talk_on_open": s["talk_on_open"],
@@ -640,7 +641,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         with _mary_lock:
             memory = mary_memory()
             result = mary.memory_tool(memory, name, args)
-            if name == "forget_memory":  # its waiting question and the scrubbed talk history
+            if name in ("forget_memory", "forget_name"):  # its waiting question and the scrubbed talk history
                 try:
                     memory.save()
                 except OSError:
@@ -661,6 +662,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         try:
             if name == "set_their_name":
                 memory.name = value
+                memory.name_forgotten = False  # M9c
             else:
                 memory.add_fact(value, str(args.get("kind") or ""), mary.fact_source(heard))  # M9c
             memory.save()
@@ -1202,6 +1204,7 @@ class Handler(SimpleHTTPRequestHandler):
                 with _mary_lock:
                     memory = mary_memory()
                     memory.name = name
+                    memory.name_forgotten = False  # M9c
                     try:
                         memory.save()
                     except OSError:
@@ -1292,7 +1295,8 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.pending_offer = None
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
-                    memory.add_turn("user", text.strip())
+                    if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran
+                        memory.add_turn("user", text.strip())
                     if say:
                         memory.add_turn("model", say)
                     try:

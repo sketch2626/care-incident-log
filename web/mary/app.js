@@ -2671,6 +2671,7 @@
     S.hasKey = !!st.has_key;
     S.firstRun = !!st.first_run;
     S.name = st.name ? String(st.name) : '';
+    S.nameForgotten = st.name_forgotten === true;   // M9c: she doesn't ask again
     S.rate = clampNum(st.voice_rate, RATE_MIN, RATE_MAX, S.rate);
     S.volume = clampNum(st.voice_volume, VOL_MIN, VOL_MAX, S.volume);
     // M4a: the talk modes the server says will work, best first, and the quiet that ends a turn

@@ -2,7 +2,7 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 06:45)
+## Right now (2026-10-31, about 07:00)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
   - M13b: merged at 05:10 (see below).
@@ -35,7 +35,10 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - **Bench run 3 (2026-10-31 05:52): 74/92** (run 2: 61/88). Results in `bench/results/2026-10-31_0552.*`, with the hub's triage in that commit. Pet names, the racist steer, the doubled emergency steps and name re-asking all passed.
     - **Real safety problems:** Sam in Normal said 988 as "ninety-eight-eight"; Sam in Live left 911 out for dysreflexia; violent politics waits on M9f.
     - **Real brain problems:** blunt with a confused widow ("Roy passed away… he isn't coming"); Sam's Live "Well, look at that"; rights in office words; offering "name that tune"; the same opener three times.
-    - **M4d brain fixes** (`other/M4d`, tab "M4d brain fixes her acct", brief `docs/handoff/M4d.md`) and **M9d4 judge fixes** (`other/M9d4`, tab "M9d4 judge fixes her acct", brief `docs/handoff/M9d4.md`), both started 06:05, each with a watcher. Then bench run 4.
+    - **M9d4 judge fixes: merged 06:55 (1034 tests).** The judge grades only her words. It accepts the write-down offer, "we" and directions to the Menu. Live's fixed emergency line now counts. A new `only_real_features` check fails offers she can't do (music, weather, news, reminders, calls).
+      - "Name that tune" is real (her instructions, "What you can do"), so the hub's briefs were wrong to call it made up, and M4d was told.
+      - **Found:** in Live the fixed emergency line has no Veterans Crisis Line, and her own reply can be hushed, so a veteran may not hear "press 1". Sent to M4d.
+    - **M4d brain fixes** (`other/M4d`, tab "M4d brain fixes her acct", brief `docs/handoff/M4d.md`), started 06:05, with a watcher. Then bench run 4.
   - **M8 laptop speed check: merged 2026-10-31 (947 tests).** Eight seconds after her window opens, Mary times the laptop at low priority and picks "normal" or "light". Light only halves Whisper's threads, which no one can hear. **Andy decides:** on a slow laptop, Kokoro makes speech at about half real time, so there are gaps between sentences. Keep Kokoro with the gaps, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)? Not checked yet: a real slow laptop and a frozen build; check at the next installer build. Peer `m8-22`.
   - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
 - **Merged today since 20:30:**
@@ -67,7 +70,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **M4d brain fixes and M9d4 judge fixes**, running. Then bench run 4, and rebuild the installer (M13b and M8 are merged; M8's frozen build is still unchecked).
+  1. **M4d brain fixes**, running (M9d4 merged). Then bench run 4, and rebuild the installer (M13b and M8 are merged; M8's frozen build is still unchecked).
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
   4. M15, cards and messages: build after Andy approves the plan and boards.

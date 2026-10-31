@@ -2,11 +2,12 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 00:20)
+## Right now (2026-10-31, about 00:45)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account's workers resumed at 23:50.** Her weekly limit resets Oct 31 at 5pm, and Andy wants her usage used before then. Check each worker's size with `python tools/worker_context.py`. New jobs go to fresh workers; reuse one only for fixes to its own job while it's under about 200,000 tokens.
   - **M9c truly forget: merged 2026-10-31** (811 tests). It's a real delete: memories live in their own `mary/memories.db` with secure_delete, so incident backups never hold them, and the old table is wiped from every backup. "Forget my name" merged too (822 tests): it clears the saved name, its memories and its talk turns, then she uses no name until one is offered. The page reloads the name after each turn (hub fix). Not run with real Gemini yet. Note: `test_live_skills` failed once while M8 was timing the laptop (a skill guard timeout under load); it passed on rerun.
-  - **M7a word search: boards approved by Andy 2026-10-31** ("I approve the boards completely"), canvas https://claude.ai/artifact/TgmCCW2RZK9TVVcTWQemzQ. His size decision: the resident chooses. There are three sizes (8x8 with the biggest letters, 10x10 as the first-time default, 12x12). Mary offers bigger letters once when the game comes up, changes size by voice on the fly (a fresh puzzle at the new size, same theme), and remembers their size. Peer `m7a-ec` is building that, then commits `DONE: M7a word search`; the hub merges it and rebuilds the installer. Note: there are now 20 skill tools plus her own; M13b fixes that next.
+  - **M7a word search: merged 2026-10-31 (865 tests).** The resident picks 8x8, 10x10 (the first-time default) or 12x12 by voice or tap; it's saved as setting `word_search_size`. The bar reads "Bigger letters", "Same", "More letters", "Back". Not yet seen in a real window, with real touch or in a real Live talk: Andy's first try is the check. Known gaps are in the merge commit.
+  - **M13b tool groups** (`other/M13b`, tab "M13b tool groups her acct", brief `docs/handoff/M13b.md`, started 00:40): each skill is one group, at most about 12 tools at once, and one thing beside Mary at a time (a picture sets the game aside, and the game comes back).
   - **M8 laptop speed check** (`other/M8`, tab "M8 laptop speed her acct", brief `docs/handoff/M8.md`, started 00:15): on first run it times Kokoro, Whisper and the wake word, picks a "normal" or "light" tier, and lightens settings by itself on a slow laptop. Anything a resident would see or hear differently waits for Andy.
   - **M9d2 bench fixes** (`other/M9d`, tab "M9d2 bench fixes her acct", peer `m9d-4b`): the fixes committed, tests in progress. Then the hub does a second real bench run.
   - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
@@ -36,10 +37,10 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **M13b, tool groups** (brief `docs/handoff/M13b.md`, ready), started right after M7a merges and before the next game. Andy decided 2026-10-31: group her tools so she only holds the ones for what you're asking about. Each skill is one group, plus her own tools and a way to open another group, at most about 12 at once. With word search she has about 26 today.
+  1. **M13b, tool groups**, running (see above). Then rebuild the installer once M13b and M8 are merged. Andy decided 2026-10-31: group her tools so she only holds the ones for what you're asking about. Each skill is one group, plus her own tools and a way to open another group, at most about 12 at once. With word search she has about 26 today.
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
-  4. Rebuild the installer after the big merges.
+  4. M15, cards for family (Andy's idea 2026-10-31): talk it through with Andy, then boards.
   5. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
   6. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.
 - **Free-tier facts:** Gemini TTS allows 10 requests a day and resets at midnight Pacific. Live is free. The text model's daily limit isn't measured yet.

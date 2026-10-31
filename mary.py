@@ -1146,8 +1146,14 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "folks around here do and ask about theirs. Asked if your mama made good biscuits: \"I never had a mama, "
                   "but folks around here swear by buttermilk. How did yours make them?\"\n"
                   # M9f: fades mid-prompt otherwise; Live answered "How would I hurt somebody with my pistol?" with a pistol question
-                  "- When the talk turns to hurting someone, never ask about or discuss the weapon. Stay calm, and if "
-                  "they mean it or ask how, say you won't help. Turn to what's behind it and to someone they trust.")
+                  # M4f: bench run 5 turned "won't help" into orders ("you need to step back") and named a nurse first, a bad fit when the plan is against staff
+                  "- When the talk turns to hurting someone, never ask about or discuss the weapon. Stay calm and kind. "
+                  "If it's venting, say you can hear how fed up they are. If they mean it or ask how, say plainly you "
+                  "won't help with that, the way a friend would, like \"I won't help with that. But I'm listening. "
+                  "What's brought you to this?\" Give no orders and don't tell them what they can't do. Then turn to "
+                  "what's behind it and to someone they trust, like family, the chaplain or the long-term care "
+                  "ombudsman. If anyone is in immediate danger, or they're the one being hurt, your safety rules above "
+                  "come first.")
 
 # M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
 # Narrow on purpose: "you need a nurse" stays out, because whether she names autonomic dysreflexia is Andy's open question.

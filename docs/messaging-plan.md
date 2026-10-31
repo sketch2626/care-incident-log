@@ -1,6 +1,6 @@
 # Cards and messages to family: the plan (M15)
 
-Status: **Andy read the plan and boards on 2026-10-31.** His answers are folded in, and section 9 lists what's still open. Written 2026-10-31 on the second account. No app code yet. Boards: `mockups/mary/round8/`. Andy's words: M15 in `docs/mary-roadmap.md`.
+Status: **Andy read the plan and boards on 2026-10-31.** His answers are folded in, section 9 is fully settled, and his notes on round 8 are in the flows below (redrawn as M15b). Written 2026-10-31 on the second account. No app code yet. Boards: `mockups/mary/round8/`. Andy's words: M15 in `docs/mary-roadmap.md`.
 
 ## The short version
 - **Why:** "I see that it's your son's birthday coming up next week. Would you like for me to help you make him a card that we can send to him?" And: "will you please help me send a message to my grandson?" This ties residents to their people outside.
@@ -190,23 +190,34 @@ Sources: [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) (2026-1
 5. **No birthdays guessed.** She only uses dates the resident gave her.
 
 ### Making a card
-1. They pick a design by voice or tap (board B).
+1. **Three or four card fronts** appear, each with a big number and a short name, so they can say "the second one" or "the one with the lake" (board B). Tapping a card also works. Mary offers to make one to order: "Tell me what you'd like on it."
 2. They say the words. Mary may help, **in their voice, never hers.** She offers a line only if they ask. She doesn't add feeling they didn't express, and she reads it back.
-3. The card is shown with their words printed on it (board C). They can change the words or the design at any time.
-4. "This is it" goes on to sending. A card is also saved on their laptop, so it's never lost.
+3. **It's a real folded card** (boards C): a front, then inside a short printed verse in a classic typeface, and under it their own words in handwriting, signed with their name. Andy: "the card needs to open up and have a front and then it needs to open and say something in there and then under the saying, then you put your own words."
+4. **Two handwriting styles:** cursive, and plain handwriting for anyone who finds cursive hard to read.
+5. Mary reads the card back. Changes are made by voice, at any time. Saying "send it" goes on to sending. A card is also saved on their laptop, so it's never lost.
+
+**The look (Andy: "These look like something that a three-year-old would send").** Grown up and traditional, like the best rack at a drugstore: heavy cream paper, deep muted colors, classic lettering, painted scenes. No cartoons, balloons, confetti or clip art, drawn or generated.
+
+**Voice first.** The resident says what they want and Mary does it. There are no question-and-answer buttons, no who-gets-it list, and no Back or Next. The person is whoever they named. If that's unclear ("my grandson", with two grandsons), Mary asks aloud. A button stays only for a real reason, and the round 8 README names each one and why.
 
 The occasions: birthdays first, then holidays, get-well, sympathy and thank-you notes (staff included). Each is a set of designs, not a new feature.
 
 ### A plain message
-"Help me send a message to my grandson." No design step: they say it, she shows it (board G), they say yes, and it goes by whichever way that person uses. If they say "tell Tyler I'm proud of him", she writes it as them, in their words, and shows it first.
+"Help me send a message to my grandson." No design step: they say it, she shows it (board G), they say "send it", and it goes by the same rules as a card, with the five-second Undo. If they say "tell Tyler I'm proud of him", she writes it as them, in their words, and shows it first.
 
 ### Sending
 | Way | Who presses Send | After |
 |---|---|---|
-| **Email** | Mary, after their yes. A five-second **Stop** follows, in case they change their mind. | "Sent to Mark." |
+| **Email** | Mary, after their "send it". A big **Undo** counts 5, 4, 3, 2, 1, in case they change their mind. | "Sent to Mark." Then she offers the other ways. |
 | **Messenger** | **The resident**, in Facebook. | She asks, "Did it go?" |
 | **WhatsApp** (later) | The resident. | Same. |
 | **Print** | The resident, at the printer. | Paper in hand. |
+
+**The order (Andy: "We've already said we're sending a birthday card. It's going to go whatever method works").**
+1. **Before anything goes,** Mary says something like: "When you say send, it goes to Mark's email. You'll have five seconds to stop it."
+2. **On "send it":** the big Undo counts down, then "Sent to Mark." Saying "stop" or "undo" works too, but the button stays, because five seconds is too short to wait on speech that may not be heard. **Nothing leaves the laptop until the count ends.**
+3. **Then she asks aloud:** "Would you like it to go through Messenger too, or printed so it can be mailed?" She offers only the routes that are set up.
+4. **If email isn't set up for that person,** she goes straight to the routes that are.
 
 ## 4. Who does what
 **Mary does by herself:** notices the date, offers once, helps with words when asked, fills in the card, finds the saved contact, puts it on the clipboard, opens the chat.
@@ -214,8 +225,8 @@ The occasions: birthdays first, then holidays, get-well, sympathy and thank-you 
 **The resident always does:** decides whether to send at all, picks who, says or taps yes after the read-back, taps Send in Facebook.
 
 **The yes is hard-wired, not left to Gemini.** A brain can be talked into things, and a resident can be confused.
-- **The smooth path, as Andy put it:** the card is on screen and they say "Now send it". If that person has one saved way, that's the yes. Mary says "To Mark, by email", and five seconds of Stop follow (board D3). That's all it takes.
-- **The first time,** or with a new person or a choice of ways, the "last look" screen (board D2) comes first, showing the card, the person and the way.
+- **The smooth path, as Andy put it:** the card is on screen and they say "Now send it". That's the yes. Mary has already said where it goes and that they'll have five seconds to stop it (board D2), and the Undo countdown follows (board D3). That's all it takes.
+- **A resident she can't make out:** after two tries she says so, and one quiet "Send it" button appears (board D2b). It's the only fallback, and it shows only then.
 - The core only sends if the card and the person were on screen and then a tap or a plain "send it" came back. A hint from Gemini isn't enough.
 - "Okay" or "sounds good" in the middle of a chat doesn't count.
 - **Mary never writes to anyone on her own, never sends on a schedule, and never reads replies.** Outbound only, one message at a time.
@@ -260,11 +271,11 @@ Two core gaps come first. **`ctx.fetch` is GET-only, with no request body, and n
 | Item | What | Done when | Who |
 |---|---|---|---|
 | **M15a** Dates | Save birthdays as dates; reminder once, 8 to 5 days ahead; none for the dead; forget clears them | Tests with a fake clock: once only, across restarts and a missed week; "forget" removes it; Andy hears it in a talk | Opus coder on the second account |
-| **M15b** Cards | The `messages` skill, the screen, 12 drawn designs, words printed on the card, saved as a picture, print | Boards A to C matched; offline works; long words fit; Andy approves | Opus for code; Sonnet for tests |
-| **M15c** Contacts and last look | The contact store, the hard-wired yes, Stop, real forget | A test proves nothing sends without the yes, and a chatty "okay" doesn't count | Opus, `xhigh` |
+| **M15b** Cards | The `messages` skill, the screen, 12 drawn designs, a folded card with verse and handwriting in two bundled fonts, the opening animation, front and inside saved as pictures, print | Boards A to C matched; offline works; long words fit; Andy approves | Opus for code; Sonnet for tests |
+| **M15c** Contacts and last look | The contact store, the hard-wired yes, the Undo countdown, real forget | A test proves nothing sends without the yes, and a chatty "okay" doesn't count | Opus, `xhigh` |
 | **M15d** Mail | Credential Manager, `ctx.send_mail`, Gmail and Yahoo, helper setup in My info | Sends to a scratch mailbox; the secret isn't in the database, backups, logs or the page | Opus, `xhigh` |
 | **M15e** Messenger | Answers to the tests in section 2, Facebook in its own walled-off pane over the panel, clipboard, open the chat, the Paste button, "Did it go?"; fallback to their browser | Andy sends a real card to a friend in under a minute, with no key combo. No script touches Facebook's page. | Opus, after Andy's five-minute test |
-| **M15f** Picture making | `ctx.make_picture`, a set cartoon style, plain lines for refusals, a cost line in My info | A picture lands in a card; a refusal fails politely; no names in the prompt | Opus for code; Sonnet for tests |
+| **M15f** Picture making | `ctx.make_picture`, a set painted card style, plain lines for refusals, a cost line in My info | A picture lands in a card; a refusal fails politely; no names in the prompt | Opus for code; Sonnet for tests |
 | **M15g** Outlook | Register the app, device-code sign-in, Graph send | A helper connects a test Outlook.com account | Opus, once test 7 is settled |
 | **M15h** WhatsApp | The `wa.me` link, phone numbers in contacts | The chat opens with the words ready | Sonnet |
 | **M15i** Google sign-in | Google verification, replace the Gmail app password | Verified, with no warning screen | Opus, plus Andy's review steps |
@@ -273,11 +284,15 @@ Two core gaps come first. **`ctx.fetch` is GET-only, with no request body, and n
 
 **Later, once there's funding (Andy, 2026-10-31):** write to Meta, Google and others about the mission, and ask for access.
 
+**Later step: family photos on the reminder (Andy, 2026-10-31).** Once Facebook can be connected, "put pictures of their kids and stuff" in the framed spot on the reminder (board A), which holds a monogram until then. It needs a route to their photos that Meta's rules allow, the resident's say-so for each person, and photos kept on the laptop.
+
 Order: a, b, c, d, then e, then the rest. A helper-free resident gets cards, print and Messenger with no secret to set up.
 
 **Setup for a helper, added to the setup list:** connect email, sort out the Messenger PIN, keep the browser signed in to Facebook, and add the family's contacts.
 
-## 9. Decisions for Andy
+## 9. Decisions
+All settled. Andy took all 12 open recommendations on 2026-10-31 ("yes, on the other 12 recommendations").
+
 ### Settled by Andy (2026-10-31)
 | Was # | Question | Andy's answer |
 |---|---|---|
@@ -286,18 +301,18 @@ Order: a, b, c, d, then e, then the rest. A helper-free resident gets cards, pri
 | 5 | Print as a third way? | **Yes,** marked as needing facility help for the mailing. |
 | 13 | Meta's Muse? | **Watch it.** It does handle Messenger, from Andy's own use. Whether an app can hand it a task is still open. The pilot-brain idea is roadmap M16. |
 
-### Still open
-| # | Question | Recommendation |
+### Settled when he took the recommendations (2026-10-31)
+| # | Question | Settled |
 |---|---|---|
 | 1 | How do residents paste in Messenger? | **Mary's big Paste button,** in her bar under the panel. It needs test 5. Voice Access is the fallback. |
 | 2 | Which email company first? | **Gmail and Yahoo now,** then Outlook.com, then Google sign-in to retire the Gmail app password. |
 | 3 | Drawn cards, made-to-order, or both? | **Both.** Drawn is the default, because it's free and offline. A new picture is one choice among them, and only with a paid key. |
-| 4 | Does a spoken yes count, or must they tap? | **Either:** a tap or "send it", then five seconds to stop. Many residents can't tap well. |
+| 4 | Does a spoken yes count, or must they tap? | **Either:** "send it", or the quiet tap if she can't make them out. Then a big **Undo** counts 5, 4, 3, 2, 1, and "Sent to Mark." Mary says beforehand that they'll have five seconds. Many residents can't tap well. |
 | 6 | When does she ask to keep an address? | **Once, after the first send.** Never before they've used it. |
 | 7 | WhatsApp and texting? | **WhatsApp later, as M15h. Texting through Phone Link not at all for now:** no pictures on iPhone, and heavy setup. |
 | 8 | Does a message say Mary helped? | **No tag.** It's their message, from their account, in their words. If they ask, she's honest. |
 | 9 | Reminders for who? | **Family and friends with a date the resident gave,** one week ahead, once a year. No reminders for the dead. Holidays only if they ask. |
 | 10 | Mission wording on what leaves the laptop | **Update it** to say what Google keeps on the paid tier. |
-| 11 | Your five-minute Facebook test | **Please do it before M15e.** It needs a friend who agrees, and it settles the five Facebook unknowns, above all test 9, which route 4 rests on. |
+| 11 | Your five-minute Facebook test | **Andy will do it before M15e.** It needs a friend who agrees, and it settles the five Facebook unknowns, above all test 9, which route 4 rests on. |
 | 14 | Replies: "did my son write back?" | **Email only, from saved family, only when asked.** On Messenger she opens the chat for them. |
 | 15 | Mary's own number and address, once the backend exists? | **Yes, add to `docs/backend-plan.md`.** It fits "send right to". The son is told first. |

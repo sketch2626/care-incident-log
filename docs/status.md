@@ -2,7 +2,7 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 08:05)
+## Right now (2026-10-31, about 10:25)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
   - M13b: merged at 05:10 (see below).
@@ -48,7 +48,8 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - **Bench run 4 (2026-10-31 06:57): 81/92, no real safety failures** (run 3: 74/92). Results in `bench/results/2026-10-31_0657.*`, with the triage in that commit.
     - **The real problem left:** Sam turned "hurting someone with a pistol" into gun talk, naming no staff. That's M9f, waiting on Andy.
     - **Minor:** "My mama could turn out buttermilk biscuits" in Normal (a human past); "sleep tight", for Andy's ear.
-    - **M4e small fixes** (`other/M4e`, tab "M4e small fixes her acct", brief `docs/handoff/M4e.md`) and **installer2** (`other/installer2`, tab "installer2 build her acct", brief `docs/handoff/installer2.md`: v0.4.0 built and checked frozen, with no downloads) both started 07:35, each with a watcher. Then bench run 5.
+    - **M4e merged 2026-10-31 10:20 (a6f744e, 1101 tests).** No mama or human past in Normal or Live (closing lines in `CHARACTER_NOTE`); M9f as a fifth safety section, "When they talk of hurting someone" (added lines only; the four older sections unchanged); the bench flaws from run 4 fixed. "Watermelon" was a cliche-list ban from Andy's saccharine-story complaint, not a stereotype, so it's dropped. If the human-past slip returns in run 5, look first at Mary's character lines ("recipe cards in a mother's handwriting"). Run 5 has 9 more runs (the threat cases).
+    - **installer2** (`other/installer2`, tab "installer2 build her acct", peer `installer2-40`, brief `docs/handoff/installer2.md`): its first build stopped at 08:00 because the laptop ran out of memory (5.7 GB RAM). The hub closed the M4e and M8 workers and told it to go ahead at 10:25, alone, with a watcher. Rule: never run a build or frozen check next to another worker or the bench. Bench run 5 comes after it.
     - **Her account hit its 5-hour limit again at 07:00** (weekly 85% used). Both workers continue by themselves at 9:50am; the hub checks them at 9:55. Her week resets at 4:59pm.
     - **M9f approved by Andy (2026-10-31, 07:45):** "Approve the draft", as written in the roadmap, including that Mary never reports a resident herself. It was handed to M4e as item 10, the one approved change to the safety sections.
   - **M8 laptop speed check: merged 2026-10-31 (947 tests).** Eight seconds after her window opens, Mary times the laptop at low priority and picks "normal" or "light". Light only halves Whisper's threads, which no one can hear. **Andy decides:** on a slow laptop, Kokoro makes speech at about half real time, so there are gaps between sentences. Keep Kokoro with the gaps, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)? Not checked yet: a real slow laptop and a frozen build; check at the next installer build. Peer `m8-22`.
@@ -75,17 +76,17 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - **M12 pictures:** waits for M4a and M4b's fixes, then Andy tries it again.
 - **Decisions waiting on Andy:**
   - **Politics:** decided 2026-10-30 (Andy's answer 10). Merged into her instructions and bench (bd7cc85).
-  - **M9f, threats against others:** approved 2026-10-31 ("Approve the draft"); being built in M4e.
+  - **M9f, threats against others:** approved 2026-10-31 ("Approve the draft"); built in M4e and merged 10:20. One line goes past the draft and fixes run 4's gap: never turn the talk toward the weapon.
   - **Paid tier for residents (Andy, 2026-10-31):** "this is going to have to be on a paid tier once it gets into the hands of the other people… for the privacy concerns." The free tier is for Andy's testing only.
   - **wake.log words:** decided 2026-10-31 (Andy: "word count at pilot"). The log keeps Whisper's words around each wake while Andy tunes the wake word. Before the pilot it keeps only a word count, because forget can't reach the log.
   - **"Forget that":** decided 2026-10-30: truly erase (Andy: "forget that means forget that"). Merged 2026-10-31.
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **M4e and installer2**, running. M4e also builds M9f (Andy approved it). Then bench run 5. The installer is being rebuilt (M13b and M8 are merged; M8's frozen build is still unchecked).
+  1. **installer2**, running alone (M4e and M9f merged). Then bench run 5. M8's frozen build is checked in installer2.
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
-  4. M15, cards and messages: plan and boards approved; build next, after M4e and installer2.
+  4. M15, cards and messages: plan and boards approved; build next, after installer2 and bench run 5, on her fresh week (after 4:59pm).
   5. M16, which brain for the pilot (Gemini paid tier, Meta's models, Muse): run the candidates through the brain bench when it's time.
   5. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
   6. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.

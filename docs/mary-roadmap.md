@@ -328,6 +328,7 @@ Andy's words: "Mary says, I see that it's your son's birthday coming up next wee
   - **Five seconds to undo:** before sending, Mary explains there'll be five seconds to cancel. After Send comes an Undo button counting "5 4 3 2 1".
   - **Messenger in the panel** "looks okay."
   - Redraw: M15b (`docs/handoff/M15b.md`), on her account once its session limit resets.
+- **Andy approved the redrawn boards (2026-10-31, morning):** "I approve of the new boards. They are much better." Merged: plan `docs/messaging-plan.md` (all 12 decisions settled) and the 16 round 8 boards in `mockups/mary/round8/` (art and builder in `round8-src/`). The worker's three proposals stand as drawn unless Andy changes them: the card goes out as one picture, front and inside; Messenger opens when her line ends unless they say "not yet"; she says "Going to Mark's email" before the five-second count. Before the Messenger step: Andy's five-minute Facebook sign-in test (plan test 9). Next: the build, as the plan's build list, after M4e and installer2.
 - Boards first, then a skill of its own (after M13b's tool groups).
 
 ### M16. Which brain for the pilot (idea; Andy, 2026-10-31, speculation for now)

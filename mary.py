@@ -28,6 +28,7 @@ EMERGENCY_TEXT = {
     "self_harm": "I'm really glad you told me. Please press your call light and tell a nurse how you're feeling, "
                  "or call or text 988 any time, day or night.",
 }
+STAY_TEXT = "I'm right here with you."  # M4c: when her emergency reply was all a repeat of EMERGENCY_TEXT
 OFFLINE_TEXT = "I'm sorry, I'm having trouble thinking right now, but I'm still right here with you."
 OFFER_QUESTION = "Would you like me to write that down?"
 SAVED_TEXT = "All right, I've written that down for you, with today's date and time. Is there anything else on your mind?"
@@ -940,8 +941,9 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     # --- end skills hook ---
     system += CHARACTER_NOTE  # M4c: late in the prompt, where it holds; only the turn notes come after it
     if kind:  # M4a: the bench heard the same instruction twice in a row
-        system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} They heard it, so don't "
-                   "say any of it again, in any words. Add only one short, calm line of your own, to keep them company.")
+        system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} Those words are your very "
+                   "first words, so the safety rule is already met. They heard it, so don't say any of it again, in any "
+                   "words. Add only one short, calm line of your own, to stay with them.")
         if kind == "self_harm":
             system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
     else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
@@ -998,6 +1000,29 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
                   "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
                   "else. Don't ask about it.")
+
+# M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
+# Narrow on purpose: "you need a nurse" stays out, because whether she names autonomic dysreflexia is Andy's open question.
+_STEP = re.compile(
+    r"\bcall\s+(?:light|button)\b|\bcall\s+out\b|\b911\b|\bnine[,\s-]+one[,\s-]+one\b"
+    r"|\b988\b|\bnine[,\s-]+eight[,\s-]+eight\b"
+    r"|\b(?:tell|get|find|grab|call)\s+(?:for\s+)?(?:(?:a|an|the|your|charge)\s+){0,2}(?:nurses?|staff)\b", _I)
+_VETERANS_LINE = re.compile(r"veteran|\bpress\s+(?:one|1)\b|838|\beight[,\s-]+three[,\s-]+eight\b", _I)  # never dropped
+_SENTENCE_GAP = re.compile(r"(?<=[.!?])\s+")
+_TAG_PIECE = re.compile(f"({_BRACKETS.pattern})")
+
+
+def _without_steps(text):
+    """Her emergency reply with every sentence that repeats the app's line taken out. Tags pass through untouched,
+    and a tag in front of a sentence doesn't shield that sentence. The Veterans Crisis Line always stays."""
+    out = []
+    for piece in _TAG_PIECE.split(text):
+        if piece.startswith("["):
+            out.append(piece)
+        else:
+            out.append(" ".join(s for s in _SENTENCE_GAP.split(piece)
+                                if _VETERANS_LINE.search(s) or not _STEP.search(s)))
+    return "".join(out)
 
 
 def not_english(text):  # M4a: Live's transcript sometimes comes back in another script
@@ -1277,7 +1302,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                         continue
                     raw += chunk
                     said += chunk
-                    stream.feed(chunk)
+                    if not kind:  # M4c: in an emergency her words wait, to be checked below
+                        stream.feed(chunk)
                 # --- skills hook (M13) --- run her tool calls, then ask again with their answers
                 if not calls or (skills is None and store is None) or kind or rounds >= MAX_TOOL_ROUNDS:  # M9c: store too
                     break
@@ -1312,6 +1338,11 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             error = BAD_KEY if _key_refused(e) else NO_GEMINI
         except Exception:
             error = NO_GEMINI
+        if kind:  # M4c: the app's line played in full, so she doesn't repeat its steps; she stays with them
+            kept = _without_steps(raw)
+            if _BRACKETS.sub("", raw).strip() and not _BRACKETS.sub("", kept).strip():
+                kept = STAY_TEXT + kept  # first, so a held-back tag can't swallow it
+            stream.feed(kept)
         for tag, value in _TAG.findall(raw):
             if tag == "remember":
                 try:  # M9c: a locked database must never stop her reply

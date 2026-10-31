@@ -1305,6 +1305,12 @@ def saved_key_and_model():
     except sqlite3.Error as e:
         raise BenchError(f"The app's saved settings couldn't be read ({type(e).__name__}).") from None
     key = (rows.get("gemini_key") or "").strip()
+    if not key:  # M15d: since the move, the key lives in Credential Manager under this data folder
+        import secret_store
+        try:
+            key = (secret_store.SecretStore(folder).get("gemini_key") or "").strip()
+        except secret_store.SecretStoreError:
+            key = ""
     if not key:
         raise BenchError("No saved key: the app has no Gemini key yet.")
     return key, (rows.get("gemini_model") or "").strip()

@@ -535,6 +535,17 @@ class TestKeyNeverLeaks(BenchCase):
         self.assertNotIn("OTHER-SECRET-VALUE", out)
         self.assertTrue(all("OTHER-SECRET-VALUE" not in json.dumps(c[0]) for c in fake.calls))
 
+    def test_key_from_app_reads_the_secret_store_after_the_move(self):  # M15d
+        import secret_store
+        folder = self.make_db([("gemini_model", "model-x")])
+        store = secret_store.SecretStore(folder)
+        store.put("gemini_key", KEY)
+        try:
+            with mock.patch.object(bb, "REAL_TRACKER_DATA", str(folder)):
+                self.assertEqual(bb.saved_key_and_model(), (KEY, "model-x"))
+        finally:
+            store.delete("gemini_key")
+
     def test_key_from_app_missing_db_is_2(self):
         os.environ.pop("GEMINI_API_KEY")
         with mock.patch.object(bb, "REAL_TRACKER_DATA", str(self.tmp / "nowhere")):

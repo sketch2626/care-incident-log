@@ -113,6 +113,7 @@ _GOES_BY_RE = re.compile(r"^\s*(?:(?:they|he|she|(?:the\s+)?resident)\s+)?"
                          r"(?:go(?:es)?\s+by|(?:likes?|prefers?|wants?)\s+(?:to\s+be|being)\s+called)\s+(?!by\b)\S", re.I)
 FORGET_THAT_S = 3600  # "forget that" means something just saved, never a memory from months ago
 FORGET_YES_S = 300  # how long "forget about my son" waits for the resident's yes
+FORGET_REACH = None  # M15c: set by the app. count(about) and forget(about, own_name=False) reach a skill's saved people
 # Who a memory names, so "forget about my son" takes every memory about him. Only these spots count as a name, never
 # every capitalized word: "Raleigh" must not spread.
 _RELATIONS = "son daughter wife husband brother sister mother father friend grandson granddaughter"
@@ -419,6 +420,14 @@ def _touched_last(rows, turns, text):  # M15a
     return None
 
 
+def _reach_gone(about, own_name=False):  # M15c
+    """What a forget also took outside her memories (a contact and its address), or [] with no reach or on any error."""
+    try:
+        return [str(text) for text in FORGET_REACH.forget(about, own_name=own_name)] if FORGET_REACH else []
+    except Exception:  # noqa: BLE001 (her own delete already happened; a skill's fault can't undo that)
+        return []
+
+
 class MemoryStore:
     """Her dated memories. Every call opens and closes its own connection, so it needs no lock of its own.
     on_change(deleted) runs after every change is saved, so the server can keep her one backup current."""
@@ -513,9 +522,17 @@ class MemoryStore:
         named = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b") if names else None
         return [r for r in rows if r["id"] in hits or (named and named.search(r["text"]))]
 
+    def others(self, about):  # M15c
+        """How many things outside her memories match about (a saved contact). 0 with no reach or on any error."""
+        try:
+            return int(FORGET_REACH.count(about)) if FORGET_REACH else 0
+        except Exception:  # noqa: BLE001
+            return 0
+
     def forget(self, about=""):
         """Really deletes and returns the texts removed. Empty about: the single newest memory ("forget that"), if it
-        was saved within FORGET_THAT_S. Otherwise everything matching(about) finds."""
+        was saved within FORGET_THAT_S. Otherwise everything matching(about) finds, plus what FORGET_REACH removed
+        (M15c: addresses too, so talk history drops them; they never go back to Gemini)."""
         if str(about or "").strip():
             rows = self.matching(about)
         else:
@@ -528,17 +545,19 @@ class MemoryStore:
                     cleared += conn.execute(f"DELETE FROM {table}").rowcount
         if rows or cleared:
             self._changed(True)
-        return [r["text"] for r in rows]
+        gone = [r["text"] for r in rows]
+        return gone + _reach_gone(about) if str(about or "").strip() else gone  # M15c
 
     def forget_name(self, name):  # M9c
-        """Really deletes every memory holding their name and returns the texts removed."""
+        """Really deletes every memory holding their name and returns the texts removed. M15c: FORGET_REACH takes only a
+        contact whose full name is exactly this one."""
         rows = [r for r in self.active() if holds_name(r["text"], name)]
         with closing(self.connect()) as conn, conn:  # M15a
             _delete(conn, [r["id"] for r in rows])
             cleared = _unstop(conn, name)
         if rows or cleared:
             self._changed(True)
-        return [r["text"] for r in rows]
+        return [r["text"] for r in rows] + _reach_gone(name, own_name=True)  # M15c
 
     def learn_date(self, found, memory_id=None):  # M15a
         """Keeps a date from parse and returns its id. Every date has a memory behind it: memory_id when it came from a

@@ -80,3 +80,74 @@
 /* (g, a) the plain message and the keepsake, one saved picture at board size */
 .skill-screen[data-skill="messages"] .mc img.mc-sheet{position:absolute;left:0;top:var(--top);width:calc(740*var(--u));height:calc(628*var(--u));object-fit:contain;
   object-position:50% 0;filter:drop-shadow(2px 8px 16px rgba(60,38,18,.3))}
+
+/* M15c: the last look (d2, d2b, g), the count (d3, g2), sent (f) and the address box (no board). Port of .c8- in r8.css. On
+   every font, max() keeps the 20px floor when the stage is smaller than 1280x800, and the address wraps rather than leaves
+   the envelope. */
+@font-face{font-family:'Cedarville Cursive';font-style:normal;font-weight:400;src:url(/mary/fonts/cedarville.woff2) format('woff2')}
+.skill-screen[data-skill="messages"] .mc-title{position:absolute;left:0;top:28px;width:calc(450*var(--u));height:96px;margin:0;display:flex;align-items:center;
+  font:700 max(20px,calc(36*var(--u)))/1.25 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.skill-screen[data-skill="messages"] .mc-look{position:absolute;left:0;top:calc(var(--top) + 52*var(--u));width:calc(740*var(--u));height:calc(420*var(--u))}
+.skill-screen[data-skill="messages"] .mc-look.small{left:calc(115*var(--u));top:calc(var(--top) + 2*var(--u));width:calc(510*var(--u));height:calc(280*var(--u))}
+.skill-screen[data-skill="messages"] .mc-env{position:absolute;left:calc(208*var(--u));top:calc(24*var(--u));width:calc(532*var(--u));height:calc(372*var(--u));
+  box-shadow:0 1px 2px rgba(60,38,18,.38),3px 7px 14px rgba(60,38,18,.26),8px 18px 38px rgba(60,38,18,.26)}
+.skill-screen[data-skill="messages"] .mc-look.small .mc-env{left:calc(130*var(--u));top:calc(7*var(--u));width:calc(380*var(--u));height:calc(266*var(--u))}
+.skill-screen[data-skill="messages"] .mc-look.small.alone .mc-env{left:calc(65*var(--u))}
+.skill-screen[data-skill="messages"] .mc-envsheet,.skill-screen[data-skill="messages"] .mc-envrules{position:absolute;left:0;top:0;display:block;width:100%;height:100%}
+.skill-screen[data-skill="messages"] .mc-lookcard{position:absolute;left:calc(8*var(--u));top:0;width:calc(300*var(--u));height:calc(420*var(--u));transform:rotate(-1.5deg);
+  box-shadow:1px 1px 2px rgba(60,38,18,.4),4px 8px 14px rgba(60,38,18,.3),10px 20px 40px rgba(60,38,18,.32)}
+.skill-screen[data-skill="messages"] .mc-look.small .mc-lookcard{left:0;width:calc(200*var(--u));height:calc(280*var(--u))}
+.skill-screen[data-skill="messages"] .mc-addr{position:absolute;left:calc(124*var(--u));right:calc(16*var(--u));top:calc(166*var(--u));color:#1c2a4a;
+  font-family:"Cedarville Cursive","Segoe Script",cursive;overflow-wrap:anywhere;transform:rotate(-.6deg);transform-origin:0 50%}
+.skill-screen[data-skill="messages"] .mc-addr-name{font-size:max(20px,calc(38*var(--u)));line-height:1.42}
+.skill-screen[data-skill="messages"] .mc-addr-mail{font-size:max(20px,calc(26*var(--u)));line-height:1.62}
+.skill-screen[data-skill="messages"] .mc-look.small .mc-addr{left:calc(88*var(--u));top:calc(112*var(--u))}
+.skill-screen[data-skill="messages"] .mc-look.small .mc-addr-name{font-size:max(20px,calc(26*var(--u)));line-height:1.46}
+.skill-screen[data-skill="messages"] .mc-look.small .mc-addr-mail{font-size:max(20px,calc(20*var(--u)));line-height:1.5}
+
+/* the bottom row: the one quiet Send it (d2b), and Use this */
+.skill-screen[data-skill="messages"] .mc-bar{position:absolute;left:0;top:calc(var(--top) + 532*var(--u));width:calc(740*var(--u));height:calc(88*var(--u));display:flex;justify-content:center}
+.skill-screen[data-skill="messages"] .mc-quiet,.skill-screen[data-skill="messages"] .mc-use{flex:none;box-sizing:border-box;width:calc(300*var(--u));min-width:200px;height:100%;min-height:64px;padding:0 12px;
+  font:700 max(20px,calc(32*var(--u)))/1 "Segoe UI",system-ui,sans-serif;border-radius:26px;cursor:pointer;touch-action:manipulation}
+.skill-screen[data-skill="messages"] .mc-quiet{color:#1f1b16;background:transparent;border:4px solid #1f1b16}
+.skill-screen[data-skill="messages"] .mc-use{color:#fff;background:#0f5560;border:4px solid #0f5560;box-shadow:0 6px 0 rgba(43,31,23,.22)}
+
+/* the count: Undo is up from the first moment. Digits are stacked and only their opacity changes */
+.skill-screen[data-skill="messages"] .mc-going{position:absolute;left:0;top:calc(var(--top) + 318*var(--u));width:calc(740*var(--u));text-align:center;
+  font:600 max(20px,calc(32*var(--u)))/1.375 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.skill-screen[data-skill="messages"] .mc-going.ask{top:calc(var(--top) + 296*var(--u))}
+.skill-screen[data-skill="messages"] .mc-undo{position:absolute;left:0;top:calc(var(--top) + 382*var(--u));box-sizing:border-box;width:calc(740*var(--u));height:calc(184*var(--u));min-height:64px;
+  margin:0;padding:0;display:flex;align-items:center;justify-content:center;gap:calc(36*var(--u));font:700 max(20px,calc(56*var(--u)))/1 "Segoe UI",system-ui,sans-serif;
+  color:#fff;background:#0f5560;border:4px solid #0f5560;border-radius:26px;box-shadow:0 6px 0 rgba(43,31,23,.22);cursor:pointer;touch-action:manipulation}
+.skill-screen[data-skill="messages"] .mc-count{position:relative;display:block;width:calc(64*var(--u));height:calc(96*var(--u));font:700 max(20px,calc(96*var(--u)))/1 "Segoe UI",system-ui,sans-serif}
+.skill-screen[data-skill="messages"] .mc-d{position:absolute;left:0;top:0;width:100%;text-align:center;opacity:0;transition:opacity .12s linear}
+.skill-screen[data-skill="messages"] .mc-d.on{opacity:1}
+.skill-screen[data-skill="messages"] .mc-sentline{position:absolute;left:0;top:calc(var(--top) + 438*var(--u));width:calc(740*var(--u));text-align:center;
+  font:700 max(20px,calc(56*var(--u)))/1.286 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+@media (prefers-reduced-motion:reduce){.skill-screen[data-skill="messages"] .mc-d{transition:none}}
+.skill-screen[data-skill="messages"] .mc-undo:focus-visible,.skill-screen[data-skill="messages"] .mc-quiet:focus-visible,.skill-screen[data-skill="messages"] .mc-use:focus-visible,.skill-screen[data-skill="messages"] .mc-field:focus-visible{outline:4px solid #1f1b16;outline-offset:3px}
+
+/* the sent note beside the card (f); a message has no card, so its note sits under it (no board) */
+.skill-screen[data-skill="messages"] .mc-sentnote{position:absolute;left:calc(356*var(--u));top:calc(70*var(--u));width:calc(384*var(--u));color:#1f1b16}
+.skill-screen[data-skill="messages"] .mc-done{display:block;width:calc(110*var(--u));height:calc(110*var(--u))}
+.skill-screen[data-skill="messages"] .mc-sentname{margin-top:calc(22*var(--u));font:700 max(20px,calc(44*var(--u)))/1.27 "Segoe UI",system-ui,sans-serif;overflow-wrap:anywhere}
+.skill-screen[data-skill="messages"] .mc-senttime{margin-top:calc(10*var(--u));font:400 max(20px,calc(30*var(--u)))/1.33 "Segoe UI",system-ui,sans-serif}
+.skill-screen[data-skill="messages"] .mc-sentnote.under{left:calc(50*var(--u));top:calc(var(--top) + 318*var(--u));width:calc(640*var(--u));display:grid;grid-template-columns:auto 1fr;
+  column-gap:calc(24*var(--u));align-items:center}
+.skill-screen[data-skill="messages"] .mc-sentnote.under .mc-done{grid-row:1 / 3}
+.skill-screen[data-skill="messages"] .mc-sentnote.under .mc-sentname{margin:0}
+
+/* the plain message (g, g2): one saved picture. G2 is the same sheet cut to 280, so its words stay at full size */
+.skill-screen[data-skill="messages"] .mc-letter{position:absolute;left:calc(50*var(--u));top:calc(var(--top) + 42*var(--u));width:calc(640*var(--u));height:calc(440*var(--u));
+  box-shadow:0 1px 2px rgba(60,38,18,.34),3px 7px 14px rgba(60,38,18,.24),8px 18px 36px rgba(60,38,18,.24)}
+.skill-screen[data-skill="messages"] .mc-letter img{object-fit:contain}
+.skill-screen[data-skill="messages"] .mc-letter.tall{top:var(--top);height:calc(628*var(--u));box-shadow:none}
+.skill-screen[data-skill="messages"] .mc-letter.small{top:calc(var(--top) + 2*var(--u));height:calc(280*var(--u));box-shadow:0 1px 2px rgba(60,38,18,.34),3px 7px 14px rgba(60,38,18,.24),8px 18px 36px rgba(60,38,18,.24);overflow:hidden}
+.skill-screen[data-skill="messages"] .mc-letter.small img{object-fit:cover;object-position:50% 50%}
+
+/* the address: one box to type in, or the address very large to check by eye (no board) */
+.skill-screen[data-skill="messages"] .mc-field{position:absolute;left:0;top:calc(var(--top) + 372*var(--u));box-sizing:border-box;width:calc(740*var(--u));height:max(64px,calc(64*var(--u)));
+  margin:0;padding:0 calc(20*var(--u));font:400 max(28px,calc(28*var(--u)))/1.2 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fffdf8;border:4px solid #2b1f17;border-radius:14px}
+.skill-screen[data-skill="messages"] .mc-bigaddr{position:absolute;left:0;top:calc(var(--top) + 52*var(--u));box-sizing:border-box;width:calc(740*var(--u));min-height:calc(240*var(--u));
+  padding:calc(32*var(--u));display:flex;align-items:center;justify-content:center;text-align:center;overflow-wrap:anywhere;
+  font:700 max(28px,calc(56*var(--u)))/1.25 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fffdf8;border:3px solid #2b1f17;border-radius:26px}

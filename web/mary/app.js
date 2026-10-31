@@ -1098,6 +1098,39 @@
   function liveSpeaking() {
     try { return !!(window.MaryLive && window.MaryLive.isSpeaking()); } catch (e) { return false; }
   }
+  // M15c: the send count's hooks, for skills/messages/screen.js. In Normal the count holds the mic: a talk's own listen
+  // waits until it lets go, so the words it hears go to /api/mary/heard and never start a reply. Her line isn't touched.
+  function holdMic() {
+    S.micHeld = true;
+    if (S.phase === 'listening' && S.listenAbort) {
+      try { S.listenAbort(); } catch (e) { log(e); }
+      setPhase(restPhase());
+    }
+  }
+  function countListen() {
+    function back() { if (S.phase === 'listening' || S.phase === 'thinking') { setPhase(restPhase()); } }
+    return listenOnce().then(function (text) {
+      back();
+      return SILENCE_NOISE.test(text) ? '' : text;
+    }, function (e) { back(); throw e; });
+  }
+  function dropCountListen() { if (S.listenAbort) { try { S.listenAbort(); } catch (e) { log(e); } } }
+  function freeMic() {
+    if (!S.micHeld) { return; }
+    S.micHeld = false;
+    dropCountListen();
+    var after = S.micAfter;
+    S.micAfter = null;
+    if (after) { setTimeout(after, 0); }   // after her line starts: convoNext then waits for it to end
+  }
+  function hushLive() {
+    if (liveOn() && liveSpeaking()) { try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); } }
+  }
+  function heardEmergency(j) {   // the same as liveHeard when Live isn't open
+    newTurn();
+    if (S.screen !== 'emergency') { show('emergency'); }
+    return say((j && j.say) ? String(j.say) : MSG.emergency, 'alert');
+  }
   // M4a: the crisis numbers digit by digit for her voice; mary.py has the same list. Captions keep the digits.
   function spokenNumbers(text) {
     return fixNumbers(String(text)).replace(/\b988\b/g, 'nine, eight, eight').replace(/\b911\b/g, 'nine one one')
@@ -1687,6 +1720,11 @@
         say((j && j.say) ? String(j.say) : MSG.emergency, 'alert');
         return;
       }
+      if (j && j.send) {   // M15c: the send gate acted on these words; say() goes through her one voice
+        var acts = j.send.effects || [];
+        for (var ai = 0; ai < acts.length; ai++) { try { window.MarySkills.apply(acts[ai]); } catch (e) { log(e); } }
+        if (j.send.say) { say(String(j.send.say)); }
+      }
       if (S.convo !== c || !c.live) { return; }
       if ((j && j.garbled) || notEnglish(tail)) { return; }   // M4a: a garbled line is never a goodbye
       if (isGoodbye(tail)) { endConvo(c, 'bye'); }
@@ -1878,6 +1916,7 @@
     c.heardTrack = c.heardTrack || { text: '', mark: 0, at: 0 };
     t = String(t == null ? '' : t);
     var tail = heardTail(c.heardTrack, t, Date.now());
+    if (S.heardWatch) { try { S.heardWatch(tail); } catch (e) { log(e); } }   // M15c: the send count watches for a stop word
     if (notEnglish(t) || notEnglish(tail)) { return true; }
     var bye = !c.ending && S.screen !== 'emergency' && isGoodbye(tail);
     var st = c.story;
@@ -1981,6 +2020,7 @@
   // tapped: the resident asked (Talk tap, wake word), so it listens even on the emergency screen (M4a)
   function convoListen(c, tapped) {
     if (S.convo !== c || c.ending || c.live) { return; }
+    if (S.micHeld) { S.micAfter = function () { convoNext(c); }; return; }   // M15c: the send count has the mic
     if (S.screen === 'emergency' && !tapped) { c.paused = true; setPhase('idle'); updateTalkButton(); return; }
     c.paused = false;
     var my = newTurn();
@@ -2222,6 +2262,7 @@
 
     if (!caption.trim()) {
       if (d.emergency) { await say(MSG.emergency, 'alert'); return; }
+      if (!d.error && !d.mood) { return; }   // M15c: a quiet turn at the send gate: no words on purpose, and no sorry
       await replyFailed();
       return;
     }
@@ -3041,6 +3082,12 @@
     openTyping: openTyping,
     addThing: addThing,                      // M4b: skills.js lists a skill's screen in "Things Mary can do"
     busy: busy,                              // M7a: a skill's screen drops its line when this is true
+    isLive: liveOn,                          // M15c: the send count, here and in the hooks below
+    speaking: function () { return !!Sp.sess; },   // M15c
+    hushLive: hushLive,                      // M15c
+    heardEmergency: heardEmergency,          // M15c
+    watchHeard: function (fn) { S.heardWatch = fn || null; },   // M15c: gets each growing tail of Live's transcript
+    countMic: { hold: holdMic, listen: countListen, stop: function () { if (S.stopNow) { S.stopNow(); } }, drop: dropCountListen, free: freeMic },   // M15c
     screenNote: screenNote,                  // M7a: a silent note to Live about what changed on a screen
     openMenu: openMenu,                      // M4b
     closeMenu: closeMenu,                    // M4b

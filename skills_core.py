@@ -25,6 +25,8 @@ from datetime import datetime
 from pathlib import Path
 
 import mail_core  # M15d: only for its plain words; skills may not import it
+import memory_core  # M15c: what counts as "everything"; memory_core never imports this file
+import send_gate  # M15c: the hard-wired yes; skills may not import it
 
 SUPPORTED_CONTRACTS = {1}
 
@@ -55,9 +57,11 @@ CORE_EFFECT_KINDS = {"show_screen", "leave_screen", "settings"}
 FORBIDDEN_IMPORTS = {"server", "sqlite3", "mary", "assist", "subprocess", "ctypes", "multiprocessing", "importlib",
                      "urllib", "http", "requests", "httpx", "aiohttp", "socket", "ssl", "ftplib", "smtplib",
                      "websocket", "websockets", "skills_core",
-                     "mail_core", "secret_store", "sys", "builtins", "gc", "inspect"}  # M15d
+                     "mail_core", "secret_store", "sys", "builtins", "gc", "inspect",  # M15d
+                     "send_gate"}  # M15c: it holds mail_core, and a skill must not reach that through it
 FORBIDDEN_NAMES = {"open", "exec", "eval", "__import__", "__builtins__",
-                   "mint_ticket", "vars", "__dict__", "__self__", "__globals__", "__getattribute__"}  # M15d: from these on
+                   "mint_ticket", "vars", "__dict__", "__self__", "__globals__", "__getattribute__",  # M15d: from these on
+                   "_host", "gate", "from_page"}  # M15c: a skill can't move a send, or say a move came from the page
 
 TITLE_MAX = 40
 SUMMARY_MAX = 200
@@ -82,6 +86,7 @@ FETCH_AGENT = "CareIncidentLog-Mary/1"
 
 SAY_NOT_WORKING = "That's not working right now."
 SAY_NEEDS_INTERNET = "I need the internet for that."
+GATE_SKIPS_BRAIN = {"count", "stopped", "quiet", "say_line", "tap"}  # M15c: the send gate's turns, which Gemini stays out of
 SAY_LOCKED = "The person who set up your laptop chose that."
 
 INSTRUCTIONS_HEAD = "Things you can do, in groups (never mention tools or groups):"  # M13b
@@ -618,9 +623,20 @@ class SkillFiles:
         return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
 
 
+def _card_gate(host, skill):  # M15c
+    """The core's send gate for a card with needs.send_mail, else None. Out here so no ctx attribute hands a skill the gate."""
+    return host.gate if skill.manifest.get("needs", {}).get("send_mail") else None
+
+
+def _page_gate(ctx):  # M15c
+    """The same, only for a move on the page, and only while the look is this skill's."""
+    gate = _card_gate(ctx._host, ctx._skill)
+    return gate if gate is not None and ctx.from_page and gate.skill == ctx.name else None
+
+
 class SkillContext:
     """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch(), look() (M4a),
-    send_mail() (M15d), asset() and font() (M15b)."""
+    send_mail() (M15d), asset() and font() (M15b), and the send gate's arm_send() and the rest (M15c)."""
 
     def __init__(self, host, skill):
         self._host = host
@@ -631,6 +647,7 @@ class SkillContext:
         self.files = SkillFiles(Path(host.data_dir) / "skills" / skill.name)
         self.effects = []
         self.heard = ""  # M7a: the resident's offline line, when offline mode made this call
+        self.from_page = False  # M15c: True only inside SkillHost.on_event
 
     def effect(self, kind, data=None):
         """Asks the page to do something: show_screen / leave_screen (its own screen) or one of its own kinds."""
@@ -701,6 +718,81 @@ class SkillContext:
         Returns {"ok": True} or {"ok": False, "code": ..., "message": ...}, and never raises."""
         return self._host._send_mail(self._skill, ticket, to, subject, body, pictures)
 
+    # ----- the hard-wired yes (M15c): all of it needs needs.send_mail on the card -----
+
+    def arm_send(self, person, to, subject, body, pictures=()):
+        """Holds this exact content for the resident's yes. Any tool call may do this, and it shows the look, no more.
+        {"ok": True, "look": id}, or {"ok": False, "reason": ...}: money, password, ssn, too_big, bad_message or no_email.
+        Never raises. An arm that's refused leaves no look."""
+        gate = _card_gate(self._host, self._skill)
+        if gate is None:
+            return {"ok": False, "reason": "no_email"}
+        try:
+            return {"ok": True, "look": gate.arm(self.name, person, to, subject, body, pictures)}
+        except send_gate.GateRefused as err:
+            return {"ok": False, "reason": err.reason}
+        except Exception:  # noqa: BLE001 (a look that can't be held is a bad message, never the skill's crash)
+            return {"ok": False, "reason": "bad_message"}
+
+    def disarm_send(self):
+        """The content changed or the screen left. No look."""
+        gate = _card_gate(self._host, self._skill)
+        if gate is not None:
+            gate.disarm(self.name)
+
+    def send_state(self):
+        """{"state", "line_said", "tap_open", "look", "line"}: none, look, counting or sending, and never an address."""
+        gate = _card_gate(self._host, self._skill)
+        return gate.state(self.name) if gate is not None else dict(send_gate.NO_LOOK)
+
+    def mail_ready(self):
+        """True when her email is connected. With no gate, email isn't set up."""
+        check = self._host.mail_ready
+        if _card_gate(self._host, self._skill) is None or check is None:
+            return False
+        try:
+            return bool(check())
+        except Exception:  # noqa: BLE001 (a check that fails counts as not ready)
+            return False
+
+    def asks_for(self, text):
+        """"money", "password", "ssn" or None, by the same words the gate refuses."""
+        return send_gate.asks_for(text)
+
+    def send_shown(self, look):
+        """Page only: the page really drew this look."""
+        gate = _page_gate(self)
+        return gate.shown(look) if gate is not None else False
+
+    def send_tap(self):
+        """Page only: their tap on the quiet Send it. True when the count started."""
+        gate = _page_gate(self)
+        return gate.tap() if gate is not None else False
+
+    def send_undo(self):
+        """Page only: their tap on Undo. True when a count stopped."""
+        gate = _page_gate(self)
+        return gate.undo() if gate is not None else False
+
+    def send_now(self, look):
+        """Page only, at the end of the count. The gate hands over the frozen content once, the ticket is minted here for
+        this one try, and send_mail goes last, so the skill never holds a ticket. Returns send_mail's result, or None when
+        the gate said no."""
+        gate = _page_gate(self)
+        if gate is None:
+            return None
+        content = gate.take(self.name, look)
+        if content is None:
+            return None
+        try:
+            ticket = gate.mailer.mint_ticket(self.name, content["to"], content["subject"], content["body"],
+                                             content["pictures"])
+            return self.send_mail(ticket, content["to"], content["subject"], content["body"], content["pictures"])
+        except Exception:  # noqa: BLE001 (nothing went: send_mail itself never raises)
+            return {"ok": False, "code": "refused", "message": mail_core.MESSAGES["refused"]}
+        finally:
+            gate.finish(look)
+
     def look(self, image_bytes, mime, question):  # M4a
         """Asks what a picture shows, through the host, so a skill never holds the key. Text, or "" when the card has no
         "vision": true, the host has no vision, or anything went wrong."""
@@ -748,6 +840,14 @@ class Skill:
 
 # ---------- the host ----------
 
+class ForgetReach:  # M15c
+    """What memory_core.FORGET_REACH holds: a forget's way to the skills, from a SkillHost."""
+
+    def __init__(self, host):
+        self.count = host.forget_count
+        self.forget = host.forget_reach
+
+
 class SkillHost:
     """Loads the skills in skills_dir and runs them. Backends come from the caller, so tests need no server:
     connect() -> sqlite3 connection, get_settings() -> {str: str}, put_settings({str: str}), online() -> bool.
@@ -771,6 +871,8 @@ class SkillHost:
         self._fetcher = fetcher
         self.vision = None  # M4a: set by the app: vision(image_bytes, mime, question) -> text or ""
         self.mailer = None  # M15d: set by the app: mailer(skill_name, ticket, to, subject, body, pictures) -> result
+        self.gate = None  # M15c: set by the app: the send_gate.SendGate. With none, email isn't set up
+        self.mail_ready = None  # M15c: set by the app: mail_ready() -> True when her email is connected
         self.recall = None  # M7a: set by the app: recall(words, limit=6) -> list of fact texts
         self.opened = None  # M13b: the group she opened last (memory only)
         self.aside = None  # M13b: the skill the page has set aside (memory only)
@@ -1252,6 +1354,7 @@ class SkillHost:
         if not ok:
             return self._result({"error": "bad_input", "detail": "event must be a small object"})
         ctx = self.context(name)
+        ctx.from_page = True  # M15c: the one place this is set
         result = self._finish(skill, "on_event", ctx, self._guard(skill, "on_event", lambda: handler(ctx, event)))  # M13b
         self._track(skill, result)  # M13b
         return result
@@ -1313,6 +1416,109 @@ class SkillHost:
                 result = {"ok": False, "code": "refused", "message": mail_core.MESSAGES["refused"]}
         self._log("mail", skill=skill.name, ok=result["ok"], code=result.get("code", ""))
         return result
+
+    # ----- the send gate (M15c) -----
+
+    def resident_said(self, text, garbled=False):
+        """The resident's finished words at the gate. None when it has nothing to do with them, else {"action", "say",
+        "effects", "skip_brain"}, after the skill's optional on_gate(ctx, action) in the guard. A failure in the gate or
+        the skill acts as if there were no gate: nothing sends, she answers normally. Never raises."""
+        gate = self.gate
+        if gate is None:
+            return None
+        try:
+            heard = gate.heard(text, garbled=garbled)
+            action = heard.get("action")
+            if not action:
+                return None
+            name = gate.skill
+            skill = self.skills.get(name)
+            if skill is None or skill.tripped or not self.enabled(name):
+                gate.disarm(name)  # nothing can finish this send
+                return None
+            say, effects = heard.get("line"), []
+            handler = getattr(skill.module, "on_gate", None)
+            if callable(handler):
+                ctx = self.context(name)
+                result = self._finish(skill, "on_gate", ctx, self._guard(skill, "on_gate", lambda: handler(ctx, action)))
+                self._track(skill, result)
+                if result["response"].get("error") == "not_working":
+                    gate.undo()
+                    return None
+                say, effects = result["say"] or say, result["effects"]
+            return {"action": action, "say": say, "effects": effects, "skip_brain": action in GATE_SKIPS_BRAIN}
+        except Exception as err:  # noqa: BLE001
+            self._log("gate_failed", error=type(err).__name__)
+            try:
+                gate.undo()
+            except Exception:  # noqa: BLE001
+                pass
+            return None
+
+    def her_words(self, text):
+        """Her finished turn, so the gate knows the line really went out. Never raises."""
+        try:
+            if self.gate is not None:
+                self.gate.her_words(text)
+        except Exception as err:  # noqa: BLE001
+            self._log("gate_failed", error=type(err).__name__)
+
+    def send_emergency(self):
+        """An emergency stops a count. It runs no skill code, so it can't delay the emergency line. Never raises."""
+        try:
+            if self.gate is not None:
+                self.gate.emergency()
+        except Exception as err:  # noqa: BLE001
+            self._log("gate_failed", error=type(err).__name__)
+
+    def _optional(self, skill, what, *args):
+        """A skill's optional module function, in the guard: its value, or None when it has none or it failed."""
+        handler = getattr(skill.module, what, None)
+        if not callable(handler):
+            return None
+        ctx = self.context(skill.name)
+        out = self._guard(skill, what, lambda: handler(ctx, *args))
+        return None if out is _FAILED else out
+
+    def forget_count(self, about):
+        """How many contacts match about, across each skill's optional forget_matches(ctx, about)."""
+        counts = [self._optional(skill, "forget_matches", about) for skill in list(self.skills.values())]
+        return sum(count for count in counts if type(count) is int and count > 0)
+
+    def forget_reach(self, about, own_name=False):
+        """A real forget reaches what skills hold, on or off, through each one's optional on_forget(ctx, about, own_name),
+        which returns {"addresses": [...], "texts": [...]}. "Everything" comes through as that one word and clears every
+        address from mail.log. A skill that removed something loses its look. Returns the addresses and texts, in one list."""
+        everything = memory_core.is_everything(about)
+        about = "everything" if everything else about
+        addresses, texts = [], []
+        removed = []
+        for skill in list(self.skills.values()):
+            out = self._optional(skill, "on_forget", about, own_name)
+            if isinstance(out, dict):
+                mail = [text for text in out.get("addresses") or [] if isinstance(text, str) and text]
+                words = [text for text in out.get("texts") or [] if isinstance(text, str) and text]
+                addresses += mail
+                texts += words
+                if mail or words:
+                    removed.append(skill.name)
+        self._gate_forgets(removed, None if everything else addresses, everything)
+        return addresses + texts
+
+    def _gate_forgets(self, removed, addresses, everything):
+        gate = self.gate
+        if gate is None:
+            return
+        try:
+            for name in removed:
+                gate.disarm(name)
+            if everything:
+                gate.disarm(gate.skill)
+            scrub = getattr(gate.mailer, "scrub_log", None)
+            if callable(scrub) and (everything or addresses):
+                scrub(addresses)
+        except Exception as err:  # noqa: BLE001 (her memories are already gone; this can't undo that)
+            self._log("gate_failed", error=type(err).__name__)
 
     # ----- the internet -----
 

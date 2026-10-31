@@ -275,21 +275,22 @@ class FailureTest(MailTestCase):
         self.assertLess(ORIG_DEADLINE, skills_core.GUARD_SLOW_TIMEOUT)
         self.assertLess(mail_core.SEND_DEADLINE, skills_core.GUARD_SLOW_TIMEOUT)
 
-    def _stall(self, mode, pictures=()):
+    def _stall(self, mode, pictures=(), code="offline"):  # M15c: code
         with mock.patch.object(mail_core, "SMTP_TIMEOUT", 0.5), mock.patch.object(mail_core, "SEND_DEADLINE", 1.2):
             made = self.mailer(self.fake(mode))
             started = time.monotonic()
             out = self.send(made, pictures=pictures)
             took = time.monotonic() - started
-        self.assertEqual(out.get("code"), "offline", out)
+        self.assertEqual(out.get("code"), code, out)
         self.assertLess(took, 1.2 + 2.0, took)
 
     def test_stalled_reads(self):
-        for mode in ("stall_greeting", "stall_auth", "stall_final"):
+        for mode in ("stall_greeting", "stall_auth"):
             self._stall(mode)
+        self._stall("stall_final", code="unsure")  # M15c: the message had gone up, so nobody can say
 
     def test_stalled_write(self):
-        self._stall("stall_body", [{"name": "x", "data": PNG + b"z" * 14_000_000}])
+        self._stall("stall_body", [{"name": "x", "data": PNG + b"z" * 14_000_000}], code="unsure")  # M15c
 
 
 class TicketTest(MailTestCase):
@@ -471,8 +472,10 @@ class RepoRulesTest(unittest.TestCase):
                 continue
             for number, line in enumerate(text.splitlines(), 1):
                 if "mint_ticket(" in line and not (path.name == "mail_core.py" and line.strip().startswith("def mint_ticket(")):
-                    found.append(f"{path.relative_to(root)}:{number}")
-        self.assertEqual(found, [])
+                    found.append(f"{path.relative_to(root)}: {line.strip()}")
+        # M15c: one caller, SkillContext.send_now, which reaches it only through the core's gate
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith("skills_core.py: ticket = gate.mailer.mint_ticket("), found)
 
     def test_shipped_skills_that_send_mail_are_slow(self):
         folders = [p for p in (helpers.ROOT / "skills").iterdir() if (p / "manifest.json").exists()]

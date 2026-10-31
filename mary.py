@@ -695,6 +695,12 @@ def _forget_asked(about):  # M9c
     return {"about": about, "at": datetime.now().isoformat(timespec="seconds")}
 
 
+def _forget_count(store, about):  # M15c
+    """How much a forget would take: her memories, plus a skill's saved people through the store's reach."""
+    others = getattr(store, "others", None)
+    return len(store.matching(about)) + (others(about) if callable(others) else 0)
+
+
 def forget_everything(memory, about):  # M9c
     """Really deletes everything about it, then what her talk history holds of it. Returns the texts removed."""
     gone = memory.store.forget(about)
@@ -758,7 +764,7 @@ def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall, forget
                 if args.get("confirmed") is True and waiting and memory_core.same_about(waiting["about"], about):
                     gone = forget_everything(memory, about)
                 else:
-                    count = len(memory.store.matching(about))
+                    count = _forget_count(memory.store, about)  # M15c
                     memory.pending_forget = _forget_asked(about) if count else None
             elif not offer_waiting:
                 gone = memory.store.forget("")
@@ -806,7 +812,7 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
             return ""
         about = hit.group(1)
         if about:  # the same one-line question as with Gemini; reply takes the yes
-            if not memory.store.matching(about):
+            if not _forget_count(memory.store, about):  # M15c
                 return NOTHING_TO_FORGET_TEXT
             memory.pending_forget = _forget_asked(about)
             return FORGET_ASK_TEXT.format(about)
@@ -1496,6 +1502,18 @@ def see_image(image_bytes, mime, question, api_key, model=""):
 # --- end M4a ---
 
 
+def _gate_call(skills, name, *args):  # M15c
+    """One call to the host's send gate. Old fakes lack these, and a gate failure must never break talk: it acts as if
+    there were no gate, so nothing sends and she answers normally."""
+    method = getattr(skills, name, None)
+    if not callable(method):
+        return None
+    try:
+        return method(*args)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
           skills=None, screen=None, on_effect=None, typed=False):
     """Mary's answer to what the resident said.
@@ -1517,6 +1535,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     without calling Gemini; anything else drops it, so a later "yes" to something else can't delete. An emergency comes
     first, and a note offer's yes goes first; either way it waits. A turn that truly forgot goes in neither talk history
     nor a note offer.
+    The send gate (M15c) hears the words right after the emergency check. When it takes the turn, Gemini, offers and
+    forgets stay out, and the turn is still saved to history, so her brain knows.
     """
     start = time.monotonic()
     spoken = ""
@@ -1579,9 +1599,15 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     if not (isinstance(prior, dict) and isinstance(prior.get("incident"), dict) and _offer_fresh(prior)):
         prior = None
     kind = is_emergency(text)
-    said_yes = bool(prior) and is_yes(text)
+    gated = None  # M15c: the send gate's answer when it takes this turn. The emergency check stays first
+    if kind:
+        _gate_call(skills, "send_emergency")
+    else:
+        gated = _gate_call(skills, "resident_said", text)
+        gated = gated if isinstance(gated, dict) and gated.get("skip_brain") else None
+    said_yes = bool(prior) and is_yes(text) and not gated
     waiting = _forget_waiting(memory.pending_forget) if store is not None else None  # M9c
-    forget_yes = bool(waiting) and not kind and not said_yes and _forget_yes(text)
+    forget_yes = bool(waiting) and not kind and not said_yes and not gated and _forget_yes(text)
     if waiting and not kind and is_decline(text):
         memory.pending_forget = None
     safety_line = ""
@@ -1594,7 +1620,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     confirmed = said_yes and not kind and write is not None
     logged = None
     offer = None
-    if confirmed or forget_yes or (kind and said_yes):  # M9c: forget_yes
+    if confirmed or forget_yes or gated or (kind and said_yes):  # M9c: forget_yes  # M15c: gated
         pass
     elif is_decline(text):
         memory.pending_offer = None
@@ -1607,7 +1633,13 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     error = ""
     remembered = []
     name_dropped = False  # M9c: forget_name ran, so a [name:] in the same reply is ignored
-    if confirmed:
+    if gated:  # M15c: no Gemini. A quiet turn says nothing at all
+        for effect in gated.get("effects") or []:
+            add_effect(effect)
+        if gated.get("say"):
+            set_mood("talking")
+            emit(gated["say"])
+    elif confirmed:
         try:
             new_id = write(prior["incident"])
         except Exception:
@@ -1708,7 +1740,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             note_went_out(memory, body)
 
     # --- skills hook (M13) --- no Gemini (no key, or it failed): an offline phrase can still run a skill
-    if (skills is not None and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
+    if (skills is not None and not gated and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
             and not (prior and (said_yes or is_decline(text)))):
         hit = skills.offline_match(text, is_blocked=skill_blocked)
         if hit:
@@ -1723,7 +1755,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     # --- end skills hook ---
 
     # M9c: no Gemini: a few exact phrases still reach her memory
-    if (store is not None and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
+    if (store is not None and not gated and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
             and not (prior and (said_yes or is_decline(text)))):
         line = offline_memory(memory, text, offer_waiting=bool(prior))
         if line:
@@ -1733,23 +1765,25 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             if not api_key:
                 error = NO_KEY
 
-    if not spoken.strip() and not kind:
+    if not spoken.strip() and not kind and not gated:  # M15c: gated
         gemini_alert = False  # a bare "alert" tag with no words is not something to act on
         set_mood("sorry")
         emit(BAD_KEY_TEXT if error == BAD_KEY else OFFLINE_TEXT)
         if not api_key:
             error = NO_KEY
-    elif mood is None:
+    elif mood is None and not gated:  # M15c: gated
         set_mood("talking")
     if memory.scrubbed:  # M9c: no note offer keeps the words of a turn that truly forgot
         offer = memory.pending_offer = None
-    elif not (offer or said_yes or kind == "self_harm" or is_decline(text)) and _asks_to_write(spoken):
+    elif not (offer or said_yes or gated or kind == "self_harm" or is_decline(text)) and _asks_to_write(spoken):  # M15c: gated
         # Gemini offered on her own for something the word list missed: a "yes" must still save it.
         offer = memory.pending_offer = _offer(_guess(text))
     if offer and not _ASKS.search(spoken):
         emit(offer["question"], sep=True)
 
     final = spoken.strip()
+    if final:  # M15c: the gate needs to know the line really went out
+        _gate_call(skills, "her_words", final)
     if waiting and memory.pending_forget is waiting and not (kind or said_yes or forget_yes):  # M9c
         memory.pending_forget = None  # her question went unanswered, so a later "yes" can't be taken for it
     if not kind:  # M15a: here, so it runs with no key and when Gemini failed; an emergency line teaches nothing

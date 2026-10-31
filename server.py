@@ -30,6 +30,7 @@ import mary
 import memory_core  # M9c
 import power
 import secret_store  # M15d: the Gemini key, out of the log and its backups
+import send_gate  # M15c: the hard-wired yes
 import skills_core  # --- skills hook (M13) ---
 import speedcheck  # M8: first-run laptop speed check
 import voices
@@ -690,8 +691,11 @@ def skill_host():
             host = skills_core.SkillHost(SKILLS_DIR, DATA, connect, _all_settings, _put_settings, online=lambda: True)
             host.vision = mary_see_image  # M4a: skills look through the host and never hold the key
             host.mailer = MAIL.send_for_skill  # M15d: skills send through the host and never see the password
+            host.gate = send_gate.SendGate(MAIL)  # M15c: only the gate holds what can mint a ticket; skills never reach it
+            host.mail_ready = lambda: MAIL.status()["connected"]  # M15c
             host.recall = lambda words, limit=6: [m["text"] for m in memory_core.MemoryStore(connect).recall(words, limit=limit)]  # M7a
             host.load(is_blocked=mary.skill_blocked)
+            memory_core.FORGET_REACH = skills_core.ForgetReach(host)  # M15c: "forget Mark" reaches his contact too
             _skill_host = host
         return _skill_host
 
@@ -701,6 +705,28 @@ def set_skill_host_for_tests(host):
     global _skill_host
     with _skill_host_lock:
         _skill_host = host
+
+
+def gate_heard(text, kind):  # M15c
+    """Live's words at the send gate, after the emergency check: {"send": {...}} for /api/mary/heard's answer, or {}. A
+    gate failure acts as no gate. An emergency never waits for a load: with no host yet, there's no look to stop."""
+    try:
+        if kind:
+            if _skill_host is not None:
+                _skill_host.send_emergency()
+            return {}
+        out = skill_host().resident_said(text, garbled=mary.not_english(text))
+    except Exception:  # noqa: BLE001
+        return {}
+    return {"send": {key: out.get(key) for key in ("say", "effects", "action")}} if out else {}
+
+
+def gate_her_words(text):  # M15c
+    """Her finished Live turn at the send gate. A gate failure acts as no gate."""
+    try:
+        skill_host().her_words(text)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def mary_live_skill_setup(screen=None):
@@ -1387,8 +1413,9 @@ class Handler(SimpleHTTPRequestHandler):
             text = str(self._body().get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
             say = ""
+            send = gate_heard(text, kind)  # M15c: a garbled line still reaches the gate, as a miss
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
-                return self._send({"emergency": False, "kind": "", "say": "", "garbled": True})
+                return self._send({"emergency": False, "kind": "", "say": "", "garbled": True, **send})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
                 with _mary_lock:  # as in Normal talk: the emergency cancels a waiting offer and is remembered
                     memory = mary_memory()
@@ -1406,12 +1433,14 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "say": say})
+            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send})
         if method == "POST" and path == "/api/mary/open":  # M4a: her hello, from the brain
             return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
             text = " ".join(str(self._body().get("text") or "").split())[:2000]
             text = mary.fix_numbers(text)  # M4d: what's remembered has the number right, whatever her voice said
+            if text:  # M15c: the page's rememberSaid lands here too, so this covers all of her Live words
+                gate_her_words(text)
             quiet = _live_forgot_at is not None and time.monotonic() - _live_forgot_at < LIVE_FORGOT_QUIET_S  # M9c
             if text and not quiet and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
                 with _mary_lock:

@@ -425,8 +425,9 @@ class FrontTests(Base):
 class SendTests(Base):
     """Section 5: "send it" never sends, never touches the card, and offers to print."""
 
-    def test_manifest_asks_for_no_mail(self):
-        self.assertNotIn("send_mail", json.dumps(MANIFEST))
+    def test_the_skill_never_calls_send_mail(self):
+        self.assertIs(MANIFEST["needs"]["send_mail"], True)  # M15c: on the card now, and it needs the slow guard
+        self.assertIs(MANIFEST["slow"], True)
         self.assertEqual(MANIFEST["needs"]["internet_hosts"], [])
         self.assertNotIn("send_mail(", (SKILLS / "messages" / "skill.py").read_text(encoding="utf-8"))
 

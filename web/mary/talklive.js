@@ -386,6 +386,7 @@
       fireHeard(s);
       emit(s, 'onTurnComplete');
       if (!s.sources.length) emit(s, 'onAudioDone');   // M4b: her sound had already finished
+      if (s.pendingNote) { var held = s.pendingNote; s.pendingNote = ''; sendNote(s, held); }   // M7a: the note held while she spoke
     }
   }
 
@@ -514,6 +515,7 @@
       muteTimer: 0,
       goAway: false,
       turnOpen: false,
+      pendingNote: '',   // M7a: newest silent note held while she speaks
       newTurn: true,
       turnEndedAt: 0,
       caption: '',
@@ -585,6 +587,7 @@
       if (said) emit(s, 'onHeardDone', said);
     }
     s.ended = true;
+    s.pendingNote = '';   // M7a
     if (S === s) S = null;
     clearTimeout(s.connectTimer);
     clearTimeout(s.heardTimer);
@@ -771,6 +774,31 @@
     }
   }
 
+  // M7a: a silent note about what changed on a screen. turnComplete is false, so it goes in the talk and she doesn't
+  // answer it. Unlike greet it leaves the mute alone: nothing here is meant to be heard. false if the line is not open.
+  // While she is speaking (turnOpen) a note would cut her off, so only the newest one is held and sent at turnComplete.
+  function note(text) {
+    var s = S;
+    if (!s || !s.ready || s.ended || !s.ws || s.ws.readyState !== 1 || !text) return false;
+    if (s.turnOpen) { s.pendingNote = String(text); return true; }   // M7a
+    return sendNote(s, text);
+  }
+
+  function sendNote(s, text) {
+    if (!s || s.ended || !s.ws || s.ws.readyState !== 1) return false;
+    try {
+      s.ws.send(JSON.stringify({clientContent: {turns: [{role: 'user', parts: [{text: String(text)}]}], turnComplete: false}}));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // M7a: true while the resident's words are coming in.
+  function isHearing() {
+    return !!(S && !S.ended && S.heardState === 'open');
+  }
+
   function stop(reason) {
     if (!S) return;
     S.stopReason = String(reason || '');
@@ -811,6 +839,8 @@
     supported: supported,
     start: start,
     greet: greet,
+    note: note,                // M7a
+    isHearing: isHearing,      // M7a
     stop: stop,
     stopSpeaking: stopSpeaking,
     isOpen: isOpen,

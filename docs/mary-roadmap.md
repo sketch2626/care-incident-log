@@ -178,6 +178,7 @@ Andy tried Mary as user #1 on 2026-10-28. This is the plan for everything he fou
 - Mock-up boards first, then the build.
 - **Word search (M7a): boards approved by Andy 2026-10-31.** Size is the resident's choice (Andy: "let's just leave it up to the patient… Mary needs to be able to change the size on the fly"): three sizes, offered once when the game comes up, changed by voice anytime, and remembered.
 - **One thing beside her at a time (Andy, 2026-10-31):** a picture asked for during a game sets the game aside, kept exactly as it was, and shows the picture; "back to the puzzle" brings the game back. No overlays, and no shrinking Mary into a corner. Built in M13b with the tool groups (Andy: "we can give Mary 100 tools… and it never get in the way").
+- **Progress (second account, branch `other/M7a`, 2026-10-31):** the skill `skills/word_search/` is built and tested, with the three sizes (saved in setting `word_search_size`), merged 2026-10-31. Opus wrote the generator, skill and screen; Sonnet the word lists and tests. Not yet seen in a real window.
 
 ### M8. Fit and speed
 - **Two kinds of laptops (Andy, 2026-10-30):** many residents get new donated Lenovos like Andy's (Ryzen 5 7520U), and some get refurbished ones. Idea: a quick speed check on first run (Kokoro, Whisper, the wake word) that picks lighter settings by itself on a slow machine, so nobody has to tune it by hand.

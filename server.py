@@ -613,6 +613,7 @@ def skill_host():
         if _skill_host is None:
             host = skills_core.SkillHost(SKILLS_DIR, DATA, connect, _all_settings, _put_settings, online=lambda: True)
             host.vision = mary_see_image  # M4a: skills look through the host and never hold the key
+            host.recall = lambda words, limit=6: [m["text"] for m in memory_core.MemoryStore(connect).recall(words, limit=limit)]  # M7a
             host.load(is_blocked=mary.skill_blocked)
             _skill_host = host
         return _skill_host

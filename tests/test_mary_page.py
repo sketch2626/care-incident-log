@@ -27,14 +27,15 @@ class MaryPageTests(unittest.TestCase):
         # M4b: the one Menu button (round 6 boards); Talk is a menu row, and there is no big Talk button any more
         for needle in ('id="menuBtn"', 'id="menu"', 'id="miTalk"', 'id="miCan"', 'id="miInfo"', 'id="miChoose"',
                        'id="miGames"', 'id="closeBtn"', 'id="canPanel"', 'id="infoPanel"', 'id="choosePanel"',
-                       'id="capLive"', 'id="lightBtn"', 'id="okBtn"', 'id="infoBtn"', 'id="typing"'):
+                       'id="capLive"', 'id="gamesPanel"', 'id="lightBtn"', 'id="okBtn"', 'id="infoBtn"', 'id="typing"'):
             self.assertIn(needle, html)
         for gone in ('id="talkBtn"', 'id="moreBtn"', 'data-act="slower"', 'data-act="louder"'):
             self.assertNotIn(gone, html)
         self.assertIn('role="menu"', html)
         self.assertEqual(html.count('role="menuitem"'), 6)
-        self.assertIn('aria-disabled="true" data-act="games"', html)
-        self.assertEqual(html.count('role="dialog"'), 3)
+        self.assertIn('data-act="games"', html)
+        self.assertNotIn('aria-disabled="true" data-act="games"', html)
+        self.assertEqual(html.count('role="dialog"'), 4)
 
     def test_app_script_and_style_load(self):
         js, _ = self.get("/mary/app.js")

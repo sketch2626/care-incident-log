@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Word search, finished</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="r6.css">
+<link rel="stylesheet" href="r7.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&amp;family=Fredoka:wght@600&amp;family=Nunito:wght@900&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div class="scr mary">
+<div class="edge"></div>
+<div class="ws-fit"><div class="ws-aside">
+<svg class="facesvg" viewBox="0 0 640 400" role="img" aria-label="Mary, smiling and glancing at the puzzle">
+<defs><radialGradient id="bl"><stop offset="0" stop-color="#f48fa6" stop-opacity="0.75"></stop><stop offset="1" stop-color="#f48fa6" stop-opacity="0"></stop></radialGradient></defs>
+<g class="sway"><g class="face">
+<g fill="none" stroke="#6b4a32" stroke-width="5" stroke-linecap="round"><path d="M228 138 C232 116 266 108 284 122"></path><path d="M412 138 C408 116 374 108 356 122"></path></g>
+<ellipse class="cheek" cx="246" cy="234" rx="36" ry="15" fill="url(#bl)"></ellipse><ellipse class="cheek" cx="394" cy="234" rx="36" ry="15" fill="url(#bl)"></ellipse>
+<g transform="translate(10 4)">
+<g class="eye ss"><ellipse cx="256" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="264" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M248 187 Q249 192 254 193 Q249 194 248 199 Q247 194 242 193 Q247 192 248 187 Z" fill="#ffffff"></path></g>
+<g class="eye ss"><ellipse cx="384" cy="182" rx="25" ry="33" fill="#3a2b22"></ellipse><circle cx="392" cy="170" r="8" fill="#ffffff"></circle><path class="spark" d="M376 187 Q377 192 382 193 Q377 194 376 199 Q375 194 370 193 Q375 192 376 187 Z" fill="#ffffff"></path></g>
+</g>
+<path d="M300 260 Q320 280 340 260" fill="none" stroke="#8a3b2e" stroke-width="7" stroke-linecap="round"></path>
+</g></g>
+</svg>
+</div></div>
+<button class="menu-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>Menu</button>
+<h1 class="ws-title"><span>Fishing</span><span>That's all of them.</span></h1>
+<div class="ws-grid" role="img" aria-label="Word search puzzle, 10 letters by 10">
+<span class="ws-mark v ws-row4 ws-col6 ws-n4"></span>
+<span class="ws-mark h ws-row1 ws-col3 ws-n5"></span>
+<span class="ws-mark v ws-row0 ws-col1 ws-n7"></span>
+<span class="ws-mark v ws-row2 ws-col9 ws-n6"></span>
+<span class="ws-mark h ws-row0 ws-col4 ws-n6"></span>
+<span class="ws-mark h ws-row2 ws-col3 ws-n5"></span>
+<span class="ws-mark h ws-row9 ws-col0 ws-n4"></span>
+<span class="ws-mark v ws-row1 ws-col8 ws-n4"></span>
+<span class="ws-mark v ws-row4 ws-col3 ws-n4"></span>
+<span class="ws-mark h ws-row8 ws-col1 ws-n3"></span>
+<span class="ws-c">P</span><span class="ws-c on">C</span><span class="ws-c">Y</span><span class="ws-c">W</span><span class="ws-c on">T</span><span class="ws-c on">A</span><span class="ws-c on">C</span><span class="ws-c on">K</span><span class="ws-c on">L</span><span class="ws-c on">E</span>
+<span class="ws-c">C</span><span class="ws-c on">A</span><span class="ws-c">B</span><span class="ws-c on">T</span><span class="ws-c on">R</span><span class="ws-c on">O</span><span class="ws-c on">U</span><span class="ws-c on">T</span><span class="ws-c on">D</span><span class="ws-c">Y</span>
+<span class="ws-c">K</span><span class="ws-c on">T</span><span class="ws-c">W</span><span class="ws-c on">C</span><span class="ws-c on">R</span><span class="ws-c on">E</span><span class="ws-c on">E</span><span class="ws-c on">L</span><span class="ws-c on">O</span><span class="ws-c on">B</span>
+<span class="ws-c">T</span><span class="ws-c on">F</span><span class="ws-c">W</span><span class="ws-c">O</span><span class="ws-c">J</span><span class="ws-c">Y</span><span class="ws-c">M</span><span class="ws-c">W</span><span class="ws-c on">C</span><span class="ws-c on">O</span>
+<span class="ws-c">L</span><span class="ws-c on">I</span><span class="ws-c">A</span><span class="ws-c on">L</span><span class="ws-c">O</span><span class="ws-c">L</span><span class="ws-c on">B</span><span class="ws-c">F</span><span class="ws-c on">K</span><span class="ws-c on">B</span>
+<span class="ws-c">U</span><span class="ws-c on">S</span><span class="ws-c">D</span><span class="ws-c on">U</span><span class="ws-c">P</span><span class="ws-c">B</span><span class="ws-c on">A</span><span class="ws-c">G</span><span class="ws-c">J</span><span class="ws-c on">B</span>
+<span class="ws-c">E</span><span class="ws-c on">H</span><span class="ws-c">H</span><span class="ws-c on">R</span><span class="ws-c">M</span><span class="ws-c">M</span><span class="ws-c on">S</span><span class="ws-c">P</span><span class="ws-c">C</span><span class="ws-c on">E</span>
+<span class="ws-c">F</span><span class="ws-c">O</span><span class="ws-c">M</span><span class="ws-c on">E</span><span class="ws-c">S</span><span class="ws-c">I</span><span class="ws-c on">S</span><span class="ws-c">E</span><span class="ws-c">N</span><span class="ws-c on">R</span>
+<span class="ws-c">S</span><span class="ws-c on">N</span><span class="ws-c on">E</span><span class="ws-c on">T</span><span class="ws-c">I</span><span class="ws-c">Y</span><span class="ws-c">N</span><span class="ws-c">L</span><span class="ws-c">W</span><span class="ws-c">M</span>
+<span class="ws-c on">W</span><span class="ws-c on">O</span><span class="ws-c on">R</span><span class="ws-c on">M</span><span class="ws-c">H</span><span class="ws-c">E</span><span class="ws-c">C</span><span class="ws-c">F</span><span class="ws-c">E</span><span class="ws-c">H</span>
+</div>
+<ul class="ws-list">
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>BASS</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>TROUT</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>CATFISH</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>BOBBER</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>TACKLE</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>CREEL</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>WORM</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>DOCK</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>LURE</span></li>
+<li class="ws-word found"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l5 5L20 6"></path></svg><span>NET</span></li>
+</ul>
+<div class="ws-bar four"><button class="ans" type="button">Easier</button><button class="ans yes" type="button">Same</button><button class="ans" type="button">Harder</button><button class="ans" type="button">Back to Mary</button></div>
+<div class="cap capA ws-cap">
+<div class="line"><span class="w done" data-t="Good">Good</span><span class="w done" data-t="one.">one.</span></div>
+<div class="line"><span class="w done" data-t="Want">Want</span><span class="w done" data-t="another?">another?</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

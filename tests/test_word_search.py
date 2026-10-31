@@ -1,0 +1,441 @@
+from tests import helpers  # noqa: F401  (must be first: points the data folder at a scratch dir)
+
+"""The word search skill: the puzzle maker and the actions, with temp folders and no network."""
+import json
+import random
+import re
+import shutil
+import sqlite3
+import tempfile
+import time
+import unittest
+from pathlib import Path
+
+import mary
+import skills_core
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+class Scratch:
+    def __init__(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="word-search-"))
+        code = self.dir / "skill_code"
+        code.mkdir()
+        shutil.copytree(ROOT / "skills" / "word_search", code / "word_search",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        self.code = code
+        self.settings = {}
+
+    def host(self):
+        db = self.dir / "skills.db"
+        host = skills_core.SkillHost(self.code, self.dir, lambda: sqlite3.connect(db), lambda: dict(self.settings),
+                                     self.settings.update)
+        host.load(is_blocked=mary.skill_blocked)
+        return host
+
+    def close(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+
+class Base(unittest.TestCase):
+    def setUp(self):
+        self.scratch = Scratch()
+        self.addCleanup(self.scratch.close)
+        self.host = self.scratch.host()
+        self.assertIn("word_search", self.host.skills, self.host.load_errors)
+        self.module = self.host.skills["word_search"].module
+
+    def call(self, action, **args):
+        return self.host.call(f"word_search__{action}", args)
+
+    def puzzle(self):
+        return self.host.skills["word_search"].state["puzzle"]
+
+    def effect(self, out, kind):
+        return next((e["data"] for e in out["effects"] if e["kind"] == kind), None)
+
+
+class PuzzleTest(Base):
+    def check_puzzle(self, made, words, directions):
+        grid = made["grid"]
+        lines = self.module._lines(len(grid))
+        self.assertEqual(sorted(p["word"] for p in made["placed"]), sorted(words))
+        for place in made["placed"]:
+            cells = place["cells"]
+            self.assertEqual("".join(grid[r][c] for r, c in cells), place["word"])
+            step = (cells[1][0] - cells[0][0], cells[1][1] - cells[0][1])
+            self.assertIn(step, directions)
+            self.assertEqual(len(self.module._copies(grid, place["word"], lines)), 1, place["word"])
+
+    def test_every_level_every_theme(self):
+        for level, (size, count, longest, diagonal, backward) in self.module.LEVELS.items():
+            directions = self.module._directions(diagonal, backward)
+            for key in self.module.THEMES:
+                with self.subTest(level=level, theme=key):
+                    words = self.module._pick_words(key, count, longest, size, [], [])
+                    self.assertEqual(len(words), count)
+                    made = self.module.make_puzzle(words, size, diagonal, backward, random.Random(level))
+                    self.check_puzzle(made, words, directions)
+
+    def test_filler_is_clean(self):
+        size, count, longest, *_ = self.module.LEVELS[3]
+        words = self.module.THEMES["fishing"]["words"][:count]
+        for seed in range(20):
+            made = self.module.make_puzzle(words, size, True, True, random.Random(seed))
+            lines = self.module._lines(size)
+            spots = {tuple(map(tuple, p["cells"])) for p in made["placed"]}
+            homes = [set(s) for s in spots]
+            for bad in self.module.BLOCKLIST:
+                for copy in self.module._copies(made["grid"], bad, lines):
+                    self.assertTrue(any(set(copy) <= home for home in homes), bad)
+
+    def test_tight_fit_never_drops(self):
+        words = ["ABCDEFGH", "IJKLMNOP", "QRSTUVWX", "YZABCDEF", "GHIJKLMN", "OPQRSTUV", "WXYZABCD", "EFGHIJKL"]
+        made = self.module.make_puzzle(words, 8, False, False, random.Random(3))
+        self.assertEqual(len(made["placed"]), 8)
+
+    def test_a_word_inside_another_cant_be_alone(self):
+        made = self.module.make_puzzle(["REEL", "CREEL", "BASS"], 8, rng=random.Random(1))
+        self.assertEqual(sorted(p["word"] for p in made["placed"]), ["BASS", "CREEL"])
+
+    def test_fast_enough_for_the_guard(self):
+        before = time.monotonic()
+        for seed in range(10):
+            self.module.make_puzzle(self.module.THEMES["holidays"]["words"][:14], 12, True, True, random.Random(seed))
+        self.assertLess((time.monotonic() - before) / 10, 0.5)
+
+
+class ActionsTest(Base):
+    def test_start_says_nothing_of_where(self):
+        out = self.call("start", topic="fish")
+        self.assertEqual(self.effect(out, "puzzle")["theme"], "Fishing")
+        self.assertNotIn("cells", json.dumps(out["response"]))
+        self.assertIsNotNone(self.effect(out, "show_screen"))
+        self.assertNotRegex(self.host.view("word_search"), r"\[|row|column")
+
+    def test_gemini_words_are_cleaned(self):
+        out = self.call("start", topic="boats", words=["hull", "keel", "mast", "sail", "oars", "bow", "stern", "cleat",
+                                                        "rudder", "anchor", "shit", "a", "x1y", "hull"])
+        data = self.effect(out, "puzzle")
+        self.assertEqual(data["theme"], "Boats")
+        self.assertIn("HULL", data["words"])
+        self.assertNotIn("SHIT", data["words"])
+
+    def test_unknown_topic_says_so(self):
+        out = self.call("start", topic="boats")
+        self.assertIn("I don't have a list for boats", out["say"])
+
+    def test_hint_ladder(self):
+        self.call("start", topic="fishing")
+        one = self.call("hint")
+        self.assertEqual(self.effect(one, "hint")["step"], 1)
+        self.assertRegex(one["say"], r"row|column|slant")
+        two = self.call("hint")
+        self.assertEqual(self.effect(two, "hint")["step"], 2)
+        self.assertEqual(self.effect(two, "hint")["cell"], self.puzzle()["placed"][[
+            p["word"] for p in self.puzzle()["placed"]].index(self.puzzle()["hint"]["word"])]["cells"][0])
+        three = self.call("hint")
+        self.assertEqual(three["effects"], [])
+        self.assertIn("show me where", three["say"])
+
+    def test_spoken_finds(self):
+        self.call("start", topic="fishing")
+        word = self.puzzle()["placed"][0]["word"]
+        out = self.host.call("word_search__check", {}, heard=f"I found the word {word.lower()}s")
+        self.assertEqual(self.effect(out, "found")["word"], word)
+        self.assertIn("already", self.call("check", word=word)["say"])
+        self.assertEqual(self.call("check", word="zebra")["say"], "I don't see that one on the list.")
+
+    def test_one_slip(self):
+        self.call("start", topic="boats", words=["trout", "marlin", "bowfin", "anchor", "harbor", "rudder", "sailor",
+                                                  "lantern", "compass", "seagull"], level=2)
+        self.assertEqual(self.call("check", word="traut")["response"]["found"], "TROUT")
+
+    def test_tap_line_either_way_and_partial(self):
+        self.call("start", topic="fishing")
+        place = self.puzzle()["placed"][0]
+        cells = place["cells"]
+        partial = self.host.on_event("word_search", {"type": "line", "from": cells[0], "to": cells[0]})
+        self.assertEqual(partial["response"], {"found": None, "partial": True})
+        out = self.host.on_event("word_search", {"type": "line", "from": cells[-1], "to": cells[0]})
+        self.assertEqual(out["response"]["found"], place["word"])
+        self.assertEqual(self.effect(out, "found")["cells"], cells)
+
+    def test_bad_events_are_ignored(self):
+        self.call("start", topic="fishing")
+        for event in ({}, {"type": "line"}, {"type": "line", "from": [0, 0], "to": [1, 3]},
+                      {"type": "line", "from": [0, 99], "to": [0, 1]}, {"type": "line", "from": [True, 0], "to": [0, 0]},
+                      {"type": "line", "from": "a", "to": None}, {"type": "new", "level": "x"}, {"type": "zzz"}):
+            self.assertEqual(self.host.on_event("word_search", event)["response"], {"ignored": True}, event)
+
+    def test_finish_and_show(self):
+        self.call("start", topic="fishing", level=1)
+        words = [p["word"] for p in self.puzzle()["placed"]]
+        for word in words[:-1]:
+            self.call("check", word=word)
+        out = self.call("show")
+        self.assertEqual(self.effect(out, "shown")["word"], words[-1])
+        self.assertIsNotNone(self.effect(out, "done"))
+        self.assertTrue(self.puzzle()["finished"])
+        self.assertIn("Finished", self.host.view("word_search"))
+        self.assertTrue(self.call("hint")["response"].get("not_for_me"))
+
+    def test_levels_end_and_persist(self):
+        self.call("start", topic="fishing", level=1)
+        self.assertTrue(self.call("easier")["response"]["at_end"])
+        self.assertEqual(self.effect(self.call("harder"), "puzzle")["size"], 10)
+        self.assertEqual(self.effect(self.call("start", topic="birds"), "puzzle")["size"], 10)
+
+    def test_survives_a_restart_and_a_closing(self):
+        self.call("start", topic="fishing")
+        word = self.puzzle()["placed"][0]["word"]
+        self.call("check", word=word)
+        host = self.scratch.host()
+        out = host.on_event("word_search", {"type": "open"})
+        self.assertEqual([f["word"] for f in self.effect(out, "puzzle")["found"]], [word])
+        self.assertEqual(self.effect(host.call("word_search__end"), "leave_screen"), {"screen": "word_search"})
+        self.assertEqual(host.view("word_search"), "No puzzle up.")
+        out = host.on_event("word_search", {"type": "open"})
+        self.assertEqual([f["word"] for f in self.effect(out, "puzzle")["found"]], [word])
+
+    def test_biggest_page_fits_an_effect(self):
+        self.call("start", topic="boats", level=3, diagonal=True, backward=True, words=["abcdefghijkl", "bcdefghijklm", "cdefghijklmn", "defghijklmno",
+                                                          "efghijklmnop", "fghijklmnopq", "ghijklmnopqr", "hijklmnopqrs",
+                                                          "ijklmnopqrst", "jklmnopqrstu", "klmnopqrstuv", "lmnopqrstuvw"])
+        puzzle = self.puzzle()
+        for place in puzzle["placed"][:-1]:
+            self.assertEqual(self.call("check", word=place["word"])["response"]["found"], place["word"])
+        out = self.host.on_event("word_search", {"type": "open"})
+        self.assertLess(len(json.dumps(out["effects"])), skills_core.RESULT_MAX)
+        self.assertIsNotNone(self.effect(out, "puzzle"))
+
+    def test_start_resumes_and_new_puzzle_starts_fresh(self):
+        self.call("start", topic="fishing")
+        before = self.puzzle()["grid"]
+        word = self.puzzle()["placed"][0]["word"]
+        self.call("check", word=word)
+        out = self.call("start")
+        self.assertEqual(out["say"], "Here's where you left off.")
+        self.assertIsNotNone(self.effect(out, "show_screen"))
+        self.assertEqual(self.effect(out, "puzzle")["grid"], before)
+        self.assertEqual(self.puzzle()["found"], [word])
+        out = self.call("start", topic="birds")  # a topic is a new puzzle
+        self.assertEqual(self.effect(out, "puzzle")["theme"], "Birds")
+        out = self.call("new_puzzle")
+        self.assertNotEqual(self.effect(out, "puzzle")["theme"], "Birds")
+        self.assertEqual(self.puzzle()["found"], [])
+
+    def test_resume_after_a_restart_and_a_closing(self):
+        self.call("start", topic="fishing")
+        grid = self.puzzle()["grid"]
+        host = self.scratch.host()
+        host.call("word_search__end")
+        out = host.call("word_search__start")
+        self.assertEqual(out["say"], "Here's where you left off.")
+        self.assertEqual(self.effect(out, "puzzle")["grid"], grid)
+
+    def test_finished_puzzle_is_not_resumed(self):
+        self.call("start", topic="fishing")
+        for place in list(self.puzzle()["placed"]):
+            self.call("check", word=place["word"])
+        self.assertTrue(self.puzzle()["finished"])
+        out = self.call("start")
+        self.assertNotEqual(out.get("say"), "Here's where you left off.")
+        self.assertFalse(self.puzzle()["finished"])
+
+    def test_themes_are_full(self):
+        self.assertEqual(len(self.module.THEMES), 12)
+        for key, theme in self.module.THEMES.items():
+            self.assertGreaterEqual(len(theme["words"]), 35, key)
+            self.assertTrue(theme["title"] and theme["keywords"], key)
+            for word in theme["words"]:
+                self.assertRegex(word, r"^[A-Z]{3,12}$")
+
+
+class CoreHooksTest(Base):
+    def test_not_for_me_lets_her_normal_line_run(self):
+        self.assertIsNone(self.host.offline_match("I found my glasses"))
+        self.assertIsNone(self.host.offline_match("give me a hint"))
+        self.assertIsNone(self.host.offline_match("I'm done"))
+
+    def test_offline_line_reaches_check(self):
+        self.host.offline_match("word search about birds")
+        self.assertEqual(self.puzzle()["title"], "Birds")
+        word = self.puzzle()["placed"][1]["word"]
+        out = self.host.offline_match(f"I found the {word.lower()}")
+        self.assertEqual(out["response"]["found"], word)
+
+    def test_recall_picks_a_theme_and_stays_out_of_sight(self):
+        facts = []
+
+        def recall(words, limit=6):
+            facts.append(words)
+            return ["likes his garden on Elm Street"] if "garden" in words else []
+
+        self.host.recall = recall
+        out = self.call("start")
+        self.assertEqual(self.effect(out, "puzzle")["theme"], "Gardening")
+        self.assertNotIn("Elm", json.dumps(out) + self.host.view("word_search"))
+        self.assertEqual(self.host.context("word_search").recall("garden"), ["likes his garden on Elm Street"])
+        self.host.recall = lambda *a, **k: 1 / 0
+        self.assertEqual(self.host.context("word_search").recall("x"), [])
+
+    def test_offline_word_search_resumes(self):
+        self.call("start", topic="fishing")
+        grid = self.puzzle()["grid"]
+        out = self.host.offline_match("let's do a word search")
+        self.assertEqual(out["say"], "Here's where you left off.")
+        self.assertEqual(self.puzzle()["grid"], grid)
+        out = self.host.offline_match("give me another puzzle")
+        self.assertNotEqual(self.puzzle()["grid"], grid)
+        self.assertIn("Here's one on", out["say"])
+
+    def test_emergency_line_never_runs_an_action(self):
+        self.call("start", topic="fishing")
+        grid = self.puzzle()["grid"]
+        for line in ("I found blood and I can't breathe", "I found blood and I need a new puzzle"):
+            self.assertTrue(mary.skill_blocked(line), line)
+            self.assertIsNone(self.host.offline_match(line, is_blocked=mary.skill_blocked))
+        self.assertEqual(self.puzzle()["grid"], grid)
+        self.assertEqual(self.puzzle()["found"], [])
+
+    def test_recall_result_never_shows_in_view(self):
+        self.host.recall = lambda words, limit=6: ["likes his garden on Elm Street"]
+        self.call("start")
+        self.assertNotIn("Elm", self.host.view("word_search"))
+        self.assertNotIn("garden on", self.host.view("word_search"))
+
+    def test_recall_needs_the_card(self):
+        self.host.recall = lambda words, limit=6: ["a fact"]
+        self.host.skills["word_search"].manifest.pop("memory")
+        self.assertEqual(self.host.context("word_search").recall("x"), [])
+
+    def test_no_exclamation_marks_in_her_lines(self):
+        source = (ROOT / "skills" / "word_search" / "skill.py").read_text(encoding="utf-8")
+        for line in re.findall(r'"[^"\n]*"', source):
+            self.assertNotRegex(line, r"[A-Za-z.]!")
+
+
+class SizesTest(Base):
+    OWN = ["trout", "marlin", "bowfin", "anchor", "harbor", "rudder", "sailor", "galley", "keels", "masts",
+           "decks", "cabin", "lagoon", "pilot", "rigging"]
+
+    def resp(self, out):
+        return dict(out["response"], say=out["say"]) if "say" in out else out["response"]
+
+    def test_three_levels_and_default(self):
+        self.assertEqual({k: v[:2] for k, v in self.module.LEVELS.items()}, {1: (8, 6), 2: (10, 10), 3: (12, 14)})
+        out = self.call("start", topic="fishing")
+        self.assertEqual((self.resp(out)["size"], self.resp(out)["level"]), (10, 2))
+        self.assertEqual(self.resp(out)["words_left"], 10)
+
+    def test_easier_and_harder_keep_the_theme(self):
+        self.call("start", topic="fishing")
+        for action, size, count, line in (("easier", 8, 6, "Bigger letters"), ("harder", 10, 10, "More letters"),
+                                          ("harder", 12, 14, "More letters")):
+            out = self.resp(self.call(action))
+            self.assertEqual((out["size"], out["words_left"]), (size, count), action)
+            self.assertEqual(self.puzzle()["theme"], "fishing")
+            self.assertTrue(out["say"].startswith(line) and "same subject" in out["say"], out["say"])
+            self.assertNotIn("\n", out["say"])
+
+    def test_own_words_and_title_survive_every_size(self):
+        self.call("start", topic="boats", words=self.OWN, level=1)
+        self.assertEqual(self.puzzle()["title"], "Boats")
+        for action in ("harder", "harder", "easier", "easier"):
+            self.call(action)
+            made = self.puzzle()
+            self.assertEqual(made["title"], "Boats", action)
+            self.assertEqual(made["theme"], self.puzzle()["theme"])
+            self.assertTrue(all(p["word"].lower() in self.OWN for p in made["placed"]), action)
+            self.assertEqual(len(made["grid"]), made["size"])
+
+    def test_the_ends_say_so_and_change_nothing(self):
+        self.call("start", topic="fishing", level=1)
+        grid = self.puzzle()["grid"]
+        out = self.resp(self.call("easier"))
+        self.assertEqual(out["say"], "That's as big as the letters go.")
+        self.assertEqual(self.puzzle()["grid"], grid)
+        self.call("start", topic="fishing", level=3)
+        grid = self.puzzle()["grid"]
+        out = self.resp(self.call("harder"))
+        self.assertEqual(out["say"], "That's as many letters as I've got.")
+        self.assertEqual(self.puzzle()["grid"], grid)
+        self.assertEqual(self.puzzle()["level"], 3)
+
+    def test_size_is_saved_and_used_next_time(self):
+        self.assertEqual(self.scratch.settings.get("word_search_size"), None)
+        self.call("start", topic="fishing")
+        self.assertIsNone(self.scratch.settings.get("word_search_size"))
+        self.call("harder")
+        self.assertEqual(str(self.scratch.settings["word_search_size"]), "3")
+        self.assertEqual(self.resp(self.call("new_puzzle"))["size"], 12)
+        host = self.scratch.host()  # a restart: new state, same settings
+        out = host.call("word_search__start", {"topic": "birds"})["response"]
+        self.assertEqual((out["size"], out["level"]), (12, 3))
+        self.scratch.settings["word_search_size"] = "1"
+        self.assertEqual(self.resp(self.call("new_puzzle"))["size"], 8)
+        self.scratch.settings["word_search_size"] = "nonsense"
+        self.assertEqual(self.resp(self.call("new_puzzle"))["level"], 2)
+
+    def test_offer_once_by_voice(self):
+        first = self.resp(self.call("start", topic="fishing"))
+        self.assertEqual(first["mention"], self.module.OFFER_SIZES)
+        self.assertTrue(first["say"].endswith(self.module.OFFER_SIZES))
+        again = self.resp(self.call("new_puzzle"))
+        self.assertNotIn("mention", again)
+        self.assertNotIn(self.module.OFFER_SIZES, again["say"])
+        host = self.scratch.host()
+        later = self.resp(host.call("word_search__start", {"topic": "birds"}))
+        self.assertNotIn("mention", later)
+        self.assertNotIn(self.module.OFFER_SIZES, later["say"])
+
+    def test_offer_once_by_tap_open(self):
+        first = self.resp(self.host.on_event("word_search", {"type": "open"}))
+        self.assertEqual(first["mention"], self.module.OFFER_SIZES)
+        self.assertIn(self.module.OFFER_SIZES, first["say"])
+        again = self.resp(self.call("new_puzzle"))
+        self.assertNotIn("mention", again)
+        host = self.scratch.host()
+        self.assertNotIn("mention", host.call("word_search__start", {"topic": "birds"})["response"])
+
+    def test_nudge_at_step_three_once_not_at_level_one(self):
+        self.call("start", topic="fishing")
+        said = [self.resp(self.call("hint"))["say"] for _ in range(5)]
+        self.assertNotIn(self.module.NUDGE_SIZES, " ".join(said[:2]))
+        self.assertIn(self.module.NUDGE_SIZES, said[2])
+        self.assertNotIn(self.module.NUDGE_SIZES, said[3] + said[4])
+        self.call("start", topic="fishing", level=1)
+        said = [self.resp(self.call("hint"))["say"] for _ in range(4)]
+        self.assertNotIn(self.module.NUDGE_SIZES, " ".join(said))
+
+    def test_offline_phrases_change_the_size(self):
+        for line, size in (("bigger letters", 8), ("make the letters bigger", 8), ("make it bigger", 8),
+                           ("smaller letters", 12), ("more letters", 12), ("a bigger puzzle", 12),
+                           ("more words", 12)):
+            self.scratch.settings["word_search_size"] = "2"
+            self.call("start", topic="fishing")
+            self.assertEqual(self.puzzle()["size"], 10)
+            out = self.host.offline_match(line)
+            self.assertIsNotNone(out, line)
+            self.assertEqual(self.puzzle()["size"], size, line)
+
+    def test_offline_phrases_do_nothing_without_a_puzzle(self):
+        for line in ("bigger letters", "make the letters bigger", "make it bigger", "smaller letters", "more letters",
+                     "a bigger puzzle", "more words"):
+            self.assertIsNone(self.host.offline_match(line), line)
+
+    def test_diagonal_and_backward_carry_through(self):
+        self.call("start", topic="fishing", diagonal=True, backward=True)
+        for action in ("harder", "easier", "easier"):
+            self.call(action)
+            self.assertTrue(self.puzzle()["diagonal"] and self.puzzle()["backward"], action)
+
+    def test_manifest_instructions_are_short(self):
+        manifest = json.loads((ROOT / "skills" / "word_search" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertLessEqual(len(manifest["instructions"]), 400)
+
+
+if __name__ == "__main__":
+    unittest.main()

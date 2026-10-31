@@ -88,6 +88,8 @@ tests/test_skills_contract.py # runs the contract on every folder in skills/
 - **`offline_phrases`**: short trigger phrases for Offline mode, for example `["louder", "speak up", "turn it up"]`. Matched only for actions with no required inputs.
 - **`offline`**: `"works"` or `"needs_internet"`. With `needs_internet`, the core makes Mary say "I need the internet for that" instead of calling the skill.
 - **`storage`**: whether it gets a private store.
+- **`vision`** (optional, M4a): true lets the skill ask Gemini about a picture with `ctx.look(image_bytes, mime, question)`. The host makes the call, so the skill never holds the key. It answers `""` without this field, or when anything goes wrong.
+- **`memory`** (optional, M7a): true lets the skill read her memory with `ctx.recall(words, limit=6)`, which returns plain fact texts. It's read-only, and it answers `[]` without this field, or when anything goes wrong. A skill must keep those facts out of its responses, `view()` and logs. Word search uses it only to choose a theme.
 - **`needs.internet_hosts`** (change A): the only hosts `ctx.fetch` may reach, as exact names or one leading wildcard label (`"*.wikipedia.org"`, `"upload.wikimedia.org"`). An empty list means no internet at all.
 
 **`ctx.fetch(url, method="GET", params=None, headers=None, max_bytes=2_000_000, timeout=6)`** (change A) is the only way a skill reaches the internet:
@@ -137,7 +139,7 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 
 **Offline mode:**
 1. Before `OFFLINE_TEXT`, `reply()` asks `skills_core.offline_match(text)`, which checks the `offline_phrases` of enabled, `offline: works` skills.
-2. A match runs the action like any other and says the skill's `say` text (handlers return a short `say` line for this; Gemini words it in the other modes).
+2. A match runs the action like any other and says the skill's `say` text (handlers return a short `say` line for this; Gemini words it in the other modes). The handler can read the whole line in `ctx.heard` (M7a; empty in the other modes), so "I found barn" can reach an action with no required inputs. A response with `"not_for_me": true` means the phrase wasn't meant for this skill (no puzzle is up), and her normal offline line runs instead.
 3. "Turn <title> on/off" (and "back on", "stop the <title>") is matched offline too, against each skill's `title`, and runs `set_skill`. Then the voice switch works with no internet.
 
 **The page:** `web/mary/skills.js` gets `GET /api/mary/skills` (enabled skills, menu entries and page script URLs) and loads each `screen.js`, which calls `MarySkills.register(name, {enter, leave, effect(kind, data)})`. It plugs into the existing `registerScreen()`, and adds menu buttons from `screen.menu_label`. Resident moves on a skill screen go to `POST /api/mary/skills/<name>/event`, which runs `skill.py`'s `on_event(ctx, event)` in the guard.

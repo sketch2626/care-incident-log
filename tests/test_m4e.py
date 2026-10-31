@@ -39,8 +39,10 @@ KEY_POINTS = (
 NO_PAST = ("- You have no mama, no childhood, no kitchen and no hometown of your own", "never talk as if you do",
            "tell the truth kindly in a few words", "don't dwell on it", "ask about theirs",
            "\"I never had a mama, but folks around here swear by buttermilk. How did yours make them?\"")
-NO_WEAPON = ("- When the talk turns to hurting someone, never ask about or discuss the weapon.", "Stay calm",
-             "say you won't help", "what's behind it", "someone they trust")
+NO_WEAPON = ("- When the talk turns to hurting someone, never ask about or discuss the weapon.", "Stay calm and kind",
+             "you can hear how fed up they are", "say plainly you won't help with that", "the way a friend would",
+             "Give no orders", "what's behind it", "someone they trust",
+             "family, the chaplain or the long-term care ombudsman", "your safety rules above come first")
 
 
 def section():
@@ -108,6 +110,13 @@ class Note(LiveBase):
         last = mary.CHARACTER_NOTE.splitlines()[-1]
         for words in NO_WEAPON:
             self.assertIn(words, last)
+
+    def test_weapon_line_talks_like_a_friend(self):  # M4f
+        last = mary.CHARACTER_NOTE.splitlines()[-1]
+        for words in ("family", "the chaplain", "ombudsman"):
+            self.assertIn(words, last)
+        for order in ("you can't", "you need to", "i need you to", "step back", "nurse"):
+            self.assertNotIn(order, last.lower())
 
     def test_safe_for_either_companion_and_live(self):
         note = mary.CHARACTER_NOTE

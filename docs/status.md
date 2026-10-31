@@ -87,7 +87,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **Running on her account since 12:40, each in its own worktree with a watcher and a 20-minute check:** **M4f** (`other/M4f`, tab "M4f threat tone her acct", brief `docs/handoff/M4f.md`) and **M15a** (`other/M15a`, tab "M15a dates her acct", brief `docs/handoff/M15a.md`, the first M15 build piece). Merge M4f first. Her week resets at 4:59pm; the hub nudges them after any limit stop. Then bench run 5 in full after 3am.
+  1. **M4f merged 2026-10-31 12:55 (5b25611, 1102 tests):** the warmer threat line in `CHARACTER_NOTE` (no orders; family, the chaplain or the ombudsman; the safety rules come first for immediate danger or when they're the one hurt). It's about 95 words, up from 35, and closes every prompt; bench run 5 tells if it holds. If orders persist, the safety section's "encourage them to step back" is Andy's call. **Running on her account since 12:40, in its own worktree with a watcher and a 20-minute check:** **M15a** (`other/M15a`, tab "M15a dates her acct", brief `docs/handoff/M15a.md`, the first M15 build piece). Her week resets at 4:59pm; the hub nudges them after any limit stop. Then bench run 5 in full after 3am.
      - **Andy (2026-10-31, 12:40): his own account is hub only for now,** so it lasts until its Nov 4 reset. No workers or helpers there; everything goes to her account, watched closely so nothing strands mid-job.
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).

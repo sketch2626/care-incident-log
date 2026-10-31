@@ -147,6 +147,14 @@ _NAME = re.compile(
     r"|(?:^\s*|[.!?,]\s+|\b(?:you can|you may|please|just|i'd like you to|i like to be|but|and|so)\s+)call me"
     r"|\b(?:everybody|everyone|folks|my friends|my family)\s+calls?\s+me)"
     r"\s+([A-Z][a-z]+)", _I)
+# M4c: her own line asking what to call them. Asks about anyone else ("what's your dog's name") don't match.
+_ASKS_NAME = re.compile(
+    r"\bwhat(?:\s+(?:would|do)|['’]d)\s+you\s+(?:like|want|prefer)\s+(?:to\s+be\s+called|me\s+to\s+call\s+you)\b"
+    r"|\bwhat\s+(?:should|shall|can|could|may|do)\s+i\s+call\s+you\b"
+    r"|\bwhat(?:['’]?s|\s+is)\s+your\s+(?:first\s+)?name\b"
+    r"|\bwhat\s+do\s+(?:folks|people|they|others|everybody|everyone|your\s+friends)\s+call\s+you\b"
+    r"|\b(?:may|can|could|might)\s+i\s+(?:ask|have|get)\s+your\s+(?:first\s+)?name\b"
+    r"|\bwhat\s+do\s+you\s+go\s+by\b", _I)
 # M9c: "don't call me Bob" and "stop calling me that" turn a name down; they never offer one.
 _NAME_REFUSED = re.compile(r"\b(?:(?:don'?t|dont|do\s+not|never)\s+(?:(?:you|ever)\s+)*call|(?:stop|quit)\s+calling)"
                            r"\s+me\s+([^\W\d_]+)", _I)
@@ -223,6 +231,7 @@ class Memory:
         self.path = Path(path) if path else default_memory_path()
         self.name = ""
         self.name_forgotten = False  # M9c: they asked her not to use a name; only a name they offer clears it
+        self.name_asked = False  # M4c: she has asked once what to call them; she doesn't ask again
         self.facts = []
         self.recent = []
         self.pending_offer = None
@@ -248,6 +257,7 @@ class Memory:
             return
         self.name = name if isinstance(name, str) else ""
         self.name_forgotten = data.get("name_forgotten") is True and not self.name  # M9c
+        self.name_asked = data.get("name_asked") is True  # M4c
         self.facts = facts[-MAX_FACTS:]
         self.recent = recent[-MAX_RECENT:]
         self.pending_offer = offer if isinstance(offer, dict) else None
@@ -267,6 +277,8 @@ class Memory:
     def add_turn(self, role, text):
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
+        if role == "model" and not self.name and _ASKS_NAME.search(text):  # M4c: both routes pass through here
+            self.name_asked = True
 
     def scrub(self, forgotten, about="", name=""):  # M9c
         """Drops every turn that carries what was just forgotten, with her answer right after any such resident turn,
@@ -292,7 +304,7 @@ class Memory:
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.pending_forget = _forget_waiting(self.pending_forget)  # M9c
-        data = {"name": self.name, "name_forgotten": self.name_forgotten, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
+        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
                 "pending_forget": self.pending_forget}
         tmp = self.path.with_name(self.path.name + ".tmp")
         try:
@@ -514,6 +526,9 @@ FORGET_ASK_NOTE = ("Ask in one line whether to forget everything about this, and
 FORGOT_NOTE = "Done. Say so in one line, and never bring it up again, even if it came up earlier in this talk."
 NAME_FORGOTTEN_NOTE = "Done. Say so in one line. Don't use a name from now on, and don't ask for one."  # M9c
 NAME_FORGOTTEN_SYSTEM = "They asked you not to use a name. Don't ask for one."  # M9c
+NAME_KNOWN_NOTE = ("You already know what they like to be called. Never ask their name or what to call them, "  # M4c
+                   "and never check it with them.")
+NAME_ASKED_NOTE = "You've already asked what they'd like to be called, so don't ask again. If they tell you, use it."  # M4c
 MEMORY_BROKEN_NOTE = "Your memory can't be reached just now. Say so kindly; don't guess."
 MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
     {"name": "recall",
@@ -843,6 +858,15 @@ def _no_tag_rules(text):  # M4a: Live and stories have nothing to strip tags, so
     return "\n".join(line for line in text.split("\n") if "[" not in line)
 
 
+def _goes_by_saved(memory):  # M4c
+    """True when a saved memory says what they go by, though memory.name is empty. A locked database must not stop her."""
+    store = getattr(memory, "store", None)
+    try:
+        return bool(store is not None and store.goes_by())
+    except Exception:
+        return False
+
+
 def system_text(memory, companion="mary", facts=True, tags=True):
     """Her system prompt: her own instructions, the live facts about her app, and what she knows of the resident.
     facts=False keeps only the resident's name (no app facts, no facts list, no ask-for-a-name tag): for a live voice chat.
@@ -862,12 +886,21 @@ def system_text(memory, companion="mary", facts=True, tags=True):
             lines = lines[:1] if memory.name else []
     if lines:
         system += "\n\nWhat you know about the resident:\n" + "\n".join(lines)
-    if not memory.name and getattr(memory, "name_forgotten", False):  # M9c: the voice tryout's stand-in has no flag
+    if memory.name:  # M4c
+        system += "\n\n" + NAME_KNOWN_NOTE
+    elif getattr(memory, "name_forgotten", False):  # M9c: the voice tryout's stand-in has no flag
         system += "\n\n" + NAME_FORGOTTEN_SYSTEM
-    elif facts and not memory.name:
+    elif facts and _goes_by_saved(memory):  # M4c
+        system += "\n\n" + NAME_KNOWN_NOTE
+    elif facts and getattr(memory, "name_asked", False):  # M4c: the stand-ins have no such field
+        system += "\n\n" + NAME_ASKED_NOTE
+        if tags:
+            system += " When they tell you, add the line [name: First name], using the name they go by, exactly as they say it."
+    elif facts:
         system += "\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called"
         system += ("; when they tell you, add the line [name: First name], using the name they go by, "
                    "exactly as they say it." if tags else ".")  # M4a
+        system += " Once they've told you, or once you've asked, don't ask again, in this talk or any other."  # M4c: Live's prompt is locked at the start
     return system
 
 

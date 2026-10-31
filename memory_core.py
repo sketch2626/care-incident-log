@@ -73,6 +73,10 @@ _NOT_SAFETY = {"not", "never", "no", "isn't", "wasn't", "didn't", "hasn't", "isn
 _CALL_THEM_RE = re.compile(r"\b(?:pet\s+names?|nicknames?|goes\s+by|(?:likes?|prefers?|wants?)\s+to\s+be\s+called|"
                            r"(?:okay|ok|fine|all\s+right|alright)\s+(?:with\s+being|being|to\s+be)\s+called|"
                            r"call(?:ed|ing)?\s+(?:him|her|them)\b)", re.I)
+# M4c: a memory that says what they go by, so she stops asking. It must open the memory: "His son goes by Mike" and
+# "Doesn't want to be called Bill" don't count, and neither does being fine with a pet name.
+_GOES_BY_RE = re.compile(r"^\s*(?:(?:they|he|she|(?:the\s+)?resident)\s+)?"
+                         r"(?:go(?:es)?\s+by|(?:likes?|prefers?|wants?)\s+(?:to\s+be|being)\s+called)\s+(?!by\b)\S", re.I)
 FORGET_THAT_S = 3600  # "forget that" means something just saved, never a memory from months ago
 FORGET_YES_S = 300  # how long "forget about my son" waits for the resident's yes
 # Who a memory names, so "forget about my son" takes every memory about him. Only these spots count as a name, never
@@ -373,6 +377,10 @@ class MemoryStore:
                 conn.executemany("DELETE FROM memories WHERE id = ?", [(r["id"],) for r in rows])
             self._changed(True)
         return [r["text"] for r in rows]
+
+    def goes_by(self):  # M4c
+        """True when a memory says what they go by."""
+        return any(_GOES_BY_RE.search(r["text"]) for r in self.active())
 
     def always_sent(self, name="", limit_words=120):
         """The small block sent to Gemini every turn: the name, anything safety-related, up to LATELY_ITEMS newest other

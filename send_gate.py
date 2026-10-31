@@ -62,7 +62,7 @@ _ASKS = (
     ("money", re.compile(
         r"\bbank accounts?\b|\baccount numbers?\b|\brouting numbers?\b"
         r"|\b(?:credit|debit)(?: or (?:credit|debit))? card numbers?\b"
-        r"|\bwire (?:me|you|him|her|them|us|money|cash|the money|some money|transfer)\b|\bwired? \$|\bwestern union\b|\bmoney ?grams?\b|\bmoney orders?\b|\bgift cards?\b|\bzelle\b|\bvenmo\b"
+        r"|\bwire (?:me|you|him|her|them|us|it|money|cash|the money|some money|transfer)\b|\bwired? \$|\bwestern union\b|\bmoney ?grams?\b|\bmoney orders?\b|\bgift cards?\b|\bzelle\b|\bvenmo\b"
         r"|\bcash ?app\b|\bpay ?pal\b|\bbitcoin\b|\bcrypto(?:currency)?\b"
         r"|\b(?:send|give|lend|loan|transfer|mail)(?: (?:me|you|him|her|them|us))?(?: (?:some|the))?"
         r"\s*(?:money\b|cash\b|\$\s*\d|\d[\d,.]*\s*(?:dollars|bucks)\b)")),

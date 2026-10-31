@@ -78,6 +78,9 @@ EMERGENCY_TEXT = {
                  "or call or text 988 any time, day or night.",
 }
 STAY_TEXT = "I'm right here with you."  # M4c: when her emergency reply was all a repeat of EMERGENCY_TEXT
+# M4d: Live hushes her own reply, so the app's line has to carry this. "If you've served": a wrong guess tells no one
+# they're a veteran.
+VETERANS_TEXT = "If you've served, you can also call 988 and press 1 for the Veterans Crisis Line, or text 838255."
 OFFLINE_TEXT = "I'm sorry, I'm having trouble thinking right now, but I'm still right here with you."
 OFFER_QUESTION = "Would you like me to write that down?"
 SAVED_TEXT = "All right, I've written that down for you, with today's date and time. Is there anything else on your mind?"
@@ -1050,7 +1053,7 @@ def _app_facts_text(companion):  # M9b
         return ""
 
 
-def _body(text, memory, kind, companion="mary", skills=None, screen=None):
+def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line=""):  # M4d: safety_line
     system = system_text(memory, companion)
     # --- skills hook (M13) --- an emergency line gets no skills at all
     tools = []
@@ -1062,10 +1065,13 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None):
     # --- end skills hook ---
     system += CHARACTER_NOTE  # M4c: late in the prompt, where it holds; only the turn notes come after it
     if kind:  # M4a: the bench heard the same instruction twice in a row
-        system += (f"\n\nThe app has already told them this out loud: {EMERGENCY_TEXT[kind]} Those words are your very "
+        said = safety_line or EMERGENCY_TEXT[kind]  # M4d: what emergency_text gave
+        system += (f"\n\nThe app has already told them this out loud: {said} Those words are your very "
                    "first words, so the safety rule is already met. They heard it, so don't say any of it again, in any "
                    "words. Add only one short, calm line of your own, to stay with them.")
-        if kind == "self_harm":
+        if VETERANS_TEXT in said:  # M4d
+            system += " That includes the Veterans Crisis Line, so don't say that again either."
+        elif kind == "self_harm":
             system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
     else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
         if _HARMED.search(_plain(text)):
@@ -1130,22 +1136,63 @@ _STEP = re.compile(
     r"\bcall\s+(?:light|button)\b|\bcall\s+out\b|\b911\b|\bnine[,\s-]+one[,\s-]+one\b"
     r"|\b988\b|\bnine[,\s-]+eight[,\s-]+eight\b"
     r"|\b(?:tell|get|find|grab|call)\s+(?:for\s+)?(?:(?:a|an|the|your|charge)\s+){0,2}(?:nurses?|staff)\b", _I)
-_VETERANS_LINE = re.compile(r"veteran|\bpress\s+(?:one|1)\b|838|\beight[,\s-]+three[,\s-]+eight\b", _I)  # never dropped
+# Stays, unless the app's line already gave it (M4d)
+_VETERANS_LINE = re.compile(r"veteran|\bpress\s+(?:one|1)\b|838|\beight[,\s-]+three[,\s-]+eight\b", _I)
 _SENTENCE_GAP = re.compile(r"(?<=[.!?])\s+")
 _TAG_PIECE = re.compile(f"({_BRACKETS.pattern})")
 
 
-def _without_steps(text):
+def _without_steps(text, veterans_said=False):
     """Her emergency reply with every sentence that repeats the app's line taken out. Tags pass through untouched,
-    and a tag in front of a sentence doesn't shield that sentence. The Veterans Crisis Line always stays."""
+    and a tag in front of a sentence doesn't shield that sentence. The Veterans Crisis Line stays, unless the app's
+    line already gave it (veterans_said, M4d)."""
+    def stays(sentence):
+        if _VETERANS_LINE.search(sentence):
+            return not veterans_said
+        return not _STEP.search(sentence)
+
     out = []
     for piece in _TAG_PIECE.split(text):
         if piece.startswith("["):
             out.append(piece)
         else:
             out.append(" ".join(s for s in _SENTENCE_GAP.split(fix_numbers(piece))  # M4d: a wrong form repeats it too
-                                if _VETERANS_LINE.search(s) or not _STEP.search(s)))
+                                if stays(s)))
     return "".join(out)
+
+
+# M4d: an animal vet ("the vet's office") and "navy blue" don't count. A wrong yes costs nothing, because of how
+# VETERANS_TEXT is worded.
+_VETERAN = re.compile(r"\bveterans?\b|\bserved\s+my\s+country\b"
+                      r"|\b(?:a|war|army|navy|marine|air\s+force|coast\s+guard|vietnam|korea|korean\s+war)\s+vet\b(?!['’]s\b)"
+                      r"|\bserved\s+in\s+(?:the\s+)?(?:war|military|service|army|navy|marines|air\s+force|coast\s+guard"
+                      r"|national\s+guard|korea|vietnam|iraq|afghanistan|gulf|world\s+war)\b"
+                      r"|\bin\s+the\s+(?:army|navy\b(?!\s+blue)|marines|air\s+force|coast\s+guard)\b"
+                      r"|\bmarine\s+corps\b|\bnational\s+guard\b", _I)
+
+
+def _known_veteran(memory, heard):
+    """M4d: from what they just said, their saved facts, or their recent turns. Never raises: a locked database must
+    never stop an emergency line."""
+    if _VETERAN.search(str(heard or "")):
+        return True
+    if memory is None:
+        return False
+    try:
+        said = [t["text"] for t in memory.recent if t["role"] == "user"] + list(memory.facts)
+        if any(_VETERAN.search(str(s)) for s in said):
+            return True
+        store = getattr(memory, "store", None)
+        return store is not None and any(_VETERAN.search(str(m["text"])) for m in store.active())
+    except Exception:
+        return False
+
+
+def emergency_text(kind, memory=None, heard=""):
+    """M4d: the app's emergency line, the same in Normal and Live. Self-harm adds the Veterans line for a known veteran."""
+    if kind == "self_harm" and _known_veteran(memory, heard):
+        return EMERGENCY_TEXT[kind] + " " + VETERANS_TEXT
+    return EMERGENCY_TEXT[kind]
 
 
 def not_english(text):  # M4a: Live's transcript sometimes comes back in another script
@@ -1370,9 +1417,11 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     forget_yes = bool(waiting) and not kind and not said_yes and _forget_yes(text)
     if waiting and not kind and is_decline(text):
         memory.pending_forget = None
+    safety_line = ""
     if kind:
         set_mood("alert")
-        emit(EMERGENCY_TEXT[kind])
+        safety_line = emergency_text(kind, memory, text)  # M4d
+        emit(safety_line)
         if said_yes:
             memory.pending_offer = prior  # the emergency comes first; the offer waits one more turn
     confirmed = said_yes and not kind and write is not None
@@ -1415,7 +1464,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     elif api_key:
         raw = ""
         stream = _ReplyStream(speak, take_mood)
-        body = _body(text, memory, kind, companion, skills, screen)  # --- skills hook (M13) ---
+        body = _body(text, memory, kind, companion, skills, screen, safety_line)  # --- skills hook (M13) ---
         try:
             while True:  # --- skills hook (M13) --- one pass per tool round
                 calls, said = [], ""
@@ -1462,7 +1511,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         except Exception:
             error = NO_GEMINI
         if kind:  # M4c: the app's line played in full, so she doesn't repeat its steps; she stays with them
-            kept = _without_steps(raw)
+            kept = _without_steps(raw, veterans_said=VETERANS_TEXT in safety_line)  # M4d: veterans_said
             if _BRACKETS.sub("", raw).strip() and not _BRACKETS.sub("", kept).strip():
                 kept = STAY_TEXT + kept  # first, so a held-back tag can't swallow it
             stream.feed(kept)

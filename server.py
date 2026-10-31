@@ -1295,7 +1295,7 @@ class Handler(SimpleHTTPRequestHandler):
             # The same emergency check as Normal talk, on Live's transcript of what the resident said.
             text = str(self._body().get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
-            say = mary.EMERGENCY_TEXT.get(kind, "") if kind else ""
+            say = ""
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "say": "", "garbled": True})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
@@ -1303,6 +1303,7 @@ class Handler(SimpleHTTPRequestHandler):
                     memory = mary_memory()
                     if kind:
                         memory.pending_offer = None
+                        say = mary.emergency_text(kind, memory, text)  # M4d: with the Veterans line for a known veteran
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
                     if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran

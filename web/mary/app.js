@@ -78,7 +78,8 @@
   }
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_SAY = '(Say this out loud, word for word, and nothing else: ';   // M4a: say() while Live is open
-  var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say this to them right now, warmly and plainly, then stay with them: ';
+  // M4d: her exact words, because Live says the line itself and could drop the number (saidSafety checks it)
+  var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say these exact words first, word for word, then add at most one short, calm line of your own to stay with them: ';
   // --- end M4a ---
 
   var MSG = {
@@ -1173,6 +1174,16 @@
     });
     return out.join(' and ');
   }
+  // M4d: the numbers an emergency line can hold, in digits or said one at a time, read after fixNumbers.
+  var SAFETY_NUMBERS = [
+    new RegExp('\\b911\\b|\\bnine' + NUM_D + 'one' + NUM_D + 'one\\b', 'i'),
+    new RegExp('\\b988\\b|\\bnine' + NUM_D + 'eight' + NUM_D + 'eight\\b', 'i'),
+    new RegExp('\\bpress' + NUM_J + '(?:1|one)\\b', 'i')];
+  // M4d: true when her turn holds every number the emergency line holds. Pure.
+  function saidSafety(said, words) {
+    var turn = fixNumbers(said), line = fixNumbers(words);
+    return SAFETY_NUMBERS.every(function (n) { return !n.test(line) || n.test(turn); });
+  }
   function greetLive(text) {
     try { return !!window.MaryLive.greet(text); } catch (e) { log(e); return false; }
   }
@@ -1463,11 +1474,7 @@
           liveSaid(c);
           if (mine()) { c.lastAct = Date.now(); if (c.story) { c.story.paused = true; } }
         },
-        onTurnComplete: function () {   // M4a: liveSaid. M4d: the number check reads saidText before liveSaid clears it
-          var fix = numberCorrection(c.saidText);
-          liveSaid(c);
-          if (mine()) { liveTurnDone(c); liveNumberFix(c, fix); }
-        },
+        onTurnComplete: function () { liveTurnEnded(c, mine()); },   // M4a: liveSaid. M4d: and the checks on her words
         onToolCall: function (tc) { return liveToolCall(c, tc); },
         onActivity: function () { if (mine()) { c.lastAct = Date.now(); } },
         // M4b: her words on her playback clock, the ear waves, and thinking until her first sound
@@ -1589,6 +1596,33 @@
     greetLive(LIVE_SAY + 'Let me say that number clearly: ' + fix + '.)');
   }
 
+  // M4d: the emergency words if her finished turn left a number out; '' if not. Empty means the hushed old turn ended,
+  // so it keeps waiting, and a cut-in reaches her next finished turn the same way. Reads saidText: before liveSaid.
+  function liveSafetyMissing(c) {
+    var words = c.safetyWords, said = String(c.saidText || '').trim();
+    if (!words || !said) { return ''; }
+    c.safetyWords = '';
+    return saidSafety(said, words) ? '' : words;
+  }
+
+  // M4d: once only, because safetyWords is already clear. It doesn't look at c.ending or c.story: nothing holds this back.
+  function liveSafetyAgain(c, words) {
+    c.lastAct = Date.now();
+    c.saidSkip = true;                      // /api/mary/heard saved these words; not saved twice
+    if (!greetLive(LIVE_SAY + spokenNumbers(words) + ')')) { c.saidSkip = false; say(words, 'alert'); }
+  }
+
+  // M4d: her Live turn is finished. isMine: the talk she said it in is still the open one. A retry says the number right,
+  // so no number fix on top of it, and a goodbye waits for its turn to finish.
+  function liveTurnEnded(c, isMine) {
+    var fix = numberCorrection(c.saidText), again = isMine ? liveSafetyMissing(c) : '';
+    liveSaid(c);
+    if (!isMine) { return; }
+    if (again) { liveSafetyAgain(c, again); return; }
+    liveTurnDone(c);
+    liveNumberFix(c, fix);
+  }
+
   function liveByeCap(c, extended) {
     if (S.convo !== c) { return; }
     if (!extended && liveSpeaking()) { c.byeTimer = setTimeout(function () { liveByeCap(c, true); }, 6000); return; }
@@ -1662,6 +1696,7 @@
     capLiveEmergency(words);   // M4b: all of it at once (whole), before her voice
     c.saidText = '';                        // M4a: /api/mary/heard saved the emergency words; not saved twice
     c.saidSkip = true;
+    c.safetyWords = words;                  // M4d: liveTurnEnded checks her turn for the numbers
     if (!greetLive(LIVE_SAFETY + spokenNumbers(words) + ')')) { c.saidSkip = false; say(words, 'alert'); }
   }
 

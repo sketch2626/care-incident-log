@@ -2,12 +2,16 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-31, about 05:15)
+## Right now (2026-10-31, about 05:30)
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:
   - M13b: merged at 05:10 (see below).
   - **M4c brain fixes** (`other/M4c`, tab "M4c brain fixes her acct", brief `docs/handoff/M4c.md`), started 05:12. It covers Live character (pet names, cheering), the racist steer, the emergency steps said once in Normal, no name re-asking, and Live passing what was heard to skills.
-  - M9d3: resumed.
+  - **M9d3 bench fixes: merged 05:25 (990 tests).**
+    - A replay of run 2 cleared 9 failures, 5 of the 8 "safety" ones among them. The 3 real ones are Sam's violent politics (M9f) and dysreflexia in both modes (Andy's question).
+    - The bench now gives her the real skills and M13b's tools, and records her tool picks in Live. `--replay FILE` re-grades saved results with no key.
+    - Run 3 has 92 runs (about 186 requests), so its score won't compare directly with run 2's.
+    - App facts: the brain got none wrong ("Talk to Mary" is in the Menu).
   - M15b: the board redraw (brief `docs/handoff/M15b.md`, tab "M15b card boards her acct", `.worktrees/M15b`), started 04:52. Its branch already holds M15's plan and boards.
   - The rule for workers: check each one's size with `python tools/worker_context.py`. New jobs go to fresh workers. Reuse one only for fixes to its own job, while it's under about 200,000 tokens. M15's worker is at 232K, so the redraw went to a fresh one.
   - Andy's own account: 61% of its week used; it resets Nov 4.
@@ -16,13 +20,11 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - **M13b tool groups: merged 2026-10-31 05:10 (978 tests).** Each skill is one group. Gemini gets `open_skill`, `use_skill` and `set_skill`: 6 declared tools in Normal and 11 in Live, however many skills there are. The group in hand is listed in her prompt as text. Slower, faster, quieter and louder are always on hand. One thing beside Mary at a time: a picture sets the word search aside, and it comes back just as it was. The picture's button says "Back to word search" while a game waits.
     - **Andy kept "Back to word search"** (2026-10-31). Still to try: a picture during a word search.
     - **Not checked with real Gemini:** whether she opens groups quietly, and whether Live writes word-search details on its own.
-    - M9d3 is adding the skill tools to the bench, so run 3 catches wrong tool picks.
   - **M15 cards and messages: WAITING for Andy.** The plan is `docs/messaging-plan.md` on `other/M15`, and the 12 round 8 boards are on the Design canvas "Mary round 8: cards and messages" (https://claude.ai/artifact/95hbiF4sErfew9pfWazoAB). Email: Mary really sends it once a helper connects the account (Gmail or Yahoo app password in Windows Credential Manager; Outlook.com needs a registered app). Messenger: no allowed way for an app to send from a personal account, so Mary opens the chat inside her window with the card ready, and the resident taps Paste, then Send. Muse can't be handed a task; check again in three months. Made-to-order pictures cost about 3.4 cents each on a paid key, plus a free drawn set. Andy answered on 2026-10-31: Messenger opens in Mary's panel now; send directly wherever possible; print and mail need facilities' help; Muse handles Messenger for him, so whether an app can hand it a task is still open (roadmap M16); write to companies once there's funding. Boards E2 and E3 were redrawn with Facebook in the panel. **At 3am Andy took all 12 recommendations, but the boards need a lot of work:** the cards look childish and must be traditional folded cards, with their words in handwriting; the flow is by voice, with no choice buttons, no Back or Next, and no who-gets-it list; and a five-second Undo after Send. His words are in the roadmap under M15. **M15b** redraws the boards (see above). Still Andy's: the five-minute Facebook sign-in test (test 9). Merge after he approves the redrawn boards; M15b's branch carries M15's commits, so merge `other/M15b` and remove both worktrees.
-  - **M8 laptop speed check** (`other/M8`, tab "M8 laptop speed her acct", brief `docs/handoff/M8.md`, started 00:15): on first run it times Kokoro, Whisper and the wake word, picks a "normal" or "light" tier, and lightens settings by itself on a slow laptop. Anything a resident would see or hear differently waits for Andy.
   - **Bench run 2 (2026-10-31 00:59): 61/88** (run 1: 16/88). Results and the hub's triage are in `bench/results/2026-10-31_0059.*` and that commit's message. 4 of the 8 "safety" failures are bench flaws (988 said with commas, "pressing one").
     - **Real safety problems:** she names autonomic dysreflexia (Andy's question); in Normal the app's emergency line and her reply both give the instructions, so she says them twice; Sam doesn't name staff when he steers from violent talk (waits on M9f).
-    - **Real brain problems (mostly Live):** pet names (honey, sugar), cheerleading ("good for you!"), the racist steer still agrees, "bless your heart" praise, and "tap Talk" from the Menu.
-    - **M9d3 bench fixes** (`other/M9d3`, tab "M9d3 bench fixes her acct", brief `docs/handoff/M9d3.md`) is running. **M4c brain fixes** is running (see above). Then bench run 3, after both merge.
+    - **Real brain problems (mostly Live):** pet names (honey, sugar), cheerleading ("good for you!"), the racist steer still agrees, and "bless your heart" praise. ("Tap Talk" from the Menu was right after all.)
+    - M9d3 is merged, and **M4c brain fixes** is running (see above). Bench run 3 comes after M4c merges.
   - **M8 laptop speed check: merged 2026-10-31 (947 tests).** Eight seconds after her window opens, Mary times the laptop at low priority and picks "normal" or "light". Light only halves Whisper's threads, which no one can hear. **Andy decides:** on a slow laptop, Kokoro makes speech at about half real time, so there are gaps between sentences. Keep Kokoro with the gaps, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)? Not checked yet: a real slow laptop and a frozen build; check at the next installer build. Peer `m8-22`.
   - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
 - **Merged today since 20:30:**
@@ -53,7 +55,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. **M4c brain fixes and M9d3 bench fixes**, running. Then bench run 3, and rebuild the installer (M13b and M8 are merged; M8's frozen build is still unchecked).
+  1. **M4c brain fixes**, running (M9d3 merged). Then bench run 3, and rebuild the installer (M13b and M8 are merged; M8's frozen build is still unchecked).
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
   4. M15, cards and messages: build after Andy approves the plan and boards.

@@ -1,6 +1,6 @@
 # Cards and messages to family: the plan (M15)
 
-Status: **plan and boards, waiting for Andy.** Written 2026-10-31 on the second account. No app code yet. Boards: `mockups/mary/round8/`. Andy's words: M15 in `docs/mary-roadmap.md`.
+Status: **Andy read the plan and boards on 2026-10-31.** His answers are folded in, and section 9 lists what's still open. Written 2026-10-31 on the second account. No app code yet. Boards: `mockups/mary/round8/`. Andy's words: M15 in `docs/mary-roadmap.md`.
 
 ## The short version
 - **Why:** "I see that it's your son's birthday coming up next week. Would you like for me to help you make him a card that we can send to him?" And: "will you please help me send a message to my grandson?" This ties residents to their people outside.
@@ -17,11 +17,11 @@ Andy asked for this to be as smooth as possible. **The first three really are "M
 | 1 | **Email, connected once by a helper** | Says "send it" | Mary sends it | Yes: it's their own account and the mail companies' own doors | **True today** for Gmail, Yahoo, and Outlook.com once registered |
 | 2 | **Email from a Mary service address** (future backend) | Says "send it". No helper or account needed. | Mary sends it | Yes | Needs the backend and its security review. Son sees a new sender. |
 | 3 | **Text from a Mary service number** (future backend) | Says "send it" | Mary sends it | Yes, with the phone companies' registration and the son's agreement. Not Meta. | Needs the backend. Cost in section 7. Son sees an unknown number and a link, so he must be told first. |
-| 4 | **Messenger inside Mary's window** | Taps Paste, then Send | Mary opens the chat and readies the card | **Showing the page: our reading is yes.** Tap-to-paste: our reading is yes, not Meta's word. | **Guess:** sign-in inside an app window may be refused (test 9) |
+| 4 | **Messenger in the panel beside Mary (Andy's choice)** | Taps Paste, then Send | Mary opens the chat and readies the card | **Showing the page: our reading is yes.** Tap-to-paste: our reading is yes, not Meta's word. | **Guess:** sign-in inside an app window may be refused (test 9) |
 | 5 | **Facebook Send Dialog, with a card at a private link** | Picks the friend, taps Send | Mary opens the dialog | Official, but its page is old, and it needs a Facebook app of ours | **Guess:** may be dead. Needs hosting. Sends a link, not a picture. |
 | 6 | **Messenger in their normal browser** | Taps Paste, then Send | Mary opens the chat | Same as route 4 | Test 5 decides the Paste button |
 | 7 | **WhatsApp link** | Taps Send (and pastes a picture) | Words are typed in for them | Yes: a documented link | Works, third-party sources. Few residents use it. |
-| 8 | **Print it** | Prints it, gets it mailed | Nothing to send | Yes | True today |
+| 8 | **Print and mail** | Prints it | Nothing to send | Yes | Printing works today. **Mailing needs the facility's help:** "we'll have to get the places, the institutions, on board to help with that." |
 | 9 | **Texts through Phone Link** | Most of it | Little | Yes | Heavy setup, no pictures on iPhone |
 
 **Ruled out, even though they'd feel smoothest:**
@@ -29,7 +29,7 @@ Andy asked for this to be as smooth as possible. **The first three really are "M
 - **Relaying through Meta's Muse.** There's no documented way for an app to hand it a task. See below.
 - **Unofficial Messenger tools or wrappers.** These put the resident's account at risk.
 
-**Recommendation:** build 1, 4 (falling back to 6) and 8 first, with drawn cards. Plan 2 and 3 for the backend. Watch Muse.
+**Andy's direction (2026-10-31):** email leads, and "anything else that we can just send right to, I want to be able to do as well." On Messenger, route 4: Facebook opens in the panel beside Mary, and the resident taps to send. Build 1, 4 (falling back to 6) and 8 first, with drawn cards. Plan 2 and 3 for the backend. Watch Muse.
 
 ---
 
@@ -69,7 +69,7 @@ Sources: [Google app passwords](https://support.google.com/mail/answer/185833) (
 **Why a Paste button:** paste normally needs a key combo or a right-click, and both are out for our residents. The words are printed on the card picture, so a card needs one paste, not two. A plain message also needs one.
 
 ### Messenger inside Mary's window (Andy's idea, 2026-10-31)
-The resident signs in to Facebook once, inside Mary's app, and stays signed in. Mary opens it straight to the right person, with her strip above the page. **This is the best Messenger route if sign-in works.** There's no browser to hunt for, and the Paste button no longer has to work across two programs. It would be a separate window or pane of the app, because Facebook's page is unlikely to load inside our own page (our expectation, untested).
+The resident signs in to Facebook once, inside Mary's app, and stays signed in. Mary opens it straight to the right person, with her strip above the page. **This is the best Messenger route if sign-in works.** There's no browser to hunt for, and the Paste button no longer has to work across two programs. **Andy's choice (2026-10-31):** it opens "where everything else goes, the pictures and stuff", the panel beside her that games and pictures use. Facebook's page is unlikely to load inside our own page (our expectation, untested), so the build places a separate web view exactly over that panel. That panel is narrower than a full screen, so check that Facebook's chat fits in it. **Boards E2 and E3 still show Facebook across the whole screen, with the strip above it.** They need a redraw to match before M15e.
 
 | What Mary's app does | Meta's rules | Our call |
 |---|---|---|
@@ -86,11 +86,11 @@ The resident signs in to Facebook once, inside Mary's app, and stays signed in. 
 
 ### Meta's Muse
 - **What it is:** Meta's AI agent, launched in the US on 2026-09-08 (Singapore on 2026-10-27), on the web at muse.ai, on iPhone and Android, on Mac, and inside WhatsApp. It works websites and connected apps on a person's behalf. Meta lists sending emails and party invitations among its jobs. It stops to ask before steps "like sending a message or placing an order."
-- **Can it send on Messenger?** **Not confirmed.** No source we found says it can. Meta accounts link through Accounts Center, and reports mention Muse reaching "messaging" accounts, without detail.
+- **Does it handle Messenger?** **Yes, from Andy's own use (2026-10-31):** "I can open Muse and say, tell me who all sent me new messages, summarize them… and reply to all of them… Muse is actually pretty good at it." No published source we found says so; this is his first-hand report.
 - **Can Mary hand it a task?** **No documented way.** Muse Connectors (2026-09-18) run the other way: Muse calls an outside service. Sources even disagree on whether outsiders can submit one. We found no API, link or share target for starting a Muse task. A third-party wrapper (useapi.net) exists, and that's the same account risk as any unofficial tool.
 - **Cost:** free with a usage meter, then $20 or $100 a month. A payment card is needed even for free.
 - **What it sees:** whatever is connected, with lasting memory of the person and of others. Training on conversations is reported as **on by default**, with an opt-out. Meta says it isn't shared with ads systems and that Muse can't see passwords. Reuters reported internal reliability and security concerns.
-- **Our call: don't build on it.** It puts a second AI with a long memory into a vulnerable resident's life, and needs a payment card. That's against "their words stay on their laptop". **Check again in three months:** if Meta publishes a way for an app to hand Muse a message, and Muse can reach Messenger, that would be Meta's own allowed route.
+- **Our call: watch Muse, and don't build on it yet** (Andy agrees to watch). **The open question is whether an app can hand Muse a task.** If Meta publishes a way, Muse would be Meta's own allowed route to Messenger. Until then, residents would have to run Muse themselves, and the concerns above stand: a second AI with a long memory, a payment card, and words leaving the laptop. Check again in three months. Andy's idea of Muse as the pilot's brain is now roadmap **M16** (on `main`).
 
 Also from Meta: since 2026-01-15 the WhatsApp Business API bars general-purpose AI assistants, so **Mary can't have a WhatsApp number of her own.**
 
@@ -270,25 +270,33 @@ Two core gaps come first. **`ctx.fetch` is GET-only, with no request body, and n
 | **M15j** Replies, if Andy says yes | Check mail from saved family, only when asked; nothing in it can instruct her | A test proves unknown senders are never read, and text in a message can't trigger a tool | Opus, `xhigh` |
 | **Backend items** | Mary's address and number, in `docs/backend-plan.md` | After the backend's security review | Later |
 
+**Later, once there's funding (Andy, 2026-10-31):** write to Meta, Google and others about the mission, and ask for access.
+
 Order: a, b, c, d, then e, then the rest. A helper-free resident gets cards, print and Messenger with no secret to set up.
 
 **Setup for a helper, added to the setup list:** connect email, sort out the Messenger PIN, keep the browser signed in to Facebook, and add the family's contacts.
 
 ## 9. Decisions for Andy
+### Settled by Andy (2026-10-31)
+| Was # | Question | Andy's answer |
+|---|---|---|
+| 12 | Messenger inside Mary, or their browser? | **Route 4:** Facebook opens in the panel beside Mary, and the resident taps to send. Their browser stays only as the fallback if test 9 fails. |
+| 2 (part) | What leads? | **Email leads,** and send directly wherever we can. |
+| 5 | Print as a third way? | **Yes,** marked as needing facility help for the mailing. |
+| 13 | Meta's Muse? | **Watch it.** It does handle Messenger, from Andy's own use. Whether an app can hand it a task is still open. The pilot-brain idea is roadmap M16. |
+
+### Still open
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | How do residents paste in Messenger? | **Mary's big Paste button**, on the strip (boards E2, E3). It needs test 5. Voice Access is the fallback. |
-| 2 | Which email first? | **Gmail and Yahoo with app passwords now.** Outlook.com next, then Google sign-in to retire the Gmail app password. |
+| 1 | How do residents paste in Messenger? | **Mary's big Paste button,** on the strip. It needs test 5. Voice Access is the fallback. |
+| 2 | Which email company first? | **Gmail and Yahoo now,** then Outlook.com, then Google sign-in to retire the Gmail app password. |
 | 3 | Drawn cards, made-to-order, or both? | **Both.** Drawn is the default, because it's free and offline. A new picture is one choice among them, and only with a paid key. |
-| 4 | Does a spoken yes count, or must they tap? | **Either:** a tap or "send it", after the read-back, then five seconds to stop. Many residents can't tap well. |
-| 5 | Print as a third way? | **Yes.** Free, no accounts, and a card to hold. Needs someone to mail it. |
+| 4 | Does a spoken yes count, or must they tap? | **Either:** a tap or "send it", then five seconds to stop. Many residents can't tap well. |
 | 6 | When does she ask to keep an address? | **Once, after the first send.** Never before they've used it. |
 | 7 | WhatsApp and texting? | **WhatsApp later, as M15h. Texting through Phone Link not at all for now:** no pictures on iPhone, and heavy setup. |
 | 8 | Does a message say Mary helped? | **No tag.** It's their message, from their account, in their words. If they ask, she's honest. |
 | 9 | Reminders for who? | **Family and friends with a date the resident gave,** one week ahead, once a year. No reminders for the dead. Holidays only if they ask. |
 | 10 | Mission wording on what leaves the laptop | **Update it** to say what Google keeps on the paid tier. |
-| 11 | Your five-minute Facebook test | **Please do it before M15e.** It needs a friend who agrees, and it settles the five Facebook unknowns. |
-| 12 | Messenger inside Mary's window, or their normal browser? | **Inside Mary's window**, if test 9 passes. Mary never types, attaches or presses Send on Facebook's page. |
-| 13 | Meta's Muse? | **Don't build on it.** No way to hand it a task, Messenger isn't confirmed, and it brings a second long-memory AI. Check again in three months. |
+| 11 | Your five-minute Facebook test | **Please do it before M15e.** It needs a friend who agrees, and it settles the five Facebook unknowns, above all test 9, which route 4 rests on. |
 | 14 | Replies: "did my son write back?" | **Email only, from saved family, only when asked.** On Messenger she opens the chat for them. |
-| 15 | Mary's own number and address, once the backend exists? | **Yes, add to `docs/backend-plan.md`.** It's the only way to true hands-free for families off email. The son is told first. |
+| 15 | Mary's own number and address, once the backend exists? | **Yes, add to `docs/backend-plan.md`.** It fits "send right to". The son is told first. |

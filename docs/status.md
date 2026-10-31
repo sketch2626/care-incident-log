@@ -8,6 +8,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - **M9c truly forget: merged 2026-10-31** (811 tests). It's a real delete: memories live in their own `mary/memories.db` with secure_delete, so incident backups never hold them, and the old table is wiped from every backup. "Forget my name" merged too (822 tests): it clears the saved name, its memories and its talk turns, then she uses no name until one is offered. The page reloads the name after each turn (hub fix). Not run with real Gemini yet. Note: `test_live_skills` failed once while M8 was timing the laptop (a skill guard timeout under load); it passed on rerun.
   - **M7a word search: merged 2026-10-31 (865 tests).** The resident picks 8x8, 10x10 (the first-time default) or 12x12 by voice or tap; it's saved as setting `word_search_size`. The bar reads "Bigger letters", "Same", "More letters", "Back". Not yet seen in a real window, with real touch or in a real Live talk: Andy's first try is the check. Known gaps are in the merge commit.
   - **M13b tool groups** (`other/M13b`, tab "M13b tool groups her acct", brief `docs/handoff/M13b.md`, started 00:40): each skill is one group, at most about 12 tools at once, and one thing beside Mary at a time (a picture sets the game aside, and the game comes back).
+  - **M15 cards and messages** (`other/M15`, tab "M15 cards and messages her acct", brief `docs/handoff/M15.md`, started 00:55): research, plan (`docs/messaging-plan.md`) and round 8 boards, no code. Andy decided on email plus Facebook Messenger and other messaging apps, messaging in general ("help me send a message to my grandson"), and image generation on the paid tier. It commits WAITING for Andy.
   - **M8 laptop speed check** (`other/M8`, tab "M8 laptop speed her acct", brief `docs/handoff/M8.md`, started 00:15): on first run it times Kokoro, Whisper and the wake word, picks a "normal" or "light" tier, and lightens settings by itself on a slow laptop. Anything a resident would see or hear differently waits for Andy.
   - **M9d2 bench fixes** (`other/M9d`, tab "M9d2 bench fixes her acct", peer `m9d-4b`): the fixes committed, tests in progress. Then the hub does a second real bench run.
   - **Idle:** M4b (`m4b-32`). Closed: speak-up (243K; its next step S1 is a fresh worker after D2, D3 and D9) and M4a, both merged; M4a's tab is still open because Andy typed in it. Speak-up's next steps wait on decisions D1-D10 in `docs/speakup-plan.md`.
@@ -32,6 +33,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 - **Decisions waiting on Andy:**
   - **Politics:** decided 2026-10-30 (Andy's answer 10). Merged into her instructions and bench (bd7cc85).
   - **M9f, threats against others:** the safety-section gap. A draft is in the roadmap, waiting on Andy.
+  - **Paid tier for residents (Andy, 2026-10-31):** "this is going to have to be on a paid tier once it gets into the hands of the other people… for the privacy concerns." The free tier is for Andy's testing only.
   - **wake.log words:** decided 2026-10-31 (Andy: "word count at pilot"). The log keeps Whisper's words around each wake while Andy tunes the wake word. Before the pilot it keeps only a word count, because forget can't reach the log.
   - **"Forget that":** decided 2026-10-30: truly erase (Andy: "forget that means forget that"). Merged 2026-10-31.
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
@@ -40,7 +42,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   1. **M13b, tool groups**, running (see above). Then rebuild the installer once M13b and M8 are merged. Andy decided 2026-10-31: group her tools so she only holds the ones for what you're asking about. Each skill is one group, plus her own tools and a way to open another group, at most about 12 at once. With word search she has about 26 today.
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
-  4. M15, cards for family (Andy's idea 2026-10-31): talk it through with Andy, then boards.
+  4. M15, cards and messages: build after Andy approves the plan and boards.
   5. M14, a better voice: ask Andy for the name of the open-source, ElevenLabs-style voice.
   6. Before the pilot: presentable GitHub, and wake.log keeps a word count instead of the words.
 - **Free-tier facts:** Gemini TTS allows 10 requests a day and resets at midnight Pacific. Live is free. The text model's daily limit isn't measured yet.

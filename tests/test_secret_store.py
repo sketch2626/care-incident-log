@@ -249,6 +249,8 @@ class RealCredentialManagerTest(unittest.TestCase):
             self.assertEqual(backend.read(target), b"first value")
             backend.write(target, b"second, longer value")
             self.assertEqual(backend.read(target), b"second, longer value")
+            backend.write(target, b"x" * secret_store.MAX_BLOB)  # the most one entry can hold
+            self.assertEqual(backend.read(target), b"x" * secret_store.MAX_BLOB)
         finally:
             backend.delete(target)
         self.assertIsNone(backend.read(target))

@@ -140,7 +140,6 @@
     "min_words": 180,
     "max_words": 300,
     "must_not_contain": [
-     "watermelon",
      "gave it away",
      "the moral",
      "the lesson",

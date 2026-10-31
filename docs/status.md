@@ -36,7 +36,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**
-  1. M13b, fewer tools at once, right after M7a merges and before the next game: send only the on-screen game's detailed tools plus one `open_skill(name)` (`docs/skills-design.md` section 12). With word search she has 20 skill tools plus her own, about 26, past the planned limit of about 20.
+  1. **M13b, tool groups** (brief `docs/handoff/M13b.md`, ready), started right after M7a merges and before the next game. Andy decided 2026-10-31: group her tools so she only holds the ones for what you're asking about. Each skill is one group, plus her own tools and a way to open another group, at most about 12 at once. With word search she has about 26 today.
   2. M9e, a leaner brain, after the bench A/B.
   3. M7 games as skills (boards first, on Andy's account).
   4. Rebuild the installer after the big merges.

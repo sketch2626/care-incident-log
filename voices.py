@@ -756,6 +756,7 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
         system += "\n\n" + LIVE_EXTRA
         if memory is not None:  # M4a: her memory tools
             system += " " + LIVE_TOOLS_NOTE
+            system += mary.reminder_note(memory, cards=bool(skills and skills.get("cards")))  # M15a
         else:  # M4c: the voice tryout has no tools note, so the character note goes here
             system += mary.CHARACTER_NOTE
         try:  # M4a: Live can't take a speed setting, so the saved speed is asked for in words

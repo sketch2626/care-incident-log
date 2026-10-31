@@ -70,6 +70,13 @@ class MaryPageTests(unittest.TestCase):
             self.assertIn(":not(#closeBtn)", selector)
         self.assertIn('id="closeBtn"', html)
 
+    def test_memory_rows_show_the_saved_date(self):  # M15a
+        for path in ("/mary/app.js", "/app.js"):
+            js, _ = self.get(path)
+            self.assertIn("saved_date", js, path)
+        mary_js, _ = self.get("/mary/app.js")
+        self.assertNotRegex(mary_js[mary_js.index("saved_date") - 200:mary_js.index("saved_date") + 600], "innerHTML")
+
     def test_menu_closes_on_idle_and_skills_list_into_things_she_can_do(self):
         js, _ = self.get("/mary/app.js")
         self.assertRegex(js, r"var MENU_IDLE_MS = 20000;")

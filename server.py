@@ -636,7 +636,8 @@ def set_skill_host_for_tests(host):
 def mary_live_skill_setup(screen=None):
     """What live_token() adds to bidiGenerateContentSetup (tools) and to the system text; wired when Mary's own
     Live session is built (M4)."""
-    return {"tools": skill_host().gemini_tools(), "instruction": skill_host().instruction_text(screen)}
+    return {"tools": skill_host().gemini_tools(), "instruction": skill_host().instruction_text(screen),
+            "cards": mary.can_make_cards(skill_host())}  # M15a
 # --- end skills hook ---
 
 
@@ -649,7 +650,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         with _mary_lock:
             memory = mary_memory()
             result = mary.memory_tool(memory, name, args)
-            if name in ("forget_memory", "forget_name"):  # its waiting question and the scrubbed talk history
+            if name in ("forget_memory", "forget_name", "stop_reminders"):  # its waiting question and the scrubbed talk history
                 try:
                     memory.save()
                 except OSError:
@@ -672,7 +673,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
                 memory.name = value
                 memory.name_forgotten = False  # M9c
             else:
-                memory.add_fact(value, str(args.get("kind") or ""), mary.fact_source(heard))  # M9c
+                memory.add_fact(value, str(args.get("kind") or ""), mary.fact_source(heard), heard=heard)  # M9c; heard: M15a
             memory.save()
         except (OSError, sqlite3.Error):  # M9c: the store writes to the database
             return {"response": {"ok": False, "error": "It could not be saved just now."}, "effects": [], "say": None}
@@ -697,9 +698,19 @@ def mary_live_story_call(args):  # M4a: Live's tell_story tool
 
 
 # --- M4a: her hello from the brain, and a skill's look at a picture ---
+def close_talk():  # M15a
+    """The talk is over, so a date note sent in it is done. Never raises: close_stale catches what this misses."""
+    with _mary_lock:
+        try:
+            memory_store().close_talk()
+        except (sqlite3.Error, OSError):
+            pass
+
+
 def mary_open(when):
     """Her hello in her own words, saved as her turn so her next answer knows she has greeted them. {"text": ""} on
     any problem: the page then says a scripted line. The lock is held only around her memory, never while Gemini writes."""
+    close_talk()  # M15a: a hello means a new talk
     s = mary_settings()
     with _mary_lock:
         memory = mary_memory()
@@ -1284,13 +1295,22 @@ class Handler(SimpleHTTPRequestHandler):
                 skills = None  # a skills failure never stops Live
             with _mary_lock:
                 memory = mary_memory()
+            noted = bool(mary.reminder_note(memory))  # M15a: the token's locked prompt will carry it
             try:
                 got = voices.live_token(companion_voices(companion)["live"], s["key"], companion, memory.name, DATA,
                                         skills=skills, silence_ms=round(s["listen_wait"] * 1000), memory=memory,
                                         rate=s["voice_rate"], plain=bool(body.get("plain")))  # M4a: rate, plain
             except voices.VoiceError as e:
                 return self._send(*voice_failure(e.kind))
+            if noted:  # M15a: only now, so a failed token leaves the note for Normal
+                try:
+                    memory.store.note_sent(memory.store.due())
+                except sqlite3.Error:
+                    pass
             return self._send({**got, "companion": companion})
+        if method == "POST" and path == "/api/mary/talk/end":  # M15a: the page's word that a talk is over
+            close_talk()
+            return self._send({"ok": True})
         if method == "POST" and path == "/api/mary/heard":
             # The same emergency check as Normal talk, on Live's transcript of what the resident said.
             text = str(self._body().get("text") or "")[:2000]
@@ -1306,6 +1326,7 @@ class Handler(SimpleHTTPRequestHandler):
                         say = mary.emergency_text(kind, memory, text)  # M4d: with the Veterans line for a known veteran
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
+                        mary.learn_dates(memory, text)  # M15a: and so does a date, with or without a tool
                     if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran
                         memory.add_turn("user", text.strip())
                     if say:
@@ -1362,8 +1383,8 @@ class Handler(SimpleHTTPRequestHandler):
                                       spent_voice=offline_voice)  # M4a: the request that hits the limit swaps too
         # --- end M4a ---
         if method == "GET" and path == "/api/mary/memories":  # M9c: the page's list; no lock, each store call stands alone
-            found = memory_store().active()
-            return self._send({"memories": [memory_core.public(m) for m in found], "count": len(found)})
+            found = memory_store().active_public()  # M15a: each with saved_date
+            return self._send({"memories": found, "count": len(found)})
         m = re.fullmatch(r"/api/mary/memories/(\d+)", path)  # M9c
         if m and method == "DELETE":
             if not mary_remove_memory(m.group(1)):
@@ -1768,6 +1789,7 @@ def main():
             webbrowser.open(url)
         return
     init_db()
+    close_talk()  # M15a: a talk cut off by a crash counts as sent
     laptop_check_setup()  # M8
     print(f"Care Incident Log running at {url}")
     if "--no-browser" not in sys.argv:

@@ -6,10 +6,13 @@ this is not: forgetting is a real delete, and what is forgotten is gone from thi
 Takes a connect callable (server.connect_memories), and imports neither server nor mary.
 """
 import json
+import os
 import re
 from contextlib import closing
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
+
+import memory_dates
 
 MEMORIES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -18,6 +21,27 @@ CREATE TABLE IF NOT EXISTS memories (
     kind TEXT NOT NULL,
     text TEXT NOT NULL,
     source TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS dates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_id INTEGER NOT NULL,
+    created_at TEXT,
+    month INTEGER,
+    day INTEGER,
+    who TEXT,
+    relation TEXT,
+    what TEXT
+);
+CREATE TABLE IF NOT EXISTS date_done (
+    date_id INTEGER,
+    year INTEGER,
+    at TEXT,
+    PRIMARY KEY (date_id, year)
+);
+CREATE TABLE IF NOT EXISTS no_reminders (
+    who TEXT PRIMARY KEY,
+    why TEXT,
+    at TEXT
 );
 """
 KINDS = ("person", "family", "likes", "health_care", "history", "preference", "other")
@@ -106,6 +130,14 @@ def says_name(text, name):  # M9c
 
 def _now():
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _today():  # M15a
+    """Today, or the day in TRACKER_TODAY (YYYY-MM-DD), so Andy can try a date out without waiting for it."""
+    try:
+        return date.fromisoformat(os.environ.get("TRACKER_TODAY", ""))
+    except ValueError:
+        return date.today()
 
 
 def _clean(text):
@@ -262,6 +294,95 @@ def _row_id(memory_id):
     return memory_id if 0 < memory_id < 2 ** 63 else None  # SQLite refuses a bigger number
 
 
+_DATE_COLUMNS = ("id", "memory_id", "created_at", "month", "day", "who", "relation", "what")  # M15a
+
+
+def _delete(conn, ids):  # M15a
+    """Really deletes these memories, the dates they hold up and those dates' done marks."""
+    rows = [(memory_id,) for memory_id in ids]
+    conn.executemany("DELETE FROM date_done WHERE date_id IN (SELECT id FROM dates WHERE memory_id = ?)", rows)
+    conn.executemany("DELETE FROM dates WHERE memory_id = ?", rows)
+    return sum(conn.execute("DELETE FROM memories WHERE id = ?", row).rowcount for row in rows)
+
+
+def _unstop(conn, about):  # M15a
+    """Drops this person's no-reminder row: what is forgotten leaves no trace, not even "don't mention Ruth"."""
+    who = " ".join(w for w in _words(about) if w not in STOPWORDS)
+    return conn.execute("DELETE FROM no_reminders WHERE who = ?", (who,)).rowcount
+
+
+def _date_rows(conn):  # M15a
+    rows = conn.execute(f"SELECT {', '.join(_DATE_COLUMNS)} FROM dates ORDER BY id").fetchall()
+    return [dict(zip(_DATE_COLUMNS, row)) for row in rows]
+
+
+def _label_memory(conn, label):  # M15a
+    """The id of a memory saying just this label, added if none does yet."""
+    new_id = _insert(conn, label, "family", "said")
+    if new_id is None:
+        same = label.casefold()
+        new_id = next(r[0] for r in conn.execute("SELECT id, text FROM memories") if r[1].casefold() == same)
+    return new_id
+
+
+def _let_go(conn, row):  # M15a
+    """Deletes the memory behind this date, leaving the date, unless another date stands on it too. True if it went."""
+    if conn.execute("SELECT 1 FROM dates WHERE memory_id = ? AND id != ?", (row["memory_id"], row["id"])).fetchone():
+        return False
+    return conn.execute("DELETE FROM memories WHERE id = ?", (row["memory_id"],)).rowcount > 0
+
+
+def _move(conn, row, month, day):  # M15a
+    """A corrected date changes in place, so date_done stays and it never comes up twice in a year. The memory behind it
+    stops saying the old day: its date words change, or it becomes the label if they can't be found."""
+    conn.execute("UPDATE dates SET month = ?, day = ? WHERE id = ?", (month, day, row["id"]))
+    saved = conn.execute("SELECT text FROM memories WHERE id = ?", (row["memory_id"],)).fetchone()
+    if not saved:
+        return
+    text = memory_dates.label({**row, "month": month, "day": day})
+    for hit in memory_dates.parse(saved[0]):
+        if (hit["who"].casefold(), hit["what"]) == (row["who"].casefold(), row["what"]):
+            start, end = hit["span"]
+            text = saved[0][:start] + memory_dates.when(month, day) + saved[0][end:]
+            break
+    conn.execute("UPDATE memories SET text = ? WHERE id = ?", (text, row["memory_id"]))
+
+
+def _who_words(who):  # M15a
+    return set(who.lower().split()) - {"and"}
+
+
+def _people(row):  # M15a
+    """The lower-case words that stop this date: each person in it and their relation. A plain anniversary is the
+    resident's own, so it goes when either spouse has."""
+    if not row["who"]:
+        return {"anniversary", "husband", "wife"}
+    return _who_words(row["who"]) | ({row["relation"].lower()} - {""})
+
+
+def _names_of(row):  # M15a
+    """The words that name this date in talk: each person in it, or for a bare relation or who "" that relation and
+    "anniversary"."""
+    who, relation = row["who"].lower(), row["relation"].lower()
+    return _who_words(who) if who and who != relation else {relation, "anniversary"} - {""}
+
+
+def _named(text, row):  # M15a
+    return any(says_name(text, name) for name in _names_of(row))
+
+
+def _touched_last(rows, turns, text):  # M15a
+    """The date a correction means: the one named with its birthday or anniversary word, or its day, in the turn nearest
+    the newest. Two in that turn: the one the correction names, or None, since a wrong guess spoils a good date."""
+    for turn in turns or ():
+        said = memory_dates.loose_dates(turn)
+        hits = [r for r in rows if _named(turn, r) and (says_name(turn, r["what"]) or (r["month"], r["day"]) in said)]
+        if hits:
+            hits = [r for r in hits if _named(text, r)] or hits
+            return hits[0] if len(hits) == 1 else None
+    return None
+
+
 class MemoryStore:
     """Her dated memories. Every call opens and closes its own connection, so it needs no lock of its own.
     on_change(deleted) runs after every change is saved, so the server can keep her one backup current."""
@@ -315,7 +436,7 @@ class MemoryStore:
         if memory_id is None:
             return False
         with closing(self.connect()) as conn, conn:
-            gone = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,)).rowcount > 0
+            gone = _delete(conn, [memory_id]) > 0  # M15a
         if gone:
             self._changed(True)
         return gone
@@ -363,20 +484,169 @@ class MemoryStore:
             rows = self.matching(about)
         else:
             rows = [r for r in self.active(limit=1) if _just_saved(r)]
-        if rows:
-            with closing(self.connect()) as conn, conn:
-                conn.executemany("DELETE FROM memories WHERE id = ?", [(r["id"],) for r in rows])
+        with closing(self.connect()) as conn, conn:  # M15a
+            _delete(conn, [r["id"] for r in rows])
+            cleared = _unstop(conn, about)
+            if is_everything(about):
+                for table in ("date_done", "dates", "no_reminders"):
+                    cleared += conn.execute(f"DELETE FROM {table}").rowcount
+        if rows or cleared:
             self._changed(True)
         return [r["text"] for r in rows]
 
     def forget_name(self, name):  # M9c
         """Really deletes every memory holding their name and returns the texts removed."""
         rows = [r for r in self.active() if holds_name(r["text"], name)]
-        if rows:
-            with closing(self.connect()) as conn, conn:
-                conn.executemany("DELETE FROM memories WHERE id = ?", [(r["id"],) for r in rows])
+        with closing(self.connect()) as conn, conn:  # M15a
+            _delete(conn, [r["id"] for r in rows])
+            cleared = _unstop(conn, name)
+        if rows or cleared:
             self._changed(True)
         return [r["text"] for r in rows]
+
+    def learn_date(self, found, memory_id=None):  # M15a
+        """Keeps a date from parse and returns its id. Every date has a memory behind it: memory_id when it came from a
+        saved fact, else one of its own whose text is its label (an auto row). The same who and what again is the same
+        date, and a different day is a correction."""
+        memory_id = _row_id(memory_id)
+        label = memory_dates.label(found)
+        deleted = False
+        with closing(self.connect()) as conn, conn:
+            start = conn.total_changes
+            if memory_id and not conn.execute("SELECT 1 FROM memories WHERE id = ?", (memory_id,)).fetchone():
+                memory_id = None
+            key = (found["who"].casefold(), found["what"])
+            row = next((r for r in _date_rows(conn) if (r["who"].casefold(), r["what"]) == key), None)
+            if row is None:
+                date_id = conn.execute(
+                    "INSERT INTO dates (memory_id, created_at, month, day, who, relation, what) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (memory_id or _label_memory(conn, label), _today().isoformat(), found["month"], found["day"],
+                     found["who"], found["relation"], found["what"])).lastrowid
+            else:
+                date_id = row["id"]
+                moved = (found["month"], found["day"]) != (row["month"], row["day"])
+                old = conn.execute("SELECT text FROM memories WHERE id = ?", (row["memory_id"],)).fetchone()
+                auto = bool(old) and old[0].casefold() == memory_dates.label(row).casefold()
+                if memory_id and memory_id != row["memory_id"] and (moved or auto):
+                    deleted = _let_go(conn, row)
+                    conn.execute("UPDATE dates SET memory_id = ? WHERE id = ?", (memory_id, date_id))
+                if moved:
+                    _move(conn, row, found["month"], found["day"])
+                if found["relation"]:
+                    conn.execute("UPDATE dates SET relation = ? WHERE id = ? AND relation = ''",
+                                 (found["relation"], date_id))
+            changed = conn.total_changes != start
+        if changed:
+            self._changed(deleted)
+        return date_id
+
+    def correct_last(self, text, heard_turns):  # M15a
+        """For "no, it's the 9th": fixes the date touched last, keeping its month if only a day was said. heard_turns
+        are recent turn texts, newest first. The date's id, or None when nothing fits or the day can't be."""
+        if not memory_dates.is_correction(text):
+            return None
+        said, day = memory_dates.loose_dates(text), memory_dates.loose_day(text)
+        if len(said) != 1 and day is None:
+            return None
+        with closing(self.connect()) as conn, conn:
+            row = _touched_last(_date_rows(conn), heard_turns, text)
+            if row is None:
+                return None
+            month, day = next(iter(said)) if len(said) == 1 else (row["month"], day)
+            if not memory_dates.valid(month, day):
+                return None
+            moved = (month, day) != (row["month"], row["day"])
+            if moved:
+                _move(conn, row, month, day)
+        if moved:
+            self._changed(False)
+        return row["id"]
+
+    def date_of(self, memory_id):  # M15a
+        """The label of the date this memory holds up, or ""."""
+        memory_id = _row_id(memory_id)
+        with closing(self.connect()) as conn:
+            rows = [r for r in _date_rows(conn) if r["memory_id"] == memory_id]
+        return memory_dates.label(rows[0]) if rows else ""
+
+    def active_public(self):  # M15a
+        """Her memories for the page, each with saved_date, the label of its date or "". public itself stays as it is,
+        since it goes out to Gemini in recall."""
+        with closing(self.connect()) as conn:
+            saved = {}
+            for row in _date_rows(conn):
+                saved.setdefault(row["memory_id"], memory_dates.label(row))
+        return [{**public(m), "saved_date": saved.get(m["id"], "")} for m in self.active()]
+
+    def due(self, today=None):  # M15a
+        """The dates to raise now: 5 to 8 days ahead, nearest first, at most 3. Not one already raised this year, one
+        learned today (she was just told, so it isn't news), one they asked to stop, or anyone who has died."""
+        today = today or _today()
+        with closing(self.connect()) as conn:
+            soon = [(row, memory_dates.next_date(row["month"], row["day"], today)) for row in _date_rows(conn)]
+            soon = [(row, on) for row, on in soon
+                    if 5 <= (on - today).days <= 8 and str(row["created_at"])[:10] != today.isoformat()]
+            if not soon:  # most days, and passed below reads every memory
+                return []
+            done = {tuple(row) for row in conn.execute("SELECT date_id, year FROM date_done")}
+            quiet = [row[0] for row in conn.execute("SELECT who FROM no_reminders")]
+        quiet += [name for memory in self.active() for name in memory_dates.passed(memory["text"])]
+        quiet = {word for name in quiet for word in name.split()}
+        out = [{**{k: row[k] for k in ("id", "who", "relation", "what", "month", "day")}, "on": on,
+                "days": (on - today).days, "label": memory_dates.label(row)}
+               for row, on in soon if (row["id"], on.year) not in done and not _people(row) & quiet]
+        return sorted(out, key=lambda item: (item["days"], item["id"]))[:3]
+
+    def mark_done(self, date_id, year):  # M15a
+        """This date was raised this year, so it stays quiet until the next."""
+        with closing(self.connect()) as conn, conn:
+            conn.execute("INSERT OR IGNORE INTO date_done (date_id, year, at) VALUES (?, ?, ?)",
+                         (date_id, year, _now()))
+        self._changed(False)
+
+    def said_due(self, text, today=None):  # M15a
+        """Marks done each due date her words name, and returns their ids. When in doubt it counts as said, for the same
+        "once" promise."""
+        said = [row for row in self.due(today) if _named(text, row)]
+        for row in said:
+            self.mark_done(row["id"], row["on"].year)
+        return [row["id"] for row in said]
+
+    def stop_reminders(self, who):  # M15a
+        """No more reminders about this person or relation."""
+        who = " ".join(str(who or "").lower().split())
+        if who:
+            with closing(self.connect()) as conn, conn:
+                conn.execute("INSERT OR REPLACE INTO no_reminders (who, why, at) VALUES (?, 'asked', ?)", (who, _now()))
+            self._changed(False)
+
+    def allow_reminders(self, who):  # M15a
+        """Reminders about this person may come again."""
+        who = " ".join(str(who or "").lower().split())
+        with closing(self.connect()) as conn, conn:
+            gone = conn.execute("DELETE FROM no_reminders WHERE who = ?", (who,)).rowcount > 0
+        if gone:
+            self._changed(True)
+
+    def note_passed(self, names):  # M15a
+        """Keeps these people, who have died, on the no-reminder list. A row already there stays."""
+        rows = [(" ".join(str(name or "").lower().split()), _now()) for name in names]
+        with closing(self.connect()) as conn, conn:
+            start = conn.total_changes
+            conn.executemany("INSERT OR IGNORE INTO no_reminders (who, why, at) VALUES (?, 'passed', ?)",
+                             [row for row in rows if row[0]])
+            changed = conn.total_changes != start
+        if changed:
+            self._changed(False)
+
+    def last_raised(self):  # M15a
+        """Who the newest raised date was about, for "don't remind me about him"; "anniversary" for their own, "" if
+        none has been raised."""
+        with closing(self.connect()) as conn:
+            row = conn.execute("SELECT d.who FROM date_done x JOIN dates d ON d.id = x.date_id "
+                               "ORDER BY x.at DESC, x.rowid DESC LIMIT 1").fetchone()
+        return (row[0] or "anniversary") if row else ""
 
     def goes_by(self):  # M4c
         """True when a memory says what they go by."""

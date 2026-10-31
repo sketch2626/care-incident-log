@@ -2,14 +2,14 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-10-30, about 16:00)
-- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice on the laptop. It was switched from Live for Andy's tuning, because Gemini TTS allows only 10 requests a day on the free tier. Live stays an option.
-- **Second-account workers.** M4a and M4b were stopped by her 5-hour limit at 15:29 and resume by themselves at 18:50. Their unsaved work is safe in their worktrees.
-  - **M4a** (`other/M4a`, terminal tab "M4a good voice", peer `m4a-70`): merged; waits for Andy's next findings. Earlier job, the fifth-try fixes:
-    - Every line she speaks goes into the brain's history, and the online hello comes from the brain.
-    - She uses his name rarely and never narrates the screen.
-    - Pictures: no example subjects, the real thing plus a Gemini vision check, and plain-text credits.
-  - **M4b** (`other/M4b`, tab "M4b captions and menu", peer `m4b-32`): one shared slide-aside layout for pictures now and games later. The credit never covers the picture.
+## Right now (2026-10-30, about 20:45)
+- **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through c89cbcc is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
+- **Second-account workers now** (Andy: use her usage before her weekly reset, Oct 31 5pm):
+  - **M9c truly forget** (`other/M9c`, tab "M9c memory core her acct", peer `m9c-00`): "forget" becomes a real delete, with no copies left in the database, the backups, memory.json or the history.
+  - **M7a word search** (`other/M7a`, tab "M7a word search her acct", brief `docs/handoff/M7a.md`): boards in `mockups/mary/round7/` first, for Andy's canvas, then the skill itself. Merge only after Andy approves the boards.
+  - **Speak-up review** (`other/speakup`, tab "Speak-up review her acct", brief `docs/handoff/speakup.md`): a review of `wip/report-to-state` plus `docs/speakup-plan.md`, with verified citations and decisions for Andy. Doc only.
+  - Idle, waiting for Andy's next findings: M4a (`m4a-70`) and M4b (`m4b-32`).
+- **Brain bench, first real run:** started 20:45 by the hub. 88 runs, about 178 requests to gemini-3.5-flash-lite. The results go in `bench/results/` for the hub to commit.
 - **Merged, waiting on a check:**
   - **M9c memory core** (merged 2026-10-30, 707 tests):
     - Memories are dated entries in the app's database, pulled with a `recall` tool; about 120 words are always sent.
@@ -23,7 +23,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
 - **Decisions waiting on Andy:**
   - **Politics:** decided 2026-10-30 (Andy's answer 10). Merged into her instructions and bench (bd7cc85).
   - **M9f, threats against others:** the safety-section gap. A draft is in the roadmap, waiting on Andy.
-  - **"Forget that":** truly erase, or hide and keep a copy? The hub leans toward truly erasing.
+  - **"Forget that":** decided 2026-10-30: truly erase (Andy: "forget that means forget that"). It's with M9c.
   - the main talk mode (Normal/Offline back-and-forth vs. Live; roadmap "Main talk mode, being decided");
   - the "Mary" shortcut name in the installer.
 - **Next, in order:**

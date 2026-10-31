@@ -67,7 +67,8 @@ The full example is in `tests/skill_fixtures/coin_flip/`. It uses a screen, stor
 - `name`, `version`, `title` and `summary` say who the skill is, in plain words.
 - `instructions` tells Mary when to offer it. Keep it under 400 characters.
 - `screen` sets the menu label and icon. `sees: true` means `view()` exists.
-- `actions` lists what Mary can call. Each one has a description and an input schema.
+- `actions` lists what Mary can call. Each one has a description and an input schema. Give the text your action needs most as the first text field: when she passes plain words, that's where they go.
+- `"always": true` on an action lets her use it from any group, with no opening. It's only for what residents need in the middle of anything, like louder and quieter. At most 4 on a card; keep it rare.
 - `offline_phrases` are short phrases that work with no internet.
 - `storage: true` gives the skill a private store. `needs` lists its internet hosts, mic and modes.
 - `offline` is `works` or `needs_internet`. `default_on` sets the start state.
@@ -170,8 +171,10 @@ MarySkills.register('my_game', { aside: true, enter(el) { /* draw */ }, leave(el
 ## 5. How Mary learns it
 
 You do not edit her brain. When the app starts, it reads every card.
-It gives the actions to Gemini as her tools, and your `instructions` go into her system text.
-This works the same in Live, Normal and Offline modes. Offline mode uses only the `offline_phrases`.
+Each skill is one group. Her prompt always lists your `title` and `summary` in one line, so write the summary to say plainly what the skill is for. When the talk turns to it she opens your group with `open_skill`, which gives her your `instructions` and actions, and runs an action with `use_skill`. While your skill is on screen she has them without opening it.
+This works the same in Live, Normal and Offline modes. Offline mode uses only the `offline_phrases`, which need no group.
+
+A game adds `setAside: true` to its `MarySkills.register` call. Then a picture doesn't end it: its page is hidden just as it is, and comes back when the picture closes, with no `leave` or `enter` call. A skill on top of it can read `MarySkills.backLabel()` to name it on a Back button, and gets an optional `backChanged()` if the game ends while hidden.
 
 ## 6. Testing
 

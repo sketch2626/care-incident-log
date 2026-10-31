@@ -124,5 +124,33 @@ function gameIsBack() {
   await M.call('pictures__next', {});
   assert.ok(!('aside' in sent[0]) && !('screen' in sent[0]));
 
+  // two games that both wait: B over A, Back from B brings A back, and A's Back reaches everyday (no endless swap)
+  skill('game_a', { setAside: true });
+  skill('game_b', { setAside: true });
+  reset(); show('game_a'); clear();
+  show('game_b');
+  assert.equal(S.screen, 'game_b');
+  assert.equal(M.comingBack(), 'game_a');
+  clear(); show('everyday');
+  assert.equal(S.screen, 'game_a', 'Back from B returns to A');
+  assert.equal(M.comingBack(), null, 'nothing is left waiting');
+  assert.equal(box('game_a').hidden, false);
+  assert.equal(box('game_b').hidden, true);
+  clear(); show('everyday');
+  assert.equal(S.screen, 'everyday', "A's Back reaches everyday");
+  assert.ok(events.includes('game_a leave'));
+  assert.equal(M.comingBack(), null);
+
+  // a game switched off by voice while it is hidden: closing the picture lands on everyday, and the picture heard it
+  reset(); show('game_a'); show('pictures'); clear();
+  assert.equal(M.comingBack(), 'game_a');
+  M.apply({ kind: 'settings', data: { skills: { game_a: false } } });
+  assert.ok(events.includes('pictures backChanged'), 'the picture hears where Back goes now');
+  assert.equal(M.comingBack(), null);
+  assert.equal(S.screen, 'pictures');
+  clear(); show('everyday');
+  assert.equal(S.screen, 'everyday');
+  assert.equal(box('game_a').hidden, true);
+
   console.log('OK skills aside');
 })().catch(e => { console.error(e); process.exit(1); });

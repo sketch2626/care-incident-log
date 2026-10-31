@@ -1,13 +1,17 @@
 """Cards and messages (M15b): draws each card, letter and keepsake as one self-contained SVG and saves them.
-Everything is in this one file because a skill can't load a second one. Mary's tools and the screen come later.
+Everything is in this one file because a skill can't load a second one. Mary's tools are at the bottom.
 
 Every draw_ function that fits text takes ctx, because the letter widths and the fonts come through it. Sizes are in
 SVG units: a card page is 500x700 units and shows at 370x518 on screen, so 27 units is the 20px floor."""
 import base64
+import datetime
+import functools
 import html
 import json
 import math
+import random
 import re
+import threading
 import unicodedata
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -142,13 +146,6 @@ SOFT_RE = re.compile(r'<filter id="([^"]+-soft)"')
 
 _metric_cache = {}
 _front_cache = {}
-
-
-# The tool. Only "close" for now; the rest of Mary's tools build on the functions below.
-
-def close(ctx):
-    """Puts the card away."""
-    return {"say": "All put away."}
 
 
 # Fitting
@@ -306,7 +303,10 @@ def _sprig(id_, x, y, scale):
 # Fonts, embedded so a picture needs nothing from outside itself
 
 def _face_rule(ctx, family, stem, weight, style, ranges):
-    data = base64.b64encode(ctx.font(stem + ".woff2")).decode("ascii")
+    try:
+        data = base64.b64encode(ctx.font(stem + ".woff2")).decode("ascii")
+    except Exception:  # a missing font falls back to the next family in the picture's list, and the card still draws
+        return ""
     return ("@font-face{font-family:'%s';font-style:%s;font-weight:%s;src:url(data:font/woff2;base64,%s) format('woff2');unicode-range:%s}"
             % (family, style, weight, data, ranges))
 
@@ -769,3 +769,553 @@ def save_letter(ctx, letter):
     name = "letter-%s.svg" % _file_id(letter["id"])
     ctx.files.write_text(name, draw_letter(ctx, letter.get("words"), letter.get("signature")))
     return {"files": {"letter": name}}
+
+
+# Mary's tools. Every "say" is something she could say aloud as it stands, and "note" carries the same words because
+# Live never sees "say". The facts are in the other fields. A draft lives in ctx.store, so a restart keeps it.
+
+SHOWN_MAX = 4
+WORDS_MAX = 1200
+LINE_MAX = 40
+NAME_MAX = 60
+LIKES_MAX = 200
+AGE_MAX = 60
+MEMORY_MAX = 110
+INDEX_MAX = 400
+READ_MAX = 3000
+PICTURE_MAX = 3_000_000  # one saved jpeg; each piece of it comes in its own event, because an event is 4 KB at most
+PICTURE_PARTS = ("front", "inside", "both")
+JPEG_MAGIC = b"\xff\xd8\xff"
+WATER_TAGS = {"water", "lake", "sea", "ocean", "river", "boat", "boats", "fishing"}
+FAITH_TAGS = {"church", "faith"}
+FAITH_WORDS = {"faith", "church", "god", "lord", "jesus", "prayer", "prayers", "pray", "praying", "bible", "hymn", "hymns"}
+MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
+          "december")
+PICK_NUMBERS = {"first": 1, "1st": 1, "1": 1, "second": 2, "2nd": 2, "2": 2, "two": 2, "third": 3, "3rd": 3, "3": 3,
+                "three": 3, "fourth": 4, "4th": 4, "4": 4, "four": 4}
+PICK_SKIP = {"the", "a", "an", "one", "with", "that", "this", "at", "of", "and", "in", "on", "it", "i", "like", "want",
+             "please", "number", "card", "picture", "small"}
+SAY_NO_CARD = "We haven't started a card yet."
+SAY_PICK_FIRST = "Let's pick a front first."
+SAY_NEEDS_WORDS = "There's nothing saved yet. It needs your words first."
+SAY_TOO_LONG = "That's too long for a card. We can shorten it, or I can make it a plain message."
+SAY_NOT_SENT = "Sending isn't set up yet. It's saved here on your laptop, and I can print it for you."
+SAY_FOLD = ("It prints on one sheet of paper. Fold the top half back behind, printed side out, then fold it left to "
+            "right. Mailing it needs some help from the facility.")
+SAY_SHEET = "It prints on one sheet of paper. Mailing it needs some help from the facility."
+
+_LOCK = threading.RLock()  # a tap, a picture and a spoken line may land together
+
+
+def _locked(fn):
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        with _LOCK:
+            return fn(*args, **kwargs)
+    return run
+
+
+def _reply(say, **facts):
+    for key, value in facts.items():  # a result is 4 KB at most, and letters outside plain English count six times over
+        if isinstance(value, str) and len(json.dumps(value)) > READ_MAX:
+            facts[key] = value[:READ_MAX // 6]
+    return dict(facts, note=say, say=say)
+
+
+def _said(value, limit):
+    return clean(value if isinstance(value, str) else "")[:limit].strip()
+
+
+def _word_set(text):
+    return set(re.findall(r"[a-z0-9']+", clean(text or "").lower()))
+
+
+def _today():
+    return datetime.date.today()
+
+
+def _slug(text, limit):
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:limit].strip("-")
+
+
+def _new_id(person):
+    return "%s-%s-%04x" % (_slug(person, 16) or "card", _today().strftime("%Y%m%d"), random.randrange(16 ** 4))
+
+
+def _draft(ctx):
+    if "draft" not in ctx.state:
+        ctx.state["draft"] = ctx.store.get("draft")
+    return ctx.state["draft"]
+
+
+def _keep(ctx, draft):
+    ctx.state["draft"] = draft
+    ctx.state.pop("keepsake", None)
+    ctx.store.put("draft", draft)
+
+
+def _file_away(ctx, draft):
+    """Keeps a saved card or letter for open_saved: its whole record, and a small list to find it by."""
+    draft["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+    ctx.store.put("saved-" + draft["id"], draft)
+    index = [entry for entry in ctx.store.get("index", []) if entry["id"] != draft["id"]]
+    index.append({"id": draft["id"], "person": draft.get("person", ""), "updated": draft["updated"]})
+    ctx.store.put("index", index[-INDEX_MAX:])
+
+
+def _is_card(draft):
+    return bool(draft) and draft.get("kind") == "card"
+
+
+def _tags(ctx, draft):
+    entry = fronts(ctx).get(draft.get("front")) or {}
+    return {tag.lower() for tag in entry.get("tags", [])}
+
+
+def _verse_true(ctx, draft, assumed):
+    if assumed in ("man", "woman"):
+        return draft.get("person_is") == assumed
+    if assumed == "water":
+        return bool(_tags(ctx, draft) & WATER_TAGS)
+    if assumed == "faith":
+        return bool(_tags(ctx, draft) & FAITH_TAGS) or draft.get("occasion") in ("sympathy", "christmas") \
+            or bool(_word_set(draft.get("likes")) & FAITH_WORDS)
+    return False
+
+
+def _verses(ctx, draft):
+    """The verses that are true of this person and this front, the most particular first."""
+    fitting = [v for v in VERSES.get(draft.get("occasion"), []) if all(_verse_true(ctx, draft, a) for a in v["assumes"])]
+    return [v["lines"] for v in sorted(fitting, key=lambda v: -len(v["assumes"]))]
+
+
+def _reading(draft):
+    verse = [] if draft.get("left_out") else (draft.get("verse") or [])
+    return " ".join(verse + [draft.get("words") or "", draft.get("signature") or ""]).strip()
+
+
+def _when(day):
+    return "%s, %s %d" % (day.strftime("%A"), day.strftime("%B"), day.day)
+
+
+def _save_card(ctx, trial):
+    """Saves a trial copy of the draft and makes it the draft. False, with nothing changed, when it won't fit."""
+    saved = save_card(ctx, trial)
+    if not saved["fits"]:
+        return False
+    for part in PICTURE_PARTS:  # a picture of the old words must not outlive them
+        ctx.files.delete("card-%s-%s.jpg" % (trial["id"], part))
+    trial.update(rev=trial.get("rev", 0) + 1, left_out=saved["verse_left_out"], saved=True, step="open")
+    _file_away(ctx, trial)
+    _keep(ctx, trial)
+    return True
+
+
+def _front_file(key):
+    return "card-draft-%s.svg" % key
+
+
+def _show_card(ctx, draft, opening=False):
+    data = {"id": draft["id"], "rev": draft.get("rev", 0), "stage": draft["step"], "opening": opening}
+    if draft["step"] == "closed":
+        data["front"] = _front_file(draft["front"])
+    else:
+        data.update({part: "card-%s-%s.svg" % (draft["id"], part) for part in ("front", "left", "inside", "both")})
+        data["pictures"] = not all(ctx.files.exists("card-%s-%s.jpg" % (draft["id"], part)) for part in PICTURE_PARTS)
+    ctx.effect("card", data)
+
+
+def _show_fronts(ctx, draft):
+    every = fronts(ctx)
+    ctx.effect("fronts", {"cards": [{"number": number, "name": every[key]["name"], "key": key, "file": _front_file(key)}
+                                    for number, key in enumerate(draft["shown"], 1)]})
+
+
+def _show_letter(ctx, draft):
+    ctx.effect("letter", {"file": "letter-%s.svg" % draft["id"], "rev": draft.get("rev", 0)})
+
+
+def _show(ctx, draft, opening=False):
+    if draft["step"] == "fronts":
+        _show_fronts(ctx, draft)
+    elif draft["step"] == "letter":
+        _show_letter(ctx, draft)
+    else:
+        _show_card(ctx, draft, opening)
+
+
+def _offer(ctx, draft):
+    """The picker: the occasion's fronts, those nearest what they love first, each drawn with the personal line."""
+    every, likes = fronts(ctx), _word_set(draft.get("likes"))
+
+    def match(entry):
+        tags = [tag.lower() for tag in entry["tags"]]
+        return sum(any(w == t or w.rstrip("s") == t or (len(w) >= 4 and t.startswith(w)) for t in tags) for w in likes)
+
+    chosen = sorted((e for e in every.values() if draft["occasion"] in e["occasions"]), key=lambda e: -match(e))[:SHOWN_MAX]
+    for entry in chosen:
+        ctx.files.write_text(_front_file(entry["key"]), draw_front(ctx, entry["key"], draft.get("line")))
+    draft.update(shown=[entry["key"] for entry in chosen], step="fronts")
+    _keep(ctx, draft)
+    ctx.effect("show_screen")
+    _show_fronts(ctx, draft)
+    return [{"number": number, "name": entry["name"]} for number, entry in enumerate(chosen, 1)]
+
+
+@_locked
+def show_fronts(ctx, person="", occasion="birthday", likes="", line="", person_is="unknown"):
+    draft = {"kind": "card", "id": _new_id(_said(person, NAME_MAX)), "person": _said(person, NAME_MAX),
+             "person_is": person_is if person_is in ("man", "woman") else "unknown",
+             "occasion": occasion if occasion in VERSES else "birthday", "likes": _said(likes, LIKES_MAX),
+             "line": _said(line, LINE_MAX), "hand": ctx.store.get("hand", "cursive"), "rev": 0}
+    shown = _offer(ctx, draft)
+    if ctx.heard:
+        return _reply("Here are some fronts. Writing the words takes the internet, so we can finish it when I'm back on.",
+                      fronts=shown)
+    return _reply("These are up. Which one do you like?", fronts=shown, person=draft["person"])
+
+
+def _match_front(ctx, choice, draft):
+    """A number, a name or a word from a front's tags, among those shown. None when it isn't clear which."""
+    shown, every = draft.get("shown", []), fronts(ctx)
+    words = re.findall(r"[a-z0-9']+", clean(str(choice)).lower())
+    wanted = set(words) - PICK_SKIP
+    scores = {}
+    for key in shown:
+        entry = every[key]
+        own = {key} | _word_set(entry["name"]) | _word_set(entry.get("label")) | {tag.lower() for tag in entry["tags"]}
+        scores[key] = len(wanted & own)
+    best = max(scores.values(), default=0)
+    hits = [key for key, score in scores.items() if score == best]
+    if best and len(hits) == 1:
+        return hits[0]
+    if best:
+        return None
+    number = next((PICK_NUMBERS[w] for w in words if w in PICK_NUMBERS), None)
+    if "last" in words:
+        number = len(shown)
+    if number is None and "one" in words and len(words) <= 2 and "the" not in words:
+        number = 1
+    return shown[number - 1] if number and number <= len(shown) else None
+
+
+@_locked
+def pick_front(ctx, choice):
+    draft = _draft(ctx)
+    if not _is_card(draft) or not draft.get("shown"):
+        return _reply(SAY_NO_CARD, picked=None)
+    key = _match_front(ctx, choice, draft)
+    if key is None:
+        return _reply("I'm not sure which one you mean.", picked=None)
+    trial = dict(draft, front=key)
+    fitting = _verses(ctx, trial)
+    if not trial.get("verse_off") and (not trial.get("verse_chosen") or trial.get("verse") not in fitting):
+        trial["verse"] = fitting[0] if fitting else []
+    name = fronts(ctx)[key]["name"]
+    ctx.effect("show_screen")
+    if trial.get("saved") and (_save_card(ctx, trial) or _save_card(ctx, dict(trial, verse=[]))):
+        _show(ctx, _draft(ctx))
+        return _reply("That's on the card now.", picked=name, read_back=_reading(_draft(ctx)))
+    trial["step"] = "closed"
+    _keep(ctx, trial)
+    _show(ctx, trial)
+    return _reply("What do you want to say?", picked=name)
+
+
+@_locked
+def set_words(ctx, words, signature=""):
+    draft = _draft(ctx)
+    if not _is_card(draft):
+        return _reply(SAY_NO_CARD)
+    words, signature = clean(words if isinstance(words, str) else "").strip(), _said(signature, NAME_MAX)
+    if len(words) > WORDS_MAX:
+        return _reply(SAY_TOO_LONG, too_long=True, saved=False)
+    words, signature = words or draft.get("words", ""), signature or draft.get("signature", "")
+    if not draft.get("front"):
+        _keep(ctx, dict(draft, words=words, signature=signature))
+        return _reply(SAY_PICK_FIRST, saved=False)
+    if not words:
+        return _reply("What do you want to say?", saved=False)
+    if not signature:
+        _keep(ctx, dict(draft, words=words))
+        return _reply("How do you want to sign it?", saved=False, words_kept=True, need="signature")
+    first = not draft.get("saved")
+    trial = dict(draft, words=words, signature=signature)
+    if not _save_card(ctx, trial):
+        return _reply(SAY_TOO_LONG, too_long=True, saved=False)
+    _show(ctx, trial, opening=first)
+    facts = {"saved": True, "read_back": _reading(trial)}
+    say = "Here's how it reads."
+    if trial["left_out"]:
+        facts["verse_left_out"] = True
+        say = "The verse won't fit with your words, so I left it out. Here's how it reads."
+    if first and trial["hand"] == "cursive" and not trial.get("mentioned"):
+        facts["mention"] = "Say once: I can write it plainer if cursive's hard to read."
+        trial["mentioned"] = True
+        _keep(ctx, trial)
+    return _reply(say, **facts)
+
+
+@_locked
+def set_hand(ctx, hand=""):
+    draft = _draft(ctx)
+    if ctx.heard:  # the only phrase here is "write it plainer"
+        if not _is_card(draft):
+            return {"not_for_me": True}
+        hand = "plain"
+    current = draft.get("hand") if _is_card(draft) else ctx.store.get("hand", "cursive")
+    hand = hand if hand in ("plain", "cursive") else ("cursive" if current == "plain" else "plain")
+    if _is_card(draft) and draft.get("saved"):
+        trial = dict(draft, hand=hand)
+        if not _save_card(ctx, trial):
+            return _reply("It won't fit on the card that way.", hand=current, too_long=True)
+        _show(ctx, trial)
+    elif _is_card(draft):
+        _keep(ctx, dict(draft, hand=hand))
+    ctx.store.put("hand", hand)
+    return _reply("Written plainer now." if hand == "plain" else "Back in cursive.", hand=hand)
+
+
+@_locked
+def change_verse(ctx, which="next"):
+    draft = _draft(ctx)
+    if not _is_card(draft) or not draft.get("front"):
+        return _reply(SAY_PICK_FIRST if _is_card(draft) else SAY_NO_CARD)
+    if which == "none":
+        trial = dict(draft, verse=[], verse_off=True)
+    else:
+        fitting = _verses(ctx, draft)
+        if not fitting or fitting == [draft.get("verse")]:
+            return _reply("That's the only verse that suits this card.", verse=draft.get("verse") or [])
+        current = fitting.index(draft["verse"]) if draft.get("verse") in fitting else -1
+        trial = dict(draft, verse=fitting[(current + 1) % len(fitting)], verse_off=False, verse_chosen=True)
+    if draft.get("saved"):
+        if not _save_card(ctx, trial):
+            return _reply("That verse won't fit with your words, so I left the card as it was.", changed=False)
+        _show(ctx, trial)
+    else:
+        _keep(ctx, trial)
+    if trial.get("left_out"):
+        return _reply("That verse won't fit with your words, so I left it out.", verse_left_out=True, verse=[])
+    return _reply("The verse is gone." if which == "none" else "Here's the verse now.", verse=trial["verse"])
+
+
+@_locked
+def change_front(ctx):
+    draft = _draft(ctx)
+    if not _is_card(draft):
+        return _reply(SAY_NO_CARD)
+    return _reply("Here are the fronts again. Your words are kept.", fronts=_offer(ctx, dict(draft)))
+
+
+@_locked
+def read_back(ctx):
+    draft = _draft(ctx)
+    if not draft:
+        return _reply(SAY_NO_CARD)
+    verse = [] if draft.get("left_out") else (draft.get("verse") or [])
+    return _reply("Here's how it reads.", verse=verse, words=draft.get("words", ""), signature=draft.get("signature", ""))
+
+
+@_locked
+def save_card_now(ctx):
+    draft = _draft(ctx)
+    if not draft or not draft.get("rev"):
+        return _reply(SAY_NEEDS_WORDS, saved=False)
+    return _reply("It's saved on your laptop, as of %s." % _when(_today()), saved=True)
+
+
+def _print_file(ctx, draft):
+    keepsake = ctx.state.get("keepsake")
+    if keepsake:
+        return keepsake["file"]
+    if not draft or not draft.get("rev"):
+        return None
+    return "letter-%s.svg" % draft["id"] if draft["kind"] == "letter" else "card-%s-print.svg" % draft["id"]
+
+
+@_locked
+def print_card(ctx):
+    file = _print_file(ctx, _draft(ctx))
+    if file is None:
+        return {"not_for_me": True} if ctx.heard else _reply(SAY_NEEDS_WORDS, printing=False)
+    ctx.state.pop("print_failed", None)
+    ctx.effect("print", {"file": file})
+    return _reply(SAY_FOLD if file.endswith("-print.svg") else SAY_SHEET, printing=True)
+
+
+@_locked
+def send_it(ctx):
+    draft = _draft(ctx)
+    if ctx.heard and not draft:
+        return {"not_for_me": True}
+    return _reply(SAY_NOT_SENT, sent=False, saved=bool(draft and draft.get("rev")), can_print=True)
+
+
+@_locked
+def plain_message(ctx, person, words, signature=""):
+    person, signature = _said(person, NAME_MAX), _said(signature, NAME_MAX)
+    words = clean(words if isinstance(words, str) else "").strip()
+    if len(words) > WORDS_MAX:
+        return _reply("That's a lot for one message. Can we shorten it?", too_long=True, saved=False)
+    draft = _draft(ctx)
+    same = bool(draft) and draft.get("kind") == "letter" and (not person or person.lower() == draft["person"].lower())
+    if same:
+        trial = dict(draft)
+    else:
+        trial = {"kind": "letter", "id": _new_id(person), "person": person, "rev": 0, "step": "letter"}
+    words, signature = words or trial.get("words", ""), signature or trial.get("signature", "")
+    trial.update(words=words, signature=signature)
+    if not words:
+        return _reply("What do you want to say?", saved=False)
+    if not signature:
+        _keep(ctx, trial)
+        return _reply("How do you want to sign it?", saved=False, words_kept=True, need="signature")
+    save_letter(ctx, trial)
+    trial["rev"] += 1
+    _file_away(ctx, trial)
+    _keep(ctx, trial)
+    ctx.effect("show_screen")
+    _show(ctx, trial)
+    return _reply("Here's what I've got.", saved=True, read_back=_reading(trial))
+
+
+def _month_number(month):
+    text = clean(str(month)).strip().lower()
+    if text.isdigit():
+        return int(text) if 1 <= int(text) <= 12 else None
+    found = [number for number, name in enumerate(MONTHS, 1) if len(text) >= 3 and name.startswith(text)]
+    return found[0] if len(found) == 1 else None
+
+
+def _next_date(month, day):
+    today = _today()
+    for year in range(today.year, today.year + 9):  # far enough for the next 29 February
+        try:
+            date = datetime.date(year, month, day)
+        except ValueError:
+            continue
+        if date >= today:
+            return date
+    return None
+
+
+@_locked
+def show_keepsake(ctx, name, month, day, age_line="", memory_line="", who=""):
+    name = _said(name, NAME_MAX)
+    number = _month_number(month)
+    date = _next_date(number, day) if number else None
+    if date is None:
+        return _reply("I don't have that date right.", shown=False)
+    if who not in ("mary", "sam"):
+        who = "sam" if ctx.settings_get("companion") == "him" else "mary"
+    file = "keepsake-%s-%02d%02d.svg" % (_slug(name, 30) or "date", date.month, date.day)
+    weekday = date.strftime("%A")
+    ctx.files.write_text(file, draw_keepsake(ctx, who, name, weekday, date.day, date.strftime("%B"),
+                                             _said(age_line, AGE_MAX), _said(memory_line, MEMORY_MAX)))
+    ctx.state["keepsake"] = {"file": file, "name": name, "when": _when(date)}
+    ctx.effect("show_screen")
+    ctx.effect("keepsake", {"file": file})
+    return _reply("It's up.", shown=True, weekday=weekday, date=_when(date))
+
+
+@_locked
+def open_saved(ctx, person=""):
+    wanted = _said(person, NAME_MAX).lower()
+    index = ctx.store.get("index", [])
+    for entry in reversed(index):
+        held = entry["person"].lower()
+        if wanted and not (held and (wanted in held or held in wanted)):
+            continue
+        record = ctx.store.get("saved-" + entry["id"])
+        if record:
+            _keep(ctx, record)
+            ctx.effect("show_screen")
+            _show(ctx, record)
+            return _reply("Here it is.", found=True, kind=record["kind"], person=record.get("person", ""),
+                          read_back=_reading(record))
+    return _reply("I don't have one saved for %s." % _said(person, NAME_MAX) if wanted else "There's nothing saved yet.",
+                  found=False)
+
+
+@_locked
+def close(ctx):
+    """Puts the card away. It stays saved."""
+    ctx.effect("leave_screen")
+    return _reply("All put away. It stays saved.")
+
+
+def _picture(ctx, event):
+    """One piece of a jpeg of the saved card, for sending later. Anything out of step is dropped; the svg stays."""
+    draft, part, seq = _draft(ctx), event.get("part"), event.get("seq")
+    key = [event.get("id"), part, event.get("rev")]
+    if not _is_card(draft) or part not in PICTURE_PARTS or key[0] != draft["id"] or key[2] != draft.get("rev"):
+        return {"ignored": True, "stale": True}
+    if seq == 0:
+        ctx.state["picture"] = {"key": key, "next": 0, "data": bytearray()}
+    job = ctx.state.get("picture")
+    if not job or job["key"] != key or job["next"] != seq:
+        return {"ignored": True, "stale": True}
+    try:
+        job["data"] += base64.b64decode(event.get("data"), validate=True)
+    except (TypeError, ValueError):
+        ctx.state.pop("picture", None)
+        return {"ignored": True, "stale": True}
+    job["next"] += 1
+    if len(job["data"]) > PICTURE_MAX:
+        ctx.state.pop("picture", None)
+        return {"ignored": True, "stale": True}
+    if not event.get("last"):
+        return {"ok": True}
+    ctx.state.pop("picture", None)
+    if not job["data"].startswith(JPEG_MAGIC):
+        return {"ignored": True, "stale": True}
+    ctx.files.write_bytes("card-%s-%s.jpg" % (draft["id"], part), bytes(job["data"]))
+    return {"ok": True, "saved": True}
+
+
+@_locked
+def on_event(ctx, event):
+    kind = event.get("type")
+    if kind == "open":  # from the menu, or after a restart
+        keepsake, draft = ctx.state.get("keepsake"), _draft(ctx)
+        if keepsake:
+            ctx.effect("keepsake", {"file": keepsake["file"]})
+        elif draft:
+            _show(ctx, draft)
+        else:
+            show_fronts(ctx)
+        return {"ok": True}
+    if kind == "pick":
+        draft = _draft(ctx)
+        if _is_card(draft) and event.get("key") in draft.get("shown", []):
+            return pick_front(ctx, event["key"])  # its say comes back, so a tap gets her line as a spoken pick does
+        return {"ignored": True}
+    if kind == "picture":
+        return _picture(ctx, event)
+    if kind == "print_failed":
+        ctx.state["print_failed"] = True
+        return _reply("The print didn't work.")
+    return {"ignored": True}
+
+
+def view(state):
+    """What Mary sees: the step, the person and the words so far, so she never has to describe the screen."""
+    failed = "The print didn't work. " if state.get("print_failed") else ""
+    keepsake = state.get("keepsake")
+    if keepsake:
+        return (failed + "A keepsake page for %s, %s." % (keepsake["name"], keepsake["when"]))[:590]
+    draft = state.get("draft")
+    if not draft:
+        return failed + "No card up."
+    person = draft.get("person") or "someone not named yet"
+    words = (draft.get("words") or "")[:300]
+    if draft.get("kind") == "letter":
+        text = "A plain message to %s. Words so far: %s" % (person, words or "none")
+    elif draft.get("step") == "fronts":
+        text = "Fronts up for %s, not picked yet." % person
+    elif draft.get("step") == "closed":
+        text = "The %s card for %s is up, no words yet. Ask what they want to say." % (draft.get("front"), person)
+    else:
+        text = "The %s card for %s is open, in %s. Words so far: %s" % (draft.get("front"), person, draft.get("hand"), words)
+    return (failed + text)[:590]

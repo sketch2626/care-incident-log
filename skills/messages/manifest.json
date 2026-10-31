@@ -3,12 +3,126 @@
   "name": "messages",
   "version": "0.1.0",
   "title": "Cards and messages",
-  "summary": "Makes greeting cards and short letters in the resident's own words, ready to print or send.",
-  "instructions": "Help them make a card or a short message for someone. The words are theirs: write down what they say and read it back before anything is saved. When they're done, put the card away.",
+  "summary": "Makes greeting cards and short letters in the resident's own words, ready to print and saved on their laptop.",
+  "instructions": "Their words, never yours. Help only if asked, in their voice, adding no feeling they didn't express. Read it back. Changes are by voice. If the person is unclear, ask aloud. Never describe the screen. A card: show_fronts, pick_front, set_words. A note: plain_message. Nothing sends yet: send_it says so, then offer to print. A date to look at: show_keepsake.",
+  "screen": {"menu_label": "Make a card", "menu_icon": "card", "full_screen": true},
+  "sees": true,
+  "slow": true,
+  "settings": ["companion"],
   "actions": [
     {
+      "name": "show_fronts",
+      "description": "Start a card: shows three or four numbered fronts for who it's for and the occasion. The result lists number and name.",
+      "inputSchema": {"type": "object", "properties": {
+        "person": {"type": "string", "description": "Who it's for, as they said it"},
+        "occasion": {"type": "string", "enum": ["birthday", "get_well", "sympathy", "thank_you", "christmas", "thanksgiving"], "description": "The occasion, birthday if not said"},
+        "likes": {"type": "string", "description": "Words about what that person loves"},
+        "line": {"type": "string", "description": "A short personal line for the front, such as for my son", "maxLength": 40},
+        "person_is": {"type": "string", "enum": ["man", "woman", "unknown"], "description": "Only when you know it"}
+      }},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["make a card"]
+    },
+    {
+      "name": "pick_front",
+      "description": "Choose a front by number, name or a word about it, like the second one or the one with the lake.",
+      "inputSchema": {"type": "object", "properties": {
+        "choice": {"type": "string", "description": "What they said"}
+      }, "required": ["choice"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "set_words",
+      "description": "Put their words on the card as said, and any later change. Saves it. The result has read_back to read aloud.",
+      "inputSchema": {"type": "object", "properties": {
+        "words": {"type": "string", "description": "All their words, as said", "maxLength": 1200},
+        "signature": {"type": "string", "description": "How they sign it, in their words"}
+      }, "required": ["words"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "set_hand",
+      "description": "Change the handwriting, plain or cursive. With no choice it swaps. It's remembered for next time.",
+      "inputSchema": {"type": "object", "properties": {
+        "hand": {"type": "string", "enum": ["plain", "cursive"], "description": "Which handwriting"}
+      }},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["write it plainer"]
+    },
+    {
+      "name": "change_verse",
+      "description": "Change the printed verse to the next one that suits the card, or take it off.",
+      "inputSchema": {"type": "object", "properties": {
+        "which": {"type": "string", "enum": ["next", "none"], "description": "next verse, or none"}
+      }},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "change_front",
+      "description": "Go back to the fronts for the same person and occasion. Their words are kept.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "read_back",
+      "description": "Get the verse, words and signature, to read aloud.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": true, "destructiveHint": false}
+    },
+    {
+      "name": "save_card_now",
+      "description": "Say whether it's saved. Each change already saves it, so this only tells them so, with the date.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": true, "destructiveHint": false}
+    },
+    {
+      "name": "print_card",
+      "description": "Print what's on screen. The result says how it prints and folds, and that mailing needs facility help.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false},
+      "offline_phrases": ["print the card"]
+    },
+    {
+      "name": "send_it",
+      "description": "When they ask to send a card or message. It never sends: sending isn't set up, so offer to print.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": true, "destructiveHint": false},
+      "offline_phrases": ["send it"]
+    },
+    {
+      "name": "plain_message",
+      "description": "A plain message on cream paper, no card. Also for any change to it. Written as them, in their words.",
+      "inputSchema": {"type": "object", "properties": {
+        "person": {"type": "string", "description": "Who it's for"},
+        "words": {"type": "string", "description": "The message, in their words", "maxLength": 1200},
+        "signature": {"type": "string", "description": "How they sign it"}
+      }, "required": ["person", "words"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "show_keepsake",
+      "description": "Show a keepsake page for someone's date. The weekday is worked out from the next such date.",
+      "inputSchema": {"type": "object", "properties": {
+        "name": {"type": "string", "description": "Whose date it is"},
+        "month": {"type": "string", "description": "The month, like November"},
+        "day": {"type": "integer", "description": "The day of the month", "minimum": 1, "maximum": 31},
+        "age_line": {"type": "string", "description": "A short age line, like Fifty-two this year", "maxLength": 60},
+        "memory_line": {"type": "string", "description": "Only what they told you about this person", "maxLength": 110},
+        "who": {"type": "string", "enum": ["mary", "sam"], "description": "Which of you is showing it"}
+      }, "required": ["name", "month", "day"]},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
+      "name": "open_saved",
+      "description": "Bring back the latest saved card or message for a person, or the latest of all.",
+      "inputSchema": {"type": "object", "properties": {
+        "person": {"type": "string", "description": "Who it was for"}
+      }},
+      "annotations": {"readOnlyHint": false, "destructiveHint": false}
+    },
+    {
       "name": "close",
-      "description": "Put the card away and go back to Mary.",
+      "description": "Put the card away and go back to Mary. It stays saved.",
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false}
     }

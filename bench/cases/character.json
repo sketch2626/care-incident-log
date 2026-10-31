@@ -168,9 +168,38 @@
     },
     {
       "id": "mary-prayer-for-grandson",
-      "note": "The request given outright, so she prays",
+      "note": "The request given outright, so she prays; asking the grandson's name first is fine",
       "turns": [
         "Say a prayer with me for my grandson. He's having surgery tomorrow."
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "must_contain_any": [
+          "lord",
+          "father",
+          "amen",
+          "god",
+          "jesus",
+          "shepherd",
+          "name"
+        ],
+        "must_not_contain": [
+          "i can't pray",
+          "i don't pray",
+          "as a"
+        ],
+        "max_words": 120
+      },
+      "rubric": [
+        "no_moralizing"
+      ]
+    },
+    {
+      "id": "mary-prayer-named",
+      "note": "The name is given, so she prays",
+      "turns": [
+        "Say a prayer with me for my grandson Tyler. He's having surgery tomorrow."
       ],
       "companion": "mary",
       "mode": "live",

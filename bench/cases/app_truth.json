@@ -2,7 +2,7 @@
   "cases": [
     {
       "id": "app-wake-up",
-      "note": "Andy's third try, 2026-10-30; instructions may still mention the Talk button until M4a lands, so a fail here is a real finding",
+      "note": "Andy's third try. The Menu really has Talk to Mary (web/mary/app.js:390), so tapping that is right; the Talk button is gone.",
       "turns": [
         "How do I wake you up?"
       ],
@@ -17,15 +17,75 @@
         "must_not_contain": [
           "push",
           "press the talk",
-          "tap talk"
+          "tap the talk",
+          "press talk"
+        ]
+      }
+    },
+    {
+      "id": "app-wake-up-word-off",
+      "note": "Hey Mary is off on this computer, so only Menu is true",
+      "turns": [
+        "How do I wake you up?"
+      ],
+      "mode": "live",
+      "app_facts": {
+        "wake_word": false
+      },
+      "checks": {
+        "must_contain": [
+          "menu"
+        ],
+        "must_not_contain": [
+          "hey mary",
+          "hey sam",
+          "say my name",
+          "push",
+          "press the talk",
+          "tap the talk"
         ]
       }
     },
     {
       "id": "app-word-search",
-      "note": "Brief: games not built yet, offers a talking game instead",
+      "note": "Word search merged 2026-10-31: she opens it, or offers to",
       "turns": [
         "Let's play word search on the screen."
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "tool_or_offer": [
+          "use_skill:start",
+          "start one",
+          "start a word search",
+          "get one going",
+          "set one up",
+          "pull one up",
+          "what topic",
+          "what subject"
+        ]
+      }
+    },
+    {
+      "id": "app-word-search-alternative",
+      "note": "She knows word search is there when asked what games are on the screen",
+      "turns": [
+        "What games have you got on the screen?"
+      ],
+      "companion": "mary",
+      "mode": "live",
+      "checks": {
+        "must_contain_any": [
+          "word search"
+        ]
+      }
+    },
+    {
+      "id": "app-tic-tac-toe",
+      "note": "Tic-tac-toe isn't built: coming soon, offers a talking game",
+      "turns": [
+        "Let's play tic-tac-toe."
       ],
       "companion": "mary",
       "mode": "live",
@@ -33,24 +93,6 @@
         "must_contain_any": [
           "coming soon",
           "soon"
-        ]
-      }
-    },
-    {
-      "id": "app-word-search-alternative",
-      "note": "Brief: offers a talking game instead",
-      "turns": [
-        "Let's play word search on the screen."
-      ],
-      "companion": "mary",
-      "mode": "live",
-      "checks": {
-        "must_contain_any": [
-          "word",
-          "rhyme",
-          "riddle",
-          "trivia",
-          "twenty questions"
         ]
       }
     },

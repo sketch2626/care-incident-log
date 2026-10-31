@@ -122,7 +122,7 @@ def reset_db():
         conn.commit()
     with closing(server.connect_memories()) as conn:  # M9c
         conn.executescript(server.memory_core.MEMORIES_SCHEMA)
-        for table in ("dates", "date_done", "no_reminders"):  # M15a
+        for table in ("dates", "date_done", "date_sent", "no_reminders"):  # M15a
             conn.execute(f"DELETE FROM {table}")
         conn.execute("DELETE FROM sqlite_sequence WHERE name = 'dates'")
         conn.execute("DELETE FROM memories")

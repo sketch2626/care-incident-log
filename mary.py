@@ -353,6 +353,7 @@ class Memory:
         if role == "model" and self.store is not None:  # M15a: Normal and Live both mark a date the moment she says it
             try:
                 self.store.said_due(text)
+                self.store.note_replied()  # M15a: after said_due, so a date she named is marked first
             except Exception:
                 pass
 
@@ -664,7 +665,8 @@ MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
                                                    "the person just mentioned.")}}}},
 ]
 MEMORY_TOOL_NAMES = tuple(tool["name"] for tool in MEMORY_TOOLS)
-REMINDER_NOTE = ("\n\n{opening} to bring up once in this talk, in your own words, at a natural moment soon: {items}. They "  # M15a
+REMINDER_MARK = "to bring up once in this talk"  # M15a: how note_went_out knows a prompt carried it
+REMINDER_NOTE = ("\n\n{opening} " + REMINDER_MARK + ", in your own words, at a natural moment soon: {items}. They "  # M15a
                  "told you {which} themselves. Say the name and the occasion plainly so they know who you mean, and "
                  "say there's still time to call or write.{cards} Keep it to a sentence or two, then go back to what you "
                  "were talking about, and leave it alone whatever they say. It's your own memory: never mention a "
@@ -863,6 +865,7 @@ def reminder_note(memory, cards=False):  # M15a: for either companion, so no nam
     if store is None:
         return ""
     try:
+        store.close_stale()
         due = store.due()
         items = "; ".join(_reminder_item(item) for item in due)
     except Exception:
@@ -870,6 +873,18 @@ def reminder_note(memory, cards=False):  # M15a: for either companion, so no nam
     opening, which = ("One thing", "this date") if len(due) == 1 else ("A few things", "these dates")
     return REMINDER_NOTE.format(opening=opening, which=which, items=items,
                                 cards=REMINDER_CARDS_LINE if cards else "") if items else ""
+
+
+def note_went_out(memory, body):  # M15a
+    """Gemini was given this prompt and answered, so a date note in it counts as sent, whatever she said. Never raises."""
+    store = getattr(memory, "store", None)
+    if store is None:
+        return
+    try:
+        if REMINDER_MARK in body["systemInstruction"]["parts"][0]["text"]:
+            store.note_sent(store.due())
+    except Exception:
+        pass
 
 
 def can_make_cards(skills):  # M15a: M15b's hook. No messages skill exists yet, so this is False; M15b flips it
@@ -1458,6 +1473,8 @@ def open_line(memory, api_key, model="", companion="mary", when=""):
     body["generationConfig"] = {"temperature": 0.9, "maxOutputTokens": 1000}
     text = _short_answer(body, api_key, model, OPEN_DEADLINE_S)
     text = " ".join(re.sub(r"[*#]+", "", re.sub(r"\[[^\]]*\]?", "", text)).split())
+    if text:  # M15a: her hello can carry the date note too
+        note_went_out(memory, body)
     end = re.search(r"[.!?…][\"'”’)]*(?=[^.!?…]*$)", text)  # a line cut off by the deadline ends on a whole sentence
     return text[:end.end()] if end else text
 
@@ -1686,6 +1703,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                 emit(NOT_WORKING_TEXT)
         if not streamed and not error:
             error = NO_GEMINI
+        if streamed:  # M15a: her own words went out (a later round's body keeps the same systemInstruction)
+            note_went_out(memory, body)
 
     # --- skills hook (M13) --- no Gemini (no key, or it failed): an offline phrase can still run a skill
     if (skills is not None and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)

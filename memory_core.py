@@ -8,6 +8,7 @@ Takes a connect callable (server.connect_memories), and imports neither server n
 import json
 import os
 import re
+import time  # M15a
 from contextlib import closing
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -38,6 +39,13 @@ CREATE TABLE IF NOT EXISTS date_done (
     at TEXT,
     PRIMARY KEY (date_id, year)
 );
+CREATE TABLE IF NOT EXISTS date_sent (
+    date_id INTEGER,
+    year INTEGER,
+    at REAL,
+    replies INTEGER DEFAULT 0,
+    PRIMARY KEY (date_id, year)
+);
 CREATE TABLE IF NOT EXISTS no_reminders (
     who TEXT PRIMARY KEY,
     why TEXT,
@@ -47,6 +55,8 @@ CREATE TABLE IF NOT EXISTS no_reminders (
 KINDS = ("person", "family", "likes", "health_care", "history", "preference", "other")
 SOURCES = ("talk", "typed", "said")
 MAX_TEXT = 200
+NOTE_REPLIES = 3  # M15a: her replies a raised date's note may ride along with
+TALK_GAP_S = 600  # M15a: a sent note this old by the real clock belongs to a talk that is over
 LATELY_ITEMS = 3
 SAFETY_LABEL = "Always keep in mind:"
 LATELY_LABEL = "Lately they told you:"
@@ -301,6 +311,7 @@ def _delete(conn, ids):  # M15a
     """Really deletes these memories, the dates they hold up and those dates' done marks."""
     rows = [(memory_id,) for memory_id in ids]
     conn.executemany("DELETE FROM date_done WHERE date_id IN (SELECT id FROM dates WHERE memory_id = ?)", rows)
+    conn.executemany("DELETE FROM date_sent WHERE date_id IN (SELECT id FROM dates WHERE memory_id = ?)", rows)
     conn.executemany("DELETE FROM dates WHERE memory_id = ?", rows)
     return sum(conn.execute("DELETE FROM memories WHERE id = ?", row).rowcount for row in rows)
 
@@ -513,7 +524,7 @@ class MemoryStore:
             _delete(conn, [r["id"] for r in rows])
             cleared = _unstop(conn, about)
             if is_everything(about):
-                for table in ("date_done", "dates", "no_reminders"):
+                for table in ("date_done", "date_sent", "dates", "no_reminders"):
                     cleared += conn.execute(f"DELETE FROM {table}").rowcount
         if rows or cleared:
             self._changed(True)
@@ -655,6 +666,39 @@ class MemoryStore:
                 self.mark_done(date_id, row["on"].year)
         return [date_id for row in said for date_id in [row["id"], *row["also"]]]
 
+    def note_sent(self, items):  # M15a
+        """These due() items went out in a prompt. A row already there keeps its reply count, and a group goes as one."""
+        now = time.time()
+        rows = [(date_id, item["on"].year, now) for item in items for date_id in [item["id"], *item["also"]]]
+        with closing(self.connect()) as conn, conn:
+            conn.executemany("INSERT INTO date_sent (date_id, year, at) VALUES (?, ?, ?) "
+                             "ON CONFLICT (date_id, year) DO UPDATE SET at = excluded.at", rows)
+
+    def note_replied(self):  # M15a
+        """She answered with a sent note in her prompt. After NOTE_REPLIES of those it is done, even mid-talk."""
+        with closing(self.connect()) as conn, conn:
+            conn.execute("UPDATE date_sent SET replies = replies + 1")
+        return self._close_sent("replies >= ?", (NOTE_REPLIES,))
+
+    def close_talk(self):  # M15a
+        """The talk is over, so every sent note is done. Returns how many."""
+        return self._close_sent()
+
+    def close_stale(self, gap_s=TALK_GAP_S):  # M15a
+        """The safety net for a talk whose end never reached us: real time, so TRACKER_TODAY doesn't move it."""
+        return self._close_sent("at < ?", (time.time() - gap_s,))
+
+    def _close_sent(self, where="1", args=()):  # M15a
+        today = _today().isoformat()  # last_raised reads this by _today(), as mark_done
+        with closing(self.connect()) as conn, conn:
+            rows = [tuple(row) for row in conn.execute(f"SELECT date_id, year FROM date_sent WHERE {where}", args)]
+            conn.executemany("INSERT OR IGNORE INTO date_done (date_id, year, at) VALUES (?, ?, ?)",
+                             [(*row, today) for row in rows])
+            conn.executemany("DELETE FROM date_sent WHERE date_id = ? AND year = ?", rows)
+        if rows:
+            self._changed(False)
+        return len(rows)
+
     def stop_reminders(self, who):  # M15a
         """No more reminders about this person or relation."""
         who = " ".join(str(who or "").lower().split())
@@ -687,8 +731,10 @@ class MemoryStore:
         none has been raised. within_days: only a date raised that recently counts."""
         since = "" if within_days is None else (_today() - timedelta(days=within_days)).isoformat()
         with closing(self.connect()) as conn:
-            row = conn.execute("SELECT d.who FROM date_done x JOIN dates d ON d.id = x.date_id "
-                               "WHERE substr(x.at, 1, 10) >= ? ORDER BY x.rowid DESC LIMIT 1", (since,)).fetchone()
+            row = conn.execute("SELECT d.who FROM date_sent x JOIN dates d ON d.id = x.date_id "  # a talk still open comes first
+                               "ORDER BY x.rowid DESC LIMIT 1").fetchone()
+            row = row or conn.execute("SELECT d.who FROM date_done x JOIN dates d ON d.id = x.date_id "
+                                      "WHERE substr(x.at, 1, 10) >= ? ORDER BY x.rowid DESC LIMIT 1", (since,)).fetchone()
         return (row[0] or "anniversary") if row else ""
 
     def goes_by(self):  # M4c

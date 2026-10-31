@@ -48,6 +48,7 @@ def start_server():
     except OSError:
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
     server.init_db()
+    server.close_talk()  # M15a: this path never runs server.main()
     server.laptop_check_setup()  # M8
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return f"http://127.0.0.1:{httpd.server_port}"

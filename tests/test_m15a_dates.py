@@ -780,5 +780,182 @@ class Needs(unittest.TestCase):
                 self.assertEqual(len(self.due_items("2026-11-02" if "9" in second else "2026-11-01")), 2)
 
 
+class StopMidTalk(unittest.TestCase):
+    """M15a: "don't remind me about him" right after "your boy's birthday", with the talk still open."""
+
+    def test_him_means_the_date_just_sent(self):
+        helpers.reset_db()
+        memory = server.mary_memory()
+        memory.name, memory.recent = "", []
+        with clock("2026-01-01"):
+            mary.learn_dates(memory, "Mark's birthday is November 7")
+        with clock("2026-11-01"):
+            memory.store.note_sent(memory.store.due())
+            self.assertEqual(memory.store.last_raised(within_days=2), "Mark")
+            mary.learn_dates(memory, "Don't remind me about him")
+        with clock("2027-11-01"):
+            self.assertEqual(memory.store.due(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneTalk(unittest.TestCase):
+    """M15a: at most one talk ever carries a date's note, whatever she says or they answer."""
+
+    DAY = "2026-11-01"
+
+    def setUp(self):
+        helpers.reset_db()
+        self.memory = server.mary_memory()
+        self.memory.name, self.memory.recent = "", []
+        self.store = self.memory.store
+        with clock("2026-01-01"):
+            mary.learn_dates(self.memory, "Mark's birthday is November 7")
+
+    def rows(self, table):
+        with closing(server.connect_memories()) as conn:
+            return [tuple(row) for row in conn.execute(f"SELECT date_id, year FROM {table}")]
+
+    def note(self, day=DAY):
+        with clock(day):
+            return mary.reminder_note(self.memory)
+
+    def talk(self, text="Good morning", said="Your boy's birthday is coming up.", day=DAY):
+        """One turn with a fake Gemini that never says Mark. True when the note was in her prompt."""
+        bodies = []
+
+        def stream(body, *args, **kw):
+            bodies.append(body)
+            if said is None:
+                raise OSError("no line")
+            yield said
+
+        with clock(day), mock.patch.object(mary, "_gemini_stream", stream):
+            mary.reply(text, self.memory, KEY)
+        return mary.REMINDER_MARK in bodies[0]["systemInstruction"]["parts"][0]["text"]
+
+    def hello(self):
+        """server.mary_open with a fake Gemini. True when the note was in her prompt."""
+        bodies = []
+
+        def answer(body, *args, **kw):
+            bodies.append(body)
+            return "Good morning to you."
+
+        real = server.mary_settings
+        with clock(self.DAY), mock.patch.object(mary, "_short_answer", answer), \
+                mock.patch.object(server, "mary_settings", lambda: {**real(), "key": KEY}):
+            self.assertTrue(server.mary_open("morning")["text"])
+        return mary.REMINDER_MARK in bodies[0]["systemInstruction"]["parts"][0]["text"]
+
+    def token(self, **patch):
+        real = server.mary_settings
+        with clock(self.DAY), mock.patch.object(server, "mary_settings", lambda: {**real(), "key": KEY}), \
+                mock.patch.object(voices, "_open", Net(Resp({"name": "auth_tokens/abc"}))):
+            if patch:
+                with mock.patch.object(voices, "live_token", **patch):
+                    return helpers.api("POST", "/api/mary/live/start", {})
+            return helpers.api("POST", "/api/mary/live/start", {})
+
+    def test_her_own_words_then_the_talk_ends(self):
+        self.assertTrue(self.talk())
+        self.assertEqual(len(self.rows("date_sent")), 1)
+        with clock(self.DAY):
+            status, got, _ = helpers.api("POST", "/api/mary/talk/end", {})
+        self.assertEqual((status, got), (200, {"ok": True}))
+        self.assertEqual(self.rows("date_sent"), [])
+        self.assertEqual(self.note(), "")
+        self.assertEqual(self.note("2026-11-02"), "")
+
+    def test_one_reply_then_gone_until_next_year(self):
+        self.assertTrue(self.talk())
+        with clock(self.DAY):
+            helpers.api("POST", "/api/mary/talk/end", {})
+        self.assertEqual(self.note("2026-11-03"), "")
+        self.assertIn("Mark", self.note("2027-11-01"))
+
+    def test_three_replies_in_one_talk(self):
+        self.assertEqual([self.talk() for _ in range(4)], [True, True, True, False])
+        self.assertEqual(self.rows("date_sent"), [])
+
+    def test_a_crash_counts_as_sent(self):
+        self.assertTrue(self.talk())
+        self.assertEqual(memory_core.MemoryStore(server.connect_memories).close_talk(), 1)
+        self.assertEqual(self.note(), "")
+
+    def test_a_stale_row_counts_as_sent(self):
+        self.assertTrue(self.talk())
+        with closing(server.connect_memories()) as conn, conn:
+            conn.execute("UPDATE date_sent SET at = at - 60")
+        self.assertIn("Mark", self.note())
+        with closing(server.connect_memories()) as conn, conn:
+            conn.execute("UPDATE date_sent SET at = at - 600")
+        self.assertEqual(self.note(), "")
+        self.assertEqual(self.rows("date_sent"), [])
+
+    def test_a_group_goes_as_one(self):
+        with clock("2026-01-01"):
+            mary.learn_dates(self.memory, "My son Mark's birthday is November 7")
+            mary.learn_dates(self.memory, "My son's birthday is November 7")
+        with clock(self.DAY):
+            items = self.store.due()
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["also"])
+        self.store.note_sent(items)
+        self.assertEqual(len(self.rows("date_sent")), 1 + len(items[0]["also"]))
+        self.assertEqual(self.store.close_talk(), 1 + len(items[0]["also"]))
+        self.assertEqual(len(self.rows("date_done")), 1 + len(items[0]["also"]))
+
+    def test_a_hello_carries_it_and_counts(self):
+        self.assertTrue(self.hello())
+        self.assertEqual(len(self.rows("date_sent")), 1)
+
+    def test_a_new_hello_closes_the_old_talk(self):
+        self.assertTrue(self.talk())
+        self.assertFalse(self.hello())
+        self.assertEqual(self.note(), "")
+
+    def test_emergency_and_harm_send_nothing(self):
+        self.assertFalse(self.talk("I can't breathe"))
+        self.assertFalse(self.talk("An aide hit me"))
+        self.assertEqual(self.rows("date_sent"), [])
+        self.assertTrue(self.talk())
+
+    def test_gemini_failing_sends_nothing(self):
+        self.assertTrue(self.talk(said=None))
+        self.assertEqual(self.rows("date_sent"), [])
+        self.assertIn("Mark", self.note())
+
+    def test_live_token_marks_and_three_turns_close(self):
+        self.assertEqual(self.token()[0], 200)
+        self.assertEqual(len(self.rows("date_sent")), 1)
+        with clock(self.DAY), mock.patch.object(server, "_live_forgot_at", None):
+            helpers.api("POST", "/api/mary/heard", {"text": "Good morning"})
+            for said in ("Good morning to you.", "How did you sleep?"):
+                helpers.api("POST", "/api/mary/live/said", {"text": said})
+            self.assertEqual(len(self.rows("date_sent")), 1)
+            helpers.api("POST", "/api/mary/live/said", {"text": "Your boy's birthday is coming up."})
+        self.assertEqual(self.rows("date_sent"), [])
+        self.assertEqual(self.note(), "")
+
+    def test_live_token_failing_marks_nothing(self):
+        self.assertNotEqual(self.token(side_effect=voices.VoiceError("connect"))[0], 200)
+        self.assertEqual(self.rows("date_sent"), [])
+        self.assertTrue(self.talk())
+
+    def test_forget_removes_the_rows(self):
+        self.assertTrue(self.talk())
+        self.store.forget("Mark")
+        self.assertEqual(self.rows("date_sent"), [])
+
+    def test_forget_everything_removes_the_rows(self):
+        self.assertTrue(self.talk())
+        self.store.forget("everything")
+        self.assertEqual(self.rows("date_sent"), [])
+
+    def test_the_page_says_when_a_talk_ends(self):
+        js = server.Path(server.__file__).parent.joinpath("web", "mary", "app.js").read_text(encoding="utf-8")
+        self.assertIn("/api/mary/talk/end", js)
+        self.assertIn("c.talked && !c.endSent", js)

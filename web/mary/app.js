@@ -1267,7 +1267,8 @@
     if (mode !== 'live' && S.typingOnly) { openTyping(); return Promise.resolve(false); }
     var c = { mode: mode, live: false, open: false, ending: false, paused: false, seq: 0, lastAct: Date.now(),
       heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false, misses: 0,
-      byeAudio: false, story: null, voice: null };   // M4a: voice = this talk's one voice, locked by lockTalkVoice()
+      byeAudio: false, story: null, voice: null,   // M4a: voice = this talk's one voice, locked by lockTalkVoice()
+      talked: mode !== 'live' };   // M15a: a Live talk has talked only once its line opened, or Normal took over
     S.convo = c;
     S.fallbackSaid = false;
     S.voiceMode = speechModeFor(mode);
@@ -1312,6 +1313,10 @@
     c.ending = true;
     if (S.convo === c) { S.convo = null; }
     c.story = null;   // M4a: a story never outlives the talk
+    if (c.talked && !c.endSent) {   // M15a: once a talk; a Live start that failed before its line opened (no mic,
+      c.endSent = true;             // stopped) spoke to no one, so it must not close the token's fresh mark
+      try { api('POST', '/api/mary/talk/end', {}, { ms: 8000 }).catch(log); } catch (e) { log(e); }
+    }
     if (c.live) {
       c.live = false;
       c.open = false;
@@ -1499,6 +1504,7 @@
     Promise.resolve(p).then(function () {
       if (!mine()) { return; }          // ended or restarted while it was opening
       c.open = true;
+      c.talked = true;   // M15a
       c.lastAct = Date.now();
       try { window.MaryLive.setVolume(S.volume); } catch (e) { log(e); }
       setPhase('listening');
@@ -1536,6 +1542,7 @@
 
   // Live would not start or dropped: the next mode in the order, with one kind line, and the talk goes on.
   function liveFallback(c) {
+    c.talked = true;   // M15a: the talk goes on in the next mode
     c.live = false;
     c.open = false;
     clearInterval(c.idleTimer);

@@ -698,9 +698,19 @@ def mary_live_story_call(args):  # M4a: Live's tell_story tool
 
 
 # --- M4a: her hello from the brain, and a skill's look at a picture ---
+def close_talk():  # M15a
+    """The talk is over, so a date note sent in it is done. Never raises: close_stale catches what this misses."""
+    with _mary_lock:
+        try:
+            memory_store().close_talk()
+        except (sqlite3.Error, OSError):
+            pass
+
+
 def mary_open(when):
     """Her hello in her own words, saved as her turn so her next answer knows she has greeted them. {"text": ""} on
     any problem: the page then says a scripted line. The lock is held only around her memory, never while Gemini writes."""
+    close_talk()  # M15a: a hello means a new talk
     s = mary_settings()
     with _mary_lock:
         memory = mary_memory()
@@ -1285,13 +1295,22 @@ class Handler(SimpleHTTPRequestHandler):
                 skills = None  # a skills failure never stops Live
             with _mary_lock:
                 memory = mary_memory()
+            noted = bool(mary.reminder_note(memory))  # M15a: the token's locked prompt will carry it
             try:
                 got = voices.live_token(companion_voices(companion)["live"], s["key"], companion, memory.name, DATA,
                                         skills=skills, silence_ms=round(s["listen_wait"] * 1000), memory=memory,
                                         rate=s["voice_rate"], plain=bool(body.get("plain")))  # M4a: rate, plain
             except voices.VoiceError as e:
                 return self._send(*voice_failure(e.kind))
+            if noted:  # M15a: only now, so a failed token leaves the note for Normal
+                try:
+                    memory.store.note_sent(memory.store.due())
+                except sqlite3.Error:
+                    pass
             return self._send({**got, "companion": companion})
+        if method == "POST" and path == "/api/mary/talk/end":  # M15a: the page's word that a talk is over
+            close_talk()
+            return self._send({"ok": True})
         if method == "POST" and path == "/api/mary/heard":
             # The same emergency check as Normal talk, on Live's transcript of what the resident said.
             text = str(self._body().get("text") or "")[:2000]
@@ -1770,6 +1789,7 @@ def main():
             webbrowser.open(url)
         return
     init_db()
+    close_talk()  # M15a: a talk cut off by a crash counts as sent
     laptop_check_setup()  # M8
     print(f"Care Incident Log running at {url}")
     if "--no-browser" not in sys.argv:

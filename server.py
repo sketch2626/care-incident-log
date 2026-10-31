@@ -636,7 +636,8 @@ def set_skill_host_for_tests(host):
 def mary_live_skill_setup(screen=None):
     """What live_token() adds to bidiGenerateContentSetup (tools) and to the system text; wired when Mary's own
     Live session is built (M4)."""
-    return {"tools": skill_host().gemini_tools(), "instruction": skill_host().instruction_text(screen)}
+    return {"tools": skill_host().gemini_tools(), "instruction": skill_host().instruction_text(screen),
+            "cards": mary.can_make_cards(skill_host())}  # M15a
 # --- end skills hook ---
 
 
@@ -649,7 +650,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         with _mary_lock:
             memory = mary_memory()
             result = mary.memory_tool(memory, name, args)
-            if name in ("forget_memory", "forget_name"):  # its waiting question and the scrubbed talk history
+            if name in ("forget_memory", "forget_name", "stop_reminders"):  # its waiting question and the scrubbed talk history
                 try:
                     memory.save()
                 except OSError:
@@ -672,7 +673,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
                 memory.name = value
                 memory.name_forgotten = False  # M9c
             else:
-                memory.add_fact(value, str(args.get("kind") or ""), mary.fact_source(heard))  # M9c
+                memory.add_fact(value, str(args.get("kind") or ""), mary.fact_source(heard), heard=heard)  # M9c; heard: M15a
             memory.save()
         except (OSError, sqlite3.Error):  # M9c: the store writes to the database
             return {"response": {"ok": False, "error": "It could not be saved just now."}, "effects": [], "say": None}
@@ -1306,6 +1307,7 @@ class Handler(SimpleHTTPRequestHandler):
                         say = mary.emergency_text(kind, memory, text)  # M4d: with the Veterans line for a known veteran
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
+                        mary.learn_dates(memory, text)  # M15a: and so does a date, with or without a tool
                     if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran
                         memory.add_turn("user", text.strip())
                     if say:
@@ -1362,8 +1364,8 @@ class Handler(SimpleHTTPRequestHandler):
                                       spent_voice=offline_voice)  # M4a: the request that hits the limit swaps too
         # --- end M4a ---
         if method == "GET" and path == "/api/mary/memories":  # M9c: the page's list; no lock, each store call stands alone
-            found = memory_store().active()
-            return self._send({"memories": [memory_core.public(m) for m in found], "count": len(found)})
+            found = memory_store().active_public()  # M15a: each with saved_date
+            return self._send({"memories": found, "count": len(found)})
         m = re.fullmatch(r"/api/mary/memories/(\d+)", path)  # M9c
         if m and method == "DELETE":
             if not mary_remove_memory(m.group(1)):

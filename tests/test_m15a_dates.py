@@ -1,14 +1,18 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folders at a scratch folder)
 
 """M15a piece 1: the offline date parser and the store of family dates. Nothing here reaches Gemini."""
+import os
 import unittest
 from contextlib import closing
 from datetime import date
 from unittest import mock
 
+import mary
 import memory_core
 import memory_dates as md
 import server
+import voices
+from tests.test_voices import KEY, Net, Resp
 
 
 def one(text, **kw):
@@ -347,6 +351,194 @@ class Today(unittest.TestCase):
             self.assertEqual(memory_core._today(), date(2026, 11, 1))
         with mock.patch.dict("os.environ", {"TRACKER_TODAY": "soon"}):
             self.assertEqual(memory_core._today(), date.today())
+
+
+
+def clock(day):
+    return mock.patch.dict(os.environ, {"TRACKER_TODAY": day})
+
+
+class Wiring(unittest.TestCase):
+    """What joins the parser and the store to her talk."""
+
+    NOTE = ("\n\nOne thing to bring up once in this talk, in your own words, at a natural moment soon: their son's "
+            "birthday, Saturday November 7, a week from today. They told you this date themselves. Say the name and the "
+            "occasion plainly so they know who you mean, and say there's still time to call or write. Keep it to a "
+            "sentence or two, then go back to what you were talking about, and leave it alone whatever they say. It's "
+            "your own memory: never mention a reminder, a note or the app. If they've just said something heavy, wait "
+            "for a better moment.")
+
+    def setUp(self):
+        helpers.reset_db()
+        self.memory = server.mary_memory()
+        self.memory.name, self.memory.recent = "", []
+        self.store = self.memory.store
+
+    def rows(self, sql="SELECT who, what, month, day FROM dates ORDER BY id"):
+        with closing(server.connect_memories()) as conn:
+            return [tuple(row) for row in conn.execute(sql).fetchall()]
+
+    def stopped(self):
+        return self.rows("SELECT who, why FROM no_reminders ORDER BY who")
+
+    def son_due(self):
+        with clock("2026-01-01"):
+            mary.learn_dates(self.memory, "My son's birthday is November 7")
+
+    def system(self, text, kind=""):
+        return mary._body(text, self.memory, kind)["systemInstruction"]["parts"][0]["text"]
+
+    def test_third_person(self):
+        found = md.parse("Their wedding anniversary is June 3.", third_person=True)
+        self.assertEqual([(f["who"], f["what"], f["month"], f["day"]) for f in found], [("", "anniversary", 6, 3)])
+        self.assertEqual(md.parse("June 3 is her anniversary.", third_person=True)[0]["who"], "")
+        self.assertEqual(md.parse("Their wedding anniversary is June 3."), [])
+        self.assertEqual(md.parse("His birthday is June 3.", third_person=True), [])
+
+    def test_last_raised_within_days(self):
+        with clock("2026-11-01"):
+            self.store.mark_done(self.store.learn_date(one("Mark's birthday is November 7")), 2026)
+        with clock("2026-11-03"):
+            self.assertEqual(self.store.last_raised(within_days=2), "Mark")
+        with clock("2026-11-04"):
+            self.assertEqual(self.store.last_raised(within_days=2), "")
+            self.assertEqual(self.store.last_raised(), "Mark")
+
+    def test_fact_keeps_a_date_they_said(self):
+        self.assertTrue(self.memory.add_fact("Her son Mark's birthday is November 7.",
+                                             heard="My son Mark's birthday is November 7"))
+        self.assertEqual(self.rows(), [("Mark", "birthday", 11, 7)])
+
+    def test_fact_keeps_a_date_from_a_recent_turn(self):
+        self.memory.add_turn("user", "June 3, I think of it every year.")
+        self.memory.add_fact("Their anniversary is June 3.", heard="That's right")
+        self.assertEqual(self.rows(), [("", "anniversary", 6, 3)])
+
+    def test_fact_keeps_a_correction(self):
+        self.memory.add_fact("Mark's birthday is November 9.", heard="No, it's the 9th")
+        self.assertEqual(self.rows(), [("Mark", "birthday", 11, 9)])
+
+    def test_fact_drops_a_date_they_never_said(self):
+        self.assertTrue(self.memory.add_fact("Her son Mark's birthday is November 7.", heard="Mark's birthday is soon"))
+        self.assertEqual((self.rows(), len(self.store.active())), ([], 1))
+
+    def test_date_trouble_never_loses_the_memory(self):
+        said = "Mark's birthday is November 7"
+        with mock.patch.object(self.store, "learn_date", side_effect=OSError("locked")):
+            self.assertTrue(self.memory.add_fact(said + ".", heard=said))
+            mary.learn_dates(self.memory, said)
+        self.assertEqual(len(self.store.active()), 1)
+
+    def test_forget_never_saves(self):
+        mary.learn_dates(self.memory, "Forget Mark's birthday, November 7")
+        self.memory.scrubbed = True
+        mary.learn_dates(self.memory, "Mark's birthday is November 7")
+        self.assertEqual(self.rows(), [])
+
+    def test_the_late_are_noted(self):
+        mary.learn_dates(self.memory, "My late husband's birthday is June 3")
+        self.assertEqual(self.stopped(), [("husband", "passed")])
+
+    def test_stop_and_allow(self):
+        mary.learn_dates(self.memory, "Don't remind me about him")
+        self.assertEqual(self.stopped(), [])
+        mary.learn_dates(self.memory, "Don't remind me about Mark")
+        self.assertEqual(self.stopped(), [("mark", "asked")])
+        mary.learn_dates(self.memory, "You can remind me about Mark")
+        self.assertEqual(self.stopped(), [])
+
+    def test_stop_a_pronoun_after_she_raised_it(self):
+        with clock("2026-11-01"):
+            self.store.mark_done(self.store.learn_date(one("Mark's birthday is November 7")), 2026)
+            mary.learn_dates(self.memory, "Don't remind me about him")
+        self.assertEqual(self.stopped(), [("mark", "asked")])
+
+    def test_correction_then_a_new_date(self):
+        said = "Mark's birthday is November 7"
+        mary.learn_dates(self.memory, said)
+        self.memory.add_turn("user", said)
+        mary.learn_dates(self.memory, "No, it's the 9th")
+        self.assertEqual(self.rows(), [("Mark", "birthday", 11, 9)])
+        mary.learn_dates(self.memory, "It's Lily's birthday, March 12")  # starts like a correction, and isn't one
+        self.assertEqual(self.rows(), [("Mark", "birthday", 11, 9), ("Lily", "birthday", 3, 12)])
+
+    def test_tool(self):
+        got = mary.memory_tool(self.memory, "stop_reminders", {"who": "my son"})
+        self.assertEqual(got["response"], {"done": True, "note": mary.REMINDERS_STOPPED_NOTE})
+        self.assertEqual(got["say"], mary.REMINDERS_STOPPED_TEXT)
+        self.assertEqual(self.stopped(), [("son", "asked")])
+        got = mary.memory_tool(self.memory, "stop_reminders", {"who": "him"})
+        self.assertEqual(got["response"], {"done": False, "note": mary.REMINDERS_WHO_NOTE})
+        self.assertEqual(mary.memory_tool(self.memory, "stop_reminders", {})["response"]["note"], mary.REMINDERS_WHO_NOTE)
+        self.assertEqual(self.stopped(), [("son", "asked")])
+
+    def test_tool_in_live(self):
+        names = [tool["name"] for tool in mary.LIVE_MEMORY_TOOLS]
+        self.assertIn("stop_reminders", names)
+        _, got, _ = helpers.api("POST", "/api/mary/skills/call", {"name": "stop_reminders", "args": {"who": "Mark"}})
+        self.assertTrue(got["response"]["done"])
+        self.assertEqual(self.stopped(), [("mark", "asked")])
+
+    def test_offline(self):
+        self.assertEqual(mary.offline_memory(self.memory, "Don't remind me about him"), "")
+        self.assertEqual(self.stopped(), [])
+        self.assertEqual(mary.offline_memory(self.memory, "Don't remind me about Mark"), mary.REMINDERS_STOPPED_TEXT)
+        self.assertEqual(self.stopped(), [("mark", "asked")])
+
+    def test_note_as_built(self):
+        self.son_due()
+        with clock("2026-10-31"):
+            self.assertEqual(mary.reminder_note(self.memory), self.NOTE)
+            self.assertNotIn("[", self.NOTE)
+            carded = mary.reminder_note(self.memory, cards=True)
+        self.assertEqual(carded.replace(mary.REMINDER_CARDS_LINE, ""), self.NOTE)
+        self.assertNotEqual(carded, self.NOTE)
+        with clock("2026-11-01"):
+            self.assertIn("6 days from today", mary.reminder_note(self.memory))
+        with clock("2026-09-01"):
+            self.assertEqual(mary.reminder_note(self.memory), "")
+
+    def test_note_in_the_prompt_only_when_fit(self):
+        self.son_due()
+        emergency = "I can't breathe"
+        with clock("2026-10-31"):
+            sent = self.system("Good morning")
+            self.assertGreater(sent.index(self.NOTE), sent.index(mary.CHARACTER_NOTE))
+            self.assertNotIn(self.NOTE, self.system("An aide hit me"))
+            self.assertNotIn(self.NOTE, self.system(emergency, mary.is_emergency(emergency)))
+
+    def test_note_in_live(self):
+        self.son_due()
+        net = Net(Resp({"name": "auth_tokens/abc"}))
+        with clock("2026-10-31"), mock.patch.object(voices, "_open", net):
+            voices.live_token("live:Achird", KEY, "mary", "", server.DATA, memory=self.memory)
+        sent = net.body()["bidiGenerateContentSetup"]["systemInstruction"]["parts"][0]["text"]
+        self.assertGreater(sent.index(self.NOTE), sent.index(voices.LIVE_TOOLS_NOTE))
+        self.assertFalse(server.mary_live_skill_setup()["cards"])  # no messages skill yet; M15b flips this
+
+    def test_once_she_says_it(self):
+        self.son_due()
+        with clock("2026-10-31"):
+            self.memory.add_turn("model", "How did you sleep?")
+            self.assertTrue(self.store.due())
+            self.memory.add_turn("model", "Your son's birthday is a week off, so there's still time to call.")
+            self.assertEqual(self.store.due(), [])
+            self.assertEqual(self.store.last_raised(within_days=2), "son")
+
+    def test_reply_with_no_gemini(self):
+        mary.reply("Mark's birthday is November 7", self.memory)
+        self.assertEqual(self.rows(), [("Mark", "birthday", 11, 7)])
+        emergency = "I can't breathe and Lily's birthday is March 12"
+        self.assertTrue(mary.is_emergency(emergency))
+        mary.reply(emergency, self.memory)
+        self.assertEqual(self.rows(), [("Mark", "birthday", 11, 7)])
+
+    def test_heard_and_the_page_list(self):
+        helpers.api("POST", "/api/mary/heard", {"text": "Mark's birthday is November 7"})
+        helpers.api("POST", "/api/mary/heard", {"text": "I can't breathe and Lily's birthday is March 12"})
+        self.assertEqual(self.rows(), [("Mark", "birthday", 11, 7)])
+        _, got, _ = helpers.api("GET", "/api/mary/memories")
+        self.assertEqual(got["memories"][0]["saved_date"], "Mark's birthday, November 7")
 
 
 if __name__ == "__main__":

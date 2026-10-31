@@ -64,6 +64,7 @@ _MODIFIERS = frozenset("wedding marriage golden silver diamond ruby pearl next b
 _TURN = frozenset("turn turns turned turning be".split())
 _TO_BE = frozenset("was were is got be being will going to gonna ,".split())
 _OWNERS = frozenset("my our his her their your the a".split())
+_THEIR = frozenset("their his her".split())  # M15a: how a fact she wrote says the resident's own
 _FONDLY = frozenset("late oldest youngest eldest older younger middle baby little dear only sweet".split())
 _NOT_WHO = frozenset("""
     i i'm me we we're us you he she it they them him hers theirs ours mine yours that this these those there here what
@@ -156,16 +157,17 @@ def _sentences(text, dates):
     return list(zip(edges, edges[1:]))
 
 
-def _who(toks, what, subject=False, whole=False):
+def _who(toks, what, subject=False, whole=False, third=False):
     """Whom the words ending at the last token name: (who, relation). who is "" for my/our anniversary and None for
-    nobody to keep. subject: "Lily" counts as well as "Lily's". whole: every token must be part of the name."""
+    nobody to keep. subject: "Lily" counts as well as "Lily's". whole: every token must be part of the name.
+    third (M15a): "their anniversary" with no name is the resident's own."""
     toks = list(toks)
     while toks and (toks[-1].lower() in _MODIFIERS or _is_num(toks[-1])):
         toks.pop()
     if not toks:
         return None, ""
     word = toks.pop()
-    if word.lower() in ("my", "our"):
+    if word.lower() in ("my", "our") or (third and what == "anniversary" and word.lower() in _THEIR):  # M15a
         return ("" if what == "anniversary" and not (whole and toks) else None), ""
     name, low = _POSS.sub("", word), _base(word)
     if low in _NOT_WHO or not name[0].isalpha() or not (subject or _POSS.search(word)):
@@ -199,7 +201,7 @@ def _who(toks, what, subject=False, whole=False):
     return (None, "") if whole and toks else (name, relation)
 
 
-def _before(left, carried):
+def _before(left, carried, third=False):
     """For "Mark's birthday is": (what, who, relation) from the words before a date, or None."""
     toks = _tokens(left)
     while toks and toks[-1].lower() in _FILLER:
@@ -209,7 +211,7 @@ def _before(left, carried):
     last = toks.pop()
     what = _WHATS.get(_base(last))
     if what:
-        return (what, *_who(toks, what))
+        return (what, *_who(toks, what, third=third))
     if _is_num(last):  # "turns ten on": the same words come before "turns" as before "was born"
         while toks and _is_num(toks[-1]):
             toks.pop()
@@ -223,7 +225,7 @@ def _before(left, carried):
     return (carried, *_who([*toks, last], carried)) if carried and _POSS.search(last) else None
 
 
-def _after(right, carried):
+def _after(right, carried, third=False):
     """For "November 7 is Mark's birthday": (what, who, relation) from the words after a date, or None."""
     toks = _tokens(_YEAR_AFTER.sub("", right, count=1))
     if toks and toks[0] == ",":  # "November 7, that's Mark's birthday"
@@ -238,15 +240,16 @@ def _after(right, carried):
         if what:
             if n + 1 < len(toks) and toks[n + 1].lower() in _NOT_THE_DAY:
                 return None
-            return (what, *_who(toks[:n], what, whole=True))
+            return (what, *_who(toks[:n], what, whole=True, third=third))
     n = next((n for n, tok in enumerate(toks) if _POSS.search(tok)), None)
     return (carried, *_who(toks[:n + 1], carried, whole=True)) if carried and n is not None else None
 
 
-def parse(text, self_name=""):
+def parse(text, self_name="", third_person=False):
     """Every family date said plainly in text, as dicts: month, day, who (shown, "" only for their own anniversary),
     relation ("son" or ""), what ("birthday" or "anniversary"), span (of the date words in text). Nothing at all for a
-    question, a doubt or a day that can't be. Never the resident's own birthday."""
+    question, a doubt or a day that can't be. Never the resident's own birthday. third_person (M15a): text is a fact
+    Gemini wrote, so "their anniversary" with no name is the resident's own."""
     text = _plain(text)
     dates = _dates(text)
     spots = _sentences(text, dates) if dates else []
@@ -260,10 +263,10 @@ def parse(text, self_name=""):
         floor = a
         for n, (start, end, month, day, _) in enumerate(here):
             stop = here[n + 1][0] if n + 1 < len(here) else b
-            hit = _before(text[floor:start], what)
+            hit = _before(text[floor:start], what, third_person)
             floor = end
             if not hit:
-                hit = _after(text[end:stop], what)
+                hit = _after(text[end:stop], what, third_person)
                 if hit:  # those words are used up, so the next date can't take them too
                     word = _WORD.search(text, end, stop)
                     floor = word.end() if word else stop

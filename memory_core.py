@@ -9,7 +9,7 @@ import json
 import os
 import re
 from contextlib import closing
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import memory_dates
@@ -602,7 +602,7 @@ class MemoryStore:
         """This date was raised this year, so it stays quiet until the next."""
         with closing(self.connect()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO date_done (date_id, year, at) VALUES (?, ?, ?)",
-                         (date_id, year, _now()))
+                         (date_id, year, _today().isoformat()))  # M15a: last_raised reads this by _today()
         self._changed(False)
 
     def said_due(self, text, today=None):  # M15a
@@ -640,12 +640,13 @@ class MemoryStore:
         if changed:
             self._changed(False)
 
-    def last_raised(self):  # M15a
+    def last_raised(self, within_days=None):  # M15a
         """Who the newest raised date was about, for "don't remind me about him"; "anniversary" for their own, "" if
-        none has been raised."""
+        none has been raised. within_days: only a date raised that recently counts."""
+        since = "" if within_days is None else (_today() - timedelta(days=within_days)).isoformat()
         with closing(self.connect()) as conn:
             row = conn.execute("SELECT d.who FROM date_done x JOIN dates d ON d.id = x.date_id "
-                               "ORDER BY x.at DESC, x.rowid DESC LIMIT 1").fetchone()
+                               "WHERE substr(x.at, 1, 10) >= ? ORDER BY x.rowid DESC LIMIT 1", (since,)).fetchone()
         return (row[0] or "anniversary") if row else ""
 
     def goes_by(self):  # M4c

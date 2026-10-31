@@ -397,7 +397,7 @@ class TestRoutes(Case):
         self.assertEqual(status, 200)
         self.assertEqual(got["count"], 2)
         self.assertEqual({m["id"] for m in got["memories"]}, {a, b})
-        self.assertEqual(set(got["memories"][0]), {"id", "date", "kind", "text"})
+        self.assertEqual(set(got["memories"][0]), {"id", "date", "kind", "text", "saved_date"})  # saved_date: M15a
         self.assertEqual(helpers.api("DELETE", f"/api/mary/memories/{a}")[0], 200)
         self.assertEqual(self.store.count(), 1)
         self.assertEqual(rows(f"SELECT * FROM memories WHERE id={a}"), [])

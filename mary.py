@@ -17,6 +17,7 @@ from pathlib import Path
 
 import assist
 import memory_core  # M9c
+import memory_dates  # M15a
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 INSTRUCTIONS = ROOT / "mary" / "instructions.md"
@@ -316,10 +317,14 @@ class Memory:
         self.pending_offer = offer if isinstance(offer, dict) else None
         self.pending_forget = _forget_waiting(pending_forget)  # M9c
 
-    def add_fact(self, fact, kind="", source="talk"):
-        """Returns True if the fact was new."""
+    def add_fact(self, fact, kind="", source="talk", heard=""):
+        """Returns True if the fact was new. heard (M15a): the resident's words, which a date in the fact must match."""
         if self.store is not None:  # M9c: kind and source only mean something in the store
-            return self.store.add(fact, kind, source) is not None
+            new_id = self.store.add(fact, kind, source)
+            if new_id is None:
+                return False
+            self._keep_date(fact, new_id, heard)  # M15a
+            return True
         fact = " ".join(str(fact).split())[:MAX_FACT_CHARS].rstrip()
         if not fact or fact.lower() in (f.lower() for f in self.facts):
             return False
@@ -327,11 +332,29 @@ class Memory:
         self.facts = self.facts[-MAX_FACTS:]
         return True
 
+    def _keep_date(self, fact, memory_id, heard):  # M15a
+        """Saves a date in a fact she wrote only if the resident really said it, so a day she got wrong or made up never
+        becomes a birthday. Never raises: the date must not lose the memory or stop her reply."""
+        try:
+            turns = [heard] + [t["text"] for t in self.recent if t["role"] == "user"][-4:]
+            said = {pair for turn in turns for pair in memory_dates.loose_dates(turn)}
+            fixed = memory_dates.loose_day(heard) if memory_dates.is_correction(heard) else None  # "no, it's the 9th"
+            for found in memory_dates.parse(fact, self.name, third_person=True):
+                if (found["month"], found["day"]) in said or found["day"] == fixed:
+                    self.store.learn_date(found, memory_id)
+        except Exception:
+            pass
+
     def add_turn(self, role, text):
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
         if role == "model" and not self.name and _ASKS_NAME.search(text):  # M4c: both routes pass through here
             self.name_asked = True
+        if role == "model" and self.store is not None:  # M15a: Normal and Live both mark a date the moment she says it
+            try:
+                self.store.said_due(text)
+            except Exception:
+                pass
 
     def scrub(self, forgotten, about="", name=""):  # M9c
         """Drops every turn that carries what was just forgotten, with her answer right after any such resident turn,
@@ -598,6 +621,7 @@ NOTHING_TO_FORGET_TEXT = "I don't have anything saved about that."
 OFFER_DROPPED_TEXT = "All right, I won't write that down."
 FORGET_ASK_TEXT = "Should I forget everything about your {}?"
 FORGET_FAILED_TEXT = "I couldn't do that just now. Please say yes again in a little while."
+REMINDERS_STOPPED_TEXT = "All right, I won't bring that up again."  # M15a
 RECALL_NOTE = "Newer dates win when two disagree. Only say what is here; never make up a memory."
 RECALL_EMPTY_NOTE = "Nothing saved about that. Say so; don't guess."
 FORGET_EMPTY_NOTE = "Nothing saved matches that. Say so kindly, in one line."
@@ -611,6 +635,8 @@ NAME_KNOWN_NOTE = ("You already know what they like to be called. Never ask thei
                    "and never check it with them.")
 NAME_ASKED_NOTE = "You've already asked what they'd like to be called, so don't ask again. If they tell you, use it."  # M4c
 MEMORY_BROKEN_NOTE = "Your memory can't be reached just now. Say so kindly; don't guess."
+REMINDERS_STOPPED_NOTE = "Done. Say so in a few plain words."  # M15a
+REMINDERS_WHO_NOTE = "You don't know who they mean yet. Ask them who, in one line."  # M15a
 MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
     {"name": "recall",
      "description": ("Look up what the resident has told you before. Call this when they mention a person, a place or "
@@ -631,8 +657,19 @@ MEMORY_TOOLS = [  # M9c: her long memory, for Normal talk and Live
      "description": ("They asked you to forget their name or to stop calling them it. It's gone for good at once, with "
                      "no question first. Not for a pet name like honey: just stop using that. Not when they give a new "
                      "name to use instead: use the new name.")},
+    {"name": "stop_reminders",  # M15a
+     "description": "They asked you not to remind them about someone's birthday or anniversary.",
+     "parameters": {"type": "object", "properties": {
+         "who": {"type": "string", "description": ("A name or relation, for example: Mark, or my son. Leave it empty for "
+                                                   "the person just mentioned.")}}}},
 ]
 MEMORY_TOOL_NAMES = tuple(tool["name"] for tool in MEMORY_TOOLS)
+REMINDER_NOTE = ("\n\nOne thing to bring up once in this talk, in your own words, at a natural moment soon: {items}. They "  # M15a
+                 "told you this date themselves. Say the name and the occasion plainly so they know who you mean, and "
+                 "say there's still time to call or write.{cards} Keep it to a sentence or two, then go back to what you "
+                 "were talking about, and leave it alone whatever they say. It's your own memory: never mention a "
+                 "reminder, a note or the app. If they've just said something heavy, wait for a better moment.")
+REMINDER_CARDS_LINE = " You can offer to help them make a card."  # M15a: M15b turns this on, through can_make_cards
 
 
 def fact_source(text, typed=False):  # M9c
@@ -698,6 +735,16 @@ def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall, forget
             forget_name(memory)
             response = {"done": True, "note": NAME_FORGOTTEN_NOTE}
             say = NAME_FORGOTTEN_TEXT
+        elif name == "stop_reminders":  # M15a
+            who = " ".join(str(args.get("who") or "").split())
+            asked = memory_dates.stop_request(f"Don't remind me about {who}")  # "him" is nobody, "my son" is "son"
+            who = (asked[1] if asked else who) or memory.store.last_raised(within_days=2)
+            if who:
+                memory.store.stop_reminders(who)
+                response = {"done": True, "note": REMINDERS_STOPPED_NOTE}
+                say = REMINDERS_STOPPED_TEXT
+            else:
+                response = {"done": False, "note": REMINDERS_WHO_NOTE}
         else:
             about = " ".join(str(args.get("about") or "").split())
             if about.lower().rstrip(".!") in ("that", "this", "it"):  # she passed "forget that" along word for word
@@ -737,6 +784,11 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
     """What she says to an exact memory phrase when Gemini can't be reached, or "" when text isn't one."""
     said = " ".join(_plain(str(text or "")).split())
     try:
+        asked = memory_dates.stop_request(said)  # M15a: a "him" with nobody raised lately falls through
+        who = (asked[1] or memory.store.last_raised(within_days=2)) if asked and asked[0] == "stop" else ""
+        if who:
+            memory.store.stop_reminders(who)
+            return REMINDERS_STOPPED_TEXT
         if _OFFLINE_RECALL.fullmatch(said):
             found = memory.store.active(limit=OFFLINE_SUMMARY_ITEMS)
             if not found:
@@ -763,6 +815,65 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
         return FORGOT_TEXT if gone else NOTHING_TO_FORGET_TEXT
     except Exception:
         return ""
+
+
+_SAYS_FORGET = re.compile(r"\bforget\b", _I)  # M15a
+
+
+def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) both learn dates this way
+    """Takes dates, deaths and "don't remind me" from the resident's own words, so it all works with no Gemini. A date a
+    fact already saved changes nothing here. Never raises. Not for an emergency line: that teaches nothing."""
+    store = getattr(memory, "store", None)
+    if store is None:
+        return
+    try:
+        if memory.scrubbed or _SAYS_FORGET.search(_plain(text)):  # "Forget Mark's birthday, November 7" must not save it
+            return
+        asked = memory_dates.stop_request(text)
+        if asked:
+            kind, who = asked
+            if kind == "remind":
+                store.allow_reminders(who)
+            else:
+                who = who or store.last_raised(within_days=2)
+                if who:  # a "him" with nobody raised lately is left to her stop_reminders tool
+                    store.stop_reminders(who)
+            return
+        store.note_passed(memory_dates.passed(text))  # an auto memory drops "late", so nothing else would say he died
+        found = memory_dates.parse(text, memory.name)
+        if not found:  # after parse: "it's Lily's birthday, March 12" is a new date, not a fix to the last one
+            store.correct_last(text, [t["text"] for t in memory.recent[-6:]][::-1])
+        for one in found:
+            store.learn_date(one)
+    except Exception:
+        pass
+
+
+def _reminder_item(item):  # M15a
+    """A due date for her prompt: "their son's birthday, Saturday November 7, a week from today"."""
+    head = re.sub(r"^Your\b", "their", item["label"].rsplit(", ", 1)[0])
+    on, days = item["on"], item["days"]
+    away = "a week from today" if days == 7 else f"{days} days from today"
+    return f"{head}, {on:%A} {memory_dates.when(on.month, on.day)}, {away}"
+
+
+def reminder_note(memory, cards=False):  # M15a: for either companion, so no name, and no square brackets for Live
+    """The quiet turn note for family dates coming up, or "". Never raises. cards: she may offer to help make a card."""
+    store = getattr(memory, "store", None)
+    if store is None:
+        return ""
+    try:
+        items = "; ".join(_reminder_item(item) for item in store.due())
+    except Exception:
+        return ""
+    return REMINDER_NOTE.format(items=items, cards=REMINDER_CARDS_LINE if cards else "") if items else ""
+
+
+def can_make_cards(skills):  # M15a: M15b's hook. No messages skill exists yet, so this is False; M15b flips it
+    try:
+        return bool(skills.enabled("messages"))
+    except Exception:
+        return False
 
 
 # M4a: Live's own memory tools, in every Live chat. No "__" in the names, so they never look like a skill's.
@@ -1079,6 +1190,8 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety
             system += HARM_NOTE
         if _FEARS_STAFF.search(_plain(text)):
             system += FEAR_NOTE
+        if not (_HARMED.search(_plain(text)) or _FEARS_STAFF.search(_plain(text))):  # M15a: never beside a report of harm
+            system += reminder_note(memory, can_make_cards(skills))
     if not kind and getattr(memory, "store", None) is not None:  # M9c: one functionDeclarations entry, shared with the skills
         tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + MEMORY_TOOLS}]
     # M4a: her scripted hello is her turn too, so a talk may start with hers, or follow her last line of the talk before
@@ -1546,7 +1659,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             if tag == "remember":
                 try:  # M9c: a locked database must never stop her reply
                     # M9c: a [remember] in the very reply that forgot must not save it straight back
-                    if not memory.scrubbed and memory.add_fact(value, source=fact_source(text, typed)):
+                    if not memory.scrubbed and memory.add_fact(value, source=fact_source(text, typed), heard=text):  # heard: M15a
                         remembered.append(" ".join(value.split()))
                 except Exception:
                     pass
@@ -1610,6 +1723,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     final = spoken.strip()
     if waiting and memory.pending_forget is waiting and not (kind or said_yes or forget_yes):  # M9c
         memory.pending_forget = None  # her question went unanswered, so a later "yes" can't be taken for it
+    if not kind:  # M15a: here, so it runs with no key and when Gemini failed; an emergency line teaches nothing
+        learn_dates(memory, text)
     if not memory.scrubbed:  # M9c: a turn that truly forgot leaves nothing in her talk history
         memory.add_turn("user", text)
         if final:

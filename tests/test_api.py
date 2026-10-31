@@ -180,7 +180,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["gemini_key_set"])
         self.assertEqual(body["resident_name"], "Pat")
-        self.assertEqual(db_rows("SELECT value FROM settings WHERE key = 'gemini_key'")[0]["value"], "fake-key-123")
+        self.assertEqual(helpers.server.SECRETS.get("gemini_key"), "fake-key-123")  # M15d: kept in the store
+        self.assertEqual(db_rows("SELECT value FROM settings WHERE key = 'gemini_key'"), [])  # and never in the table
 
     def test_unknown_setting_ignored(self):
         _, body, _ = api("PUT", "/api/settings", {"not_a_setting": "x"})

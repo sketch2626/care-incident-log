@@ -311,7 +311,20 @@ Andy's words: "Mary says, I see that it's your son's birthday coming up next wee
   - **It's messaging in general, not only cards:** "will you please help me send a message to my grandson?" Phone calls from the computer are out.
   - **Image generation** is fine because residents will be on a paid tier for privacy anyway ("this is going to have to be on a paid tier once it gets into the hands of the other people… for the privacy concerns").
 - **Hub's caution, to check in research:** Facebook gives businesses (Pages) a way to send messages, but as far as the hub knows there's no official way for a personal account to send to a friend. Tools that drive Messenger automatically break Meta's rules and could get a resident's account locked. The likely honest route: Mary writes the message and opens Messenger to that person, and the resident taps Send. Email can be fully sent by Mary once a helper connects the account.
+- **Research done (M15 worker, 2026-10-31):** plan `docs/messaging-plan.md` and round 8 boards on the canvas "Mary round 8: cards and messages". Email can be sent by Mary herself. Messenger has no allowed app route from a personal account, so the resident taps to send.
+- **Andy's answers after reading it (2026-10-31):**
+  - **Messenger now:** open Facebook right in Mary's screen, "where everything else goes, the pictures and stuff" (the panel beside her). The resident taps to send.
+  - **Send directly** wherever we can: "Anything else that we can just send right to, I want to be able to do as well."
+  - **Print and mail:** yes, but the facilities have to be on board to help.
+  - **Muse does handle Messenger (Andy uses it himself):** "I can open Muse and say, tell me who all sent me new messages, summarize them… and reply to all of them… Muse is actually pretty good at it." The open question is whether an app can hand Muse a task (an API). See M16.
+  - **Later, once there's funding:** write to the companies (Meta, Google and others) about the mission and ask for access and help.
 - Boards first, then a skill of its own (after M13b's tool groups).
+
+### M16. Which brain for the pilot (idea; Andy, 2026-10-31, speculation for now)
+Andy's words: "maybe when we do the pilot we can do like half and half with Gemini and the other half with the Muse API if that's possible… if not, maybe just using the Wonder and the Wonderful APIs that they have now, because they're really cheap… definitely as good as 3.8 Gemini… We're going to need a strong model doing this."
+- Residents run on a paid tier (decided 2026-10-31). Today Mary runs on the free tier with a smaller model.
+- **To check when it's time:** whether Muse has an API an app can use, Meta's Wonder and Wonderful models (price, privacy terms, tool calling, voice), and which Gemini models the paid tier opens up. The hub doesn't know these model names yet, so check before relying on them.
+- **How to decide:** the brain bench (M9d) grades any model on the same cases, so put each candidate through it. A half-and-half pilot needs a second provider behind the same tools and safety rules.
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
 - **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.

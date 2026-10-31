@@ -3,7 +3,11 @@ from tests import helpers  # noqa: F401  (must be first: points the data folders
 """M9c: Mary's long memory (memory_core.py): the table and move, the store, the core sent every turn, recall, forget,
 the offline phrases, Normal talk with a fake Gemini, Live's tool route and the page routes. No network."""
 import json
+import os
+import sqlite3
 import unittest
+import uuid
+from contextlib import closing
 from pathlib import Path
 
 import mary
@@ -15,11 +19,22 @@ EMERGENCY = "I can't breathe"
 
 
 def store():
-    return memory_core.MemoryStore(server.connect)
+    return server.memory_store()
 
 
 def rows(sql="SELECT * FROM memories ORDER BY id"):
-    return helpers.db_rows(sql)
+    """Her memories, read from memories.db (the settings are in the incident log: see settings())."""
+    with closing(server.connect_memories()) as conn:
+        return [dict(r) for r in conn.execute(sql)]
+
+
+def settings(key):
+    return [r["value"] for r in helpers.db_rows("SELECT value FROM settings WHERE key=?", (key,))]
+
+
+def migrate(path, target):
+    with closing(server.connect()) as conn, conn:
+        return memory_core.migrate_json(path, target, conn)
 
 
 class Case(unittest.TestCase):
@@ -31,11 +46,9 @@ class Case(unittest.TestCase):
         self.addCleanup(self.file.unlink, missing_ok=True)
 
     def age(self, memory_id, days):
-        import sqlite3
-        from contextlib import closing
         from datetime import datetime, timedelta
         old = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
-        with closing(sqlite3.connect(server.DB_PATH)) as conn:
+        with closing(server.connect_memories()) as conn:
             conn.execute("UPDATE memories SET created_at = ? WHERE id = ?", (old, memory_id))
             conn.commit()
 
@@ -43,19 +56,25 @@ class Case(unittest.TestCase):
 class TestTableAndMove(Case):
     def test_init_creates_table(self):
         self.assertTrue(rows("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'"))
+        self.assertFalse(helpers.db_rows("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'"))
 
-    def test_move_once_in_order_file_untouched(self):
+    def test_move_once_in_order_file_loses_facts_only(self):
         src = Path(helpers.TMP) / "old-memory.json"
-        src.write_text(json.dumps({"name": "Ruth", "facts": ["First fact", "Second fact", "Third fact"]}), encoding="utf-8")
-        before = src.read_bytes()
-        self.assertEqual(memory_core.migrate_json(src, self.store), 3)
+        recent = [{"role": "user", "text": "Hello", "at": "2026-10-01T10:00:00"}]
+        src.write_text(json.dumps({"name": "Ruth", "facts": ["First fact", "Second fact", "Third fact"],
+                                   "recent": recent}), encoding="utf-8")
+        self.assertEqual(migrate(src, self.store), 3)
         self.assertEqual([m["text"] for m in reversed(self.store.active())], ["First fact", "Second fact", "Third fact"])
-        self.assertEqual(src.read_bytes(), before)
-        self.assertEqual(rows("SELECT value FROM settings WHERE key='memories_moved'")[0]["value"], "1")
+        # migrate_json itself leaves the file alone (its docstring: "The server strips the facts"); init_db does that,
+        # see TestTrulyForget.test_old_facts_stripped_by_init_db.
+        kept = json.loads(src.read_text(encoding="utf-8"))
+        self.assertEqual(kept["name"], "Ruth")
+        self.assertEqual([t["text"] for t in kept["recent"]], ["Hello"])
+        self.assertEqual(settings("memories_moved"), ["1"])
         self.store.remove(self.store.active()[-1]["id"])
-        self.assertEqual(memory_core.migrate_json(src, self.store), 0)
+        self.assertEqual(migrate(src, self.store), 0)
         self.assertEqual(self.store.count(), 2)
-        self.assertEqual(src.read_bytes(), before)
+        self.assertEqual(len(json.loads(src.read_text(encoding="utf-8"))["facts"]), 3)
 
     def test_bad_or_missing_json_does_not_raise(self):
         bad = Path(helpers.TMP) / "bad-memory.json"
@@ -66,10 +85,10 @@ class TestTableAndMove(Case):
                 bad.unlink(missing_ok=True)
             else:
                 bad.write_text(content, encoding="utf-8")
-            self.assertEqual(memory_core.migrate_json(bad, self.store), 0, content)
+            self.assertEqual(migrate(bad, self.store), 0, content)
         helpers.reset_db()
         bad.write_text('{"facts": [1, "ok fact", null]}', encoding="utf-8")
-        self.assertEqual(memory_core.migrate_json(bad, self.store), 1)
+        self.assertEqual(migrate(bad, self.store), 1)
 
 
 class TestStore(Case):
@@ -85,13 +104,12 @@ class TestStore(Case):
         self.assertIsNone(self.store.add("  Likes   tea "))
         self.assertEqual(self.store.count(), 1)
 
-    def test_soft_delete_and_save_again(self):
+    def test_real_delete_and_save_again(self):
         mid = self.store.add("Likes tea")
         self.assertTrue(self.store.remove(mid))
         self.assertFalse(self.store.remove(mid))
-        row = rows(f"SELECT * FROM memories WHERE id={mid}")
-        self.assertEqual(len(row), 1)
-        self.assertTrue(row[0]["deleted_at"])
+        self.assertEqual(rows(f"SELECT * FROM memories WHERE id={mid}"), [])
+        self.assertNotIn("deleted_at", rows("SELECT * FROM memories LIMIT 1") or [{}])
         self.assertEqual(self.store.active(), [])
         self.assertEqual(self.store.recall("tea"), [])
         self.assertEqual(self.store.always_sent(), "")
@@ -236,7 +254,7 @@ class TestForget(Case):
         mid = self.store.add("Newest fact")
         self.assertEqual(self.store.forget(""), ["Newest fact"])
         self.assertEqual(self.store.count(), 1)
-        self.assertTrue(rows(f"SELECT deleted_at FROM memories WHERE id={mid}")[0]["deleted_at"])
+        self.assertEqual(rows(f"SELECT * FROM memories WHERE id={mid}"), [])
 
     def test_old_newest_not_removed(self):
         mid = self.store.add("Newest fact")
@@ -244,29 +262,32 @@ class TestForget(Case):
         self.assertEqual(self.store.forget(""), [])
         self.assertEqual(self.store.count(), 1)
 
-    def test_about_no_synonyms_and_soft(self):
+    def test_about_no_synonyms_and_real_delete(self):
         did = self.store.add("My daughter Ann lives in Raleigh")
         self.assertEqual(self.store.forget("kids"), [])
         self.assertEqual(self.store.count(), 1)
         self.assertEqual(self.store.forget("daughter Ann"), ["My daughter Ann lives in Raleigh"])
         self.assertEqual(self.store.count(), 0)
-        self.assertTrue(rows(f"SELECT deleted_at FROM memories WHERE id={did}")[0]["deleted_at"])
+        self.assertEqual(rows(f"SELECT * FROM memories WHERE id={did}"), [])
 
     def test_that_and_it_via_memory_tool_are_bare(self):
         memory = server.mary_memory()
         self.store.add("Fresh fact")
         got = mary.memory_tool(memory, "forget_memory", {"about": "that"})
-        self.assertEqual(got["response"]["forgotten"], ["Fresh fact"])
+        self.assertEqual(got["response"]["forgotten"], 1)
+        self.assertNotIn("Fresh fact", json.dumps(got))
+        self.assertEqual(self.store.count(), 0)
         self.store.add("Another fresh fact")
         got = mary.memory_tool(memory, "forget_memory", {"about": "It."})
-        self.assertEqual(got["response"]["forgotten"], ["Another fresh fact"])
+        self.assertEqual(got["response"]["forgotten"], 1)
+        self.assertEqual(self.store.count(), 0)
 
     def test_offer_waiting_bare_removes_nothing(self):
         memory = server.mary_memory()
         self.store.add("Fresh fact")
         for about in ({}, {"about": ""}, {"about": "that"}):
             got = mary.memory_tool(memory, "forget_memory", about, offer_waiting=True)
-            self.assertEqual(got["response"]["forgotten"], [])
+            self.assertEqual(got["response"]["forgotten"], 0)
         self.assertEqual(self.store.count(), 1)
 
 
@@ -277,7 +298,13 @@ class TestOfflinePhrases(Case):
         self.assertIn("Likes tea", mary.offline_memory(memory, "what do you remember about me"))
         self.assertEqual(mary.offline_memory(memory, "Mary, forget that"), mary.FORGOT_TEXT)
         self.store.add("Son's job is at the mill")
-        self.assertEqual(mary.offline_memory(memory, "please forget about my son's job"), mary.FORGOT_TEXT)
+        self.assertEqual(self.store.count(), 1)  # "forget that" took Likes tea; the new fact is still here
+        self.assertEqual(mary.offline_memory(memory, "please forget about my son's job"),
+                         mary.FORGET_ASK_TEXT.format("son's job"))  # asks first
+        self.assertEqual(self.store.count(), 1)
+        self.assertEqual(memory.pending_forget["about"], "son's job")
+        out = mary.reply("yes", memory, "")
+        self.assertEqual(out["text"], mary.FORGOT_TEXT)
         self.assertEqual(self.store.count(), 0)
 
     def test_does_not_fire(self):
@@ -373,7 +400,7 @@ class TestRoutes(Case):
         self.assertEqual(set(got["memories"][0]), {"id", "date", "kind", "text"})
         self.assertEqual(helpers.api("DELETE", f"/api/mary/memories/{a}")[0], 200)
         self.assertEqual(self.store.count(), 1)
-        self.assertTrue(rows(f"SELECT deleted_at FROM memories WHERE id={a}")[0]["deleted_at"])
+        self.assertEqual(rows(f"SELECT * FROM memories WHERE id={a}"), [])
 
     def test_unknown_id_404(self):
         self.assertEqual(helpers.api("DELETE", "/api/mary/memories/99999")[0], 404)
@@ -386,7 +413,7 @@ class TestRoutes(Case):
 
     def test_key_never_leaks(self):
         helpers.api("PUT", "/api/settings", {"gemini_key": KEY})
-        self.assertEqual(rows("SELECT value FROM settings WHERE key='gemini_key'")[0]["value"], KEY)
+        self.assertEqual(settings("gemini_key"), [KEY])
         self.store.add("Likes tea")
         _, listed, _ = helpers.api("GET", "/api/mary/memories")
         _, called, _ = helpers.api("POST", "/api/mary/skills/call", {"name": "recall", "args": {"words": "tea"}})

@@ -40,7 +40,7 @@ def _inside_tmp(path):
         return False
 
 
-if not (_inside_tmp(server.DB_PATH) and _inside_tmp(server.ANDYFLOW_DB)):
+if not (_inside_tmp(server.DB_PATH) and _inside_tmp(server.MEMORIES_DB) and _inside_tmp(server.ANDYFLOW_DB)):  # M9c
     shutil.rmtree(TMP, ignore_errors=True)
     raise SystemExit(
         "SAFETY STOP: the tests would touch files outside their scratch folder "
@@ -112,13 +112,24 @@ def db_rows(sql, args=()):
 
 
 def reset_db():
-    """Empty the scratch db and remove the fixture Andy Flow db."""
+    """Empty the scratch db and her memories' file, and remove their backup and the fixture Andy Flow db."""
     start_server()
     with closing(sqlite3.connect(server.DB_PATH)) as conn:
-        for table in ("incidents", "settings", "inbox_seen", "memories"):  # M9c: memories
+        for table in ("incidents", "settings", "inbox_seen"):
             conn.execute(f"DELETE FROM {table}")
-        conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('incidents', 'memories')")
+        conn.execute("DELETE FROM sqlite_sequence WHERE name = 'incidents'")
+        conn.execute("DROP TABLE IF EXISTS memories")  # M9c: only a test of the old layout leaves it here
         conn.commit()
+    with closing(server.connect_memories()) as conn:  # M9c
+        conn.executescript(server.memory_core.MEMORIES_SCHEMA)
+        conn.execute("DELETE FROM memories")
+        conn.execute("DELETE FROM sqlite_sequence WHERE name = 'memories'")
+        conn.commit()
+    gc.collect()  # a handle left to the garbage collector would stop the delete on Windows
+    server.MEMORIES_BACKUP.unlink(missing_ok=True)
+    server.MEMORIES_BACKUP.with_suffix(".tmp").unlink(missing_ok=True)
+    server._memory_backup_stale = False
+    server._live_forgot_at = None
     try:
         server.ANDYFLOW_DB.unlink()
     except FileNotFoundError:

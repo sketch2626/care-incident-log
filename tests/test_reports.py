@@ -87,6 +87,24 @@ class FTagReportTests(ReportBase):
         html, _ = self.report()
         self.assertIn("F760", html)
 
+    def test_medication_f760_is_labelled_significant_only(self):
+        self.add(category="medication", description="My evening pills came two hours late.")
+        html, _ = self.report()
+        self.assertIn("F760 (if the error was significant)", html)
+
+    def test_non_medication_row_has_no_significant_note(self):
+        self.add(category="call_light", description="I waited a long time for help.")
+        html, _ = self.report()
+        self.assertNotIn("if the error was significant", html)
+
+    def test_f600_cite_covers_neglect_and_abuse_lines(self):
+        for day in ("2026-10-17", "2026-10-18", "2026-10-19"):
+            self.add(occurred_date=day)
+        html, _ = self.report()
+        self.assertIn("F600", html)
+        self.assertEqual(reports.REGULATIONS["F600"]["cite"], "§483.12, §483.12(a)(1)")
+        self.assertIn("§483.12, §483.12(a)(1)", html)
+
     def test_call_light_cites_f725(self):
         self.add(category="call_light", description="I waited a long time for help.")
         html, _ = self.report()
@@ -229,6 +247,13 @@ class XlsxExportTests(ReportBase):
         text = "".join(z.read(n).decode("utf-8") for n in z.namelist() if n.endswith(".xml"))
         self.assertIn("Inside marker.", text)
         self.assertNotIn("Outside marker.", text)
+
+    def test_export_labels_f760_as_significant_only(self):
+        self.add(category="medication", description="My evening pills came two hours late.")
+        data, _ = self.export()
+        z = zipfile.ZipFile(io.BytesIO(data))
+        text = "".join(z.read(n).decode("utf-8") for n in z.namelist() if n.endswith(".xml"))
+        self.assertIn("F760 (if the error was significant)", text)
 
     def test_export_with_no_incidents_still_works(self):
         data, _ = self.export()

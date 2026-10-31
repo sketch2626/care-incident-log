@@ -30,6 +30,7 @@ FOOTNOTE = ("Regulatory references (42 CFR Part 483; CMS State Operations Manual
 ATTESTATION = ("declare that each entry in this record was written by me at the time shown under "
                "'Logged at', and that it is true and accurate to the best of my knowledge.")
 PATTERN_NOTE = "repeated failure — possible neglect"
+SIGNIFICANT_NOTE = "if the error was significant"
 PATTERN_MIN = 3
 
 # Same keys as server.CATEGORIES (not imported: running `python server.py` makes it __main__).
@@ -56,7 +57,7 @@ REGULATIONS = {
     "F690": {"title": "Bowel/Bladder Incontinence, Catheter, UTI", "cite": "§483.25(e)(1)-(3)"},
     "F760": {"title": "Residents Are Free of Significant Med Errors", "cite": "§483.45(f)(2)"},
     "F686": {"title": "Treatment/Svcs to Prevent/Heal Pressure Ulcers", "cite": "§483.25(b)(1)(i)-(ii)"},
-    "F600": {"title": "Free from Abuse and Neglect", "cite": "§483.12(a)(1)"},
+    "F600": {"title": "Free from Abuse and Neglect", "cite": "§483.12, §483.12(a)(1)"},
     "F550": {"title": "Resident Rights/Exercise of Rights", "cite": "§483.10(a)(1)-(2),(b)(1)-(2)"},
     "F689": {"title": "Free of Accident Hazards/Supervision/Devices", "cite": "§483.25(d)(1)-(2)"},
 }
@@ -88,7 +89,7 @@ _RULES = {
 # ---------------------------------------------------------------- regulations
 
 def is_pattern(incident, period_rows):
-    """CMS needs a pattern for neglect: 3 or more incidents of one category in the period.
+    """This app's own rule, not CMS's: 3 or more incidents of one category in the period count as a pattern.
     ("Something else" is a catch-all, not one kind of failure, so it never counts as a pattern.)"""
     cat = incident.get("category")
     if cat == "other":
@@ -121,8 +122,11 @@ def regs_for(incident, period_rows):
 
 
 def _describe(tags, pattern=False):
-    """'F809, F600 (repeated failure -- possible neglect)'."""
-    return ", ".join(f"{t} ({PATTERN_NOTE})" if pattern and t == "F600" else t for t in tags)
+    """'F809, F600 (repeated failure -- possible neglect), F760 (if the error was significant)'."""
+    notes = {"F760": SIGNIFICANT_NOTE}
+    if pattern:
+        notes["F600"] = PATTERN_NOTE
+    return ", ".join(f"{t} ({notes[t]})" if t in notes else t for t in tags)
 
 
 # ---------------------------------------------------------------- shared content

@@ -162,10 +162,11 @@ class InMaryPageTests(unittest.TestCase):
         self.assertIn("postMessage(msg, window.location.origin)", mary)
         self.assertIn("e.origin !== location.origin || e.source !== window.parent", block)
         self.assertIn("ev.origin !== window.location.origin || !f || ev.source !== f.contentWindow", mary)
-        told = set(re.findall(r"toMary\('(\w+)'(?:, \{ (?:on|name: id) \})?\)", js))
-        self.assertEqual(told, {"activity", "close", "mic", "saved", "screen"})
-        self.assertEqual(len(re.findall(r"toMary\('", js)), len(re.findall(r"toMary\('\w+'(?:, \{ (?:on|name: id) \})?\)", js)))
-        self.assertEqual(set(re.findall(r"deepPost\(\{ what: '(\w+)'", mary)), {"talk", "hide"})
+        shape = r"(?:, \{ ?(?:on|name: id|why: '\w+'|form: '\w+'|label: label \|\| FORM_MISSING\[focusSel\] \|\| '')? ?\})?"  # piece 4: fixed words, never a value
+        told = set(re.findall(r"toMary\('(\w+)'" + shape + r"\)", js))
+        self.assertEqual(told, {"activity", "close", "mic", "saved", "screen", "saved_ok", "saved_fail", "save_none"})
+        self.assertEqual(len(re.findall(r"toMary\('", js)), len(re.findall(r"toMary\('\w+'" + shape + r"\)", js)))
+        self.assertEqual(set(re.findall(r"deepPost\(\{ what: '(\w+)'", mary)), {"talk", "hide", "save"})
 
     def test_paste_uses_the_apps_bridge_on_her_page_and_no_message(self):
         js = read("app.js")

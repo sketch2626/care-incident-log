@@ -118,7 +118,7 @@ class SizesTests(unittest.TestCase):
     def test_saved_check_is_shown_after_a_save_and_cleared_by_a_change(self):
         js = read("app.js")
         self.assertIn("$('#infoSaved').hidden = false;", js)
-        self.assertIn("$('#infoForm').addEventListener('input', () => { $('#infoSaved').hidden = true; });", js)
+        self.assertIn("$('#infoForm').addEventListener('input', () => { $('#infoSaved').hidden = true; infoTouched = true; });", js)
         self.assertNotIn("toast('Saved.')", js)
 
 

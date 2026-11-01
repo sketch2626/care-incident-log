@@ -1,0 +1,183 @@
+/* Mary round 6: captions and the one button. Shared by every board, and a starting point for M4.
+   Screen 1280x800 CSS px (a typical laptop). Faces are Cute 3 from round 4. */
+
+.scr{position:relative;overflow:hidden;box-sizing:border-box;width:1280px;height:800px;font:22px/1.5 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.scr.mary{--ink:#9b2c58;--bar:#c9557f;background:radial-gradient(ellipse at 50% 42%,#fffaf0 0%,#fff0d2 50%,#fadcaa 100%)}
+.scr.sam{--ink:#1b5a8c;--bar:#3f7fbf;background:radial-gradient(ellipse at 50% 42%,#fdf8ee 0%,#f6e8cc 50%,#e9cf9f 100%)}
+.scr.sos{--ink:#8a1f2e;--bar:#c94a5a}
+
+/* Mood glow at the edges: Mary's is round, Sam's is square */
+.edge{position:absolute;inset:0;pointer-events:none;animation:edge 6s ease-in-out infinite}
+.mary .edge{background:radial-gradient(ellipse closest-side,rgba(245,170,110,0) 60%,rgba(245,170,110,.9) 100%)}
+.sam .edge{box-shadow:inset 0 0 140px 50px rgba(214,140,50,.85)}
+.mary.listen .edge{background:radial-gradient(ellipse closest-side,rgba(110,185,220,0) 58%,rgba(110,185,220,.95) 100%);animation-duration:3s}
+.sam.listen .edge{box-shadow:inset 0 0 140px 50px rgba(95,170,215,.85);animation-duration:3s}
+.mary.listen.loud .edge{background:radial-gradient(ellipse closest-side,rgba(90,175,220,0) 44%,rgba(90,175,220,1) 100%);animation:voice 1.1s ease-in-out infinite}
+.sam.listen.loud .edge{box-shadow:inset 0 0 200px 80px rgba(80,160,215,.95);animation:voice 1.1s ease-in-out infinite}
+.mary.think .edge{background:radial-gradient(ellipse closest-side,rgba(176,156,222,0) 60%,rgba(176,156,222,.9) 100%);animation-duration:8s}
+.sam.think .edge{box-shadow:inset 0 0 140px 50px rgba(160,140,215,.85);animation-duration:8s}
+.mary.sos .edge{background:radial-gradient(ellipse closest-side,rgba(232,110,120,0) 60%,rgba(232,110,120,.9) 100%);animation:steady 4s ease-in-out infinite}
+.sam.sos .edge{box-shadow:inset 0 0 140px 50px rgba(225,105,115,.85);animation:steady 4s ease-in-out infinite}
+@keyframes edge{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes steady{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes voice{0%,100%{opacity:.7}30%{opacity:1}55%{opacity:.82}80%{opacity:.95}}
+
+/* Face (viewBox 640x400, scaled to the screen) */
+.facesvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.face{transform-box:view-box;transform-origin:320px 200px;animation:float 6s ease-in-out infinite}
+.face.lean{animation:lean 6s ease-in-out infinite}
+.face.tilt{animation:tilt 7s ease-in-out infinite}
+.sway{transform-box:view-box;transform-origin:320px 330px;animation:sway 9s ease-in-out infinite}
+.hop{transform-box:view-box;transform-origin:320px 330px;animation:hop 8s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.ss{animation:ss 6s ease-in-out infinite}
+.blink{animation:blink 7s ease-in-out infinite}
+.peek{transform-box:fill-box;transform-origin:center;animation:peek 12s ease-in-out infinite}
+.ponder{animation:ponder 6s ease-in-out infinite}
+.spark{transform-box:fill-box;transform-origin:center;animation:twinkle 3.5s ease-in-out infinite}
+.lift{animation:lift 3s ease-in-out infinite}
+.cheek{opacity:.8}
+.soft .cheek{opacity:.45}
+.mouth-talk{transform-box:fill-box;transform-origin:50% 0;animation:talk 1.4s ease-in-out infinite}
+.mouth-rest{transform-box:fill-box;transform-origin:50% 0;transform:scaleY(.35)}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes lean{0%,100%{transform:rotate(-2.5deg) translateY(0)}50%{transform:rotate(-2.5deg) translateY(-4px)}}
+@keyframes tilt{0%,100%{transform:rotate(3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-3px)}}
+@keyframes sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
+@keyframes hop{0%,100%{transform:translateY(0)}3%{transform:translateY(-10px)}6%{transform:translateY(0) scale(1.02,.98)}9%{transform:translateY(0) scale(1,1)}}
+@keyframes ss{0%,88%,100%{transform:scale(1,1)}91%{transform:scale(1.14,.1)}94%{transform:scale(.95,1.07)}97%{transform:scale(1.02,.98)}}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes peek{0%,55%{transform:translate(-7px,3px)}62%,88%{transform:translate(0,0) scale(1.03)}95%,100%{transform:translate(-7px,3px)}}
+@keyframes ponder{0%,100%{transform:translate(-9px,-9px)}45%{transform:translate(-4px,-11px)}70%{transform:translate(-10px,-6px)}}
+@keyframes twinkle{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@keyframes lift{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes talk{0%{transform:scaleY(.4)}20%{transform:scaleY(1)}38%{transform:scaleY(.55)}56%{transform:scaleY(.9)}74%{transform:scaleY(.45)}88%{transform:scaleY(.8)}100%{transform:scaleY(.4)}}
+
+/* Captions. One .line per row (2 at most); each word is a .w with its text again in data-t.
+   Word states: .later = not shown yet (keeps its space so nothing jumps),
+   .w alone = next word, an empty outline, .on.f1-.f9 = being said (fill 10-90%), .done = said. */
+.cap{position:absolute;left:56px;right:56px;bottom:34px;display:flex;flex-direction:column;align-items:center;transition:opacity .4s}
+.cap.left{right:600px}
+.cap.hidden{opacity:0}
+.line{display:flex;justify-content:center;gap:0 .3em;white-space:nowrap}
+.line.gone{opacity:.25;transform:translateY(-26px)}
+.w{position:relative;display:inline-block}
+.w::before,.w::after{content:attr(data-t);position:absolute;left:0;top:0;pointer-events:none}
+.w::after{color:var(--ink);clip-path:inset(-30% 100% -30% -6%)}
+.w.f1::after{clip-path:inset(-30% 90% -30% -6%)}
+.w.f2::after{clip-path:inset(-30% 80% -30% -6%)}
+.w.f3::after{clip-path:inset(-30% 70% -30% -6%)}
+.w.f4::after{clip-path:inset(-30% 60% -30% -6%)}
+.w.f5::after{clip-path:inset(-30% 50% -30% -6%)}
+.w.f6::after{clip-path:inset(-30% 40% -30% -6%)}
+.w.f7::after{clip-path:inset(-30% 30% -30% -6%)}
+.w.f8::after{clip-path:inset(-30% 20% -30% -6%)}
+.w.f9::after{clip-path:inset(-30% 10% -30% -6%)}
+.w.done::after{clip-path:none}
+.w.later{visibility:hidden}
+
+/* A · Coloring-in (CHOSEN, Andy 2026-10-30): empty white bubble letters, colored in with her color; white sticker edge */
+.capA{font-family:"Fredoka","Segoe UI",sans-serif;font-weight:600;font-size:66px;line-height:1.2}
+.capA .w{color:#fffdf8;-webkit-text-stroke:13px #ffffff;paint-order:stroke fill;filter:drop-shadow(0 0 1.2px rgba(74,52,38,.7)) drop-shadow(0 4px 0 rgba(74,52,38,.16))}
+.capA .w::before{color:#fffdf8;-webkit-text-stroke:3px #4a3426}
+.capA .w::after{-webkit-text-stroke:3px var(--ink)}
+.capA .w.on,.capC .w.on{transform:translateY(-5px)}
+
+/* B · Bold ink (not chosen): calm, like a book; dark ink with a soft cream halo, her color underlines the word she is saying */
+.capB{font-family:"Nunito","Segoe UI",sans-serif;font-weight:900;font-size:62px;line-height:1.22}
+.capB .w{color:#fff8ec;-webkit-text-stroke:14px rgba(255,248,236,.96);paint-order:stroke fill;filter:drop-shadow(0 0 7px rgba(255,248,236,.95));text-decoration:underline 9px transparent;text-underline-offset:14px;text-decoration-skip-ink:none}
+.capB .w.on{text-decoration-color:var(--bar)}
+.capB .w::before{color:#fffaf2;-webkit-text-stroke:2.5px #8a6f5c}
+.capB .w::after{color:#2a1d15;-webkit-text-stroke:2px #2a1d15}
+
+/* C · Speech bubble (not chosen): words sit in a soft white bubble with a tail up to her mouth */
+.cap.bubble{left:110px;right:110px;bottom:26px;padding:12px 36px 16px;background:#fffdf8;border:3px solid rgba(74,52,38,.4);border-radius:52px;box-shadow:0 12px 30px rgba(90,60,30,.18)}
+.cap.bubble::before{content:"";position:absolute;left:50%;top:-23px;width:40px;height:40px;margin-left:-20px;background:#fffdf8;border-left:3px solid rgba(74,52,38,.4);border-top:3px solid rgba(74,52,38,.4);border-radius:10px 0 0 0;transform:rotate(45deg)}
+.capC{font-family:"Baloo 2","Segoe UI",sans-serif;font-weight:700;font-size:60px;line-height:1.24}
+.capC .w{color:transparent}
+.capC .w::before{color:#f4ede3;-webkit-text-stroke:2.5px #8a7560}
+.capC .w::after{-webkit-text-stroke:2px var(--ink)}
+
+/* Listening (Andy, 2026-10-30): sound waves where her ears would be, three arcs each side,
+   small to large, pulsing outward. No words. Brighter and faster while the resident talks (.loud). */
+.ears{display:none}
+.listen .ears{display:inline}
+.wave{fill:none;stroke:#2b6f96;stroke-linecap:round;transform-box:view-box;animation:waveq 2.6s ease-in-out infinite}
+.wave.l{transform-origin:204px 196px}
+.wave.r{transform-origin:436px 196px}
+.wave.w2{animation-delay:.25s}
+.wave.w3{animation-delay:.5s}
+.loud .wave{animation:wave 1s ease-out infinite}
+.loud .wave.w2{animation-delay:.18s}
+.loud .wave.w3{animation-delay:.36s}
+@keyframes wave{0%{opacity:.2;transform:scale(.9)}35%{opacity:1;transform:scale(1.05)}100%{opacity:.2;transform:scale(1)}}
+@keyframes waveq{0%,100%{opacity:.22}50%{opacity:.62}}
+
+/* Thinking (Andy, 2026-10-30): little bubbles rise off the top of her head into a thought cloud.
+   Two versions: .think.dots (three dots color in) or .think.word ("Thinking…" colors in). Lavender glow stays.
+   The cloud sits up and to her left; the face settles 60 px lower while she thinks (no caption then). */
+.cloud,.cdots,.cloudword{display:none}
+.think .cloud{display:inline}
+.think.dots .cdots{display:inline}
+.think.word .cloudword{display:flex}
+.cloud{filter:drop-shadow(0 2px 0 rgba(74,52,38,.16))}
+.cloud .ol>*{fill:#fffdf8;stroke:#4a3426;stroke-width:3.4}
+.cloud .fl>*{fill:#fffdf8}
+.trail circle{fill:#fffdf8;stroke:#4a3426;stroke-width:1.7;animation:trail 2.4s ease-in-out infinite}
+.trail circle:nth-child(2){animation-delay:.3s}
+.trail circle:nth-child(3){animation-delay:.6s}
+.cdots circle{fill:#fffdf8;stroke:#4a3426;stroke-width:1.6;animation:cdot 2.1s ease-in-out infinite}
+.cdots circle:nth-child(2){animation-delay:.35s}
+.cdots circle:nth-child(3){animation-delay:.7s}
+.cloudword{position:absolute;left:244px;top:52px;width:200px;justify-content:center;font-size:34px;line-height:1.2}
+.cloudword .w{filter:none;-webkit-text-stroke-width:0}
+.cloudword .w::before{-webkit-text-stroke-width:2px}
+.w.loop::after{animation:colorin 2.6s ease-in-out infinite}
+@keyframes trail{0%,100%{opacity:.35}40%{opacity:1}}
+@keyframes cdot{0%,12%{fill:#fffdf8;stroke:#4a3426}30%,62%{fill:var(--ink);stroke:var(--ink)}85%,100%{fill:#fffdf8;stroke:#4a3426}}
+@keyframes colorin{0%,8%{clip-path:inset(-30% 100% -30% -6%);opacity:1}62%,86%{clip-path:inset(-30% 0 -30% -6%);opacity:1}100%{clip-path:inset(-30% 0 -30% -6%);opacity:0}}
+
+/* One face, mood classes on .scr (the live board; the way M4 should build it) */
+.brow,.facepos{transition:transform .45s ease}
+.think .facepos{transform:translateY(30px)}
+.listen .brow{transform:translateY(-8px)}
+.think .brow-l{transform:translateY(-7px)}
+.think .brow-r{transform:translateY(4px)}
+.listen .peek{animation:none;transform:scale(1.08)}
+.think .peek{animation:ponder 6s ease-in-out infinite}
+.listen .face{animation:lean 6s ease-in-out infinite}
+.m-smile,.m-hmm{display:none}
+.listen .m-talk,.think .m-talk{display:none}
+.listen .m-smile,.think .m-hmm{display:inline}
+
+/* The one button, top right; the menu drops down from it */
+.menu-btn{position:absolute;top:28px;right:28px;display:flex;align-items:center;gap:14px;height:96px;padding:0 36px 0 28px;font:700 34px/1 "Segoe UI",system-ui,sans-serif;color:#2b1f17;background:#fffdf8;border:4px solid #2b1f17;border-radius:48px;box-shadow:0 6px 0 rgba(43,31,23,.22);cursor:pointer}
+.menu-btn svg{width:44px;height:44px;flex:none}
+.menu-btn.open{background:#2b1f17;color:#fffdf8;box-shadow:none;transform:translateY(4px)}
+.menu{position:absolute;top:146px;right:28px;width:560px;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:10px;background:#fffdf8;border:4px solid #2b1f17;border-radius:36px;box-shadow:0 22px 50px rgba(70,45,20,.28)}
+.menu::before{content:"";position:absolute;top:-17px;right:92px;width:28px;height:28px;background:#fffdf8;border-left:4px solid #2b1f17;border-top:4px solid #2b1f17;border-radius:6px 0 0 0;transform:rotate(45deg)}
+.mi{display:flex;align-items:center;gap:22px;min-height:88px;padding:0 26px;font:600 32px/1.15 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#ffffff;border:3px solid #d9cbb8;border-radius:24px;text-align:left;cursor:pointer}
+.mi svg{width:46px;height:46px;flex:none}
+.mi.talk{background:#0f5560;border-color:#0f5560;color:#ffffff}
+.mi.soon{background:#f6f0e7;border-style:dashed;color:#5a4d40;cursor:default}
+.mi .chip{margin-left:auto;padding:6px 16px;border-radius:999px;background:#ece2d3;color:#4a3d31;font-size:22px;font-weight:700}
+.mi.quit{margin-top:6px;border-color:#2b1f17}
+
+/* Emergency answers: the only time extra buttons show */
+.answers{position:absolute;left:0;right:0;bottom:214px;display:flex;justify-content:center;gap:24px}
+.ans{min-height:92px;padding:0 38px;font:700 32px/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fffdf8;border:4px solid #2b1f17;border-radius:26px;box-shadow:0 6px 0 rgba(43,31,23,.22);cursor:pointer}
+.ans.yes{background:#0f5560;border-color:#0f5560;color:#ffffff}
+
+/* Board label (not part of the app) */
+.tag{position:absolute;left:24px;top:24px;display:flex;flex-direction:column;gap:2px;max-width:640px;padding:10px 22px;background:rgba(255,254,250,.92);border:3px solid #1f1b16;border-radius:22px}
+.tag b{font-size:34px;line-height:1.15}
+.tag span{font-size:20px;line-height:1.3;color:#453d34}
+
+/* Plain boards (word states, notes, contrast) */
+.sheet{position:relative;box-sizing:border-box;width:1280px;padding:44px 56px;background:#fff8ec;font:22px/1.45 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.sheet h1{margin:0 0 6px;font-size:40px;line-height:1.15}
+.sheet h2{margin:0;font-size:28px;line-height:1.2}
+.sheet p{margin:0}
+.muted{color:#5a4d40}
+
+@media (prefers-reduced-motion: reduce){*{animation:none!important}.w.on{transform:none}}

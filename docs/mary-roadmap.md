@@ -367,6 +367,7 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - D3: "Pick a front you like" means nothing to him. Say it plainly, e.g. "Which picture do you like for the front of the card?" The live skill has the same word ("Let's pick a front first.", `skills/messages/skill.py:799`).
   - Changing (E1): remove Forget Sarah and Put it back. Forgetting (E2): remove "Yes, forget her"; she asks once and "yes" does it. Keep "No, keep her" as the emergency stop.
   - Adding by voice (C1-C4, S1), G1, G2, F1 and F2: fine as drawn.
+- **Andy's five answers (2026-11-01, "go with my picks", the hub's picks):** after a first send she keeps the address and says "It's in your book now" (no question); "forget Sarah" also clears what Mary remembers about her; setup puts a Windows PIN on each laptop; "forget everything" leaves the address book alone (it can be cleared on its own); a helper's copy for a new laptop, unlocked with six words kept on paper.
 - **Order:** boards and a design note now, beside the M18 build (mockups only, no shared files); the build after M18 merges.
 
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)

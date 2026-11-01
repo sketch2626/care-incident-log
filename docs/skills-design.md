@@ -128,7 +128,7 @@ The **server is each skill's brain and the page is its face.** All of a skill's 
 
 `skills_core.call(fn_name, args) -> {"response": {...}, "effects": [...], "say": str|None}`:
 - It checks that the skill exists, is on, and isn't `needs_internet` while offline. Then it validates `args` against `inputSchema` (wrong args become `{"error": "bad_input", ...}` for Gemini, not a crash).
-- It runs the handler in the guard (section 6). The handler gets `ctx` (`ctx.store`, `ctx.state`, `ctx.effect(kind, data)`, `ctx.settings_get/put` for the keys its manifest declares) and returns a small JSON-able result.
+- It runs the handler in the guard (section 6). The handler gets `ctx` (`ctx.store`, `ctx.state`, `ctx.effect(kind, data)`, `ctx.settings_get/put` for the keys its manifest declares, `ctx.has_printer()`) and returns a small JSON-able result.
 - **Effects** are what the page must do, for example `{"skill":"crossword","kind":"hint","data":{...}}` or core effects like `{"kind":"show_screen","data":{"screen":"crossword"}}`.
 
 **Normal mode:**

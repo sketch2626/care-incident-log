@@ -167,6 +167,7 @@ MarySkills.register('my_game', { aside: true, enter(el) { /* draw */ }, leave(el
 - **Showing a saved image.** A skill can show an image it saved in `ctx.files` at `/api/mary/skills/<name>/image/<file>` (jpg, png, gif, webp or svg). An svg can't run scripts or load anything from outside itself, so it has to carry its own fonts and pictures.
 - **Files you ship with the skill.** `ctx.asset(name)` gives the bytes of a file in the skill's own `assets` folder. Subfolders are fine, and nothing outside that folder can be read.
 - **Bundled fonts.** `ctx.font(file)` gives the bytes of a font in `web/mary/fonts`, by its bare file name, such as `cinzel.woff2`.
+- **Printing.** `ctx.has_printer()` says whether this computer has a real printer. Offer printing only when it's true, and never ask the system yourself.
 - **Settings only those listed.** A skill may change only the settings its card names.
 - **No risky calls.** No `subprocess`, `sqlite3`, `importlib`, `open`, `exec`, `eval` or `__import__`.
 - **Text limits.** `instructions` is 400 characters at most. Each description is 200 at most. `view()` is 600 at most.

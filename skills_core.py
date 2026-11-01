@@ -26,6 +26,7 @@ from pathlib import Path
 
 import mail_core  # M15d: only for its plain words; skills may not import it
 import memory_core  # M15c: what counts as "everything"; memory_core never imports this file
+import printers  # M17: skills ask ctx.has_printer() and may not import it
 import send_gate  # M15c: the hard-wired yes; skills may not import it
 
 SUPPORTED_CONTRACTS = {1}
@@ -58,7 +59,8 @@ FORBIDDEN_IMPORTS = {"server", "sqlite3", "mary", "assist", "subprocess", "ctype
                      "urllib", "http", "requests", "httpx", "aiohttp", "socket", "ssl", "ftplib", "smtplib",
                      "websocket", "websockets", "skills_core",
                      "mail_core", "secret_store", "sys", "builtins", "gc", "inspect",  # M15d
-                     "send_gate"}  # M15c: it holds mail_core, and a skill must not reach that through it
+                     "send_gate",  # M15c: it holds mail_core, and a skill must not reach that through it
+                     "printers"}  # M17: ctx.has_printer() is the way in
 FORBIDDEN_NAMES = {"open", "exec", "eval", "__import__", "__builtins__",
                    "mint_ticket", "vars", "__dict__", "__self__", "__globals__", "__getattribute__",  # M15d: from these on
                    "_host", "gate", "from_page"}  # M15c: a skill can't move a send, or say a move came from the page
@@ -636,7 +638,8 @@ def _page_gate(ctx):  # M15c
 
 class SkillContext:
     """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch(), look() (M4a),
-    send_mail() (M15d), asset() and font() (M15b), and the send gate's arm_send() and the rest (M15c)."""
+    send_mail() (M15d), asset() and font() (M15b), the send gate's arm_send() and the rest (M15c), and
+    has_printer() (M17)."""
 
     def __init__(self, host, skill):
         self._host = host
@@ -792,6 +795,10 @@ class SkillContext:
             return {"ok": False, "code": "refused", "message": mail_core.MESSAGES["refused"]}
         finally:
             gate.finish(look)
+
+    def has_printer(self):  # M17
+        """True when this computer has a real printer. Skills ask here and never the system."""
+        return printers.has_printer()
 
     def look(self, image_bytes, mime, question):  # M4a
         """Asks what a picture shows, through the host, so a skill never holds the key. Text, or "" when the card has no

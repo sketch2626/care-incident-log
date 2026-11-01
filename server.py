@@ -34,6 +34,7 @@ import secret_store  # M15d: the Gemini key, out of the log and its backups
 import send_gate  # M15c: the hard-wired yes
 import skills_core  # --- skills hook (M13) ---
 import speedcheck  # M8: first-run laptop speed check
+import printers  # M17
 import voices
 import wakeword  # M6: "Hey Mary" (opens nothing until a Mary page asks)
 
@@ -610,6 +611,7 @@ def mary_app_facts(companion):
             "voice_rate": s["voice_rate"], "voice_volume": s["voice_volume"],
             "talk_choice": s["talk_mode"],  # M4a: Live, Normal or Offline, as saved
             "talk_on_open": s["talk_on_open"],  # M4a: she starts talking when her screen opens
+            "printer": printers.has_printer(),  # M17: she never offers printing when there is none
             "wake_word": s["wake_word"] and wakeword.available()[0]}  # M6; M4a: only when it can really run here
 
 

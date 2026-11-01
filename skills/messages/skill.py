@@ -804,6 +804,12 @@ SAY_NO_EMAIL = "Your email isn't set up, so this one can go by printing. Want it
 SAY_CANT_SEND = "I can't send that one as it is. Want it printed?"
 SAY_NO_PICTURE = "The picture wouldn't make. I can send the words as a plain message, or print it."
 SAY_PRINT_OFFER = "Would you like it printed so it can be mailed?"
+# M17: with no printer she offers nothing and says it's saved. %s is card, message or page (_what).
+SAY_SAVED_LATER = "The %s is saved, and a helper can print it for you later."
+SAY_NO_EMAIL_LATER = "Your email isn't set up. " + SAY_SAVED_LATER
+SAY_CANT_SEND_LATER = "I can't send that one as it is. " + SAY_SAVED_LATER
+SAY_NO_PICTURE_PLAIN = "The picture wouldn't make. I can send the words as a plain message."
+SAY_NO_PRINTER = "It's saved. There's no printer on this computer, so a helper can print it for you later."
 SAY_WHO = "Who's it for?"
 SAY_NEXT = "When they're happy with it, call send_it."
 ASKS_WORDS = {"money": "money", "password": "a password", "ssn": "a Social Security number"}
@@ -871,6 +877,34 @@ def _draft(ctx):
     if "draft" not in ctx.state:
         ctx.state["draft"] = ctx.store.get("draft")
     return ctx.state["draft"]
+
+
+def _what(ctx):  # M17
+    """The plain word for what's up: a keepsake page, a message or a card."""
+    if ctx.state.get("keepsake"):
+        return "page"
+    draft = _draft(ctx)
+    return "message" if draft and draft.get("kind") == "letter" else "card"
+
+
+def _saved_later(ctx):  # M17
+    """The no-printer line, or "" when nothing is saved to print."""
+    saved = ctx.state.get("keepsake") or (_draft(ctx) or {}).get("rev")
+    return SAY_SAVED_LATER % _what(ctx) if saved else ""
+
+
+def _then_print(ctx, lead=""):  # M17
+    """What follows a send: the print offer when there's a printer, the saved line when there isn't."""
+    return ("%s %s" % (lead, SAY_PRINT_OFFER if ctx.has_printer() else _saved_later(ctx))).strip()
+
+
+def _no_picture(ctx):  # M17
+    return SAY_NO_PICTURE if ctx.has_printer() else ("%s %s" % (SAY_NO_PICTURE_PLAIN, _saved_later(ctx))).strip()
+
+
+def _cant_go(ctx, offer, without_printer):  # M17
+    can_print = ctx.has_printer()
+    return _reply(offer if can_print else without_printer % _what(ctx), sent=False, saved=True, can_print=can_print)
 
 
 def _keep(ctx, draft):
@@ -1171,6 +1205,8 @@ def print_card(ctx):
     if file is None:
         return {"not_for_me": True} if ctx.heard else _reply(SAY_NEEDS_WORDS, printing=False)
     ctx.state.pop("print_failed", None)
+    if not ctx.has_printer():  # M17
+        return _reply(SAY_NO_PRINTER, printing=False, saved=True)
     ctx.effect("print", {"file": file})
     return _reply(SAY_FOLD if file.endswith("-print.svg") else SAY_SHEET, printing=True)
 
@@ -1320,10 +1356,10 @@ def _arm(ctx, draft, who, address):
         if reason in ASKS_WORDS:
             return _paused(reason)
         if reason == "too_big":
-            return _reply(SAY_NO_PICTURE, picture_failed=True, sent=False)
+            return _reply(_no_picture(ctx), picture_failed=True, sent=False)
         if reason == "no_email":
-            return _reply(SAY_NO_EMAIL, sent=False, saved=True, can_print=True)
-        return _reply(SAY_CANT_SEND, sent=False, saved=True, can_print=True)
+            return _cant_go(ctx, SAY_NO_EMAIL, SAY_NO_EMAIL_LATER)
+        return _cant_go(ctx, SAY_CANT_SEND, SAY_CANT_SEND_LATER)
     line = ctx.send_state()["line"]
     data = {"look": armed["look"], "name": who, "email": address, "kind": draft["kind"], "rev": draft.get("rev", 0)}
     if draft["kind"] == "card":
@@ -1347,7 +1383,7 @@ def _send_flow(ctx):
     if reason:
         return _paused(reason)
     if not ctx.mail_ready():
-        return _reply(SAY_NO_EMAIL, sent=False, saved=True, can_print=True)
+        return _cant_go(ctx, SAY_NO_EMAIL, SAY_NO_EMAIL_LATER)
     name = draft.get("person", "")
     if not name:
         return _reply(SAY_WHO, need_person=True, sent=False)
@@ -1420,14 +1456,14 @@ def address_right(ctx, right):
 def keep_address(ctx, keep):
     sent = ctx.state.pop("just_sent", None)
     if not sent:
-        return _reply(SAY_PRINT_OFFER, kept=False)
+        return _reply(_then_print(ctx) or "All right.", kept=False)
     record = dict(_contact_of(ctx, sent["person"]), asked=True)
     if keep is True:
         record.update(email=sent["address"], no_keep=False)
     else:
         record.update(email="", no_keep=True)
     kept = _put_contact(ctx, record) and keep is True
-    return _reply(("Kept. " if kept else "All right. ") + SAY_PRINT_OFFER, kept=kept)
+    return _reply(_then_print(ctx, "Kept." if kept else "All right."), kept=kept)
 
 
 @_locked
@@ -1700,7 +1736,7 @@ def _sent(ctx, held):
     ctx.effect("sent", {"name": short, "time": time, "part": part})
     contact = _contact_of(ctx, person)
     if contact.get("email") or contact.get("asked") or contact.get("no_keep"):
-        return _reply("Sent to %s. %s" % (short, SAY_PRINT_OFFER), sent=True)
+        return _reply(_then_print(ctx, "Sent to %s." % short), sent=True)
     _put_contact(ctx, dict(contact, asked=True))
     ctx.state["just_sent"] = {"person": person, "address": held["address"]}
     return _reply("Sent to %s. Keep %s address for next time?" % (short, _whose(short)), sent=True, keep_question=True)
@@ -1713,7 +1749,8 @@ def _not_sent(ctx, held, result):
     if result.get("code") == "unsure":  # never retried: nobody can know it didn't go
         return _reply("I'm not sure that went. Ask %s if it came before we send it again." % held["short"],
                       sent=False, unsure=True)
-    return _reply("%s %s" % (str(result.get("message") or "That didn't go."), SAY_PRINT_OFFER), sent=False, can_print=True)
+    return _reply(_then_print(ctx, str(result.get("message") or "That didn't go.")), sent=False,
+                  can_print=ctx.has_printer())
 
 
 def _stale(ctx, held):
@@ -1798,7 +1835,7 @@ def _page_event(ctx, event):
         return {"ok": True}
     if kind == "picture_failed":
         _no_picture_wanted(ctx)
-        return _reply(SAY_NO_PICTURE, picture_failed=True)
+        return _reply(_no_picture(ctx), picture_failed=True)
     return {"ignored": True}
 
 

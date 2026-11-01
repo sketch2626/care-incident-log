@@ -104,7 +104,7 @@ SAFETY_HEADINGS = ("Emergencies come first", "When they talk of hurting someone"
                    "When something goes wrong with their care", "On their side, and toward people")
 # The keys must match server.mary_app_facts. wake_word is on by default in the app; a case can turn it off.
 DEFAULT_APP_FACTS = {"voice_now": "picked", "picked_voice": "Aoede", "talk_mode": "handsfree", "talk_choice": "live",
-                     "talk_on_open": True, "voice_rate": 1.0, "voice_volume": 1.0, "wake_word": True}
+                     "talk_on_open": True, "voice_rate": 1.0, "voice_volume": 1.0, "wake_word": True, "printer": True}
 APP_FACT_KEYS = set(DEFAULT_APP_FACTS) | {"picked_about"}
 
 RUBRICS = {

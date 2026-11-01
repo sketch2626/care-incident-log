@@ -1,0 +1,235 @@
+{
+"v": 3,
+"createdOnFiles": {
+"v": 1,
+"at": "2026-11-01T12:00:00Z"
+},
+"title": "Mary round 10: a secure address book",
+"launch": {
+"view": "canvas"
+},
+"pages": [],
+"boards": {
+"A1-List-Mary.dc.html": {
+"x": 0,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a1) The list"
+},
+"A2-Find-Mary.dc.html": {
+"x": 1360,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a2) Two Sarahs"
+},
+"B1-Card-Mary.dc.html": {
+"x": 2720,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(b1) One person's card"
+},
+"H1-Doctor-Mary.dc.html": {
+"x": 0,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(h1) A doctor's card"
+},
+"C1-AddFill-Mary.dc.html": {
+"x": 0,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(c1) She fills it in as they talk, moving"
+},
+"C2-AddSpell-Mary.dc.html": {
+"x": 1360,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(c2) She spells it back"
+},
+"C3-AddFix-Mary.dc.html": {
+"x": 2720,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(c3) They catch a mistake"
+},
+"C4-AddSaved-Mary.dc.html": {
+"x": 4080,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(c4) Saved, on their word"
+},
+"S1-AddSpell-Sam.dc.html": {
+"x": 5440,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(s1) Sam works the same"
+},
+"D1-Email-Mary.dc.html": {
+"x": 0,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "(d1) \"Email my daughter\""
+},
+"D2-Look-Mary.dc.html": {
+"x": 1360,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "(d2) The look before it goes"
+},
+"D3-Card-Mary.dc.html": {
+"x": 2720,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "(d3) \"Make Sarah a birthday card\""
+},
+"G1-KeepAsk-Mary.dc.html": {
+"x": 0,
+"y": 4880,
+"w": 1280,
+"h": 800,
+"title": "(g1) Ask once (the pick)"
+},
+"G2-KeptSay-Mary.dc.html": {
+"x": 1360,
+"y": 4880,
+"w": 1280,
+"h": 800,
+"title": "(g2) Keep it and say so"
+},
+"E1-Change-Mary.dc.html": {
+"x": 0,
+"y": 6100,
+"w": 1280,
+"h": 800,
+"title": "(e1) A new number"
+},
+"E2-ForgetAsk-Mary.dc.html": {
+"x": 1360,
+"y": 6100,
+"w": 1280,
+"h": 800,
+"title": "(e2) She asks once"
+},
+"E3-Forgotten-Mary.dc.html": {
+"x": 2720,
+"y": 6100,
+"w": 1280,
+"h": 800,
+"title": "(e3) Really removed"
+},
+"F1-Helper-Mary.dc.html": {
+"x": 0,
+"y": 7320,
+"w": 1280,
+"h": 800,
+"title": "(f1) A helper types"
+},
+"F2-HelperVoice-Mary.dc.html": {
+"x": 1360,
+"y": 7320,
+"w": 1280,
+"h": 800,
+"title": "(f2) The resident pitches in"
+},
+"N-Notes.dc.html": {
+"x": 0,
+"y": 8540,
+"w": 1280,
+"h": 800,
+"title": "(n) Notes"
+}
+},
+"order": [
+"A1-List-Mary.dc.html",
+"A2-Find-Mary.dc.html",
+"B1-Card-Mary.dc.html",
+"H1-Doctor-Mary.dc.html",
+"C1-AddFill-Mary.dc.html",
+"C2-AddSpell-Mary.dc.html",
+"C3-AddFix-Mary.dc.html",
+"C4-AddSaved-Mary.dc.html",
+"S1-AddSpell-Sam.dc.html",
+"D1-Email-Mary.dc.html",
+"D2-Look-Mary.dc.html",
+"D3-Card-Mary.dc.html",
+"G1-KeepAsk-Mary.dc.html",
+"G2-KeptSay-Mary.dc.html",
+"E1-Change-Mary.dc.html",
+"E2-ForgetAsk-Mary.dc.html",
+"E3-Forgotten-Mary.dc.html",
+"F1-Helper-Mary.dc.html",
+"F2-HelperVoice-Mary.dc.html",
+"N-Notes.dc.html"
+],
+"notes": {
+"t0": {
+"x": 0,
+"y": -300,
+"text": "The address book",
+"kind": "title1",
+"maxW": 2640
+},
+"t1": {
+"x": 0,
+"y": 920,
+"text": "My doctors",
+"kind": "title1",
+"maxW": 2640
+},
+"t2": {
+"x": 0,
+"y": 2140,
+"text": "Adding someone by voice",
+"kind": "title1",
+"maxW": 2640
+},
+"t3": {
+"x": 0,
+"y": 3360,
+"text": "Using it",
+"kind": "title1",
+"maxW": 2640
+},
+"t4": {
+"x": 0,
+"y": 4580,
+"text": "A new address on a first send: two ways",
+"kind": "title1",
+"maxW": 2640
+},
+"t5": {
+"x": 0,
+"y": 5800,
+"text": "Changing and removing",
+"kind": "title1",
+"maxW": 2640
+},
+"t6": {
+"x": 0,
+"y": 7020,
+"text": "A helper adding several people",
+"kind": "title1",
+"maxW": 2640
+},
+"t7": {
+"x": 0,
+"y": 8240,
+"text": "Notes",
+"kind": "title1",
+"maxW": 2640
+}
+},
+"designSystems": []
+}

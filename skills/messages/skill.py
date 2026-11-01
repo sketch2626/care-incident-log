@@ -820,6 +820,11 @@ CONTENT_FIELDS = ("kind", "id", "person", "occasion", "line", "front", "words", 
 CONTACTS_MAX = 500
 DETAIL_MAX = 120
 ADDRESS_MAX = 254
+ADDRESS_LINES = 3  # M18: how many lines of theirs an address waits for a yes or a keep answer before it's let go
+ASKS_ADDRESS_RE = re.compile(r"\baddress\b|(?:'s|\b(?:her|his|their|my|the|that|whose))\s+e-?mail\b")  # M18: not "an email"
+ASKS_HEAR_RE = re.compile(r"\b(?:what|what's|read|tell|say|spell|give|repeat|remind|hear|know|have|got|need|find|look)\b")
+ASKS_FILL_RE = re.compile(r"\b(?:fill|put|type|enter|paste|copy|write|use|add)\b")
+ASKS_BOX_RE = re.compile(r"\b(?:fill|put|type|enter|paste|copy)\b")
 ADDRESS_RE = re.compile(r"[a-z0-9_%+'-]+(?:\.[a-z0-9_%+'-]+)*@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}")
 SPOKEN_DIGITS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7",
                  "eight": "8", "nine": "9"}
@@ -1233,7 +1238,14 @@ def _find(ctx, name):
     if not wanted:
         return []
     return [c for c in every if _norm(c["name"]) == wanted] or [
-        c for c in every if _norm(c["name"]).split()[:1] == [wanted] or _norm(c.get("relationship")) == wanted]
+        c for c in every if _norm(c["name"]).split()[:1] == [wanted] or _norm(c.get("relationship")) == wanted] or [
+        c for c in every if _both_named(c, wanted)]
+
+
+def _both_named(contact, wanted):  # M18
+    """"My daughter Sarah": the relationship and the first name together. Either one alone never gets here."""
+    words, first, relation = wanted.split(), _norm(contact["name"]).split()[:1], _norm(contact.get("relationship"))
+    return bool(first and relation) and first[0] in words and set(relation.split()) <= set(words)
 
 
 def _put_contact(ctx, record):
@@ -1406,6 +1418,47 @@ def _send_flow(ctx):
     return _arm(ctx, draft, contact["name"] if contact else name, address)
 
 
+def _with_the_send(ctx):  # M18
+    """Whether the address just checked is for the card or message that's ready to go."""
+    draft = _draft(ctx)
+    if not draft or not draft.get("rev") or ctx.state.get("keepsake"):
+        return False
+    name, hits = draft.get("person", ""), _find(ctx, draft.get("person", ""))
+    return bool(_waiting_address(ctx, name, hits[0] if len(hits) == 1 else None))
+
+
+def _offer_keep(ctx, wait):  # M18
+    """An address they told her with nothing being sent, checked with them. It stays only if they say so, in contacts."""
+    ctx.state.pop("address_wait", None)
+    ctx.effect("leave_screen")
+    hits = _find(ctx, wait["person"])
+    if len(hits) == 1 and hits[0].get("email", "").lower() == wait["address"]:
+        return _reply("I've already got that one.", kept=True)
+    ctx.state["address_told"] = {key: wait.get(key, "") for key in ("person", "address", "relationship")}
+    return _reply("Keep %s address for next time?" % _whose(wait["person"]), keep_question=True)
+
+
+def _keep_told(ctx, told, keep):  # M18
+    """Their answer about an address told outside a send. A no changes nothing, so an address already saved stays."""
+    if keep is not True:
+        return _reply("All right.", kept=False)
+    hits = _find(ctx, told["person"])
+    record = dict(hits[0] if len(hits) == 1 else _new_contact(told["person"]), email=told["address"], asked=True, no_keep=False)
+    if told.get("relationship"):
+        record["relationship"] = told["relationship"]
+    kept = _put_contact(ctx, record)
+    return _reply("Kept." if kept else "I can't keep any more people.", kept=kept)
+
+
+def _asked_address(heard, contact):  # M18
+    """Whether their own words ask to hear this address or put it in a box. Sending needs neither."""
+    words = clean(heard or "").lower().replace("\u2019", "'")
+    if ASKS_ADDRESS_RE.search(words) and (ASKS_HEAR_RE.search(words) or ASKS_FILL_RE.search(words)):
+        return True
+    names = _norm(contact["name"]).split()[:1] + [_norm(contact.get("relationship"))]
+    return bool(ASKS_BOX_RE.search(words)) and any(name and re.search(r"\b%s\b" % re.escape(name), words) for name in names)
+
+
 @_locked
 def send_it(ctx, person=""):
     draft, person = _draft(ctx), _said(person, NAME_MAX)
@@ -1420,7 +1473,7 @@ def send_it(ctx, person=""):
 
 
 @_locked
-def give_address(ctx, address, person=""):
+def give_address(ctx, address, person="", relationship=""):  # M18: relationship
     draft, person = _draft(ctx), _said(person, NAME_MAX)
     if draft and person and not draft.get("person"):
         draft = dict(draft, person=person)
@@ -1433,7 +1486,8 @@ def give_address(ctx, address, person=""):
     spoken = _spoken_address(address)
     if spoken is None:
         return _ask_address(ctx, name, bad=True)
-    ctx.state["address_wait"] = {"person": name, "address": spoken, "right": False}
+    ctx.state["address_wait"] = {"person": name, "address": spoken, "right": False,
+                                 "relationship": _said(relationship, DETAIL_MAX)}
     ctx.state["send_view"] = {"kind": "address_wait", "name": name}
     ctx.effect("show_screen")
     ctx.effect("address_wait", {"name": name, "address": spoken})
@@ -1449,11 +1503,16 @@ def address_right(ctx, right):
         return _ask_address(ctx, wait["person"])
     wait["right"] = True
     ctx.state.pop("send_view", None)
+    if not _with_the_send(ctx):  # M18
+        return _offer_keep(ctx, wait)
     return _send_flow(ctx)
 
 
 @_locked
 def keep_address(ctx, keep):
+    told = ctx.state.pop("address_told", None)  # M18: told outside a send. Below is M15c's question, as it was
+    if told:
+        return _keep_told(ctx, told, keep)
     sent = ctx.state.pop("just_sent", None)
     if not sent:
         return _reply(_then_print(ctx) or "All right.", kept=False)
@@ -1493,6 +1552,22 @@ def find_contact(ctx, name):
             "has_email": bool(hits[0].get("email"))}
 
 
+@_locked
+def contact_address(ctx, name):  # M18
+    """A saved address for her to read out or put in a box, and only when their own words just asked for it."""
+    hits = _find(ctx, _said(name, NAME_MAX))
+    if len(hits) > 1:
+        return _which(hits, known=True)
+    if not hits:
+        return {"known": False}
+    found = {"known": True, "name": hits[0]["name"], "has_email": bool(hits[0].get("email"))}
+    if not found["has_email"]:
+        return found
+    if not _asked_address(ctx.heard, hits[0]):
+        return dict(found, not_asked=True, note="They didn't ask for the address. Use the name: a send needs no address.")
+    return dict(found, address=hits[0]["email"], note="For what they asked, this once. Spell it, or put it in the box.")
+
+
 def _forget_hits(ctx, about, own_name):
     """The contacts about means, whether it means only their address ("Mark's address"), and the name it came to."""
     words = str(about or "").strip(" .!?").replace("\u2019", "'")
@@ -1518,7 +1593,8 @@ def _holding(ctx, hits, wanted, own_name):
     def theirs(person):
         return _norm(person) in names or (not own_name and _norm(person).split()[:1] == [_norm(wanted)])
 
-    return [key for key in ("address_wait", "just_sent", "held") if key in ctx.state and theirs(ctx.state[key]["person"])]
+    return [key for key in ("address_wait", "address_told", "just_sent", "held")  # M18: address_told
+            if key in ctx.state and theirs(ctx.state[key]["person"])]
 
 
 def _everything(about):
@@ -1530,7 +1606,7 @@ def on_forget(ctx, about, own_name=False):
     """A real forget. Their addresses and names come back so the core can drop them from talk history and mail.log."""
     if _everything(about):
         hits, only_address = _contacts(ctx), False
-        keys = [key for key in ("address_wait", "just_sent", "held") if key in ctx.state]
+        keys = [key for key in ("address_wait", "address_told", "just_sent", "held") if key in ctx.state]  # M18: address_told
     else:
         hits, only_address, wanted = _forget_hits(ctx, about, own_name)
         keys = _holding(ctx, hits, wanted, own_name)
@@ -1680,7 +1756,7 @@ def open_saved(ctx, person=""):
 def close(ctx):
     """Puts the card away. It stays saved. Anything held for a send goes with it."""
     _drop_send(ctx)
-    for key in ("just_sent", "address_wait", "last_sent"):
+    for key in ("just_sent", "address_wait", "address_told", "last_sent"):  # M18: address_told
         ctx.state.pop(key, None)
     ctx.effect("leave_screen")
     return _reply("All put away. It stays saved.")
@@ -1794,6 +1870,21 @@ def _typed_address(ctx, event):
     return _send_flow(ctx)
 
 
+def on_resident_line(ctx, over=False):  # M18
+    """One more line from them, or the talk's end. An address still waiting on a yes or a keep answer is let go, so it
+    never sits in memory past the question. One they've checked for a send stays with that send."""
+    with _LOCK:
+        for key in ("address_wait", "address_told"):
+            wait = ctx.state.get(key)
+            if not wait or wait.get("right"):
+                continue
+            wait["lines"] = wait.get("lines", 0) + 1
+            if over or wait["lines"] >= ADDRESS_LINES:
+                ctx.state.pop(key, None)
+                if (ctx.state.get("send_view") or {}).get("kind") == "address_wait":
+                    ctx.state.pop("send_view", None)
+
+
 def on_event(ctx, event):
     if event.get("type") == "count_done":
         return _count_done(ctx, event)
@@ -1851,6 +1942,8 @@ def _send_seen(state):
         return "Waiting for %s email address. " % _whose(name)
     if seen.get("kind") == "address_wait":
         return "Checking the address for %s with them. " % name
+    if state.get("address_told"):  # M18
+        return "Waiting to hear whether to keep %s address. " % _whose(state["address_told"]["person"])
     if sent and sent["date"] == _today().isoformat():
         ask = "Waiting to hear whether to keep the address. " if state.get("just_sent") else ""
         return "Sent to %s, %s %s. %s" % (sent["name"], sent["time"].lower(), sent["part"], ask)

@@ -151,8 +151,85 @@ def _today():  # M15a
         return date.today()
 
 
+# --- M18: an email address is kept in one place, the messages skill's contacts, and goes through here everywhere else ---
+ADDRESS_WORDS = "(an email address)"
+_TLD = r"(?:com|net|org|edu|gov|mil|info|biz|us|co|uk|ca)"
+_DOT = r"(?:\s*\.(?=[a-z0-9])|\s+\.\s+|[\s,]+(?:dot|period|point)[\s,]+)"  # "home. Us kids" is the end of a sentence
+_SPELLED = r"(?:[a-z0-9][\s,.-]+)+[a-z0-9]"  # g m a i l, or a-o-l
+_MAIL_HOST = (r"(?:g\s?mail|google\s?mail|ya\s?hoo|y\s?mail|a\s?o\s?l|hot\s?mail|out\s?look|live|msn|i\s?cloud|me|comcast|"
+              r"xfinity|verizon|a\s?t\s?t|bell\s?south|charter|spectrum|earth\s?link|wind\s?stream|proton\s?mail|proton|mail)")
+# The address-shaped ending: at, a name, a dot, a known ending. A mail company needs nothing more. Any other name needs
+# a name in front ("mark at hollisfamily dot com"), so "bought it at walmart dot com" stays plain talk.
+_ADDRESS_END = re.compile(
+    r"(?P<at>@|(?<![\w.'-])at(?:[\s-]+(?:sign|symbol))?(?![\w'-]))[\s,]*"
+    r"(?:(?P<mail>" + _MAIL_HOST + r")(?:" + _DOT + r"|\.\s+|[\s,]+(?=(?:com|net)\b))"
+    r"|(?P<host>[a-z0-9][a-z0-9-]*|" + _SPELLED + r")" + _DOT + r")"
+    r"(?:[a-z0-9][a-z0-9-]*" + _DOT + r"){0,3}" + _TLD + r"(?:" + _DOT + _TLD + r")?(?![\w-])", re.I)
+_WRITTEN = re.compile(r"[\w.+%'-]+@[\w-]+(?:[.,][\w-]+)*|[\w.+%'-]+\s*@\s*[\w-]+(?:\.[\w-]+)+", re.I)  # any ending at all
+_WRITTEN_LEFT = re.compile(r"[\w.+%'-]+$")
+_PIECE = re.compile(r"under\s+score|[^\s,;:!?()\"<>]+", re.I)
+_JOINS = frozenset(("dot", "period", "point", "underscore", "under score", "dash", "hyphen", "minus", "plus"))
+_NUMBER_WORDS = frozenset("""zero oh one two three four five six seven eight nine ten eleven twelve thirteen fourteen
+    fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred
+    thousand""".split())
+_NOT_HOSTS = frozenset("the that this those these a an my our your his her their it them".split())
+_NOT_NAMES = frozenset("""it its them they that this those these there here he she we you me my mine us our your his her
+    their him one ones is are am was were be been being do did does has have had will would can could should may might
+    not no yes yeah ok okay sure please thanks and or but so then now also just still only even very really too all any
+    some look looks looked looking see saw seen stare stared staring glance glanced shop shops shopped shopping buy buys
+    bought order orders ordered sell sells sold sale sales find finds found got get gets go goes going went gone come
+    comes came stay stays stayed live lives lived work works worked email e-mail mail address website site page web
+    online internet to from for of in on at by with about over under up down out back off say says said tell tells told
+    call calls called""".split())
+_ONLY_ADDRESS = re.compile(r"(?:(?:[\w'’-]+\s+){0,3}(?:e-?mail|address)\b\s*(?:address\s*)?(?:is|was|:|=)?\s*)?"
+                           + re.escape(ADDRESS_WORDS) + r"\W*", re.I)
+
+
+def _address_start(text, end, after_piece=False):
+    """Where the name part of an address starts, going back word by word from end: "mark dot hollis", "m a r k". end
+    itself when nothing there can be a name. after_piece: what's at end is a name piece already."""
+    pieces = list(_PIECE.finditer(text, max(0, end - 120), end))
+    start, can_join = end, not after_piece
+    for piece in reversed(pieces):
+        word = " ".join(piece.group().lower().split()).replace("’", "'").strip(".!?'\"-")
+        if word in _JOINS:
+            if can_join:  # two joins together, or nothing yet for it to join
+                break
+            can_join = True
+            continue
+        if not can_join or not word or word in _NOT_NAMES or word.endswith("'s"):
+            break
+        start, can_join = piece.start(), len(word) == 1 or word.isdigit() or word in _NUMBER_WORDS
+    return start
+
+
+def scrub_addresses(text):
+    """These words with any email address, written or spoken, as "(an email address)". The caller keeps what it gets
+    back. The send gate and give_address see the raw line first, and nothing else needs it."""
+    text = str(text or "")
+    for found in reversed(list(_ADDRESS_END.finditer(text))):  # from the end, so earlier places stay right
+        at = found.start("at")
+        if (found.group("host") or "").lower() in _NOT_HOSTS:
+            continue
+        tight = found.group("at") == "@" and at > 0 and not text[at - 1].isspace()
+        left = _WRITTEN_LEFT.search(text, max(0, at - 120), at) if tight else None
+        start = _address_start(text, left.start(), True) if left else _address_start(text, at)
+        if start == at and found.group("at") != "@" and not found.group("mail"):
+            continue
+        text = text[:start] + ADDRESS_WORDS + text[found.end():]
+    for found in reversed(list(_WRITTEN.finditer(text))):
+        text = text[:_address_start(text, found.start(), True)] + ADDRESS_WORDS + text[found.end():]
+    return text
+
+
+def only_address(text):
+    """True when scrubbed words say nothing but an address: there's no memory left in them."""
+    return bool(_ONLY_ADDRESS.fullmatch(" ".join(str(text or "").split())))
+# --- end M18 ---
+
+
 def _clean(text):
-    text = " ".join(str(text or "").split())[:MAX_TEXT].rstrip()
+    text = " ".join(scrub_addresses(text).split())[:MAX_TEXT].rstrip()  # M18: scrub first, so a cut can't hide one
     return "" if _GEMINI_KEY.search(text) else text
 
 
@@ -444,7 +521,7 @@ class MemoryStore:
         """The new memory's id, or None if it was empty or is already saved. There is no cap. Something forgotten
         may be saved again if the resident says it again."""
         text = _clean(text)
-        if not text:
+        if not text or only_address(text):  # M18
             return None
         with closing(self.connect()) as conn, conn:
             new_id = _insert(conn, text, kind, source)

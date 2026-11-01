@@ -104,7 +104,7 @@ tests/test_skills_contract.py # runs the contract on every folder in skills/
 - The skill never sees the password. The core keeps it in the secret store and logs in itself.
 - Every email needs a one-time ticket, bound to the skill and the exact content. Only the core can mint one, from the resident's own "send it" or tap, after the five-second Undo (`send_gate.py`, M15c). The skill never holds it. A ticket lasts two minutes and is good for one try, so a retry needs a new one.
 - The card needs `"slow": true`. A send ends within 12 s, inside the 18 s limit of a slow skill. A call past its limit keeps running in the background, so an email could go out after Mary said it hadn't. Make the send the last thing the action does.
-- It returns `{"ok": true}` or `{"ok": false, "code", "message"}` and never raises. `skills.log` keeps the skill and the result. `mail.log` also keeps the address. Neither keeps the subject, the body, the pictures or the password.
+- It returns `{"ok": true}` or `{"ok": false, "code", "message"}` and never raises. `skills.log` keeps the skill and the result. `mail.log` also keeps a short hash of the address (M18), never the address. Neither keeps the subject, the body, the pictures or the password.
 
 ### 4. The core loader (`skills_core.py`)
 1. At start, scan `skills/*/manifest.json`. For each one: validate the manifest (the contract checks in section 8 that can run fast), import `skill.py` as module `skills.<name>.skill`, and check that every declared action has a handler `def <action>(ctx, **args)`. Any failure means the skill isn't loaded, with a line in `DATA\skills.log`.

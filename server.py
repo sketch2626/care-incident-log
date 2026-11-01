@@ -46,6 +46,7 @@ DEFAULT_DATA = Path(os.environ.get("APPDATA") or Path.home()) / "CareIncidentLog
 DATA = Path(os.environ.get("TRACKER_DATA") or DEFAULT_DATA)
 SECRETS = secret_store.SecretStore(DATA)  # M15d: tied to this data folder, so a scratch install sees none of the real ones
 MAIL = mail_core.Mailer(SECRETS, DATA / "mail.log")  # M15d: the log is written only when an email is tried
+MAIL.hide_old_addresses()  # M18: lines from before this version held the address itself
 LEGACY_DATA = ROOT / "data"  # where versions before the desktop app kept the log
 DB_PATH = DATA / "incidents.db"
 BACKUPS = DATA / "backups"
@@ -762,6 +763,8 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
     else:
         value = " ".join(str(args.get("fact") or "").split())
+        if memory_core.only_address(memory_core.scrub_addresses(value)):  # M18
+            return {"response": {"ok": False, "note": ADDRESS_NOT_A_MEMORY}, "effects": [], "say": None}
         error = "" if value else "There was no fact to save."
     if error:
         return {"response": {"ok": False, "error": error}, "effects": [], "say": None}
@@ -779,6 +782,8 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
     return {"response": {"ok": True}, "effects": [], "say": None}
 
 
+ADDRESS_NOT_A_MEMORY = ("An email address never goes in your memories. It goes in their contacts: use give_address, "  # M18
+                        "spell it back, and after their yes ask if they want it kept.")
 STORY_FAILED = {"error": "no_story",  # M4a
                 "note": "Tell a short story yourself instead, with a beginning, middle and end."}
 
@@ -804,6 +809,11 @@ def close_talk():  # M15a
             memory_store().close_talk()
         except (sqlite3.Error, OSError):
             pass
+    try:  # M18: an address still waiting on a yes goes with the talk
+        if _skill_host is not None:
+            _skill_host.talk_over()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def mary_open(when):
@@ -1064,7 +1074,7 @@ def wake_log(kind, **fields):
         parts = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), kind]
         for k, v in fields.items():
             if v is not None and v != "":
-                parts.append(f"{k}={json.dumps(v, ensure_ascii=False) if isinstance(v, str) else v}")
+                parts.append(f"{k}={json.dumps(memory_core.scrub_addresses(v), ensure_ascii=False) if isinstance(v, str) else v}")  # M18
         line = "  ".join(parts) + "\n"
         path = DATA / "wake.log"
         with _wake_log_lock:
@@ -1447,7 +1457,7 @@ class Handler(SimpleHTTPRequestHandler):
             kind = mary.is_emergency(text) or ""
             say = ""
             # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
-            send = {} if body.get("note") else gate_heard(text, kind)
+            send = {} if body.get("note") else gate_heard(text, kind)  # M18: the only place past here with the raw line
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "say": "", "garbled": True, **send})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
@@ -1481,7 +1491,8 @@ class Handler(SimpleHTTPRequestHandler):
                     memory = mary_memory()
                     last = memory.recent[-1] if memory.recent else {}
                     # M4a: the emergency words are saved by /heard; say() of the same words must not double them
-                    if last.get("role") != "model" or " ".join(last["text"].split()) != text[:mary.MAX_TURN_CHARS].strip():
+                    kept = memory_core.scrub_addresses(text)  # M18: add_turn keeps this, not what the gate had above
+                    if last.get("role") != "model" or " ".join(last["text"].split()) != kept[:mary.MAX_TURN_CHARS].strip():
                         memory.add_turn("model", text)
                         try:
                             memory.save()

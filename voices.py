@@ -10,6 +10,7 @@ import importlib.util
 import io
 import json
 import math
+import memory_core
 import os
 import re
 import sys
@@ -214,9 +215,9 @@ def log(event, data=None):
         line = {"ts": datetime.now().isoformat(timespec="seconds")}
         for k in _LOG_STRINGS:
             if k in event:
-                line[k] = str(event[k])[:60]
+                line[k] = memory_core.scrub_addresses(str(event[k]))[:60]  # M18
         if "note" in event:
-            line["note"] = str(event["note"])[:120]
+            line["note"] = memory_core.scrub_addresses(str(event["note"]))[:120]  # M18
         for k in _LOG_BOOLS:
             if k in event:
                 line[k] = bool(event[k])

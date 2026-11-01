@@ -288,7 +288,7 @@ class SmoothPath(Flow):
         self.finish()
         self.check_message(False)
         rows = self.log_rows()
-        self.assertEqual([(r["to"], r["ok"]) for r in rows], [(ADDRESS, True)])
+        self.assertEqual([(r["to"], r["ok"]) for r in rows], [(mail_core.address_mark(ADDRESS), True)])  # M18
         text = self.log.read_text(encoding="utf-8")
         for secret in ("Thinking of you", "A message from", "Dad"):
             self.assertNotIn(secret, text)
@@ -553,7 +553,8 @@ class Forget(Flow):
         return json.dumps([m["text"] for m in server.mary_memory().store.active(limit=50)])
 
     def to_list(self):
-        return [r["to"] for r in self.log_rows()]
+        marks = {mail_core.address_mark(address): address for address in (ADDRESS, AMY)}  # M18: the log holds marks
+        return [marks.get(r["to"], r["to"]) for r in self.log_rows()]
 
     def test_yes_rule_removes_nothing_first(self):
         first = self.post("/api/mary/skills/call", {"name": "forget_memory", "args": {"about": "Mark"}})

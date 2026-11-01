@@ -59,6 +59,11 @@ _PICTURE_KINDS = ((b"\x89PNG\r\n\x1a\n", ("png", "png")), (b"\xff\xd8\xff", ("jp
 _POLICY = email.policy.default.clone(cte_type="7bit")  # long lines and accents are safe on any mail server
 
 
+def address_mark(address):  # M18
+    """A short mark for mail.log: two sends to one address match, and the address can't be read back out of it."""
+    return hashlib.sha256(("mail.log " + str(address).strip().lower()).encode("utf-8")).hexdigest()[:10]
+
+
 def _address_ok(address):
     return isinstance(address, str) and len(address) <= ADDRESS_MAX and _ADDRESS_RE.fullmatch(address) is not None
 
@@ -338,10 +343,11 @@ class Mailer:
         return {"ok": False, "code": code, "message": MESSAGES[code]}
 
     def _log(self, skill, to, code):
-        """One JSON line per attempt: never the subject, body, pictures or password. A failed write stops nothing."""
+        """One JSON line per attempt: never the address (M18: only its mark), subject, body, pictures or password. A
+        failed write stops nothing."""
         try:
             line = json.dumps({"when": datetime.fromtimestamp(self._clock()).isoformat(timespec="seconds"),
-                               "skill": str(skill)[:64], "to": to if _address_ok(to) else "",
+                               "skill": str(skill)[:64], "to": address_mark(to) if _address_ok(to) else "",
                                "ok": code is None, "code": code or ""})
             with self._log_lock:
                 self._log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -350,12 +356,41 @@ class Mailer:
         except Exception:  # noqa: BLE001
             pass
 
+    def hide_old_addresses(self):  # M18
+        """Lines from before M18 held the address: they get its mark, and a torn line that shows one goes. Never raises."""
+        temp = self._log_path.with_name(self._log_path.name + ".tmp")
+        try:
+            with self._log_lock:
+                if not self._log_path.is_file():
+                    return
+                before = self._log_path.read_text(encoding="utf-8")
+                if "@" not in before:
+                    return
+                kept = []
+                for line in before.splitlines():
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        row = None
+                    if isinstance(row, dict) and "@" in str(row.get("to")):
+                        line = json.dumps(dict(row, to=address_mark(row["to"])))
+                    if "@" not in line:
+                        kept.append(line)
+                temp.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
+                temp.replace(self._log_path)
+        except Exception:  # noqa: BLE001
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
     def scrub_log(self, addresses=None):  # M15c
         """Blanks "to" on the lines with these addresses, in any case, or on every line with None. The swap is atomic, so
         a crash leaves the old log or the new one. Never raises, and no log file is fine."""
         temp = self._log_path.with_name(self._log_path.name + ".tmp")
         try:
             wanted = None if addresses is None else {str(address).strip().lower() for address in addresses}
+            marks = None if wanted is None else {address_mark(address) for address in wanted}  # M18
             with self._log_lock:
                 if not self._log_path.is_file():
                     return
@@ -369,7 +404,7 @@ class Mailer:
                         if wanted is not None and not any(address in line.lower() for address in wanted):
                             kept.append(line)
                         continue
-                    if row.get("to") and (wanted is None or str(row["to"]).lower() in wanted):
+                    if row.get("to") and (wanted is None or str(row["to"]).lower() in wanted or row["to"] in marks):
                         row["to"] = ""
                         line = json.dumps(row)
                     kept.append(line)

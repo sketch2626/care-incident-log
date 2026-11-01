@@ -780,11 +780,11 @@ class Mail(unittest.TestCase):
         self.mailer._done("messages", "amy@example.org", "offline")
         self.mailer.scrub_log(["MARK@example.ORG"])
         rows = self.lines()
-        self.assertEqual([row["to"] for row in rows], ["", "amy@example.org"])
+        self.assertEqual([row["to"] for row in rows], ["", mail_core.address_mark("amy@example.org")])  # M18
         self.assertEqual([(row["ok"], row["code"]) for row in rows], [(True, ""), (False, "offline")])
         self.assertTrue(rows[0]["when"])
         self.mailer.scrub_log([])
-        self.assertEqual(self.lines()[1]["to"], "amy@example.org")
+        self.assertEqual(self.lines()[1]["to"], mail_core.address_mark("amy@example.org"))  # M18
         self.mailer.scrub_log(None)
         self.assertEqual([row["to"] for row in self.lines()], ["", ""])
         self.assertEqual([path.name for path in self.dir.iterdir()], ["mail.log"])

@@ -63,6 +63,7 @@ def log_note(what, detail=""):
     except OSError:
         pass  # the startup watch holds it open; trim it next time
     try:
+        detail = server.memory_core.scrub_addresses(str(detail))  # M18
         with path.open("a", encoding="utf-8") as f:
             f.write(f"\n{datetime.now():%Y-%m-%d %H:%M:%S}  {what}\n{detail}")
     except Exception:

@@ -121,7 +121,7 @@
     { id: 'email', frame: 'info', hash: '#info', scroll: 'mailCard', name: 'Connect email',
       explain: 'Lets a card or message go out from their own email, only after they say to send it.',
       fields: [
-        { id: 'mailAddress', label: 'Email address', kind: 'text', fill: true, explain: 'Their own email address.' },
+        { id: 'mailAddress', label: 'Email address', kind: 'text', fill: true, address: true, explain: 'Their own email address.' },
         { id: 'mail_provider', radio: 'mail_provider', label: 'Which email is it?', kind: 'choice', fill: true,
           choices: [{ value: 'gmail', label: 'Gmail' }, { value: 'yahoo', label: 'Yahoo' }],
           explain: 'Which company their email is with.' },
@@ -351,6 +351,9 @@
       if (ch) { return { v: ch.value, show: ch.label }; }
       return { no: "That isn't one of the choices. They are: " + f.choices.map(function (c) { return c.label; }).join(', ') + '.' };
     }
+    if (f.address && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {   // M18: what goes in the box is the written address
+      return { no: 'That box needs it written out, like name@gmail.com. Spell it back to them first, then fill it.' };
+    }
     return { v: raw, show: raw };
   }
 
@@ -380,7 +383,8 @@
     finishTyping();
     var win = doc.defaultView, done = function () {
       return { ok: true, label: f.label, value: c.show, saved: false,
-        next: 'Say the value back and ask "Is that right?" Nothing is saved.' };
+        next: f.address ? 'Spell it back letter by letter and ask "Is that right?" Nothing is saved.'
+          : 'Say the value back and ask "Is that right?" Nothing is saved.' };
     };
     light(doc, f, el);
     if (f.radio) {

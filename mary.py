@@ -302,7 +302,7 @@ class Memory:
             name = data.get("name")
             facts, recent = data.get("facts"), data.get("recent")  # null or odd values must not lose the name
             facts = [f for f in (facts if isinstance(facts, list) else []) if isinstance(f, str) and f.strip()]
-            recent = [{"role": t["role"], "text": t["text"], "at": str(t.get("at", ""))}
+            recent = [{"role": t["role"], "text": memory_core.scrub_addresses(t["text"]), "at": str(t.get("at", ""))}  # M18
                       for t in (recent if isinstance(recent, list) else [])
                       if isinstance(t, dict) and t.get("role") in ("user", "model") and isinstance(t.get("text"), str)]
             offer = data.get("pending_offer")
@@ -314,11 +314,15 @@ class Memory:
         self.name_asked = data.get("name_asked") is True  # M4c
         self.facts = facts[-MAX_FACTS:]
         self.recent = recent[-MAX_RECENT:]
-        self.pending_offer = offer if isinstance(offer, dict) else None
+        held = _OFFER_WORDS.get(str(self.path))  # M18: their own words come back from RAM, not from the file
+        self.pending_offer = held[1] if held and held[0] == offer else (offer if isinstance(offer, dict) else None)
         self.pending_forget = _forget_waiting(pending_forget)  # M9c
 
     def add_fact(self, fact, kind="", source="talk", heard=""):
         """Returns True if the fact was new. heard (M15a): the resident's words, which a date in the fact must match."""
+        fact = memory_core.scrub_addresses(fact)  # M18: and a fact that was only an address is no memory
+        if memory_core.only_address(fact):
+            return False
         if self.store is not None:  # M9c: kind and source only mean something in the store
             new_id = self.store.add(fact, kind, source)
             if new_id is None:
@@ -346,6 +350,7 @@ class Memory:
             pass
 
     def add_turn(self, role, text):
+        text = memory_core.scrub_addresses(text)  # M18: before the cut, so a cut can't hide one
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
         if role == "model" and not self.name and _ASKS_NAME.search(text):  # M4c: both routes pass through here
@@ -381,8 +386,13 @@ class Memory:
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.pending_forget = _forget_waiting(self.pending_forget)  # M9c
-        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
-                "pending_forget": self.pending_forget}
+        offer_out = _no_addresses(self.pending_offer)  # M18: the file never holds an address, and the incident keeps their words
+        if offer_out != self.pending_offer:
+            _OFFER_WORDS[str(self.path)] = (offer_out, self.pending_offer)
+        else:
+            _OFFER_WORDS.pop(str(self.path), None)
+        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": offer_out,
+                "pending_forget": _no_addresses(self.pending_forget)}  # M18
         tmp = self.path.with_name(self.path.name + ".tmp")
         try:
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -829,6 +839,16 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
 _SAYS_FORGET = re.compile(r"(?<!don't )(?<!dont )(?<!do not )(?<!never )\bforget\b", _I)  # M15a: "don't forget, ..." is a date
 
 
+_OFFER_WORDS = {}  # M18: one waiting offer per memory file, in RAM only: (as written to the file, their real words)
+
+
+def _no_addresses(value):  # M18
+    """A waiting note offer or forget, as memory.json may hold it."""
+    if isinstance(value, dict):
+        return {key: _no_addresses(item) for key, item in value.items()}
+    return memory_core.scrub_addresses(value) if isinstance(value, str) else value
+
+
 def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) both learn dates this way
     """Takes dates, deaths and "don't remind me" from the resident's own words, so it all works with no Gemini. A date a
     fact already saved changes nothing here. Never raises. Not for an emergency line: that teaches nothing."""
@@ -836,6 +856,7 @@ def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) b
     if store is None:
         return
     try:
+        text = memory_core.scrub_addresses(text)  # M18
         if memory.scrubbed or _SAYS_FORGET.search(_plain(text)):  # "Forget Mark's birthday, November 7" must not save it
             return
         asked = memory_dates.stop_request(text)
@@ -1750,7 +1771,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                 try:  # M9c: a locked database must never stop her reply
                     # M9c: a [remember] in the very reply that forgot must not save it straight back
                     if not memory.scrubbed and memory.add_fact(value, source=fact_source(text, typed), heard=text):  # heard: M15a
-                        remembered.append(" ".join(value.split()))
+                        remembered.append(" ".join(memory_core.scrub_addresses(value).split()))  # M18
                 except Exception:
                     pass
             elif value.strip() and not name_dropped:

@@ -9,8 +9,9 @@ Two stages (measured on a Ryzen 5 7520U laptop):
    cheap, about 2.5% of one core, but on its own it also "hears" Hey Mary in
    "Hey man" and "Hey Larry", so what it finds is only a candidate.
 2. faster-whisper (the same base.en model voice typing uses) then reads the last
-   ~2.5 s of audio and must hear "hey mary" / "hey sam" too. It tells "Mary" from
-   "man", "Larry", "marry" and "merry". It costs about 1 s, and only on candidates.
+   ~2.5 s of audio and must hear the greeting and the name anywhere, or the bare name
+   among the clip's first 4 words (Vosk already heard it). It tells "Mary" from "man",
+   "Larry", "marry" and "merry". It costs about 1 s, and only on candidates.
 
 Public interface (all functions are thread-safe):
 
@@ -21,6 +22,7 @@ Public interface (all functions are thread-safe):
     pause(reason)            -> None   let go of the microphone now, until resume(reason)
     resume(reason)           -> None   listening restarts once no pause reason is left
     set_companion(companion) -> None   "him" -> Sam, anything else -> Mary (only that name wakes)
+    alive()                  -> bool   is the worker thread running?
     status()                 -> dict   {"enabled", "running", "listening", "paused_by", "wakes",
                                         "last", "problem"}
     wait(after_seq, timeout) -> dict | None   long-poll: newest wake event with seq > after_seq
@@ -34,6 +36,8 @@ Notes (on_note, called on the worker thread with no lock held; errors in it are 
         Vosk heard the name; Whisper is checking it now (a wake event follows if it agrees).
     {"type": "almost", "name", "stage1_text", "confirm_text", "confirm_ms", "companion", "time"}
         Whisper turned the candidate down (a near miss).
+    {"type": "mic", "reason", "companion", "time"}
+        The open microphone died and is being reopened; reason says how.
 
 Lock order: speech._rec_lock first, then _Listener._lock (wait()'s Condition shares that
 lock). Nothing takes speech._rec_lock while holding _Listener._lock. The audio callback
@@ -70,6 +74,7 @@ NAMES = ("mary", "sam")      # the bench listens for both; the app only for the 
 GRAMMAR = ["hey mary", "hey sam", "[unk]"]  # the bench grammar ("[unk]" = anything else)
 NAME_SPELLINGS = {"mary": ("mary", "marie"), "sam": ("sam",)}  # how Whisper may write each name
 GREETINGS = ("hey", "hi", "hay", "okay", "ok")  # words Whisper may write before the name
+BARE_NAME_WORDS = 4          # or Whisper may write the bare name among the clip's first this many words
 RING_SECONDS = 3.0           # audio kept for the Whisper check
 CONFIRM_WAIT_S = 0.5         # after a candidate, wait for this much more audio (or the end of the phrase)
 CONFIRM_SECONDS = 2.5        # ...then Whisper reads the last 2.5 s
@@ -79,6 +84,12 @@ QUEUE_BLOCKS = 50            # audio waiting for the worker (5 s); the oldest bl
 QUEUE_POLL_S = 0.2           # the worker checks at least this often whether to open or close the mic
 REOPEN_RETRY_S = 5.0         # a microphone that would not open is tried again this often
 JOIN_TIMEOUT_S = 5.0         # stop() waits at most this long for the worker thread
+MIC_STALL_S = 3.0            # an open microphone with no block for this long has died: reopen it
+MIC_ZERO_S = 10.0            # nothing but exact zeros for this long has died too (real silence is never all zeros)
+MIC_ZERO_MAX = 12            # ...and with only zeros each reopen waits twice as long, up to this many times MIC_ZERO_S
+MIC_NOTE_S = 60.0            # the same "mic" note goes out at most this often (a muted mic gives only zeros)
+CLOSE_WAIT_S = 2.0           # a close gets this long: PortAudio can hang on a vanished device
+SLOW_CHECK_S = 3.0           # a Whisper check longer than this makes the audio queued behind it stale
 
 MSG_NOT_INSTALLED = 'Listening for "Hey {name}" is not installed on this computer. You can still tap Talk.'
 MSG_MODEL_MISSING = (
@@ -134,9 +145,13 @@ def _candidate_re(names):
 
 
 def _confirm_re(names):
-    spellings = [s for n in names for s in NAME_SPELLINGS.get(n, (n,))]
+    """Group 1: a greeting and the name, anywhere. Group 2: otherwise the bare name among the first BARE_NAME_WORDS
+    words, because Vosk already heard it and messy audio garbles the rest. \\b keeps "marry" and "maryland" out."""
+    spellings = "|".join(map(re.escape, [s for n in names for s in NAME_SPELLINGS.get(n, (n,))]))
     return re.compile(
-        r"\b(" + "|".join(GREETINGS) + r")\b[\s,.!]*(" + "|".join(map(re.escape, spellings)) + r")\b"
+        r"^.*?\b(?:" + "|".join(GREETINGS) + r")\b[\s,.!]*(" + spellings + r")\b"
+        r"|^\W*(?:[\w'-]+\W+){0," + str(BARE_NAME_WORDS - 1) + r"}(" + spellings + r")\b",
+        re.DOTALL,
     )
 
 
@@ -228,6 +243,7 @@ def _whisper_confirm(audio) -> str:
             audio,
             language="en",
             beam_size=1,
+            temperature=0.0,  # one pass: on messy clips the fallback ladder took 12 s
             condition_on_previous_text=False,
             vad_filter=False,
         )
@@ -243,9 +259,10 @@ class Detector:
     microphones. Not thread-safe: one thread feeds it.
 
     feed() returns a list of wake events:
-        {"name", "stage1_text", "confirm_text", "audio_t", "confirm_ms"}
+        {"name", "stage1_text", "confirm_text", "audio_t", "confirm_ms", "greeted"}
     audio_t is the seconds of audio fed so far when the wake fired. With confirm=False
-    every Vosk candidate is a wake (stage 1 only, for the bench comparison).
+    every Vosk candidate is a wake (stage 1 only, for the bench comparison). greeted:
+    Whisper heard a greeting before the name, not only the bare name.
     """
 
     def __init__(self, model_dir=None, names=NAMES, confirm=True, recognizer_factory=None, confirmer=None):
@@ -364,7 +381,8 @@ class Detector:
                                           "confirm_text": text.strip(), "confirm_ms": ms})
             return None
         self.confirmed += 1
-        return self._event(pending, text.strip(), ms, self._spelling.get(m.group(2), pending["name"]))
+        heard = m.group(1) or m.group(2)
+        return self._event(pending, text.strip(), ms, self._spelling.get(heard, pending["name"]), m.group(1) is not None)
 
     @staticmethod
     def _hook(fn, info: dict) -> None:
@@ -374,13 +392,14 @@ class Detector:
             except Exception:
                 pass
 
-    def _event(self, pending: dict, confirm_text, ms, name=None) -> dict:
+    def _event(self, pending: dict, confirm_text, ms, name=None, greeted=False) -> dict:
         return {
             "name": name or pending["name"],
             "stage1_text": pending["stage1_text"],
             "confirm_text": confirm_text,
             "audio_t": round(self.fed / SAMPLE_RATE, 3),
             "confirm_ms": ms,
+            "greeted": greeted,
         }
 
     def _finish(self, event: dict | None) -> list[dict]:
@@ -396,12 +415,23 @@ class Detector:
 # Listener (the always-on microphone)
 # --------------------------------------------------------------------------
 
-def _close(stream) -> None:
-    for step in (stream.stop, stream.close):
-        try:
-            step()
-        except Exception:
-            pass
+def _close(stream):
+    """Stop and close a stream. PortAudio can hang on a vanished device, and callers hold speech._rec_lock (and the
+    server's _cond), so this runs on a daemon thread that gets CLOSE_WAIT_S. Returns that thread if it is still stuck."""
+    def shut():
+        for step in (stream.stop, stream.close):
+            try:
+                step()
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=shut, name="care-wakeword-close", daemon=True)
+    thread.start()
+    thread.join(CLOSE_WAIT_S)
+    if thread.is_alive():
+        log.warning("The microphone did not close within %s s; carrying on", CLOSE_WAIT_S)
+        return thread
+    return None
 
 
 def _drain(q) -> None:
@@ -443,6 +473,12 @@ class _Listener:
         self._stream = None
         self._gen = 0             # bumped whenever the stream opens or closes; older audio is ignored
         self._next_open = 0.0     # monotonic time of the next try to open the microphone
+        self._last_audio = 0.0    # monotonic time of the last block from the open stream
+        self._last_sound = 0.0    # ...and of the last block that wasn't all zeros
+        self._zero_turns = 1      # a muted mic reopens less and less often: MIC_ZERO_S times this, up to MIC_ZERO_MAX
+        self._mic_lost = False    # a stream died: re-scan the devices before opening again
+        self._stuck_close = None  # a close thread that hasn't come back
+        self._mic_note = (None, 0.0)  # the last "mic" note's reason and time
         self._problem: str | None = None
         self._dropped = 0         # audio blocks dropped because the worker fell behind
         self._seq = 0
@@ -533,6 +569,12 @@ class _Listener:
             out["problem"] = _fmt(problem, name)
         return out
 
+    def alive(self) -> bool:
+        """Is the worker thread running? It stops for good if its Detector can't be built."""
+        with self._lock:
+            thread = self._thread
+        return thread is not None and thread.is_alive()
+
     def wait(self, after_seq=0, timeout: float = 25.0) -> dict | None:
         """The newest wake event with seq > after_seq, or None after `timeout` seconds
         (or at once when listening is not on, or as soon as stop() is called)."""
@@ -606,6 +648,7 @@ class _Listener:
                         last_gen = None
                 if needs_sync:
                     self._sync(run)
+                self._heal(run)
                 try:
                     item = q.get(timeout=QUEUE_POLL_S)
                 except queue.Empty:
@@ -621,8 +664,14 @@ class _Listener:
                 if rate != SAMPLE_RATE:
                     data = _to_16k(data, rate)
                 self._feed_gen = gen
-                for event in detector.feed(data):
+                began = time.monotonic()
+                events = detector.feed(data)
+                slow = time.monotonic() - began > SLOW_CHECK_S
+                for event in events:
                     self._publish(run, gen, event)
+                if slow:  # what queued up behind a long Whisper check is stale: it must not be judged
+                    _drain(q)
+                    detector.reset()
             except Exception:
                 log.exception("Wake-word listening hit a problem; carrying on")
                 time.sleep(0.5)
@@ -645,9 +694,9 @@ class _Listener:
                 log.exception("The wake-word callback failed")
 
     def _note(self, run, kind: str, info: dict) -> None:
-        """A Detector hook (worker thread): pass a "heard" or "almost" note to on_note."""
+        """A Detector hook, or the worker's own "mic" note: pass it to on_note (worker thread)."""
         with self._lock:
-            if self._run is not run or self._feed_gen != self._gen:
+            if self._run is not run or (kind != "mic" and self._feed_gen != self._gen):
                 return  # heard before a pause or stop: too late to act on
             callback = self._on_note
             note = dict(info, type=kind, companion=self._primary, time=round(time.time(), 3))
@@ -661,6 +710,12 @@ class _Listener:
         def callback(indata, frames, time_info, status):
             # PortAudio's thread: only queue the bytes. Never block, raise or close the stream here.
             try:
+                if gen == self._gen:  # a stream whose close hung may still call back: only the open one counts
+                    now = time.monotonic()
+                    self._last_audio = now
+                    if indata.any():
+                        self._last_sound = now
+                        self._zero_turns = 1
                 item = (gen, rate, indata.tobytes())
                 for _ in range(3):
                     try:
@@ -698,11 +753,12 @@ class _Listener:
                 else:
                     return
             if stream is not None:
-                _close(stream)
+                self._note_stuck(_close(stream))
                 _drain(q)
                 log.info("Wake-word microphone closed")
                 return
             try:
+                self._rescan_if_lost(sp)
                 stream = self._open(sp, gen, q)
             except Exception as exc:
                 message = str(exc) if isinstance(exc, RuntimeError) and str(exc) else MSG_MIC_FAILED
@@ -717,8 +773,71 @@ class _Listener:
                 if keep:
                     self._stream = stream
                     self._problem = None
+                    self._mic_lost = False
+                    self._last_audio = self._last_sound = time.monotonic()
             if not keep:
                 _close(stream)
+
+    def _note_stuck(self, stuck) -> None:
+        """A close that hung: the device list may be out of date, and nothing re-scans until that close comes back."""
+        if stuck is not None:
+            self._stuck_close, self._mic_lost = stuck, True
+
+    def _rescan_if_lost(self, sp) -> None:
+        """A stream died: PortAudio only lists devices when it starts, so look again before reopening and a changed
+        default device is found. Not while voice typing records, or while a hung close may still be inside PortAudio.
+        (caller holds speech._rec_lock)"""
+        stuck = self._stuck_close
+        if not self._mic_lost or sp._rec is not None or (stuck is not None and stuck.is_alive()):
+            return
+        sd = sp._get_sd()
+        if sd is not None:
+            sp._last_rescan = time.monotonic()
+            sp._rescan_devices(sd)
+
+    def _mic_trouble(self, stream) -> str | None:
+        """Why the open stream looks dead, or None. A stream that has gone may raise when asked."""
+        try:
+            active = getattr(stream, "active", True)
+        except Exception:
+            active = False
+        if not active:
+            return "stream stopped"
+        now = time.monotonic()
+        if now - self._last_audio >= MIC_STALL_S:
+            return f"no audio for {MIC_STALL_S:g} s"
+        if now - self._last_sound >= MIC_ZERO_S * self._zero_turns:
+            self._zero_turns = min(self._zero_turns * 2, MIC_ZERO_MAX)
+            return f"only zeros for {MIC_ZERO_S:g} s"
+        return None
+
+    def _heal(self, run) -> None:
+        """Worker thread: a dead microphone is closed and opened again at once, so she is never deaf for good. A reopen
+        that fails goes on through _sync's retry."""
+        with self._lock:
+            stream = self._stream
+        reason = self._mic_trouble(stream) if stream is not None else None
+        if reason is None:
+            return
+        sp = _speech()
+        with sp._rec_lock:
+            with self._lock:
+                if self._run is not run or self._stream is not stream:
+                    return  # a pause or stop got there first
+                self._stream = None
+                self._gen += 1
+                self._next_open = 0.0
+                self._mic_lost = True
+                q = self._queue
+            self._note_stuck(_close(stream))
+            _drain(q)
+        now = time.monotonic()
+        last_reason, last_at = self._mic_note
+        if reason != last_reason or now - last_at >= MIC_NOTE_S:
+            self._mic_note = (reason, now)
+            log.warning("Wake-word microphone died (%s); reopening", reason)
+            self._note(run, "mic", {"reason": reason})
+        self._sync(run)
 
     def _open(self, sp, gen: int, q):
         """Open the default microphone (caller holds speech._rec_lock)."""
@@ -815,6 +934,11 @@ def set_companion(companion) -> None:
 
 def status() -> dict:
     return _listener.status()
+
+
+def alive() -> bool:
+    """Is the worker thread running? WakeLink starts it again if not."""
+    return _listener.alive()
 
 
 def wait(after_seq=0, timeout: float = 25.0) -> dict | None:

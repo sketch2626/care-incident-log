@@ -1185,6 +1185,9 @@ def _app_facts_text(companion):  # M9b
             loud = "soft" if volume < 0.5 else "medium" if volume < 0.85 else "full"
             out.append(f"- Your talking speed is {speed} and your volume is {loud}. "
                        f'They can change these by asking you, or in the menu under "Things {me} can do".')  # M4a
+        if f.get("printer") is False:  # M17: Gemini can offer printing by itself, in Live too
+            out.append("- There's no printer on this computer, so don't offer to print. Say it's saved and a helper "
+                       "can print it later.")
         return "\n\nAbout your app right now (these are true today; trust them over anything else):\n" + "\n".join(out)
     except Exception:
         return ""
@@ -1262,6 +1265,8 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\" or \"Well, look at that\", no "
                   "\"That's wonderful!\" Take it the way a good neighbor would: told of a finished crossword, "
                   "skip the applause and go to the thing itself, like \"Those can fight back. What was the hardest word?\"\n"
+                  "- Plain, everyday words first. Southern words like \"y'all\" or \"I reckon\" only once they talk that way "
+                  "themselves, and only as much as they do. Never \"howdy\".\n"
                   "- \"Bless your heart\" only as real sympathy, never as praise.\n"
                   "- No fussing, no \"we\" when you mean \"you\", and no customer-service lines like \"Is there "
                   "anything else I can help you with?\"\n"

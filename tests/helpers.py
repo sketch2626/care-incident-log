@@ -32,6 +32,10 @@ import secret_store  # noqa: E402
 SECRETS = secret_store.MemoryBackend()  # M15d: set before the server loads, so no test can reach real Credential Manager
 secret_store.set_backend(SECRETS)
 
+import printers  # noqa: E402
+
+printers._override = True  # M17: tests act as if a printer is there, so the card tests stay as they are
+
 import server  # noqa: E402
 
 server._speech = False  # speech_engine() returns None; never loads the mic or the model

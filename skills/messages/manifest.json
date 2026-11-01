@@ -77,7 +77,7 @@
     },
     {
       "name": "print_card",
-      "description": "Print what's on screen. The result says how it prints and folds, and that mailing needs facility help.",
+      "description": "Print what's on screen. The result says how it prints and folds, and that mailing needs facility help. If there's no printer, the result says so: pass that on.",
       "inputSchema": {"type": "object", "properties": {}},
       "annotations": {"readOnlyHint": false, "destructiveHint": false},
       "offline_phrases": ["print the card"]

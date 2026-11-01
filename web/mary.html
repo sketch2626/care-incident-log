@@ -73,6 +73,8 @@
       <p id="infoSaved" class="saved-note" role="status" aria-live="polite"></p>
       <h3 id="modeTitle">How Mary talks</h3>
       <div id="modeList" class="rows" role="radiogroup" aria-labelledby="modeTitle"></div>
+      <!-- M17: shows only when something other than the pick is really in use -->
+      <p id="modeNote" class="saved-note" role="status"></p>
       <h3 id="voiceTitle">Mary's voice</h3>
       <div id="voiceList" class="rows" role="radiogroup" aria-labelledby="voiceTitle"></div>
       <h3 id="waitTitle">How long Mary waits</h3>
@@ -85,7 +87,7 @@
       <!-- M9c: what she remembers, each with a Remove button -->
       <h3 id="memTitle">What Mary remembers</h3>
       <div id="memList" class="rows"></div>
-      <a id="moreSettings" class="row link" href="/?from=mary#info">More settings</a>
+      <a id="moreSettings" class="row link" href="/?from=mary#info">More settings: your name, room and Gemini key&nbsp;<span aria-hidden="true">&#8594;</span></a>
     </div>
   </div>
 

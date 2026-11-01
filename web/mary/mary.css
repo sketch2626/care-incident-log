@@ -88,6 +88,9 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .sheetcard .saved-note:empty{display:none}
 .back{align-self:flex-start;display:flex;align-items:center;gap:14px;min-height:96px;padding:0 36px;font:700 34px/1 "Segoe UI",system-ui,sans-serif;
   color:#fffdf8;background:#2b1f17;border:4px solid #2b1f17;border-radius:48px;cursor:pointer}
+/* M17: the way back stays in view however far a panel or a skill screen scrolls */
+.sheetcard .back{position:sticky;top:0;z-index:2;box-shadow:0 0 0 8px #fffdf8}
+.skill-screen > .btn{position:sticky;top:0;z-index:2;min-height:64px;margin-bottom:12px;background-color:#fffdf8;box-shadow:0 0 0 8px #fffdf8}
 .rows{display:flex;flex-direction:column;gap:10px}
 .row{display:flex;align-items:center;gap:18px;min-height:88px;padding:12px 26px;font:600 30px/1.2 "Segoe UI",system-ui,sans-serif;
   color:#1f1b16;background:#ffffff;border:3px solid #d9cbb8;border-radius:24px;text-align:left;text-decoration:none;cursor:pointer}

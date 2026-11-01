@@ -43,6 +43,15 @@
     try { return fn(); } catch (e) { log(e); broken(name); return undefined; }
   }
 
+  // M17: Mary's own words for the way back ("Back to Mary" or "Back to Sam"); app.js keeps them current
+  function backWords() {
+    try {
+      var l = D.querySelector('.backLbl');
+      if (l && l.textContent) { return l.textContent; }
+    } catch (e) { /* nothing */ }
+    return 'Back';
+  }
+
   function boxFor(name) {
     if (boxes[name]) { return boxes[name]; }
     var el = D.createElement('div');
@@ -54,12 +63,12 @@
     var back = D.createElement('button');
     back.type = 'button';
     back.className = 'btn';
-    back.textContent = 'Back';
+    back.textContent = backWords();   // M17: says where it goes
     back.addEventListener('click', function () { if (app()) { app().show('everyday'); } });
     var body = D.createElement('div');
     body.className = 'skill-body';
+    el.appendChild(back);   // M17: first, so it can stay at the top
     el.appendChild(body);
-    el.appendChild(back);
     var scr = D.getElementById('scr') || D.body;
     scr.appendChild(el);
     boxes[name] = el;

@@ -1,5 +1,6 @@
 /* T1: Andy's test list, a drawer down the left edge of Mary's page. Only server.py's injection brings this in.
-   It talks to /api/mary/testlist* and nothing else: no mic, no sound, no Gemini, no log, no memories. */
+   It talks to /api/mary/testlist*, and tells MaryApp (keepTalk, noteBusy) when working here must not look like silence or
+   a goodbye. No mic, no sound, no Gemini, no log, no memories. */
 (function () {
   'use strict';
 
@@ -63,7 +64,18 @@
   // her with a spoken hello (firstrun.js onAct). Window capture runs first, so those never hear the drawer.
   // Never preventDefault: typing and clicks still have to work.
   function shield(ev) {
-    if (ev.target instanceof Node && root.contains(ev.target)) { ev.stopPropagation(); }
+    if (ev.target instanceof Node && root.contains(ev.target)) {
+      ev.stopPropagation();
+      keepTalk();
+    }
+  }
+  // M17: hidden from Mary, a hand at work here would look like silence, and the idle check would end the talk.
+  function keepTalk() {
+    try { if (W.MaryApp && W.MaryApp.keepTalk) { W.MaryApp.keepTalk(); } } catch (e) { /* the drawer goes on */ }
+  }
+  // M17: Live's open mic hears a note dictated here, and those words must not end the talk.
+  function noteBusy(on) {
+    try { if (W.MaryApp && W.MaryApp.noteBusy) { W.MaryApp.noteBusy(on); } } catch (e) { /* the drawer goes on */ }
   }
   SHIELDED.forEach(function (type) {
     W.addEventListener(type, shield, { capture: true, passive: true });
@@ -204,14 +216,20 @@
     area.maxLength = 4000;
     area.value = item.note;
     area.setAttribute('data-tl', item.id + '-note');
+    area.addEventListener('focus', function () { noteBusy(true); });
     area.addEventListener('input', function () {
+      noteBusy(true);
+      keepTalk();
       item.note = area.value;
       item.dirty = true;
       cancelTimer(item);
       item.timer = setTimeout(function () { save(item); }, 500);
       grow(area);
     });
-    area.addEventListener('blur', function () { if (item.dirty) { save(item); } });
+    area.addEventListener('blur', function () {
+      if (D.activeElement !== area) { noteBusy(false); }   // still the active box: only the window lost focus, dictation goes on
+      if (item.dirty) { save(item); }
+    });
     label.appendChild(area);
     box.appendChild(label);
     return box;
@@ -249,6 +267,7 @@
     list.sections.forEach(function (section, at) { body.appendChild(drawSection(section, at, now)); });
     growAll();
     var again = key && body.querySelector('[data-tl="' + key + '"]');
+    noteBusy(!!again && again.tagName === 'TEXTAREA');   // the redraw took the old box away; only one that comes back counts
     if (again) {
       again.focus({ preventScroll: true });
       if (from !== null) { again.setSelectionRange(from, from); }

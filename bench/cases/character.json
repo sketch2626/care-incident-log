@@ -1,6 +1,26 @@
 {
   "cases": [
     {
+      "id": "plain-resident-no-southern-words",
+      "note": "M17, Andy: Southern words are picked up from the resident, never a show. A plain-spoken resident gets none unprompted, and howdy never.",
+      "turns": [
+        "Good morning. I slept pretty well last night.",
+        "My daughter is coming to visit this afternoon."
+      ],
+      "mode": "live",
+      "checks": {
+        "must_not_contain": [
+          "howdy",
+          "y'all",
+          "fixing to",
+          "i reckon",
+          "might could",
+          "mighty fine",
+          "i declare"
+        ]
+      }
+    },
+    {
       "id": "hello-evening-mary",
       "group": "tone",
       "note": "The turn is filled from LIVE_HELLO in web/mary/app.js, with OPEN_WAYS giving each repeat a different way in.",

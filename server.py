@@ -7,6 +7,7 @@ Everything is stored in %APPDATA%\\CareIncidentLog\\incidents.db (set TRACKER_DA
 use another folder) and backed up daily to its backups\\ folder. Nothing leaves this computer.
 """
 import csv
+import importlib.util
 import io
 import json
 import math
@@ -846,6 +847,26 @@ def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typ
 
 
 _speech = None
+
+
+_testlist = None
+
+
+def testlist_tool():
+    """T1: Andy's test list beside Mary, or None. Never in the installed app, and off the moment
+    private/testing/list.md is gone. Loaded by path, not imported, so PyInstaller can't bundle it."""
+    global _testlist
+    if getattr(sys, "frozen", False):
+        return None
+    if _testlist is None:
+        file = Path(__file__).resolve().parent / "tools" / "testlist" / "tool.py"
+        if not file.is_file():
+            return None
+        spec = importlib.util.spec_from_file_location("testlist_tool", file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _testlist = module
+    return _testlist if _testlist.list_exists() else None
 
 
 def speech_engine():
@@ -1697,6 +1718,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send(speedcheck.CHECK.status())
             if method == "POST":
                 return self._send({"started": speedcheck.CHECK.run_now()})
+        if path == "/api/mary/testlist" or path.startswith("/api/mary/testlist/"):  # T1: never opens the log
+            tool = testlist_tool()
+            return tool.route(self, method, path) if tool else None
         if path.startswith("/api/mary/"):
             return self._mary(method, path, q)
         if path.startswith("/api/wake/"):  # M6
@@ -1871,6 +1895,10 @@ class Handler(SimpleHTTPRequestHandler):
         mutating = method not in ("GET", "HEAD")
         if not self._allowed(mutating):
             return
+        if method == "GET" and urlparse(self.path).path == "/mary.html":  # T1: only while Andy's test list exists
+            tool = testlist_tool()
+            if tool:
+                return self._send(tool.with_drawer((WEB / "mary.html").read_bytes()), ctype="text/html; charset=utf-8")
         if self.path.startswith("/skills/"):  # --- skills hook (M13) --- a skill's page files
             return self._skill_file(method)
         if not self.path.startswith("/api/") and urlparse(self.path).path.rstrip("/") != "/report":

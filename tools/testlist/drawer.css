@@ -1,0 +1,39 @@
+/* T1: Andy's test list, a column of its own at the left edge. Mary's page is scaled to make room (drawer.js). */
+#tl-root{position:fixed;left:0;top:0;bottom:0;width:64px;z-index:200;display:flex;flex-direction:column;
+  background:#fffdf8;color:#2b1f17;font:22px/1.35 'Segoe UI',system-ui,sans-serif}
+#tl-root.tl-open{width:clamp(340px,28vw,460px);border-right:4px solid #2b1f17}
+#tl-root button{min-height:64px;font:inherit;font-weight:700;color:#2b1f17;background:#fff;
+  border:4px solid #2b1f17;border-radius:14px;cursor:pointer}
+#tl-root button:focus-visible,#tl-root textarea:focus-visible{outline:5px solid #0f5560;outline-offset:3px;box-shadow:0 0 0 3px #fff}
+
+#tl-root .tl-tab{width:100%;height:100%;padding:0;background:#fffdf8;border:0;border-right:4px solid #2b1f17;border-radius:0;
+  writing-mode:vertical-rl;font-size:26px}
+#tl-root .tl-tab:focus-visible{outline-offset:-10px}
+
+#tl-root .tl-panel{flex:1;min-height:0;display:flex;flex-direction:column}
+#tl-root .tl-head{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:4px solid #2b1f17}
+#tl-root .tl-title{flex:1;min-width:0;margin:0;font-size:26px;font-weight:700;overflow-wrap:anywhere}
+#tl-root .tl-hide{flex:none;min-width:96px;padding:0 16px}
+#tl-root .tl-msg{margin:0;padding:12px 16px;font-size:22px;font-weight:700;color:#8a1f2e;border-bottom:4px solid #8a1f2e}
+
+#tl-root .tl-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px}
+#tl-root .tl-section{margin:0 0 20px}
+#tl-root .tl-name{margin:0 0 12px;font-size:24px;font-weight:700;overflow-wrap:anywhere}
+#tl-root .tl-line{margin:0 0 12px;font-size:22px;overflow-wrap:anywhere}
+#tl-root .tl-fold{display:block;width:100%;padding:10px 16px;text-align:left;overflow-wrap:anywhere}
+
+#tl-root .tl-item{margin:0 0 16px;padding:12px;border:4px solid transparent;border-radius:14px;scroll-margin:8px}
+#tl-root .tl-item.tl-now{background:#e8f3f4;border-color:#0f5560}
+#tl-root .tl-text{margin:0 0 12px;font-size:22px;overflow-wrap:anywhere}
+#tl-root .tl-marks{display:flex;gap:12px;margin:0 0 12px}
+#tl-root .tl-marks button{flex:1;min-width:0;padding:0 8px}
+#tl-root .tl-worked[aria-pressed="true"]{background:#0f5560;border-color:#0f5560;color:#fff}
+#tl-root .tl-didnt[aria-pressed="true"]{background:#8a1f2e;border-color:#8a1f2e;color:#fff}
+#tl-root .tl-note{display:block;font-size:20px;font-weight:700}
+#tl-root textarea{display:block;width:100%;min-height:64px;margin:4px 0 0;padding:14px;resize:none;overflow:auto;
+  font:400 22px/1.35 'Segoe UI',system-ui,sans-serif;color:#2b1f17;background:#fff;
+  border:3px solid #2b1f17;border-radius:14px;user-select:text;-webkit-user-select:text}
+
+#tl-root .tl-over{display:block;width:100%;padding:0 16px}
+
+@media (prefers-reduced-motion:reduce){#tl-root *{animation:none;transition:none}}

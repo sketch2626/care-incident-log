@@ -796,7 +796,7 @@ PICK_NUMBERS = {"first": 1, "1st": 1, "1": 1, "second": 2, "2nd": 2, "2": 2, "tw
 PICK_SKIP = {"the", "a", "an", "one", "with", "that", "this", "at", "of", "and", "in", "on", "it", "i", "like", "want",
              "please", "number", "card", "picture", "small"}
 SAY_NO_CARD = "We haven't started a card yet."
-SAY_PICK_FIRST = "Let's pick a front first."
+SAY_PICK_FIRST = "Which picture do you like for the front of the card?"  # M20, Andy's wording
 SAY_NEEDS_WORDS = "There's nothing saved yet. It needs your words first."
 SAY_TOO_LONG = "That's too long for a card. We can shorten it, or I can make it a plain message."
 SAY_NOTHING_READY = "Nothing's ready to send yet."

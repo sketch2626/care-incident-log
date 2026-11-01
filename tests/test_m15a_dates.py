@@ -491,7 +491,7 @@ class Wiring(unittest.TestCase):
             self.assertEqual(mary.reminder_note(self.memory), self.NOTE)
             self.assertNotIn("[", self.NOTE)
             carded = mary.reminder_note(self.memory, cards=True)
-        self.assertEqual(carded.replace(mary.REMINDER_CARDS_LINE, ""), self.NOTE)
+        self.assertEqual(carded.replace(mary.REMINDER_CARDS_LINE, "").replace(mary.REMINDER_KEEPSAKE_LINE, ""), self.NOTE)
         self.assertNotEqual(carded, self.NOTE)
         with clock("2026-11-01"):
             self.assertIn("6 days from today", mary.reminder_note(self.memory))

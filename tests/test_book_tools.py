@@ -232,13 +232,13 @@ class ListAndAdd(Book):
         self.assertEqual(self.host.offline_match("how many people have I got")["say"], "You have 1 person in your book.")
         for line in ("add Tom to my book", "put Tom in my address book please, add him to my address book"):
             out = self.host.offline_match(line)
-            self.assertIn("Menu", out["say"])
+            self.assertIn("live voice", out["say"])
             self.assertFalse(out["response"]["saved"])
         self.assertEqual(self.call("list_people")["count"], 1)
 
     def test_add_points_to_the_menu_and_saves_nothing(self):
         out = self.call("add_to_book", heard="add Tom to my book")
-        self.assertEqual(self.last["say"], "That's done in Address book. Tap Menu, then Address book.")
+        self.assertEqual(self.last["say"], "I can't add anyone to your book right now. That takes my live voice.")
         self.assertFalse(out["saved"])
         self.assertIsNone(self.contact("Tom"))
 

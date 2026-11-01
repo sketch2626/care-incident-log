@@ -619,9 +619,7 @@ class Forget(Flow):
         self.assertNotIn(ADDRESS, json.dumps(done))
 
     def test_forget_name_reaches_an_exact_contact(self):
-        self.call("save_contact", name="Mark Hollis")
         self.keep_email("Mark Hollis", "m.hollis@example.net")
-        self.call("save_contact", name="Mark Jones")
         self.keep_email("Mark Jones", "m.jones@example.net")
         with server._mary_lock:
             memory = server.mary_memory()

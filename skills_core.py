@@ -1129,7 +1129,7 @@ class SkillHost:
 
     def _log(self, event, **fields):
         """One JSON line in skills.log. Callers pass only names, codes and numbers: never resident text, keys or URLs."""
-        fields = {key: memory_core.scrub_addresses(value) if isinstance(value, str) else value  # M18: the wall behind that
+        fields = {key: memory_core.scrub_details(value) if isinstance(value, str) else value  # M18: the wall behind that
                   for key, value in fields.items()}
         line = json.dumps(dict({"time": datetime.now().isoformat(timespec="seconds"), "event": event}, **fields))
         with self._log_lock:

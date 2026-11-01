@@ -538,8 +538,13 @@ class _BookLink:  # M19: memory_core imports neither server nor the book
     set_birthday = staticmethod(_set_birthday)
 
 
+def _book_details():  # M19 piece 6: a locked book gives nothing, so words stay as they are until it opens
+    return memory_core.book_details(BOOK.people(include_hidden=True)) if BOOK.state() == "open" else []
+
+
 BOOK.on_change = _book_changed
 memory_core.BOOK_LINK = _BookLink
+memory_core.BOOK_DETAILS = _book_details
 
 # M19 piece 5: what the address book screens may read and write. kind, asked, no_keep and hidden are never the page's.
 BOOK_FORM = ("name", "relationship", "email", "phone", "cell", "address", "facebook", "birthday", "notes")
@@ -918,8 +923,10 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
     else:
         value = " ".join(str(args.get("fact") or "").split())
-        if memory_core.only_address(memory_core.scrub_addresses(value)):  # M18
-            return {"response": {"ok": False, "note": ADDRESS_NOT_A_MEMORY}, "effects": [], "say": None}
+        scrubbed = memory_core.scrub_details(value)  # M19: any detail
+        if memory_core.only_address(scrubbed):  # M18
+            note = ADDRESS_NOT_A_MEMORY if memory_core.ADDRESS_WORDS in scrubbed else DETAIL_NOT_A_MEMORY
+            return {"response": {"ok": False, "note": note}, "effects": [], "say": None}
         error = "" if value else "There was no fact to save."
     if error:
         return {"response": {"ok": False, "error": error}, "effects": [], "say": None}
@@ -939,6 +946,8 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
 
 ADDRESS_NOT_A_MEMORY = ("An email address never goes in your memories. It goes in their contacts: use give_address, "  # M18
                         "spell it back, and after their yes ask if they want it kept.")
+DETAIL_NOT_A_MEMORY = ("A phone number or street address never goes in your memories. If they want it kept, it goes in "  # M19
+                       "their address book: they add it there, in Address book in the Menu.")
 STORY_FAILED = {"error": "no_story",  # M4a
                 "note": "Tell a short story yourself instead, with a beginning, middle and end."}
 
@@ -1230,7 +1239,7 @@ def wake_log(kind, **fields):
         parts = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), kind]
         for k, v in fields.items():
             if v is not None and v != "":
-                parts.append(f"{k}={json.dumps(memory_core.scrub_addresses(v), ensure_ascii=False) if isinstance(v, str) else v}")  # M18
+                parts.append(f"{k}={json.dumps(memory_core.scrub_details(v), ensure_ascii=False) if isinstance(v, str) else v}")  # M18
         line = "  ".join(parts) + "\n"
         path = DATA / "wake.log"
         with _wake_log_lock:
@@ -1648,7 +1657,7 @@ class Handler(SimpleHTTPRequestHandler):
                     memory = mary_memory()
                     last = memory.recent[-1] if memory.recent else {}
                     # M4a: the emergency words are saved by /heard; say() of the same words must not double them
-                    kept = memory_core.scrub_addresses(text)  # M18: add_turn keeps this, not what the gate had above
+                    kept = memory_core.scrub_details(text)  # M18: add_turn keeps this, not what the gate had above
                     if last.get("role") != "model" or " ".join(last["text"].split()) != kept[:mary.MAX_TURN_CHARS].strip():
                         memory.add_turn("model", text)
                         try:

@@ -7,6 +7,7 @@ Takes a connect callable (server.connect_memories), and imports neither server n
 """
 import json
 import os
+import functools
 import re
 import time  # M15a
 from contextlib import closing
@@ -157,6 +158,7 @@ def _today():  # M15a
 
 # --- M18: an email address is kept in one place, the messages skill's contacts, and goes through here everywhere else ---
 ADDRESS_WORDS = "(an email address)"
+DETAIL_WORDS = "[address]"  # M19: a phone number, street address or saved detail
 _TLD = r"(?:com|net|org|edu|gov|mil|info|biz|us|co|uk|ca)"
 _DOT = r"(?:\s*\.(?=[a-z0-9])|\s+\.\s+|[\s,]+(?:dot|period|point)[\s,]+)"  # "home. Us kids" is the end of a sentence
 _SPELLED = r"(?:[a-z0-9][\s,.-]+)+[a-z0-9]"  # g m a i l, or a-o-l
@@ -185,8 +187,9 @@ _NOT_NAMES = frozenset("""it its them they that this those these there here he s
     comes came stay stays stayed live lives lived work works worked email e-mail mail address website site page web
     online internet to from for of in on at by with about over under up down out back off say says said tell tells told
     call calls called""".split())
-_ONLY_ADDRESS = re.compile(r"(?:(?:[\w'’-]+\s+){0,3}(?:e-?mail|address)\b\s*(?:address\s*)?(?:is|was|:|=)?\s*)?"
-                           + re.escape(ADDRESS_WORDS) + r"\W*", re.I)
+_ONLY_ADDRESS = re.compile(r"(?:(?:[\w'’-]+\s+){0,3}(?:e-?mail|address|phone|telephone|cell|mobile|number|facebook|live[sd]?\s+at)"  # M19
+                           r"\b\s*(?:address\s*|number\s*|name\s*)?(?:is|was|:|=)?\s*)?"
+                           r"(?:" + re.escape(ADDRESS_WORDS) + "|" + re.escape(DETAIL_WORDS) + r")\W*", re.I)
 
 
 def _address_start(text, end, after_piece=False):
@@ -232,8 +235,105 @@ def only_address(text):
 # --- end M18 ---
 
 
+# --- M19 piece 6: what she keeps holds no phone number, street address or saved detail. An incident's words never come
+# through here: they stay as said ---
+BOOK_DETAILS = None  # set by the server: the book's email, phone, cell, address and facebook values; none when it's locked
+_NOT_STREET = "|".join(sorted(_NOT_NAMES | frozenset("""a an the i who kids children grandkids people folks men women
+    boys girls nurses aides times mile miles minute minutes min mins hour hours hr hrs day days week weeks month months
+    year years block blocks lane lanes way ways foot feet story stories floor floors dollar dollars percent""".split())))
+_HOUSE = r"(?<![\w$#.,/:-])(?<!\bin )(?<!since )(?<!until )(?<!room )\d{1,6}[a-z]?\s+"  # "in 1942" is a year
+_STREET_NAME = r"(?:(?!(?:" + _NOT_STREET + r")\b)[\w'.-]+\s+)"  # "3 kids on Maple Street" is no address
+_STREET = re.compile(
+    _HOUSE + _STREET_NAME + r"{1,4}?(?:street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|parkway|pkwy|"
+    r"circle|cir|(?-i:Way|Trail|Terrace|Place))\b\.?(?:,?\s+(?:apt|apartment|unit|suite|ste)\.?\s*#?\s*\w+)?"
+    r"|" + _HOUSE + r"(?:us\s+)?" + _STREET_NAME + r"{0,4}?(?:highway|hwy)\b\.?(?:\s+\d{1,4}\b)?"
+    r"|\b(?:p\.?\s?o\.?\s*box|post\s+office\s+box)\s+\d+\b", re.I)
+_NOT_A_PHONE = r"(?![\w/-]|[.,]\d)"  # a date, a price or a longer number goes on past it
+_PHONE = re.compile(r"(?<![\w$#.,/:-])(?:(?:\+1[ \t.-]{0,3}|1[ \t.-]{1,3})?"  # "1942-1945" is no 1 and a number
+                    r"(?:\(\d{3}\)[ \t.-]{0,3}|\d{3}[ \t.-]{1,3})?\d{3}[ \t.-]{1,3}\d{4}"
+                    r"|\d{7,11})" + _NOT_A_PHONE)
+_DIGIT_WORD = r"(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)"
+_SPOKEN_PHONE = re.compile(r"\b(?:" + _DIGIT_WORD + r"[\s,.-]+){6,10}" + _DIGIT_WORD + r"\b", re.I)
+_ROOM_BEFORE = re.compile(r"\b(?:room|rm|apt|apartment|unit|suite|bed|ward|wing)\.?\s*$", re.I)
+_RUN = re.compile(r"(?<!\d)\d(?:[\s().-]{0,3}\d){6,10}(?!\d)")  # a saved number, however it's grouped
+_LETTER = re.compile(r"[^\W\d_]")
+_BOOK_VALUE_MIN = 5
+
+
+def _phone_key(text):
+    digits = re.sub(r"\D", "", text)
+    return digits[1:] if len(digits) == 11 and digits[0] == "1" else digits
+
+
+def _date_digits(digits):
+    """03141950 or 19500314: a date, written with no marks."""
+    if len(digits) != 8:
+        return False
+    years, months, days = ("18", "19", "20"), range(1, 13), range(1, 32)
+    return ((digits[:2] in years and int(digits[4:6]) in months and int(digits[6:]) in days)
+            or (int(digits[:2]) in months and int(digits[2:4]) in days and digits[4:6] in years))
+
+
+def _phone_out(found):
+    before = found.string[max(0, found.start() - 12):found.start()]
+    if _date_digits(re.sub(r"\D", "", found.group())) or _ROOM_BEFORE.search(before):
+        return found.group()
+    return DETAIL_WORDS
+
+
+def book_details(people):
+    """What scrub_details hides for these rows. Plain words that could be somebody's name or a town stay out of it: a
+    Facebook name that shares a word with a name in the book, and any one plain word, so names always stay."""
+    names = {word for person in people for word in person["name"].casefold().split()}
+    found = []
+    for person in people:
+        found += [person[field] for field in ("email", "phone", "cell") if person[field]]
+        for field in ("address", "facebook"):
+            for value in {person[field], *person[field].splitlines()}:
+                words = value.casefold().split()
+                if re.search(r"[\d_./@]", value) or (len(words) > 1 and not names.intersection(words)):
+                    found.append(value)
+    return found
+
+
+def _book_values():
+    """What the book holds now. Never raises: a book that fails must not stop a reply or a log line."""
+    if BOOK_DETAILS is None:
+        return ()
+    try:
+        return tuple(sorted({value.strip() for value in BOOK_DETAILS() if len(value.strip()) >= _BOOK_VALUE_MIN}))
+    except Exception:  # noqa: BLE001
+        return ()
+
+
+@functools.lru_cache(maxsize=1)
+def _book_matchers(values):
+    """(the saved words as one pattern or None, the saved numbers by their digits)."""
+    numbers = [value for value in values if not _LETTER.search(value) and len(_phone_key(value)) >= 7]
+    words = [r"[\s,]+".join(re.escape(word) for word in re.split(r"[\s,]+", value) if word)
+             for value in sorted(set(values) - set(numbers), key=len, reverse=True)]
+    words = [word for word in words if word]
+    pattern = re.compile(r"(?<![\w.@-])(?:" + "|".join(words) + r")(?![\w@-])", re.I) if words else None
+    return pattern, frozenset(_phone_key(value) for value in numbers)
+
+
+def scrub_details(text):
+    """scrub_addresses, plus phone numbers, street addresses and what's saved in the book, each as "[address]". For what
+    she keeps and the logs. Names, relationships, birthdays and notes stay: "Sarah's birthday is March 14" is a good memory."""
+    text = scrub_addresses(text)
+    saved, numbers = _book_matchers(_book_values())
+    if saved is not None:
+        text = saved.sub(DETAIL_WORDS, text)
+    text = _SPOKEN_PHONE.sub(DETAIL_WORDS, _STREET.sub(DETAIL_WORDS, text))
+    text = _PHONE.sub(_phone_out, text)
+    if numbers:
+        text = _RUN.sub(lambda found: DETAIL_WORDS if _phone_key(found.group()) in numbers else found.group(), text)
+    return text
+# --- end M19 piece 6 ---
+
+
 def _clean(text):
-    text = " ".join(scrub_addresses(text).split())[:MAX_TEXT].rstrip()  # M18: scrub first, so a cut can't hide one
+    text = " ".join(scrub_details(text).split())[:MAX_TEXT].rstrip()  # M18: scrub first, so a cut can't hide one
     return "" if _GEMINI_KEY.search(text) else text
 
 

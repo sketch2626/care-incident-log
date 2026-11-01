@@ -302,7 +302,7 @@ class Memory:
             name = data.get("name")
             facts, recent = data.get("facts"), data.get("recent")  # null or odd values must not lose the name
             facts = [f for f in (facts if isinstance(facts, list) else []) if isinstance(f, str) and f.strip()]
-            recent = [{"role": t["role"], "text": memory_core.scrub_addresses(t["text"]), "at": str(t.get("at", ""))}  # M18
+            recent = [{"role": t["role"], "text": memory_core.scrub_details(t["text"]), "at": str(t.get("at", ""))}  # M18
                       for t in (recent if isinstance(recent, list) else [])
                       if isinstance(t, dict) and t.get("role") in ("user", "model") and isinstance(t.get("text"), str)]
             offer = data.get("pending_offer")
@@ -320,7 +320,7 @@ class Memory:
 
     def add_fact(self, fact, kind="", source="talk", heard=""):
         """Returns True if the fact was new. heard (M15a): the resident's words, which a date in the fact must match."""
-        fact = memory_core.scrub_addresses(fact)  # M18: and a fact that was only an address is no memory
+        fact = memory_core.scrub_details(fact)  # M18: and a fact that was only an address is no memory
         if memory_core.only_address(fact):
             return False
         if self.store is not None:  # M9c: kind and source only mean something in the store
@@ -350,7 +350,7 @@ class Memory:
             pass
 
     def add_turn(self, role, text):
-        text = memory_core.scrub_addresses(text)  # M18: before the cut, so a cut can't hide one
+        text = memory_core.scrub_details(text)  # M18: before the cut, so a cut can't hide one
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
         if role == "model" and not self.name and _ASKS_NAME.search(text):  # M4c: both routes pass through here
@@ -921,7 +921,7 @@ def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) b
     if store is None:
         return
     try:
-        text = memory_core.scrub_addresses(text)  # M18
+        text = memory_core.scrub_details(text)  # M18
         if memory.scrubbed or _SAYS_FORGET.search(_plain(text)):  # "Forget Mark's birthday, November 7" must not save it
             return
         asked = memory_dates.stop_request(text)
@@ -1857,7 +1857,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                 try:  # M9c: a locked database must never stop her reply
                     # M9c: a [remember] in the very reply that forgot must not save it straight back
                     if not memory.scrubbed and memory.add_fact(value, source=fact_source(text, typed), heard=text):  # heard: M15a
-                        remembered.append(" ".join(memory_core.scrub_addresses(value).split()))  # M18
+                        remembered.append(" ".join(memory_core.scrub_details(value).split()))  # M18
                 except Exception:
                     pass
             elif value.strip() and not name_dropped:

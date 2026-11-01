@@ -826,6 +826,29 @@ ASKS_ADDRESS_RE = re.compile(r"\baddress\b|(?:'s|\b(?:her|his|their|my|the|that|
 ASKS_HEAR_RE = re.compile(r"\b(?:what|what's|read|tell|say|spell|give|repeat|remind|hear|know|have|got|need|find|look)\b")
 ASKS_FILL_RE = re.compile(r"\b(?:fill|put|type|enter|paste|copy|write|use|add)\b")
 ASKS_BOX_RE = re.compile(r"\b(?:fill|put|type|enter|paste|copy)\b")
+# M19 piece 6: the words that ask for each detail. "Call my daughter" and "happy birthday" ask for none, and "my phone" or
+# "my notes" are their own, so "my" stays out of these. A card "for Sarah's birthday" is a task, not an ask.
+_HERS = r"(?:'s|\b(?:her|his|their|whose))\s+"
+ASKS_NUMBER = (r"(?:'s|\b(?:her|his|their|the|that|whose))\s+(?:(?:home|house|phone|telephone|cell|mobile)\s+)*number\b"
+               r"(?!\s+of\b)|\b(?:phone|telephone|cell|mobile)\s+number\b")
+ASKS_DETAIL_RES = {
+    "email": ASKS_ADDRESS_RE,
+    "phone": re.compile(ASKS_NUMBER + "|" + _HERS + r"(?:home\s+|house\s+|land\s*line\s+)?(?:tele)?phone\b"),
+    "cell": re.compile(ASKS_NUMBER + "|" + _HERS + r"(?:cell|mobile)\b"),
+    "address": re.compile(r"(?<!mail )\baddress\b"),
+    "facebook": re.compile(_HERS + r"facebook\b"),
+    "birthday": re.compile(r"^(?!.*\bfor\s+(?:[\w'-]+\s+){0,3}birthday\b).*" + _HERS + r"birthday\b", re.S),
+    "notes": re.compile(r"(?:'s|\b(?:her|his|their|the|whose))\s+notes\b|\bnotes\s+(?:on|for|about)\b"),
+}
+DETAIL_FIELDS = tuple(ASKS_DETAIL_RES)
+ASKS_WHEN_RE = re.compile(r"\bwhen(?:'s)?\b")  # birthdays only: "when" asks nothing about an address
+ASKS_WHO_RE = re.compile(r"\bwho(?:'s)?\b")
+SAY_NOT_ASKED = "They didn't ask for that. Use the name."
+SAY_ASKED = "For what they asked, this once."
+SAY_SPELL = "Spell it back letter by letter."
+SAY_ADD_TO_BOOK = "That's done in Address book. Tap Menu, then Address book."
+LIST_MAX = 40
+LIST_SAY_MAX = 200  # more names than this and the spoken line gives only the number
 ADDRESS_RE = re.compile(r"[a-z0-9_%+'-]+(?:\.[a-z0-9_%+'-]+)*@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}")
 SPOKEN_DIGITS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7",
                  "eight": "8", "nine": "9"}
@@ -1439,12 +1462,15 @@ def _keep_told(ctx, told, keep):  # M18
     return _reply("Kept." if kept else _cant_keep(ctx), kept=kept)
 
 
-def _asked_address(heard, contact):  # M18
-    """Whether their own words ask to hear this address or put it in a box. Sending needs neither."""
-    words = clean(heard or "").lower().replace("\u2019", "'")
-    if ASKS_ADDRESS_RE.search(words) and (ASKS_HEAR_RE.search(words) or ASKS_FILL_RE.search(words)):
+def _asked_detail(heard, person, field):  # M19: M18's _asked_address, for any detail, as strict
+    """Whether their own words ask to hear this kind of detail or put it in a box. Sending and calling need neither."""
+    words = clean(heard or "").lower().replace("’", "'")
+    if ASKS_DETAIL_RES[field].search(words) and (ASKS_HEAR_RE.search(words) or ASKS_FILL_RE.search(words)
+                                                 or (field == "birthday" and ASKS_WHEN_RE.search(words))):
         return True
-    names = _norm(contact["name"]).split()[:1] + [_norm(contact.get("relationship"))]
+    if field != "email":
+        return False
+    names = _norm(person["name"]).split()[:1] + [_norm(person.get("relationship"))]  # the To box is the email
     return bool(ASKS_BOX_RE.search(words)) and any(name and re.search(r"\b%s\b" % re.escape(name), words) for name in names)
 
 
@@ -1514,46 +1540,58 @@ def keep_address(ctx, keep):
 
 
 @_locked
-def save_contact(ctx, name, relationship="", facebook="", phone=""):
-    name = _said(name, NAME_MAX)
-    if not name:
-        return _reply("Who should I remember?", saved=False)
-    fields = _said_relation(name)
-    for field, value in (("relationship", relationship), ("facebook", facebook), ("phone", phone)):
-        value = _said(value, DETAIL_MAX)
-        if value:
-            fields[field] = value
-    if not ctx.people.keep(name, fields):
-        return _reply(_cant_keep(ctx), saved=False)
-    return _reply("I've got %s." % name, saved=True)
-
-
-@_locked
-def find_contact(ctx, name):
+def find_person(ctx, name):  # M19
+    """Who they are and which details are saved, never a value. Never a doctor: ctx.people leaves them out."""
     hits = ctx.people.find(_said(name, NAME_MAX))
     if len(hits) > 1:
         return _which(hits, known=True)
     if not hits:
         return _nobody(ctx)
-    return {"known": True, "name": hits[0]["name"], "relationship": hits[0]["relationship"],
-            "has_email": hits[0]["has_email"]}
+    found = {"known": True, "name": hits[0]["name"], "relationship": hits[0]["relationship"]}
+    found.update(("has_" + field, hits[0]["has_" + field]) for field in DETAIL_FIELDS)
+    return found
 
 
 @_locked
-def contact_address(ctx, name):  # M18
-    """A saved address for her to read out or put in a box, and only when their own words just asked for it."""
-    hits = ctx.people.find(_said(name, NAME_MAX))
+def read_detail(ctx, person, field):  # M19
+    """One saved detail for her to read out or put in a box, and only when their own words just asked for it."""
+    if field not in ASKS_DETAIL_RES:
+        return {"error": "bad_field", "fields": list(DETAIL_FIELDS)}
+    hits = ctx.people.find(_said(person, NAME_MAX))
     if len(hits) > 1:
         return _which(hits, known=True)
     if not hits:
         return _nobody(ctx)
-    found = {"known": True, "name": hits[0]["name"], "has_email": hits[0]["has_email"]}
-    if not found["has_email"]:
+    found = {"known": True, "name": hits[0]["name"], "field": field, "has": hits[0]["has_" + field]}
+    if not found["has"]:
         return found
-    if not _asked_address(ctx.heard, hits[0]):
-        return dict(found, not_asked=True, note="They didn't ask for the address. Use the name: a send needs no address.")
-    return dict(found, address=ctx.people.detail(hits[0], "email"),
-                note="For what they asked, this once. Spell it, or put it in the box.")
+    if not _asked_detail(ctx.heard, hits[0], field):
+        return dict(found, not_asked=True, note=SAY_NOT_ASKED)
+    found.update(value=ctx.people.detail(hits[0], field), note=SAY_ASKED)
+    if field == "email":
+        found["spell"] = SAY_SPELL
+    return found
+
+
+@_locked
+def list_people(ctx):  # M19
+    """Who's in the book, when they ask: names, relationships and the count. Never a detail."""
+    if ctx.people.locked():
+        return _reply(SAY_BOOK_LOCKED, book_locked=True, count=0, people=[])
+    people = [{"name": p["name"], "relationship": p["relationship"]} for p in ctx.people.everyone()[:LIST_MAX]]
+    while len(json.dumps(people)) > READ_MAX:  # a result is 4 KB at most
+        people.pop()
+    count = ctx.people.count()
+    say = "You have %d %s in your book." % (count, "person" if count == 1 else "people") if count else "Your book is empty."
+    names = ", ".join(p["name"] for p in people)
+    if count and len(people) == count and len(names) <= LIST_SAY_MAX and ASKS_WHO_RE.search(_norm(ctx.heard)):
+        say = "%s: %s." % (say[:-1], names)
+    return _reply(say, count=count, people=people)
+
+
+@_locked
+def add_to_book(ctx):  # M19: nothing saves by itself. Piece 6b's form takes this over
+    return _reply(SAY_ADD_TO_BOOK, saved=False)
 
 
 def _exactly(ctx, words, exact=True):

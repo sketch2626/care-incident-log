@@ -75,6 +75,10 @@ class Base(unittest.TestCase):
     def letter(self, person="Mark"):
         self.act("plain_message", person=person, words="Thinking of you.", signature="Dad")
 
+    def person(self, name, **fields):
+        """Someone already in the book, as the Address book form leaves them."""
+        self.assertTrue(self.ctx.people.keep(name, fields))
+
     def contact(self, name):
         """Their row in the book, by this exact name, hidden marks too."""
         return next((p for p in self.host.book.people(include_hidden=True) if p["name"] == name), None)
@@ -106,28 +110,28 @@ class Base(unittest.TestCase):
 
 class FindTests(Base):
     def test_by_name_first_name_and_relationship_without_case(self):
-        self.act("save_contact", name="Mark Hollis", relationship="son")
+        self.person(name="Mark Hollis", relationship="son")
         for name in ("mark hollis", "MARK", "Son", "my son"):
-            r = self.act("find_contact", name=name)
+            r = self.act("find_person", name=name)
             self.assertEqual((r["known"], r["name"], r["relationship"], r["has_email"]),
                              (True, "Mark Hollis", "son", False), name)
-        self.assertEqual(self.act("find_contact", name="Tyler"), {"known": False})
+        self.assertEqual(self.act("find_person", name="Tyler"), {"known": False})
 
     def test_a_full_name_never_lands_on_someone_else_with_that_first_name(self):
-        self.act("save_contact", name="Mark")
-        self.assertFalse(self.act("find_contact", name="Mark Jones")["known"])
+        self.person(name="Mark")
+        self.assertFalse(self.act("find_person", name="Mark Jones")["known"])
 
     def test_two_hits_ask_with_names_only(self):
-        self.act("save_contact", name="Mark Hollis", phone="555-0100")
-        self.act("save_contact", name="Mark Jones")
-        r = self.act("find_contact", name="Mark")
+        self.person(name="Mark Hollis", phone="555-0100")
+        self.person(name="Mark Jones")
+        r = self.act("find_person", name="Mark")
         self.assertEqual(r["which"], ["Mark Hollis", "Mark Jones"])
         self.assertIn("Mark Hollis or Mark Jones", self.last["say"])
         self.assertNotIn("555", self.last["say"])
 
     def test_two_hits_on_a_send_ask_who(self):
-        self.act("save_contact", name="Mark Hollis")
-        self.act("save_contact", name="Mark Jones")
+        self.person(name="Mark Hollis")
+        self.person(name="Mark Jones")
         self.letter()
         r = self.act("send_it")
         self.assertTrue(r["need_person"])
@@ -139,10 +143,10 @@ class FindTests(Base):
         self.assertTrue(self.act("send_it")["need_person"])
         self.assertEqual(self.last["say"], "Who's it for?")
 
-    def test_save_contact_merges_and_keeps_the_address(self):
+    def test_a_later_detail_merges_and_keeps_the_address(self):
         self.address_then_send()
         self.act("keep_address", keep=True)
-        self.act("save_contact", name="mark", phone="555-0100")
+        self.person(name="mark", phone="555-0100")
         self.assertEqual((self.contact("Mark")["email"], self.contact("Mark")["phone"]), (ADDRESS, "555-0100"))
 
 
@@ -179,7 +183,7 @@ class AddressTests(Base):
         self.act("keep_address", keep=True)
         self.assertNotIn(ADDRESS, " ".join(self.seen))
         self.assertEqual(self.host.view("messages").count("gmail"), 0)
-        self.act("find_contact", name="Mark")
+        self.act("find_person", name="Mark")
         self.assertNotIn(ADDRESS, " ".join(self.seen))
         self.assertTrue(self.last["response"]["has_email"])
 
@@ -330,8 +334,8 @@ class BookTests(Base):
     def test_a_locked_book_never_sounds_as_if_they_are_gone(self):
         self.saved()
         self.lock_book()
-        for tool in ("find_contact", "contact_address"):
-            out = self.act(tool, name="Mark")
+        for tool, args in (("find_person", {"name": "Mark"}), ("read_detail", {"person": "Mark", "field": "email"})):
+            out = self.act(tool, **args)
             self.assertTrue(out["book_locked"], tool)
             self.assertEqual(self.last["say"], "Your address book is locked right now, so I can't look them up. A helper "
                                                "can open it.")
@@ -339,8 +343,6 @@ class BookTests(Base):
     def test_a_locked_book_keeps_nothing_and_says_so(self):
         self.saved()
         self.lock_book()
-        self.assertFalse(self.act("save_contact", name="Tyler")["saved"])
-        self.assertIn("locked", self.last["say"])
         self.act("give_address", address=SPOKEN, person="Tyler")
         self.act("address_right", right=True)
         self.assertFalse(self.act("keep_address", keep=True)["kept"])
@@ -412,7 +414,7 @@ class ForgetTests(Base):
 
     def test_forget_marks_address_removes_only_the_email(self):
         self.kept()
-        self.act("save_contact", name="Mark", phone="555-0100")
+        self.person(name="Mark", phone="555-0100")
         self.assertEqual(self.mod.forget_matches(self.ctx, "Mark's address"), 1)
         out = self.mod.on_forget(self.ctx, "Mark’s email", False)
         self.assertEqual(out, {"addresses": [ADDRESS], "texts": []})
@@ -440,13 +442,13 @@ class ForgetTests(Base):
         self.assertNotIn("just_sent", self.ctx.state)
 
     def test_own_name_needs_the_full_name(self):
-        self.act("save_contact", name="Mark Hollis")
+        self.person(name="Mark Hollis")
         self.assertEqual(self.mod.on_forget(self.ctx, "Mark", True), {"addresses": [], "texts": []})
         self.assertEqual(self.mod.on_forget(self.ctx, "Mark Hollis", True)["texts"], ["Mark Hollis"])
 
     def test_everything_leaves_the_book_and_clears_what_is_held(self):
         self.kept()
-        self.act("save_contact", name="Ann")
+        self.person(name="Ann")
         self.assertEqual(self.mod.forget_matches(self.ctx, "everything"), 0)
         out = self.mod.on_forget(self.ctx, "everything", False)
         self.assertEqual(out, {"addresses": [ADDRESS], "texts": []})  # the one held in memory, so mail.log still clears

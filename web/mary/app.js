@@ -3343,6 +3343,7 @@
     else if (act === 'info') { closeMenu(false); openPanel('infoPanel'); }
     else if (act === 'choose') { closeMenu(false); openPanel('choosePanel'); }
     else if (act === 'games') { closeMenu(false); openPanel('gamesPanel'); }   // M7a
+    else if (act === 'book') { if (!openDeep('#book-list')) { window.location.href = '/?from=mary#book-list'; } }   // M19
     else if (act === 'close') {
       closeMenu(false);
       try { window.pywebview.api.close_window(); } catch (e) { log(e); }

@@ -59,7 +59,7 @@ async function api(path, opts = {}) {
   let res;
   try { res = await fetch(path, init); } catch { throw new Error('Could not reach the tracker. Is it still running?'); }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong. Please try again.'), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong. Please try again.'), { status: res.status, code: data.code });
   return data;
 }
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
@@ -236,7 +236,7 @@ function maryAskedSave() {
   } else toMary('save_none', { why: 'no_form' });
 }
 
-const SCREENS = ['home', 'add', 'saved', 'list', 'inbox', 'report', 'info'];
+const SCREENS = ['home', 'add', 'saved', 'list', 'inbox', 'report', 'info', 'book-list', 'book-card', 'book-form', 'book-helper'];
 let cur = { screen: 'home' };
 let pendingInbox = null;
 let lastSaved = null;
@@ -258,6 +258,7 @@ function go(name, replace) {
 function route() {
   const [name, arg = ''] = location.hash.replace(/^#/, '').split('/');
   if (cur.screen === 'add') { keepDraft(); teardownMic(); } // M18
+  if (bookRoute(name, arg)) return; // M19
   switch (name) {
     case 'add': {
       const opts = arg === 'inbox' && pendingInbox ? { inboxItem: pendingInbox } : CAT[arg] ? { cat: arg } : {};
@@ -1360,6 +1361,7 @@ window.addEventListener('focus', async () => {
 window.addEventListener('hashchange', route);
 
 buildTiles();
+bookInit(); // M19
 (async () => {
   try { await load(); } catch (err) { setBanner(err.message); }
   $('#backName').textContent = state.settings.companion === 'him' ? 'Sam' : 'Mary'; // M17

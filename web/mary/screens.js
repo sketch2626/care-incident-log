@@ -40,6 +40,7 @@
   var READ_GROUP_NO = "I don't know that group. Tell me what kind of problem it was.";
   var READ_FAIL_NO = "I couldn't get to your notes just now.";
   var READ_NONE = "There's nothing saved for that.";
+  var WHO_NO = "Tell me who, and I'll find them.";
 
   var GROUPS = [
     { key: 'call_light', label: 'No one answered my call light' },
@@ -52,6 +53,29 @@
     { key: 'safety', label: 'I fell or got hurt' },
     { key: 'other', label: 'Something else' }
   ];
+
+  // M19 piece 5: the address book's nine fields. Kind 'detail' is the wall: look_at_screen never reads one. A form gives
+  // only what she filled herself (Mine), and a card only which fields have something in them. fill stays false until
+  // piece 6 turns it on, field by field.
+  function bookFields(prefix) {
+    return [
+      { key: 'name', label: 'Name', explain: 'Their name, as they want to see it in the list.' },
+      { key: 'relationship', label: 'Relationship', explain: 'Who this person is to them, like daughter or friend from church.' },
+      { key: 'email', label: 'Email', address: true, explain: 'The email address messages go to.' },
+      { key: 'phone', label: 'Home phone', explain: 'A home phone number.' },
+      { key: 'cell', label: 'Cell phone', explain: 'A cell phone number.' },
+      { key: 'address', label: 'Mailing address', explain: 'Where a letter or a card goes.' },
+      { key: 'facebook', label: 'Facebook', explain: 'The name this person goes by on Facebook.' },
+      { key: 'birthday', label: 'Birthday', explain: 'The month and the day. You mention it when it gets close.' },
+      { key: 'notes', label: 'Notes', explain: 'Anything else worth keeping about this person.' }
+    ].map(function (f) {
+      f.id = prefix + f.key;
+      f.kind = 'detail';
+      f.fill = false;
+      return f;
+    });
+  }
+  var BOOK_FORM = bookFields('bf-');
 
   var TALK = { id: 'talk', name: 'Your own screen', explain: 'Your face, with nothing else open.', fields: [] };
 
@@ -136,6 +160,18 @@
         { id: 'mailConnect', label: 'Connect email', kind: 'switch', fill: false,
           explain: 'Connects their email once the boxes above are filled. The tap is theirs.' }
       ] },
+    { id: 'book-list', frame: 'book-list', hash: '#book-list', name: 'Address book', people: true,
+      explain: 'The people they know: a list of names and relationships, kept only on this laptop.',
+      labels: ['Find someone', 'Up', 'Down', 'Show everyone'], fields: [] },
+    { id: 'book-card', frame: 'book-card', hash: null, name: 'Address book card', person: true, show: 'filled',
+      explain: 'One person from the address book. You can see which details are filled in, and not what they say.',
+      fields: bookFields('bc-') },
+    { id: 'book-form', frame: 'book-form', hash: '#book-form', name: 'Address book form', show: 'hers',
+      explain: 'The form for one person in the address book. Nothing is kept until they save it.',
+      labels: ['Save'], fields: BOOK_FORM },
+    { id: 'book-helper', frame: 'book-helper', hash: '#book-helper', name: 'Address book, a helper adding people', show: 'hers',
+      explain: 'A helper types in several people, one after another. Typed words stay on the laptop.',
+      labels: ['Save and add another', 'Done'], fields: BOOK_FORM },
     { id: 'things', panel: 'canPanel', name: 'Things I can do',
       explain: 'Things they can say to you, or tap: slow down, speed up, quieter, louder, more time, typing to you, and My notes.',
       fields: [] },
@@ -160,6 +196,7 @@
   var Lit = { el: null };
   var Typing = { finish: null };
   var Undo = {};   // per field, what was there before each of her fills. Held here only, never logged
+  var Mine = {};   // M19: per detail field, what she filled herself. The only detail value look can ever send
   var Months = { after: null };   // piece 5: the heard turn behind her offer to go by month
 
   function no(say) { return { ok: false, say: say }; }
@@ -206,7 +243,7 @@
 
   // The one place a value is read. A secret never gets past the first line.
   function valueOf(doc, f, el) {
-    if (isSecret(f, el) || !el) { return undefined; }
+    if (isSecret(f, el) || f.kind === 'detail' || !el) { return undefined; }
     if (f.radio) {
       var on = radios(doc, f).filter(function (r) { return r.checked; })[0];
       if (!on) { return ''; }
@@ -216,11 +253,16 @@
     if (f.kind === 'switch') { return el.type === 'checkbox' ? (el.checked ? 'on' : 'off') : undefined; }
     return el.value;
   }
-  function cardField(doc, f) {
+  function cardField(doc, f, s) {
     var el = fieldEl(doc, f);
     if (isSecret(f, el)) { return { field: f.id, label: f.label, kind: 'secret' }; }   // label and kind, and nothing that could hint
     if (!shown(el)) { return null; }
     var out = { field: f.id, label: f.label, kind: f.kind, explain: f.explain, can_fill: !!f.fill };
+    if (f.kind === 'detail') {   // no path below this line for a detail
+      if (s.show === 'filled') { out.filled = !!String(el.textContent || '').trim(); }
+      else if (Mine.hasOwnProperty(f.id) && el.value === Mine[f.id]) { out.value = Mine[f.id]; }
+      return out;
+    }
     if (f.choices) { out.choices = f.choices.map(function (c) { return c.label; }); }
     var v = valueOf(doc, f, el);
     if (v !== undefined) { out.value = v; }
@@ -229,12 +271,22 @@
   function isoDay(d) {
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
+  // Names and relationships, and only those two, whatever the page holds.
+  function lookPeople(doc, card) {
+    var book = doc.defaultView && doc.defaultView.maryBook, now = book ? book.listNow() : null;
+    if (!now) { return; }
+    card.book = now.state;
+    if (now.state !== 'open') { return; }
+    card.count = now.count;
+    card.people = now.people.map(function (p) { return { name: p.name, relationship: p.relationship }; });
+  }
   function look(env) {
     var s = here(env), doc = env.doc(), card = { screen: s.name, about: s.explain };
     if (s.labels) { card.labels = s.labels; }
     if (s.groups) { card.groups = GROUPS.map(function (g) { return g.label; }); }
     if (doc && !s.panel) {
-      var fields = fieldsOf(s).map(function (f) { return cardField(doc, f); }).filter(Boolean);
+      if (s.people) { lookPeople(doc, card); }
+      var fields = fieldsOf(s).map(function (f) { return cardField(doc, f, s); }).filter(Boolean);
       if (fields.length) { card.fields = fields; }
       if (fields.some(function (f) { return f.kind === 'date'; })) { card.today = isoDay(new Date()); }
     }
@@ -410,7 +462,8 @@
       return done();
     }
     remember(f, el.value, el.value !== c.v, env);
-    if (f.kind !== 'text') {   // a date or a time box only holds a whole value
+    if (f.kind === 'detail') { Mine[f.id] = c.v; }
+    if (f.kind !== 'text' && f.kind !== 'detail') {   // a date or a time box only holds a whole value
       setVal(win, el, c.v);
       fire(win, el, 'input');
       fire(win, el, 'change');
@@ -472,6 +525,7 @@
     var hit = findOpen(args.name), s = hit && hit.s;
     if (!s) { return no(NOT_OPEN_NO); }
     if (s.id === 'saved') { return no(SAVED_NO); }
+    if (s.person) { return no(WHO_NO); }   // a card opens for someone: piece 6 finds who
     if (s.panel) {
       env.openPanel(s.panel);
       return { ok: true, screen: s.name };
@@ -618,6 +672,7 @@
     reset: function () {
       finishTyping();
       Undo = {};
+      Mine = {};
       Months.after = null;
       Lit.el = null;
     }

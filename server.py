@@ -32,6 +32,7 @@ import mail_core  # M15d: the resident's own email
 import mary
 import send_gate
 import memory_core  # M9c
+import memory_dates  # M19: the same date reading for the address book's birthday box
 import power
 import secret_store  # M15d: the Gemini key, out of the log and its backups
 import send_gate  # M15c: the hard-wired yes
@@ -539,6 +540,86 @@ class _BookLink:  # M19: memory_core imports neither server nor the book
 
 BOOK.on_change = _book_changed
 memory_core.BOOK_LINK = _BookLink
+
+# M19 piece 5: what the address book screens may read and write. kind, asked, no_keep and hidden are never the page's.
+BOOK_FORM = ("name", "relationship", "email", "phone", "cell", "address", "facebook", "birthday", "notes")
+BOOK_ID = re.compile(r"[0-9a-f]{32}")
+BOOK_LOCKED = "Your address book is locked. A helper's copy can open it."
+BOOK_FULL = "Your address book is full."
+BOOK_SAME = "That name is already in your address book."
+BOOK_NO_NAME = "A name is needed."
+BOOK_NO_BIRTHDAY = "I can't read that birthday. Try March 14 or 3/14."
+BOOK_NOT_HERE = "That person isn't in your address book."
+BOOK_HER = frozenset("daughter sister mother mom momma mama wife niece aunt auntie granddaughter grandmother grandma "
+                     "girlfriend stepdaughter stepmother".split())
+BOOK_HIM = frozenset("son brother father dad daddy papa husband nephew uncle grandson grandfather grandpa boyfriend "
+                     "stepson stepfather".split())
+
+
+class BookRefused(Exception):
+    """A plain answer to a write. The words are fixed, so they never hold a name or an address."""
+
+    def __init__(self, code, words, status=400):
+        super().__init__(words)
+        self.code, self.words, self.status = code, words, status
+
+
+def book_shown():
+    """Who the list shows. Doctors have their own part of the book, later."""
+    return [person for person in BOOK.people() if person["kind"] != "doctor"]
+
+
+def book_them(relationship):
+    """"her", "him", or "them" whenever the relationship doesn't plainly say. "Son's wife" names both, so it's "them"."""
+    words = set(re.findall(r"[a-z]+", str(relationship or "").lower()))
+    her, him = bool(words & BOOK_HER), bool(words & BOOK_HIM)
+    return "her" if her and not him else "him" if him and not her else "them"
+
+
+def book_birthday_words(birthday):
+    """"March 14" for a stored "03-14" or "1950-03-14", else ""."""
+    return memory_dates.when(int(birthday[-5:-3]), int(birthday[-2:])) if birthday else ""
+
+
+def book_birthday(text, old=""):
+    """The stored form of what was typed: "March 14", "3/14" or a stored form. The same day keeps a year already known."""
+    words = " ".join(str(text or "").split())
+    if not words:
+        return ""
+    plain = address_book._birthday(words)
+    if not plain:
+        found = memory_dates.loose_dates("birthday " + words)  # 3/14 counts only beside a birthday word
+        if len(found) != 1:
+            raise BookRefused("birthday", BOOK_NO_BIRTHDAY)
+        month, day = next(iter(found))
+        plain = f"{month:02d}-{day:02d}"
+    return old if old[-5:] == plain[-5:] else plain
+
+
+def book_fields(body, old=None):
+    """Only the form's fields, as text, with the birthday in its stored form."""
+    fields = {name: body[name] for name in BOOK_FORM if isinstance(body.get(name), str)}
+    if "birthday" in fields:
+        fields["birthday"] = book_birthday(fields["birthday"], (old or {}).get("birthday", ""))
+    if (old is None or "name" in fields) and not address_book._text(fields.get("name"), address_book.MAX_NAME):
+        raise BookRefused("name", BOOK_NO_NAME)
+    if "name" in fields:
+        wanted = address_book._norm(fields["name"])
+        if any(address_book._norm(p["name"]) == wanted and p["id"] != (old or {}).get("id") for p in book_shown()):
+            raise BookRefused("same_name", BOOK_SAME, 409)
+    return fields
+
+
+def book_person(person_id):
+    """A shown person, or None. A hidden mark or a doctor isn't one of the list's."""
+    person = BOOK.get(person_id)
+    return person if person and not person["hidden"] and person["kind"] != "doctor" else None
+
+
+def book_card(person):
+    """One card, for the page only. The screen tools send Gemini none of it."""
+    return {"state": "open", "id": person["id"], **{name: person[name] for name in BOOK_FORM},
+            "birthday_words": book_birthday_words(person["birthday"]), "them": book_them(person["relationship"])}
 
 
 def sync_book_dates():  # M19
@@ -1807,6 +1888,39 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send(WAKE.hold(on, body.get("why")))
         return None
 
+    def _book(self, method, path):
+        """M19 piece 5: the address book screens. There's no delete: forget goes by voice, through her forget path. A
+        locked book answers locked and refuses writes, and nothing here ever makes or wipes anything to get round that."""
+        person_id = path[len("/api/book/"):]
+        if person_id and not BOOK_ID.fullmatch(person_id):
+            return None
+        if (method, bool(person_id)) not in (("GET", False), ("GET", True), ("POST", False), ("PUT", True)):
+            return None
+        why = BOOK.why_locked()
+        try:
+            if why:
+                if method == "GET":
+                    return self._send({"state": "locked", "why": why, "people": [], "count": 0})
+                raise address_book.BookLocked()
+            if method == "GET" and not person_id:
+                people = [{"id": p["id"], "name": p["name"], "relationship": p["relationship"]} for p in book_shown()]
+                return self._send({"state": "open", "why": "", "people": people, "count": len(people)})
+            if method == "POST":
+                return self._send(book_card(BOOK.get(BOOK.add(book_fields(self._body())))), 201)
+            old = book_person(person_id)
+            if old is None:
+                return self._send({"error": BOOK_NOT_HERE, "code": "not_here"}, 404)
+            if method == "GET":
+                return self._send(book_card(old))
+            BOOK.update(person_id, book_fields(self._body(), old))
+            return self._send(book_card(BOOK.get(person_id)))
+        except BookRefused as e:
+            return self._send({"error": e.words, "code": e.code}, e.status)
+        except address_book.BookLocked:
+            return self._send({"error": BOOK_LOCKED, "code": "locked", "state": "locked"}, 409)
+        except address_book.BookFull:
+            return self._send({"error": BOOK_FULL, "code": "full"}, 409)
+
     def _route(self, method):
         parsed = urlparse(self.path)
         path, query = parsed.path.rstrip("/"), parse_qs(parsed.query)
@@ -1828,6 +1942,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._wake(method, path, q)
         if path == "/api/mail" or path.startswith("/api/mail/"):  # M15d: holds no log connection while an email goes out
             return self._mail(method, path)
+        if path == "/api/book" or path.startswith("/api/book/"):  # M19: the sealed book holds no log connection
+            return self._book(method, path)
         with connect() as conn:
             self._conn = conn  # _send commits it first, so a reply never arrives before its save is on disk
             if method == "GET" and path == "/api/incidents":

@@ -328,6 +328,82 @@
   </div>
 </section>
 
+<!-- M19 piece 5: the address book. If you can just ask Mary, it needs no button (Andy), so these screens hold far fewer than
+     the boards. Every value stays on this page; web/mary/screens.js sends Mary none of them. -->
+<section id="book-list" class="screen book" aria-label="Address book" hidden>
+  <p class="book-shut" id="bookShut" role="status" hidden></p>
+  <div id="bookOpen" hidden>
+    <div class="book-head">
+      <div class="book-titles">
+        <div class="book-titleline"><h1 tabindex="-1">Address book</h1><span class="book-count" id="bookCount"></span></div>
+        <p class="book-line">If you need to scroll down, let me know.</p>
+      </div>
+      <input class="book-find" type="text" id="bookFind" placeholder="Find someone" aria-label="Find someone" maxlength="60" autocomplete="off">
+    </div>
+    <p class="book-none" id="bookNone" hidden></p>
+    <div class="book-rows" id="bookRows"></div>
+  </div>
+  <div class="m9-row book-bar" id="bookListBar" hidden>
+    <button type="button" class="book-btn book-step" id="bookUp">Up</button>
+    <button type="button" class="book-btn book-step" id="bookDown">Down</button>
+    <button type="button" class="book-btn book-everyone" id="bookEveryone" hidden>Show everyone</button>
+    <p class="book-lock"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Kept only on this laptop, locked.</p>
+  </div>
+</section>
+
+<section id="book-card" class="screen book" aria-label="Address book card" hidden>
+  <p class="book-shut" id="bookCardShut" role="status" hidden></p>
+  <div id="bookCardBody" hidden>
+    <div class="book-cardhead"><h1 tabindex="-1" id="bc-name"></h1><span class="book-relhead" id="bc-relationship"></span></div>
+    <div class="book-grid">
+      <div class="book-col">
+        <div><p class="book-lab">Cell phone</p><div class="book-val" id="bc-cell"></div></div>
+        <div><p class="book-lab">Home phone</p><div class="book-val" id="bc-phone"></div></div>
+        <div><p class="book-lab">Email</p><div class="book-val" id="bc-email"></div></div>
+        <div><p class="book-lab">Birthday</p><div class="book-val" id="bc-birthday"></div></div>
+      </div>
+      <div class="book-col">
+        <div><p class="book-lab">Mailing address</p><div class="book-val two" id="bc-address"></div></div>
+        <div><p class="book-lab">Facebook</p><div class="book-val" id="bc-facebook"></div></div>
+        <div><p class="book-lab">Notes</p><div class="book-val two" id="bc-notes"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="m9-row" id="bookStopBar" hidden><button type="button" class="save" id="bookStop"></button></div>
+</section>
+
+<section id="book-form" class="screen book" aria-label="Address book form" hidden>
+  <form id="bookForm" novalidate>
+    <h1 class="book-formhead" tabindex="-1">Someone in your address book</h1>
+    <p class="book-shut" id="bookFormShut" role="status" hidden></p>
+    <div class="book-grid" id="bookFormBody">
+      <div class="book-col">
+        <div><label class="book-lab" for="bf-name">Name</label><input class="book-in" type="text" id="bf-name" maxlength="60" autocomplete="off"></div>
+        <div><label class="book-lab" for="bf-cell">Cell phone</label><input class="book-in" type="text" id="bf-cell" maxlength="254" autocomplete="off"></div>
+        <div><label class="book-lab" for="bf-phone">Home phone</label><input class="book-in" type="text" id="bf-phone" maxlength="254" autocomplete="off"></div>
+        <div><label class="book-lab" for="bf-email">Email</label><input class="book-in" type="text" id="bf-email" maxlength="254" autocomplete="off"></div>
+        <div><label class="book-lab" for="bf-birthday">Birthday</label><input class="book-in" type="text" id="bf-birthday" maxlength="254" autocomplete="off"></div>
+      </div>
+      <div class="book-col">
+        <div><label class="book-lab" for="bf-relationship">Relationship</label><input class="book-in" type="text" id="bf-relationship" maxlength="254" autocomplete="off"></div>
+        <div><label class="book-lab" for="bf-address">Mailing address</label><textarea class="book-in two" id="bf-address" maxlength="254" autocomplete="off"></textarea></div>
+        <div><label class="book-lab" for="bf-facebook">Facebook</label><input class="book-in" type="text" id="bf-facebook" maxlength="254" autocomplete="off"></div>
+        <div><label class="book-lab" for="bf-notes">Notes</label><textarea class="book-in two" id="bf-notes" maxlength="1000" autocomplete="off"></textarea></div>
+      </div>
+    </div>
+    <div class="m9-row" id="bookFormBar">
+      <p class="book-msg" id="bookMsg" role="alert" hidden></p>
+      <p class="m9-saved" id="bookSaved" role="status" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"></path></svg>Saved.</p>
+      <p class="book-added" id="bookAdded" hidden></p>
+      <button type="button" class="book-btn book-all" id="bookAll">All people</button>
+      <button type="submit" class="save" id="bookSave">Save</button>
+      <button type="button" class="save book-done" id="bookDone" hidden>Done</button>
+    </div>
+  </form>
+</section>
+
+<section id="book-helper" class="screen book" aria-label="Address book, a helper adding people" hidden></section>
+
 </main>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <div id="confirmBox" class="confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirmText" hidden>
@@ -337,6 +413,7 @@
     <button type="button" class="bigbtn alt" id="confirmNo">No, keep it</button>
   </div>
 </div>
+<script src="book.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

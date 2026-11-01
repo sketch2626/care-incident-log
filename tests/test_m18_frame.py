@@ -85,7 +85,7 @@ class ExitTests(unittest.TestCase):
         self.assertIn("$('moreSettings').addEventListener('click', function (ev) { if (openDeep('#info')) { ev.preventDefault(); } });", js)
         self.assertIn('id="moreSettings" class="row link" href="/?from=mary#info"', read("mary.html"))  # the fallback
         leaves = re.findall(r"[^\n]*location\.(?:href|assign|replace)[^\n]*", js)
-        self.assertEqual(len(leaves), 2, leaves)
+        self.assertEqual(len(leaves), 3, leaves)
         for line in leaves:
             self.assertIn("if (!openDeep(", line)
 

@@ -1020,7 +1020,8 @@ LIVE_STORY_TOOL = {
 # There is no save tool, on purpose. One tool, use_screen, with an action (Live gets about 12 tools at most). The names under open match LIST in screens.js (tests/test_m18_screens.py).
 LIVE_SCREEN_NAMES = ["notes", "write", "write_call_light", "write_meal", "write_bathing", "write_toileting",
                      "write_medication", "write_repositioning", "write_staff", "write_safety", "write_other", "list",
-                     "report", "info", "email", "inbox", "things", "games", "choose", "info_panel"]
+                     "report", "info", "email", "inbox", "things", "games", "choose", "info_panel", "book-list",
+                     "book-form", "book-helper"]
 LIVE_PAGE_TOOLS = [
     {"name": "story_more",
      "description": "When they want the rest of a story you were telling after they cut in, call this for the next part."},

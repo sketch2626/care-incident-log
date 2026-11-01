@@ -1360,8 +1360,8 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "help with that. But I'm listening. Family or the chaplain would be good folks to talk this over with, "
                   "too. What's brought you to this?\" If they're being hurt and talk of hitting back, take up both, like "
                   "\"What he did is not okay, and I'd hate to see you be the one in trouble. Is there a nurse you trust "
-                  "you could tell? I can write it down if you'd like.\" If anyone is in danger this very minute, your "
-                  "safety rules above come first.")
+                  "you could tell? I can write it down if you'd like.\" If anyone is in danger this very minute, or "
+                  "they're the one being hurt, your safety rules above come first.")
 
 # M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
 # Narrow on purpose: "you need a nurse" stays out, because whether she names autonomic dysreflexia is Andy's open question.

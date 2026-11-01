@@ -30,6 +30,7 @@ SPEECH_ARGS = ["--hidden-import", "speech", "--hidden-import", "reports",
                "--hidden-import", "wakeword", "--collect-binaries", "vosk", "--collect-data", "vosk"]  # M6
 # Mary's own modules, named for the same reason, and what the Kokoro voice reads at run time.
 MARY_ARGS = ["--hidden-import", "mary", "--hidden-import", "voices", "--hidden-import", "skills_core",
+             "--hidden-import", "address_book",  # M19: brings cryptography with it
              "--hidden-import", "memory_core", "--hidden-import", "difflib",  # M9c; M7a: word_search imports difflib, and PyInstaller never sees a skill's imports
              "--hidden-import", "speedcheck", "--hidden-import", "version",  # M8
              "--hidden-import", "power", "--hidden-import", "kokoro_onnx", "--collect-data", "kokoro_onnx",

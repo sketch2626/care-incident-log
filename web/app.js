@@ -241,7 +241,7 @@ function go(name, replace) {
 
 function route() {
   const [name, arg = ''] = location.hash.replace(/^#/, '').split('/');
-  if (cur.screen === 'add') teardownMic();
+  if (cur.screen === 'add') { keepDraft(); teardownMic(); } // M18
   switch (name) {
     case 'add': {
       const opts = arg === 'inbox' && pendingInbox ? { inboxItem: pendingInbox } : CAT[arg] ? { cat: arg } : {};
@@ -277,7 +277,7 @@ function route() {
       return showScreen('report');
     case 'info':
       cur = { screen: 'info' };
-      fillInfo();
+      if (IN_MARY && infoDirty) { loadSkills(); loadMemories(); loadMail(); } else fillInfo(); // M18: half-typed My info stays
       return showScreen('info');
     default:
       cur = { screen: 'home' };
@@ -382,6 +382,50 @@ const radioVal = name => { const r = $(`input[name="${name}"]:checked`); return 
 const setRadio = (name, value) => { $$(`input[name="${name}"]`).forEach(r => { r.checked = r.value === value; }); };
 const EXTRA_FIELDS = ['staff_involved', 'reported_to', 'outcome', 'witnesses'];
 
+/* ---------- M18: half-typed work ---------- */
+// Inside Mary's page a talk can move the resident around, and #add's one form is shared, so going away and coming back
+// used to wipe it. A form with changes is kept here by what it was for, in this page's memory only, until Save. Coming
+// back to the same category (or to none, by voice) or the same edit puts it back.
+const drafts = new Map();
+const formNow = () => ({
+  words: $('#words').value, when: radioVal('when'), day: $('#day').value, time: $('#time').value,
+  wait: radioVal('wait'), sev: radioVal('sev'), extra: EXTRA_FIELDS.map(k => $(`#${k}`).value),
+});
+const addKey = () => (add.editing ? `edit:${add.editing.id}` : add.inbox ? `inbox:${add.inbox.kind}:${add.inbox.source_id}` : `new:${add.cat || ''}`);
+
+function keepDraft() {
+  if (!IN_MARY || add.saved) return;
+  const form = formNow();
+  if (JSON.stringify(form) === add.clean) return;
+  const key = addKey();
+  drafts.delete(key); // the newest goes last
+  drafts.set(key, { form, cat: add.cat, formal: add.formal, formalFor: add.formalFor, whenTouched: add.whenTouched, customWait: add.customWait });
+}
+
+function takeDraft(key) {
+  const k = key === 'new:' ? [...drafts.keys()].filter(x => x.startsWith('new:')).pop() : key;
+  const d = drafts.get(k);
+  drafts.delete(k);
+  return d;
+}
+
+function putDraft(d) {
+  const f = d.form;
+  Object.assign(add, { formal: d.formal, formalFor: d.formalFor, whenTouched: d.whenTouched, customWait: d.customWait });
+  $('#words').value = f.words;
+  $('#day').value = f.day;
+  $('#time').value = f.time;
+  setRadio('when', f.when);
+  if (d.customWait) setWait(d.customWait);
+  setRadio('wait', f.wait);
+  setRadio('sev', f.sev);
+  EXTRA_FIELDS.forEach((k, i) => { $(`#${k}`).value = f.extra[i]; });
+  setType(d.cat);
+}
+
+// A save ends her light (web/mary/screens.js puts it on).
+function unlit() { $$('.m9-lit').forEach(el => el.classList.remove('m9-lit')); }
+
 function initAdd({ cat = null, incident = null, inboxItem = null } = {}) {
   const g = inboxItem ? inboxItem.guess || {} : null;
   add = { editing: incident, inbox: inboxItem, cat: null, formal: '', formalFor: '', whenTouched: false, busy: false, customWait: 0 };
@@ -415,6 +459,9 @@ function initAdd({ cat = null, incident = null, inboxItem = null } = {}) {
     $('#addtitle').textContent = cat ? CAT[cat].tile : 'Just tell me what happened';
   }
   setType(incident ? incident.category : g && CAT[g.category] ? g.category : cat);
+  add.clean = JSON.stringify(formNow()); // M18: what counts as untouched, before anything kept comes back
+  const kept = takeDraft(addKey());
+  if (kept) putDraft(kept);
   updateWhenUI();
   setMic('checking');
   checkMic();
@@ -735,6 +782,8 @@ $('#form').addEventListener('submit', async e => {
     pendingInbox = null;
     try { await load(); } catch { /* the saved screen can still show what was just written */ }
     add.busy = false;
+    add.saved = true; // M18: nothing here to keep
+    unlit();
     toMary('saved'); // M18
     go(`saved/${id}`);
   } catch (err) {
@@ -890,7 +939,12 @@ const INFO_FIELDS = ['resident_name', 'room', 'facility', 'facility_address', 's
 const FROM_MARY = new URLSearchParams(location.search).get('from') === 'mary'; // Mary sent the resident here
 $('#backToMary').addEventListener('click', () => { if (IN_MARY) toMary('close'); else location.href = '/mary.html'; }); // M17: the bar at the top of every screen
 
+let infoDirty = false; // M18: typed into My info since it was last filled, so coming back doesn't write over it
+$('#info').addEventListener('input', () => { infoDirty = true; });
+$('#info').addEventListener('change', () => { infoDirty = true; });
+
 function fillInfo() {
+  infoDirty = false;
   const s = state.settings;
   INFO_FIELDS.forEach(k => { $(`#i-${k}`).value = s[k] || ''; });
   $('#i-gemini_enabled').checked = s.gemini_enabled === '1';
@@ -1238,6 +1292,7 @@ $('#infoForm').addEventListener('submit', async e => {
     state.settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
     try { await load(); } catch { /* the banner says so */ } // so home shows or hides the Andy Flow parts
     fillInfo();
+    unlit(); // M18
     $('#infoSaved').hidden = false; // M18: the plain check beside Save; the toast below only says the way back
     toMary('saved'); // M18: a key saved here reaches her at once
     if (IN_MARY) {

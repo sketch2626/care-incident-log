@@ -926,14 +926,39 @@ LIVE_STORY_TOOL = {
         "type": "string", "description": ("What they asked for, in a few words, for example: a funny one about "
                                           "fishing on the Outer Banks. Say 'any story' if they didn't say.")}},
         "required": ["request"]}}
-# M4a: these two are answered by the page, not the server. No "parameters": they take no arguments, and Gemini
+# M4a: these are answered by the page, not the server. A tool with no arguments has no "parameters", because Gemini
 # refuses an OBJECT with empty properties.
+# M18: the screen tools are the page's too (web/mary/screens.js has the list of screens and fields and the rules, and
+# they run after the page's emergency gate). their_words takes no text: the page pastes the resident's own transcript.
+# There is no save tool, on purpose. One tool, use_screen, with an action (Live gets about 12 tools at most). The names under open match LIST in screens.js (tests/test_m18_screens.py).
+LIVE_SCREEN_NAMES = ["notes", "write", "write_call_light", "write_meal", "write_bathing", "write_toileting",
+                     "write_medication", "write_repositioning", "write_staff", "write_safety", "write_other", "list",
+                     "report", "info", "email", "inbox", "things", "games", "choose", "info_panel"]
 LIVE_PAGE_TOOLS = [
     {"name": "story_more",
      "description": "When they want the rest of a story you were telling after they cut in, call this for the next part."},
     {"name": "end_talk",
      "description": ("Call this right after your one short goodbye, when they say goodbye, tell you to go to sleep or "
                      "rest, or say they're done talking.")},
+    {"name": "use_screen",
+     "description": ("Works on the screen in front of them, only when they ask. Never on your own idea, and it never "
+                     "saves or sends anything. Actions: look = the screen's name, its boxes and choices and what's in "
+                     "them (call it before explain or fill; never just to describe the screen). open = open the screen "
+                     "in name; a name starting write_ opens the form for that kind of problem. explain = light up the "
+                     "box in field, then explain it in your own words. fill = put value in the box in field, then say "
+                     "it back and ask if it's right. put_back = undo your last fill of the box in field. their_words = "
+                     "copy their own words into Your words, exactly as they said them (you can't give it any words). "
+                     "go_back = go back to you, the same as tapping you."),
+     "parameters": {"type": "object", "properties": {
+         "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back."},
+         "name": {"type": "string", "description": "For open: the screen, one of " + ", ".join(LIVE_SCREEN_NAMES) + "."},
+         "field": {"type": "string", "description": "For explain, fill, put_back: the field from look."},
+         "value": {"type": "string", "description": ("For fill: what goes in it, from what they said. A date as YYYY-MM-DD, "
+                                                    "a time as HH:MM, a choice by its label.")},
+         "turns_back": {"type": "string", "description": ("For their_words: which thing they said. 1 is what they said "
+                                                          "before asking you, 2 the time before that, up to 4. 0 is the "
+                                                          "turn they asked in.")}},
+         "required": ["action"]}},
 ]
 LIVE_CORE_TOOLS = LIVE_MEMORY_TOOLS + [LIVE_STORY_TOOL] + LIVE_PAGE_TOOLS  # M4a: every Live chat on her own screen gets these
 STORY_DEADLINE_S = 25  # M4a: a whole story, collected before Live tells it

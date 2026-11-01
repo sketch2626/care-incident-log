@@ -1847,6 +1847,8 @@
   function liveHeard(c, text) {
     text = String(text == null ? '' : text).trim();
     c.heard = text;
+    var turn = { text: text, bad: notEnglish(text) || !!(window.MaryScreens && window.MaryScreens.noContent(text)) };   // M18: what their_words may offer
+    c.turns = (c.turns || []).concat([turn]).slice(-12);
     c.lastAct = Date.now();
     c.numFixed = false;   // M4d
     c.cutTried = false;   // M17
@@ -1859,6 +1861,7 @@
     });
     c.heardCheck = p;
     p.then(function (j) {
+      if (j && j.garbled) { turn.bad = true; }   // M18: first, so a tool waiting on heardCheck sees it
       if (j && j.emergency) {
         if (S.convo === c && c.live) { liveEmergency(c, j); return; }
         newTurn();                                                // Live closed meanwhile: never miss it anyway
@@ -2128,20 +2131,28 @@
         return { functionResponses: calls.map(function (fc) { return { id: fc.id, name: fc.name, response: TOOL_REFUSED }; }) };
       }
       // M4a: story_more and end_talk are the page's own; end_talk is never answered, so she says nothing more
-      var own = [], rest = [];
+      var own = [], rest = [], page = [];
       calls.forEach(function (fc) {
         if (fc.name === 'end_talk' && S.noteBusy && noteBusyNow() && !c.ending) {   // M17: it heard a note, so the talk goes
           own.push({ id: fc.id, name: fc.name, response: END_TALK_HELD });          // on, and Live waits for an answer
         }
         else if (fc.name === 'end_talk') { liveEndTalk(c); }
         else if (fc.name === 'story_more') { own.push({ id: fc.id, name: fc.name, response: storyTake(c) }); }
+        else if (window.MaryScreens && window.MaryScreens.isTool(fc.name)) { page.push(fc); }   // M18: past the emergency gate above
         else { rest.push(fc); }
       });
-      if (!rest.length) { return { functionResponses: own }; }
-      if (!window.MarySkills) { throw new Error('skills are not loaded'); }
-      return window.MarySkills.handleLiveToolCall({ functionCalls: rest }, heard).then(function (r) {
-        r.functionResponses = own.concat(r.functionResponses);
-        return r;
+      // M18: the screen tools, one at a time in the order she called them, so a fill can't land on a screen still opening
+      return page.reduce(function (done, fc) {
+        return done.then(function () { return window.MaryScreens.run(fc.name, fc.args, screenEnv(c)); }).then(function (res) {
+          own.push({ id: fc.id, name: fc.name, response: res });
+        });
+      }, Promise.resolve()).then(function () {
+        if (!rest.length) { return { functionResponses: own }; }
+        if (!window.MarySkills) { throw new Error('skills are not loaded'); }
+        return window.MarySkills.handleLiveToolCall({ functionCalls: rest }, heard).then(function (r) {
+          r.functionResponses = own.concat(r.functionResponses);
+          return r;
+        });
       });
     }).then(function (r) {
       return storyFromTool(c, r);   // M4a: the first part of a story, answered at once
@@ -2669,6 +2680,7 @@
     el.classList.toggle('up', on);
     el.setAttribute('aria-hidden', on ? 'false' : 'true');
     if (on) { el.classList.toggle('noframe', !deep); }
+    screenTell();
     if (on === Band.small || !root) { return; }
     Band.small = on;
     Band.snap = S.screen === 'emergency' || bandStill();
@@ -2758,6 +2770,7 @@
   // A page loaded in the frame. It knows nothing yet, and if the last one had the mic, nobody is left to let go of it.
   function onDeepLoad() {
     var held = S.formMic;
+    if (window.MaryScreens) { window.MaryScreens.reset(); }   // piece 3: a new page, so nothing to put back
     Deep.screen = '';
     Deep.talk = null;
     if (!deepOnLog()) { deepReady(true); }   // the printable report: no first-screen word comes from it
@@ -2771,7 +2784,7 @@
     var d = ev.data;
     if (!d || d.type !== 'mary-deep') { return; }
     if (d.what === 'close') { closeDeep(); }
-    else if (d.what === 'screen') { Deep.screen = String(d.name || ''); deepReady(true); }
+    else if (d.what === 'screen') { Deep.screen = String(d.name || ''); deepReady(true); screenTell(); }
     else if (d.what === 'saved') { refreshStatus().catch(log); }
     else if (d.what === 'activity') {
       if (S.convo) { S.convo.formAt = Date.now(); }
@@ -2781,6 +2794,29 @@
       S.formMic = !!d.on && deepUp();
       wakeHoldCheck();   // M18
     }
+  }
+  // Piece 3: what the screen tools (screens.js) need from this page. doc() is null until the log is in view.
+  function screenEnv(c) {
+    return {
+      doc: function () {
+        try { return (deepUp() && deepOnLog()) ? $('deepFrame').contentDocument : null; } catch (e) { return null; }
+      },
+      panel: function () { return panelOpen() ? M.panel : null; },
+      openDeep: openDeep,
+      openPanel: function (id) { if (menuOpen()) { closeMenu(false); } openPanel(id); },
+      back: bandBack,
+      turns: (c && c.turns) || []
+    };
+  }
+  // On moving screens Live hears the name and nothing else, as a silent note (no reply). Never during a story or an
+  // emergency. The fields go only when she asks with look_at_screen.
+  function screenTell() {
+    var c = S.convo;
+    if (!c || !c.live || c.ending || c.story || S.screen === 'emergency' || !window.MaryScreens) { return; }
+    var name = window.MaryScreens.nameHere(screenEnv(c));
+    if (name === (c.screenTold || window.MaryScreens.TALK_NAME)) { return; }
+    c.screenTold = name;
+    screenNote('Screen: ' + name);
   }
   // ---------------------------------------------------------------- end M18
 

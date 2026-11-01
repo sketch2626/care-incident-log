@@ -1,0 +1,91 @@
+/* Mary round 9: she comes along into the deeper screens (M18). New classes only; every board also links r6.css (an unchanged copy).
+   Screen 1280x800. Deeper screens: her band y 0-156, the page y 156-712, the bottom row y 712-800. The band never overlays the page.
+   Boxes on the page are placed by inline left, top, width and height from round9-src/build.py, so check.py can measure them. */
+
+/* full-page caption, style A at 44px */
+.cap.m9-full{font-size:44px}
+
+/* the top band, her warm background, never scrolls */
+.m9-band{position:absolute;left:0;top:0;width:1280px;height:156px;background:inherit;box-shadow:inset 0 -3px 0 rgba(43,31,23,.18)}
+.m9-band.clear{background:none;box-shadow:none}
+
+/* small Mary: her real face cropped to her head, in a plain circle, x 16, y 12, 132 across; the whole circle is the tap target */
+.m9-small{position:absolute;left:16px;top:12px;width:132px;height:132px;border-radius:50%;background:radial-gradient(circle at 50% 42%,#fffdf8 0%,#fff6e4 70%,#ffedcf 100%);cursor:pointer}
+.m9-ring{position:absolute;inset:0;border-radius:50%;pointer-events:none;box-shadow:inset 0 0 0 5px var(--glow),0 0 10px 3px var(--glow);animation:edge 6s ease-in-out infinite}
+.scr.mary{--glow:rgb(245,170,110)}
+.scr.sam{--glow:rgb(214,140,50)}
+.scr.listen{--glow:rgb(95,170,215)}
+.scr.think{--glow:rgb(160,140,215)}
+.listen .m9-ring{animation-duration:3s}
+.think .m9-ring{animation-duration:8s}
+
+/* her words, beside her and centered in the band; same dark ink words and white edge as style A, scaled to 32px */
+.cap.m9-words{left:164px;right:416px;top:12px;bottom:auto;height:132px;justify-content:center;align-items:flex-start;font-size:32px}
+.cap.m9-words .w{-webkit-text-stroke:9px #ffffff}
+.cap.m9-words .w::before{-webkit-text-stroke:2px #4a3426}
+.cap.m9-words .w::after{-webkit-text-stroke:2px var(--ink)}
+
+/* Back to Mary, same weight as the Menu button */
+.menu-btn.m9-back{box-sizing:border-box;width:368px;padding:0 20px;justify-content:center}
+
+/* the deeper page, the real app's look; it scrolls on its own, under the band */
+.m9-page{position:absolute;left:0;top:156px;width:1280px;height:556px;overflow-y:auto;background:#fbf7ef;color:#1f1b16;font:400 24px/1.3 "Segoe UI",system-ui,sans-serif}
+.m9-head{position:absolute;display:flex;align-items:center;font:700 36px/1.2 "Segoe UI",system-ui,sans-serif}
+.m9-lab{position:absolute;display:flex;align-items:center;font:600 26px/1.2 "Segoe UI",system-ui,sans-serif}
+.m9-legend{position:absolute;display:flex;align-items:center;font:700 28px/1.2 "Segoe UI",system-ui,sans-serif}
+.m9-field{position:absolute;box-sizing:border-box;display:flex;align-items:center;gap:16px;padding:0 24px;font:400 28px/1.2 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#ffffff;border:3px solid #6f6152;border-radius:14px}
+.m9-field.big{align-items:flex-start;padding:18px 24px;font-size:30px;line-height:1.35}
+.m9-field svg{flex:none;width:40px;height:40px;color:#544739}
+.m9-plainline{position:absolute;display:flex;align-items:center;font:600 26px/1.2 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+
+/* lit: 5px gold ring, dark outer edge, pale gold fill */
+.m9-lit{background:#fff1c7;border:5px solid #f2b632;box-shadow:0 0 0 3px #2b1f17}
+.m9-group{position:absolute;box-sizing:border-box;border-radius:20px}
+
+/* the value filling in: stacked, opacity only, nothing moves. Rests on the whole number */
+.m9-fill{position:relative;display:block;width:120px;height:34px}
+.m9-v{position:absolute;left:0;top:0;opacity:0}
+.m9-v.c{opacity:1}
+.m9-v.a{animation:m9-v1 4.8s linear infinite}
+.m9-v.b{animation:m9-v2 4.8s linear infinite}
+.m9-v.c{animation:m9-v3 4.8s linear infinite}
+@keyframes m9-v1{0%,19.99%{opacity:1}20%,100%{opacity:0}}
+@keyframes m9-v2{0%,19.99%{opacity:0}20%,39.99%{opacity:1}40%,100%{opacity:0}}
+@keyframes m9-v3{0%,39.99%{opacity:0}40%,100%{opacity:1}}
+
+/* the form's choices */
+.m9-opt{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:16px;padding:0 8px;font:600 24px/1.15 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#ffffff;border:3px solid #6f6152;border-radius:14px;cursor:pointer}
+.m9-opt.on{color:#ffffff;background:#0f5560;border-color:#0f5560}
+.m9-opt.hinted{justify-content:flex-start;padding:0 20px}
+.m9-word{flex:none;width:150px;text-align:left;font-size:26px}
+.m9-hint{font:400 22px/1.2 "Segoe UI",system-ui,sans-serif;color:#544739}
+
+/* the bottom row, y 712-800, stays in view */
+.m9-row{position:absolute;left:0;top:712px;width:1280px;height:88px;background:#ffffff;box-shadow:inset 0 3px 0 #d9cbb8}
+.m9-save{position:absolute;box-sizing:border-box;padding:0 12px;font:700 32px/1 "Segoe UI",system-ui,sans-serif;color:#ffffff;background:#0f5560;border:0;border-radius:18px;cursor:pointer}
+.m9-paste{position:absolute;box-sizing:border-box;padding:0 12px;font:700 28px/1 "Segoe UI",system-ui,sans-serif;color:#ffffff;background:#0f5560;border:0;border-radius:14px;cursor:pointer}
+.m9-saved{position:absolute;display:flex;align-items:center;gap:14px;font:700 32px/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.m9-saved svg{flex:none;width:44px;height:44px;color:#0f5560}
+
+/* board notes: dashed, not part of the app */
+.m9-note{position:absolute;box-sizing:border-box;display:flex;align-items:center;padding:6px 14px;font:600 20px/1.3 "Segoe UI",system-ui,sans-serif;color:#1f1b16;background:#fffdf8;border:3px dashed #544739;border-radius:10px}
+
+/* E1: she grows from the corner, transform only; the band, page and row fade out; her caption goes on at the bottom after the page has gone */
+.m9-grow{position:absolute;left:0;top:0;width:1280px;height:800px;transform-origin:0 0;animation:m9-grow 3s cubic-bezier(.45,.05,.55,.95) infinite}
+.m9-gone{opacity:0;animation:m9-fade 3s linear infinite}
+.m9-capin{animation:m9-capin 3s linear infinite}
+@keyframes m9-grow{0%,20%{transform:translate(-68.86px,-11.57px) scale(.23571)}70%,100%{transform:translate(0,0) scale(1)}}
+@keyframes m9-fade{0%,10%{opacity:1}40%,100%{opacity:0}}
+@keyframes m9-capin{0%,42%{opacity:0}52%,100%{opacity:1}}
+
+/* N-Notes */
+.m9-notes{position:absolute;left:96px;top:0;width:1088px;height:800px}
+.m9-sec{position:absolute;left:0;width:1088px}
+.m9-sec h2{margin:0 0 10px;font:700 40px/1.2 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.m9-sec p{margin:0;font:400 30px/1.35 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+
+@media (prefers-reduced-motion: reduce){
+.m9-ring,.mouth-talk,.face,.sway,.ss,.spark,.edge{animation:none}
+.m9-v.a,.m9-v.b,.m9-v.c{animation:none}
+.m9-grow,.m9-gone,.m9-capin{animation:none}
+}

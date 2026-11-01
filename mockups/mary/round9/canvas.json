@@ -1,0 +1,157 @@
+{
+"v": 3,
+"createdOnFiles": {
+"v": 1,
+"at": "2026-11-01T12:00:00Z"
+},
+"title": "Mary round 9: she comes along",
+"launch": {
+"view": "canvas"
+},
+"pages": [],
+"boards": {
+"A1-Full-Mary.dc.html": {
+"x": 0,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a1) Full page, mid-talk"
+},
+"A2-Menu-Mary.dc.html": {
+"x": 1360,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a2) Menu open"
+},
+"A3-MyInfo-Mary.dc.html": {
+"x": 2720,
+"y": 0,
+"w": 1280,
+"h": 800,
+"title": "(a3) My info, she comes along"
+},
+"B1-Fill-Mary.dc.html": {
+"x": 0,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(b1) She fills in the room, moving"
+},
+"B2-Saved-Mary.dc.html": {
+"x": 1360,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(b2) Saved"
+},
+"S1-Fill-Sam.dc.html": {
+"x": 2720,
+"y": 1220,
+"w": 1280,
+"h": 800,
+"title": "(s1) Sam works the same, moving"
+},
+"C1-Explain-Mary.dc.html": {
+"x": 0,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(c1) She explains a choice"
+},
+"C2-FillForm-Mary.dc.html": {
+"x": 1360,
+"y": 2440,
+"w": 1280,
+"h": 800,
+"title": "(c2) She fills from their words"
+},
+"D1-Secret-Mary.dc.html": {
+"x": 0,
+"y": 3660,
+"w": 1280,
+"h": 800,
+"title": "(d1) She keeps out of the password"
+},
+"E1-Grow-Mary.dc.html": {
+"x": 0,
+"y": 4880,
+"w": 1280,
+"h": 800,
+"title": "(e1) She grows back, moving"
+},
+"E2-Back-Mary.dc.html": {
+"x": 1360,
+"y": 4880,
+"w": 1280,
+"h": 800,
+"title": "(e2) Full page, talk still going"
+},
+"N-Notes.dc.html": {
+"x": 0,
+"y": 6100,
+"w": 1280,
+"h": 800,
+"title": "(n) Notes"
+}
+},
+"order": [
+"A1-Full-Mary.dc.html",
+"A2-Menu-Mary.dc.html",
+"A3-MyInfo-Mary.dc.html",
+"B1-Fill-Mary.dc.html",
+"B2-Saved-Mary.dc.html",
+"S1-Fill-Sam.dc.html",
+"C1-Explain-Mary.dc.html",
+"C2-FillForm-Mary.dc.html",
+"D1-Secret-Mary.dc.html",
+"E1-Grow-Mary.dc.html",
+"E2-Back-Mary.dc.html",
+"N-Notes.dc.html"
+],
+"notes": {
+"t0": {
+"x": 0,
+"y": -300,
+"text": "Mary comes along",
+"kind": "title1",
+"maxW": 2640
+},
+"t1": {
+"x": 0,
+"y": 920,
+"text": "She fills it in, you say when",
+"kind": "title1",
+"maxW": 2640
+},
+"t2": {
+"x": 0,
+"y": 2140,
+"text": "On an incident form",
+"kind": "title1",
+"maxW": 2640
+},
+"t3": {
+"x": 0,
+"y": 3360,
+"text": "Secrets",
+"kind": "title1",
+"maxW": 2640
+},
+"t4": {
+"x": 0,
+"y": 4580,
+"text": "Back to her",
+"kind": "title1",
+"maxW": 2640
+},
+"t5": {
+"x": 0,
+"y": 5800,
+"text": "Notes",
+"kind": "title1",
+"maxW": 2640
+}
+},
+"designSystems": []
+}

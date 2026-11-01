@@ -217,7 +217,23 @@ if (IN_MARY) {
     if (!d || d.type !== 'mary-deep') return;
     if (d.what === 'talk') maryTalking(!!d.on);
     else if (d.what === 'hide') micLetGo();
+    else if (d.what === 'save') maryAskedSave(); // piece 4
   });
+}
+
+// Piece 4: her page asks only on the resident's own plain "save it". This presses Save the way a tap does, with the same
+// checks and the same Saved screen. A Save already going answers for itself.
+function maryAskedSave() {
+  if (cur.screen === 'add') {
+    if (add.busy) return;
+    const same = !add.inbox && add.cat === add.cleanCat && JSON.stringify(formNow()) === add.clean;
+    if (add.saved || same) return toMary('save_none', { why: 'nothing' });
+    $('#form').requestSubmit();
+  } else if (cur.screen === 'info') {
+    if ($('#infoSave').disabled) return;
+    if (!infoTouched) return toMary('save_none', { why: 'nothing' });
+    $('#infoForm').requestSubmit();
+  } else toMary('save_none', { why: 'no_form' });
 }
 
 const SCREENS = ['home', 'add', 'saved', 'list', 'inbox', 'report', 'info'];
@@ -460,6 +476,7 @@ function initAdd({ cat = null, incident = null, inboxItem = null } = {}) {
   }
   setType(incident ? incident.category : g && CAT[g.category] ? g.category : cat);
   add.clean = JSON.stringify(formNow()); // M18: what counts as untouched, before anything kept comes back
+  add.cleanCat = add.cat; // piece 4: picking another group is a change too
   const kept = takeDraft(addKey());
   if (kept) putDraft(kept);
   updateWhenUI();
@@ -726,11 +743,13 @@ async function finishFieldTalk() {
 
 /* ---------- Save ---------- */
 
-function formFail(message, focusSel) {
+const FORM_MISSING = { '#words': 'what happened', '#day': 'which day it happened' }; // piece 4: plain labels, never a value
+function formFail(message, focusSel, label) {
   const e = $('#formError');
   e.textContent = message;
   e.hidden = false;
   if (focusSel) $(focusSel).focus(); else e.scrollIntoView({ block: 'center' });
+  toMary('saved_fail', { label: label || FORM_MISSING[focusSel] || '' }); // piece 4
 }
 
 $('#form').addEventListener('submit', async e => {
@@ -759,7 +778,7 @@ $('#form').addEventListener('submit', async e => {
         if (!formal && guessed.formal_summary) formal = guessed.formal_summary;
       } catch (err) { if (!cat) throw err; }
     }
-    if (!cat) throw new Error('Please choose which group this belongs to.');
+    if (!cat) throw Object.assign(new Error('Please choose which group this belongs to.'), { label: 'which group this belongs to' });
     // Anything the resident picked wins; otherwise keep what was heard in their words.
     const w = collectWait();
     const pickedWait = w.never || w.wait !== '';
@@ -785,6 +804,7 @@ $('#form').addEventListener('submit', async e => {
     add.saved = true; // M18: nothing here to keep
     unlit();
     toMary('saved'); // M18
+    toMary('saved_ok', { form: 'add' }); // piece 4
     go(`saved/${id}`);
   } catch (err) {
     add.busy = false;
@@ -795,7 +815,7 @@ $('#form').addEventListener('submit', async e => {
     }
     btn.disabled = false;
     btn.textContent = 'Save';
-    formFail(err.message);
+    formFail(err.message, undefined, err.label);
   }
 });
 
@@ -940,11 +960,13 @@ const FROM_MARY = new URLSearchParams(location.search).get('from') === 'mary'; /
 $('#backToMary').addEventListener('click', () => { if (IN_MARY) toMary('close'); else location.href = '/mary.html'; }); // M17: the bar at the top of every screen
 
 let infoDirty = false; // M18: typed into My info since it was last filled, so coming back doesn't write over it
+let infoTouched = false; // piece 4: the same, for #infoForm alone: "save it" presses this form's Save, not the other boxes'
 $('#info').addEventListener('input', () => { infoDirty = true; });
 $('#info').addEventListener('change', () => { infoDirty = true; });
 
 function fillInfo() {
   infoDirty = false;
+  infoTouched = false;
   const s = state.settings;
   INFO_FIELDS.forEach(k => { $(`#i-${k}`).value = s[k] || ''; });
   $('#i-gemini_enabled').checked = s.gemini_enabled === '1';
@@ -1269,7 +1291,8 @@ function updateFlowState() { $('#flowState').textContent = $('#i-andyflow_enable
 $('#i-andyflow_enabled').addEventListener('change', updateFlowState);
 $('#infoForm').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
 
-$('#infoForm').addEventListener('input', () => { $('#infoSaved').hidden = true; }); // M18: a new change isn't saved yet
+$('#infoForm').addEventListener('input', () => { $('#infoSaved').hidden = true; infoTouched = true; }); // M18: a new change isn't saved yet
+$('#infoForm').addEventListener('change', () => { infoTouched = true; });
 $('#infoForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#infoSave');
@@ -1295,6 +1318,7 @@ $('#infoForm').addEventListener('submit', async e => {
     unlit(); // M18
     $('#infoSaved').hidden = false; // M18: the plain check beside Save; the toast below only says the way back
     toMary('saved'); // M18: a key saved here reaches her at once
+    toMary('saved_ok', { form: 'info' }); // piece 4
     if (IN_MARY) {
       // M18: the way back is her own band, still at the top, and a talk may be going on
       const who = state.settings.companion === 'him' ? 'Sam' : 'Mary';
@@ -1306,6 +1330,7 @@ $('#infoForm').addEventListener('submit', async e => {
   } catch (err) {
     $('#infoError').textContent = err.message;
     $('#infoError').hidden = false;
+    toMary('saved_fail', {}); // piece 4
   } finally { btn.disabled = false; }
 });
 

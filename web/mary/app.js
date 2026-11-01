@@ -1874,6 +1874,7 @@
         for (var ai = 0; ai < acts.length; ai++) { try { window.MarySkills.apply(acts[ai]); } catch (e) { log(e); } }
         if (j.send.say) { say(String(j.send.say)); }
       }
+      if (j && j.save && !j.send) { deepSaveHeard(); }   // M18 piece 4: their own plain "save it", on the server's word
       if (S.convo !== c || !c.live) { return; }
       if ((j && j.garbled) || notEnglish(tail)) { return; }   // M4a: a garbled line is never a goodbye
       if (isGoodbye(tail) && !(S.noteBusy && noteBusyNow())) { endConvo(c, 'bye'); }   // M17: not words for a note
@@ -2495,6 +2496,7 @@
       if (turn !== S.turn) { return; }
       if (!d) { throw new Error('no answer'); }
       await finishReply(d, T);
+      if (d.save && !d.emergency) { await deepSaveHeard(); }   // M18 piece 4
     } catch (e) {
       clearTimeout(timer);
       T.dead = true;
@@ -2633,7 +2635,8 @@
   // as it does on her face, and no timer closes it. Closing only hides it, so a half-filled form survives.
   // Messages are { type: 'mary-deep', what, ... }, to this origin only, and never carry what was typed.
   var DEEP_URL = '/?from=mary&in=mary';
-  var Deep = { open: false, src: false, talk: null, screen: '', shown: false, over: undefined, readyT: 0 };
+  var Deep = { open: false, src: false, talk: null, screen: '', shown: false, over: undefined, readyT: 0,
+               saveAt: 0, asked: false, saveDone: null, tellT: 0, waitT: 0, capT: 0 };
   var Band = { small: false, snap: false, moveT: 0, wordsT: 0 };
   var BAND_MOVE_MS = 500, BAND_FADE_MS = 300, BAND_WORDS_MS = 320, DEEP_READY_MS = 4000;
 
@@ -2771,6 +2774,7 @@
   function onDeepLoad() {
     var held = S.formMic;
     if (window.MaryScreens) { window.MaryScreens.reset(); }   // piece 3: a new page, so nothing to put back
+    deepSaveEnd();   // piece 4: and no answer is coming
     Deep.screen = '';
     Deep.talk = null;
     if (!deepOnLog()) { deepReady(true); }   // the printable report: no first-screen word comes from it
@@ -2786,6 +2790,9 @@
     if (d.what === 'close') { closeDeep(); }
     else if (d.what === 'screen') { Deep.screen = String(d.name || ''); deepReady(true); screenTell(); }
     else if (d.what === 'saved') { refreshStatus().catch(log); }
+    else if (d.what === 'saved_ok') { deepSaved(SAVE_SAID.ok, true); }   // piece 4
+    else if (d.what === 'saved_fail') { deepSaved(d.label ? saveMissing(String(d.label)) : SAVE_SAID.fail, false); }
+    else if (d.what === 'save_none') { deepSaved(SAVE_SAID[d.why === 'nothing' ? 'nothing' : 'no_form'], false); }
     else if (d.what === 'activity') {
       if (S.convo) { S.convo.formAt = Date.now(); }
       App.keepTalk();
@@ -2817,6 +2824,78 @@
     if (name === (c.screenTold || window.MaryScreens.TALK_NAME)) { return; }
     c.screenTold = name;
     screenNote('Screen: ' + name);
+  }
+  // Piece 4: the save gate. Only a tap on Save or the resident's own plain "save it" saves. The server rules on the words
+  // (send_gate.is_plain_save) and this code acts only on its save: true, so no tool call and no line of hers can reach it.
+  // The frame does the same submit a tap does, and answers with no field values.
+  var SAVE_ONCE_MS = 6000, SAVE_TELL_MS = 400, SAVE_WAIT_MS = 20000, SAVE_CAP_MS = 4000;
+  var SAVE_SAID = {
+    ok: { live: "(The form was saved. Say 'Saved.' and nothing more.)", note: '(The form was saved.)', plain: 'Saved.' },
+    fail: { live: '(The form did not save. Tell them in one short line that the screen says why.)', note: '(The form did not save.)',
+            plain: "That didn't save. The screen says why." },
+    no_form: { live: '(No form is open, so the app saved nothing. If they meant a form, say so in one short line.)',
+               plain: "There's no form open to save." },
+    nothing: { live: '(Nothing on this form has changed, so there was nothing to save. Say so in one short line.)',
+               plain: "Nothing has changed, so there's nothing to save." }
+  };
+  function saveMissing(label) {
+    return { live: '(The form did not save. Still needed: ' + label + '. Tell them that in one short line.)',
+             note: '(The form did not save. Still needed: ' + label + '.)',
+             plain: "That didn't save. I still need " + label + '.' };
+  }
+  function deepSaveEnd() {
+    clearTimeout(Deep.waitT);
+    Deep.asked = false;
+    var done = Deep.saveDone;
+    Deep.saveDone = null;
+    if (done) { done(); }
+  }
+  // Her word back: in Live a note she answers, otherwise her own voice. Never over the emergency screen.
+  function saveTell(said) {
+    if (S.screen === 'emergency') { return Promise.resolve(); }
+    if (liveOn() && greetLive(said.live)) { return Promise.resolve(); }
+    return Promise.resolve(say(said.plain));
+  }
+  // A tap: the band's caption says it too, and lets go by itself unless she has started talking.
+  function bandSaved() {
+    if (!bandUp() || liveSpeaking() || Sp.sess) { return; }
+    capCall(function () { cap.plain('Saved.'); });
+    clearTimeout(Deep.capT);
+    Deep.capT = setTimeout(function () {
+      if (!liveSpeaking() && !Sp.sess) { capCall(function () { cap.plain(''); }); }
+    }, SAVE_CAP_MS);
+  }
+  // The server said this line is a plain "save it". One line saves once: Live can deliver a line twice or in pieces. A
+  // skill's own screen keeps its "save it" (messages has save_card_now). The promise ends once she has been told.
+  function deepSaveHeard() {
+    var now = Date.now();
+    if (S.screen === 'emergency' || now - Deep.saveAt < SAVE_ONCE_MS) { return Promise.resolve(); }
+    if (!deepUp() && skillScreen()) { return Promise.resolve(); }
+    var form = deepUp() && !panelOpen() && deepOnLog() && (Deep.screen === 'add' || Deep.screen === 'info');
+    deepSaveEnd();
+    Deep.saveAt = now;
+    return new Promise(function (done) {
+      Deep.saveDone = done;
+      Deep.waitT = setTimeout(deepSaveEnd, SAVE_WAIT_MS);
+      if (!form) { saveTell(SAVE_SAID.no_form).then(deepSaveEnd, deepSaveEnd); return; }
+      if (window.MaryScreens) { window.MaryScreens.finishTyping(); }   // her fill lands first, and their word beats a yes not yet said
+      Deep.asked = true;
+      deepPost({ what: 'save' });
+    });
+  }
+  // The frame's answer. Asked by their word she answers it; a tap only tells her. Waits a moment for any move to the Saved
+  // screen, because that move's silent note would cut her off.
+  function deepSaved(said, ok) {
+    var asked = Deep.asked;
+    Deep.asked = false;
+    clearTimeout(Deep.tellT);
+    Deep.tellT = setTimeout(function () {
+      if (!ok) { Deep.saveAt = 0; }   // not saved, so they can say it again
+      if (asked) { saveTell(said).then(deepSaveEnd, deepSaveEnd); return; }
+      if (S.screen === 'emergency' || !said.note) { return; }
+      screenNote(said.note);
+      if (ok) { bandSaved(); }
+    }, SAVE_TELL_MS);
   }
   // ---------------------------------------------------------------- end M18
 

@@ -541,6 +541,7 @@
     nameHere: function (env) { return here(env).name; },
     noContent: noContent,
     pickHeard: pickHeard,
+    finishTyping: finishTyping,   // piece 4: a plain "save it" lets her fill land first
     reset: function () {
       finishTyping();
       Undo = {};

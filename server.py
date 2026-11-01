@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlparse
 import assist
 import mail_core  # M15d: the resident's own email
 import mary
+import send_gate
 import memory_core  # M9c
 import power
 import secret_store  # M15d: the Gemini key, out of the log and its backups
@@ -725,6 +726,16 @@ def gate_heard(text, kind):  # M15c
     return {"send": {key: out.get(key) for key in ("say", "effects", "action")}} if out else {}
 
 
+def save_heard(text, kind):  # M18 piece 4
+    """True when this finished line is the resident's own plain "save it": no emergency, not garbled. A send answer from the
+    gate wins at the route. The page acts only with a form up, never over a skill's screen, so a look left waiting at the
+    gate can't quietly swallow it. The server saves nothing here: only the page can press Save."""
+    try:
+        return not kind and not mary.not_english(text) and send_gate.is_plain_save(text)
+    except Exception:  # noqa: BLE001 (a failure saves nothing)
+        return False
+
+
 def gate_her_words(text):  # M15c
     """Her finished Live turn at the send gate. A gate failure acts as no gate."""
     try:
@@ -855,6 +866,7 @@ def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typ
             "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
             "offer": r["offer"], "logged": r["logged"], "error": r["error"], "needs_key": not s["key"],
             "bad_key": r["error"] == mary.BAD_KEY,
+            "save": save_heard(text, r["emergency"] or r["gemini_alert"]),  # M18 piece 4
             "first_words_s": r["first_words_s"], "total_s": r["total_s"]}
 
 
@@ -1458,6 +1470,7 @@ class Handler(SimpleHTTPRequestHandler):
             say = ""
             # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
             send = {} if body.get("note") else gate_heard(text, kind)  # M18: the only place past here with the raw line
+            save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "say": "", "garbled": True, **send})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
@@ -1477,7 +1490,7 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send})
+            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send, **save})
         if method == "POST" and path == "/api/mary/open":  # M4a: her hello, from the brain
             return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered

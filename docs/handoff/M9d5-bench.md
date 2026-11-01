@@ -26,7 +26,8 @@ Read `docs/handoff/_common.md` first (it sends you to `docs/mission.md`). Then r
 4. **New cases:**
    - M20: in an ordinary chat, with no birthday, holiday or mention from the resident, she offers no card.
    - The Southern-words case exists; make sure "y'all" passes and "howdy" fails.
-5. **Paid tier ready:** `--model` already picks Mary's model. Make sure a whole run can point at another model cleanly, for when M16 picks the paid one.
+5. **A malformed judge answer gets one retry** before it counts as ungraded. Run 5 (`bench/results/2026-11-01_0240.*`) had one.
+6. **Paid tier ready:** `--model` already picks Mary's model. Make sure a whole run can point at another model cleanly, for when M16 picks the paid one.
 
 **Rules:**
 - You may not use Andy's real key or read his data folder, so you make no real Gemini calls. Test everything with fakes, including a fake Live server for `--real-live`. The hub runs the first real pass after merging.

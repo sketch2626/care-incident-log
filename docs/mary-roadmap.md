@@ -359,7 +359,19 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
 - **Today:** M15c keeps a small contact list inside the `messages` skill (name, relationship, email, Facebook or phone), filled only from sends, with no screen to see or change it.
 - **What it means:** a real Address Book screen for everyone the resident can think of: name, relationship, phones, email, mailing address, Facebook, birthday and notes. It's stored securely on the laptop, and Mary fills it in by voice (M18) and uses it ("email my daughter"). The M15c contacts move into it. Birthdays feed M15a's reminders.
 - **Decided (Andy, 2026-11-01):** it's built into the app, and plug-ins ask permission to use it. Andy: "it needed to be a permanent secured part of the app, and other things could just ask for permission to use it." Plus a medical part: "a separate part of that book that has her medical professionals and all the information needed in that other plugins later might be able to use… and then gives her an easier way to contact her doctor's office." The medical part goes on the boards; plug-ins that use it come later, if it works out for residents.
+- **Andy's board review (round 10, 2026-11-01, about 5:30am): approved with these changes.** The rule behind them: if you can just ask Mary, it needs no button.
+  - The list (A1, A2, E3): keep Up and Down. Under "Who are you after?" add a line like "If you need to scroll down, let me know." Remove the "Add someone" button.
+  - A person's card (B1): remove All people, Change, Email Sarah and Make a card. "If you want to change something, you're just going to ask."
+  - A doctor's card (H1): keep All doctors, remove Change.
+  - The look before it goes (D2): keep Send, remove "Not yet". "If you don't send it, then that's not yet."
+  - D3: "Pick a front you like" means nothing to him. Say it plainly, e.g. "Which picture do you like for the front of the card?" The live skill has the same word ("Let's pick a front first.", `skills/messages/skill.py:799`).
+  - Changing (E1): remove Forget Sarah and Put it back. Forgetting (E2): remove "Yes, forget her"; she asks once and "yes" does it. Keep "No, keep her" as the emergency stop.
+  - Adding by voice (C1-C4, S1), G1, G2, F1 and F2: fine as drawn.
 - **Order:** boards and a design note now, beside the M18 build (mockups only, no shared files); the build after M18 merges.
+
+### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
+- **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."
+- Two places to watch: the designs (no "Make a card" buttons scattered everywhere) and Mary herself (she shouldn't steer talks toward the newest skill). Add a bench case: in an ordinary chat she offers no card unless a birthday, a holiday or the resident brings it up. Check her prompt for lines that push cards (`REMINDER_CARDS_LINE` belongs only with a birthday reminder).
 
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
 - **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.

@@ -147,7 +147,9 @@
         { id: 'i-gemini_enabled', label: 'Use the smart helper', kind: 'switch', fill: false,
           explain: 'When it is on, what they say is sent to Google to tidy it up. Off keeps everything on this computer.' },
         { id: 'i-gemini_key', label: 'Smart helper key', kind: 'secret', fill: false,
-          explain: 'A key from Google that lets the smart helper and you work. A helper types or pastes it in.' }
+          explain: 'A key from Google that lets the smart helper and you work. A helper types or pastes it in.' },
+        { id: 'copyWords', label: 'The six words', kind: 'secret', fill: false,
+          explain: "The six words that open a helper's copy of the address book. A helper types them in." }
       ] },
     { id: 'email', frame: 'info', hash: '#info', scroll: 'mailCard', name: 'Connect email',
       explain: 'Lets a card or message go out from their own email, only after they say to send it.',

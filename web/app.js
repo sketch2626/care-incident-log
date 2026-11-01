@@ -1363,6 +1363,7 @@ window.addEventListener('hashchange', route);
 
 buildTiles();
 bookInit(); // M19
+copyInit(); // M19 piece 7
 (async () => {
   try { await load(); } catch (err) { setBanner(err.message); }
   $('#backName').textContent = state.settings.companion === 'him' ? 'Sam' : 'Mary'; // M17

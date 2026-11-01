@@ -9,16 +9,19 @@ locked book is left exactly as it was: a key is only ever made for a book with n
 Only this module imports cryptography, and server.py still runs if that import fails.
 """
 import base64
+import hashlib
 import json
 import os
 import re
 import sqlite3
+import sys
 import threading
 import unicodedata
 from contextlib import closing
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
-from secrets import token_bytes, token_hex
+from secrets import choice, token_bytes, token_hex
 
 import secret_store
 
@@ -52,6 +55,19 @@ WHY_UNAVAILABLE = "unavailable"  # no cryptography library, or no safe place for
 WHY_KEY = "key"  # the key is missing or doesn't fit
 WHY_FILE = "file"  # the file can't be read
 
+# Piece 7: a helper's copy. A key doesn't travel, so this file is sealed with a key made from six words on paper.
+COPY_MAGIC = "CareBook"
+COPY_VERSION = 1
+COPY_WORDS = 6
+SALT_BYTES = 16
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 16, 8, 1  # these exact values and no others: a file can't ask for more
+SCRYPT_MAXMEM = 128 * 1024 * 1024
+MAX_COPY = 5 * 1024 * 1024
+MAX_COPY_HEAD = 512
+COPY_DETAILS = tuple(name for name in TEXT_FIELDS if name != "name") + ("birthday",)
+COPY_MARKS = ("asked", "no_keep", "asked_birthday")  # not hidden: a mark never hides someone already shown
+WORDS_FILE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "book_words.txt"
+
 CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")  # a line break stays, for the fields that keep them
 BIRTHDAY = re.compile(r"(?:([0-9]{4})-)?([0-9]{2})-([0-9]{2})")
 
@@ -70,6 +86,11 @@ class BookLocked(BookError):
 
 class BookFull(BookError):
     message = "the address book is full"
+
+
+class CopyRefused(BookError):
+    """Wrong words or a damaged file. One message for both, so a try learns nothing."""
+    message = "That file and those words don't fit together."
 
 
 def _text(value, limit, lines=False):
@@ -157,6 +178,80 @@ def _gone(path):
         return True
     except OSError:
         return False
+
+
+@lru_cache(maxsize=1)
+def word_list():
+    """book_words.txt, one plain word a line. It ships beside this file."""
+    return tuple(WORDS_FILE.read_text(encoding="ascii").split())
+
+
+def normalize_words(words):
+    """Lowercase, single spaces. A list of words is fine too."""
+    if isinstance(words, (list, tuple)):
+        words = " ".join(str(word) for word in words)
+    return " ".join(str(words or "").lower().split())
+
+
+def _copy_key(words, salt):
+    return hashlib.scrypt(words.encode("ascii"), salt=salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, maxmem=SCRYPT_MAXMEM,
+                          dklen=KEY_BYTES)
+
+
+def _copy_head(head):
+    """The salt and nonce, once every value in the header is exactly what's allowed. This runs before any scrypt."""
+    found = json.loads(head)
+    allowed = {"magic": COPY_MAGIC, "version": COPY_VERSION, "n": SCRYPT_N, "r": SCRYPT_R, "p": SCRYPT_P}
+    if not isinstance(found, dict) or set(found) != {*allowed, "salt", "nonce"}:
+        raise CopyRefused()
+    if any(type(found[name]) is not type(value) or found[name] != value for name, value in allowed.items()):
+        raise CopyRefused()  # type() too: JSON's true and 65536.0 equal 1 and 65536 in Python
+    salt, nonce = base64.b64decode(found["salt"], validate=True), base64.b64decode(found["nonce"], validate=True)
+    if len(salt) != SALT_BYTES or len(nonce) != NONCE_BYTES:
+        raise CopyRefused()
+    return salt, nonce
+
+
+def _copy_open(data, words):
+    if not isinstance(data, (bytes, bytearray)) or not 0 < len(data) <= MAX_COPY:
+        raise CopyRefused()
+    typed = normalize_words(words).split()
+    if len(typed) != COPY_WORDS or not set(word_list()).issuperset(typed):
+        raise CopyRefused()
+    head, _, sealed = bytes(data).partition(b"\n")
+    if len(head) > MAX_COPY_HEAD or not sealed:
+        raise CopyRefused()
+    salt, nonce = _copy_head(head)
+    plain = AESGCM(_copy_key(" ".join(typed), salt)).decrypt(nonce, sealed, head)  # the whole header is bound in
+    found = json.loads(plain)
+    if not isinstance(found, list) or not all(isinstance(record, dict) for record in found):
+        raise CopyRefused()
+    return [record for record in map(_clean, found) if record["name"]]
+
+
+def read_copy(data, words):
+    """The records in a helper's copy. Anything wrong at all raises CopyRefused, with no detail."""
+    try:
+        return _copy_open(data, words)
+    except Exception:
+        raise CopyRefused() from None
+
+
+def _copy_person(record):
+    """Who this record is, for a merge. A doctor and a person of one name stay two."""
+    return record["kind"], _norm(record["name"]).casefold()
+
+
+def _copy_fills(there, record):
+    """What the copy may add to someone already here, and whether any of it is a detail. Only blanks fill, and a "don't
+    keep" on either side keeps the email out."""
+    keep_out = ("email",) if there["no_keep"] or record["no_keep"] else ()
+    fills = {name: record[name] for name in COPY_DETAILS if record[name] and not there[name] and name not in keep_out}
+    details = bool(fills)
+    fills.update((name, True) for name in COPY_MARKS if record[name] and not there[name])
+    if details and there["hidden"]:
+        fills["hidden"] = False  # the same as the contacts' move: a mark that gains a detail is a person
+    return fills, details
 
 
 class AddressBook:
@@ -446,3 +541,89 @@ class AddressBook:
                 _gone(tmp)
                 if fresh:
                     self._backup_stale = not _gone(self.backup_path)
+
+    # A helper's copy: the one way a book moves to another laptop
+
+    def make_copy(self):
+        """(six words, the file's bytes). The file is every record, hidden marks and doctors too, and never the key."""
+        with self._lock:
+            self._require()
+            records = list(self._cache.values())
+        try:
+            found = word_list()
+            words = [choice(found) for _ in range(COPY_WORDS)]
+            salt, nonce = token_bytes(SALT_BYTES), token_bytes(NONCE_BYTES)
+            head = json.dumps({"magic": COPY_MAGIC, "version": COPY_VERSION, "salt": base64.b64encode(salt).decode("ascii"),
+                               "n": SCRYPT_N, "r": SCRYPT_R, "p": SCRYPT_P, "nonce": base64.b64encode(nonce).decode("ascii")},
+                              separators=(",", ":")).encode("ascii")
+            plain = json.dumps(records, ensure_ascii=False).encode("utf-8")
+            data = head + b"\n" + AESGCM(_copy_key(" ".join(words), salt)).encrypt(nonce, plain, head)
+        except Exception:  # no word list, or too little memory for scrypt
+            raise BookError() from None
+        if len(data) > MAX_COPY:  # read_copy would refuse it
+            raise BookError()
+        return words, data
+
+    def _set_aside(self):
+        """A locked book is moved whole and unchanged, under names never used before. A key that's there but doesn't fit
+        is kept under its own name, because it's the last hope for those files. Nothing is wiped, and if a move fails
+        everything goes back. Then there's no book and no key, so the next write makes a key the normal way."""
+        day, tries = date.today().isoformat(), 1
+        while True:
+            more = f"-{tries}" if tries > 1 else ""
+            main = self.path.with_name(f"{self.path.stem}.locked-{day}{more}.db")
+            moves = [(self.path, main), (self.path.with_name(self.path.name + "-journal"), main.with_name(main.name + "-journal")),
+                     (self.backup_path, self.backup_path.with_name(f"{self.backup_path.stem}.locked-{day}{more}.db"))]
+            if not any(new.exists() for _, new in moves):
+                break
+            tries += 1
+        moves = [(old, new) for old, new in moves if old.exists()]
+        kept_name = f"{KEY_NAME}_locked_{day.replace('-', '')}" + (f"_{tries}" if tries > 1 else "")
+        moved = []
+        try:
+            old_key = self._secrets.get(KEY_NAME)
+            if old_key is not None:
+                self._secrets.put(kept_name, old_key)
+            for old, new in moves:
+                os.rename(old, new)
+                moved.append((old, new))
+            if old_key is not None:
+                self._secrets.delete(KEY_NAME)
+        except Exception:
+            for old, new in reversed(moved):
+                os.rename(new, old)
+            raise BookLocked() from None
+        self._forget()
+
+    def bring_in(self, records):
+        """Merges a helper's copy by name and gives back counts, never names. Only ever called with what read_copy gave
+        back, so nothing moves on a bad read. Only a book locked for its key is moved aside: the other reasons refuse."""
+        counts = {"added": 0, "filled": 0, "full": False}
+        records = [record for record in map(_clean, records) if record["name"]]
+        with self._lock:
+            why = self._try_open()
+            if why and why != WHY_KEY:
+                raise BookLocked()
+            if not records:
+                return counts
+            if why:
+                self._set_aside()
+            self._require()
+            here = {}
+            for person in sorted(self.people(include_hidden=True), key=lambda person: person["hidden"]):
+                here.setdefault(_copy_person(person), person["id"])  # shown rows first
+            try:
+                for record in records:
+                    row_id = here.get(_copy_person(record))
+                    if row_id is None:
+                        here[_copy_person(record)] = self.add(record)
+                        counts["added"] += not record["hidden"]
+                    else:
+                        fills, details = _copy_fills(self._cache[row_id], record)
+                        if fills:
+                            self.update(row_id, fills)
+                            counts["filled"] += details
+            except BookFull:
+                counts["full"] = True
+            self.backup()
+        return counts

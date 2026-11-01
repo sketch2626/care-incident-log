@@ -314,6 +314,36 @@
       <button type="button" class="bigbtn alt" id="mailDisconnect">Disconnect</button>
     </div>
   </div>
+  <!-- M19 piece 7: outside #infoForm. The six words show only here and go to no one: her screens list #copyWords as a secret
+       and never list #copyShown. -->
+  <div class="card infocard skillscard" id="copyCard">
+    <h2 class="smarth first">Helper's copy</h2>
+    <p class="note">This moves the address book to a new laptop. It's a job for a helper. A saved copy stays on the stick until someone throws it away.</p>
+    <div id="copyStart">
+      <button type="button" class="bigbtn" id="copyMake">Make a helper's copy</button>
+      <button type="button" class="bigbtn alt" id="copyBring">Bring in a helper's copy</button>
+    </div>
+    <div id="copyMade" hidden>
+      <ol class="copy-words" id="copyShown"></ol>
+      <p class="warn"><b>Write these six words on paper and keep them with family. Anyone with the file and the words can read this book.</b></p>
+      <p class="note">Forget can't reach a copy on a stick, so throw old copies away.</p>
+      <p class="note">You can save the file one time.</p>
+      <a class="bigbtn" id="copySave" href="#info">Save the file</a>
+      <p class="note" id="copySent" hidden>If the file didn't land on your stick, cross out these words and make a new copy.</p>
+      <button type="button" class="bigbtn alt" id="copyDone">Done</button>
+    </div>
+    <div id="copyIn" hidden>
+      <label class="bigbtn alt" for="copyFile">Pick the file</label>
+      <input class="copy-file" type="file" id="copyFile" accept=".carebook">
+      <p class="note" id="copyFileName" hidden></p>
+      <label class="fl" for="copyWords">The six words</label>
+      <input class="txt" type="text" id="copyWords" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button type="button" class="bigbtn" id="copyGo">Bring it in</button>
+      <button type="button" class="bigbtn alt" id="copyBack">Back</button>
+    </div>
+    <p class="note" id="copyMsg" role="status" hidden></p>
+  </div>
+  <!-- end copyCard -->
   <div class="card infocard skillscard" id="skillsCard">
     <h2 class="smarth first">Things Mary can do</h2>
     <p class="note" id="skillsMsg" aria-live="polite"></p>
@@ -333,6 +363,7 @@
      the boards. Every value stays on this page; web/mary/screens.js sends Mary none of them. -->
 <section id="book-list" class="screen book" aria-label="Address book" hidden>
   <p class="book-shut" id="bookShut" role="status" hidden></p>
+  <p class="book-go" id="bookGo" hidden><a class="linkbtn" id="bookToCopy" href="#info">Go to Helper's copy</a></p>
   <div id="bookOpen" hidden>
     <div class="book-head">
       <div class="book-titles">

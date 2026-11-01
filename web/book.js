@@ -33,6 +33,7 @@ function bookDrawList() {
   const open = Bk.state === 'open', loading = Bk.state === '';
   $('#bookShut').hidden = open || loading;
   $('#bookShut').textContent = BOOK_SHUT[Bk.state] || '';
+  $('#bookGo').hidden = Bk.state !== 'locked';   // piece 7: the line says a helper's copy can open it, so this goes there
   $('#bookOpen').hidden = !open;
   $('#bookListBar').hidden = !open;   // the lock line lives here, so it shows only while the book is really open
   if (!open) return;
@@ -246,6 +247,125 @@ function bookKeep() {
   go('book-list');
 }
 
+/* ---------- A helper's copy (piece 7), in My info. Nothing here reaches Mary, and her screens never list the words ---------- */
+
+const COPY_FITS = "That file and those words don't fit together.";
+const COPY_MAX = 5 * 1024 * 1024, COPY_HOLD_MS = 10 * 60 * 1000;
+const Cp = { busy: false, timer: 0, open: false };
+
+function copySay(words) {
+  $('#copyMsg').textContent = words;
+  $('#copyMsg').hidden = !words;
+}
+function copyPanel(which) {
+  Cp.open = !!which;
+  $('#copyStart').hidden = !!which;
+  $('#copyMade').hidden = which !== 'made';
+  $('#copyIn').hidden = which !== 'in';
+}
+// The words show one time: this runs on Done, on leaving My info and when the ten minutes are up.
+function copyClear() {
+  clearTimeout(Cp.timer);
+  $('#copyShown').replaceChildren();
+  $('#copySave').href = '#info';
+  $('#copySent').hidden = true;
+  $('#copyWords').value = '';
+  $('#copyFile').value = '';
+  $('#copyFileName').hidden = true;
+  copyPanel('');
+  copySay('');
+}
+function copyBusy(on, button) {
+  Cp.busy = on;
+  button.disabled = on;
+}
+
+async function copyMake() {
+  if (Cp.busy) return;
+  copyBusy(true, $('#copyMake'));
+  copySay('Making the copy.');
+  try {
+    const got = await post('/api/book/copy');
+    copySay('');
+    if (cur.screen !== 'info') return;   // they've gone, and the words never show to no one
+    $('#copyShown').replaceChildren(...got.words.map(word => {
+      const li = document.createElement('li');
+      li.textContent = word;
+      return li;
+    }));
+    $('#copySave').href = `/api/book/copy/${encodeURIComponent(got.token)}`;
+    $('#copySave').hidden = false;
+    copyPanel('made');
+    Cp.timer = setTimeout(() => {   // a dead link would open a bare error page in the frame
+      copyClear();
+      copySay('Ten minutes went by, so that copy has run out. Make a new one.');
+    }, COPY_HOLD_MS);
+  } catch (err) {
+    copySay(err.message);
+  } finally {
+    copyBusy(false, $('#copyMake'));
+  }
+}
+
+function copyFileRead(file) {
+  return new Promise((done, failed) => {
+    const reader = new FileReader();
+    reader.onload = () => done(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => failed(new Error(COPY_FITS));
+    reader.readAsDataURL(file);
+  });
+}
+
+function copyBroughtIn(got) {
+  if (!got.added && !got.filled && !got.full) return 'Everyone in that copy is already here.';
+  const parts = [`That's ${bookPeople(got.added)} added.`];
+  if (got.filled) parts.push(`${bookPeople(got.filled)} filled in.`);
+  if (got.full) parts.push('The address book is full, so the rest stayed out.');
+  return parts.join(' ');
+}
+
+async function copyBringIn() {
+  if (Cp.busy) return;
+  const file = $('#copyFile').files[0], words = $('#copyWords').value;
+  if (!file) return copySay('Pick the file first.');
+  if (!words.trim()) return copySay('Type the six words first.');
+  if (file.size > COPY_MAX) return copySay(COPY_FITS);
+  copyBusy(true, $('#copyGo'));
+  copySay('Bringing it in. This can take a minute.');
+  try {
+    const got = await post('/api/book/bring-in', { file: await copyFileRead(file), words });
+    copyClear();
+    copySay(copyBroughtIn(got));
+  } catch (err) {
+    copySay(err.message);   // what's typed stays, so one wrong word can be fixed
+  } finally {
+    copyBusy(false, $('#copyGo'));
+  }
+}
+
+function copyInit() {
+  // Typing here isn't a change to My info, so it must not hold the form's other boxes back from refilling.
+  ['input', 'change'].forEach(kind => $('#copyCard').addEventListener(kind, e => e.stopPropagation()));
+  $('#copyMake').addEventListener('click', copyMake);
+  $('#copyBring').addEventListener('click', () => { copySay(''); copyPanel('in'); });
+  $('#copyDone').addEventListener('click', copyClear);
+  $('#copyBack').addEventListener('click', copyClear);
+  $('#copyGo').addEventListener('click', copyBringIn);
+  $('#copyFile').addEventListener('change', () => {
+    const file = $('#copyFile').files[0];
+    $('#copyFileName').textContent = file ? file.name : '';
+    $('#copyFileName').hidden = !file;
+  });
+  $('#copySave').addEventListener('click', () => {
+    clearTimeout(Cp.timer);
+    setTimeout(() => {   // after the browser has taken the link: it works one time
+      $('#copySave').hidden = true;
+      $('#copySent').hidden = false;
+    }, 0);
+  });
+  $('#bookToCopy').addEventListener('click', () => { Bk.toCopy = true; });
+}
+
 /* ---------- What the rest of the page calls ---------- */
 
 function bookInit() {
@@ -269,6 +389,11 @@ function bookInit() {
 
 // route() in app.js hands the book's hashes here. True when the name was one of them.
 function bookRoute(name, arg) {
+  if (name !== 'info' && Cp.open) copyClear();
+  if (name === 'info' && Bk.toCopy) {
+    Bk.toCopy = false;
+    setTimeout(() => $('#copyCard').scrollIntoView({ block: 'start' }), 0);   // once the screen is showing
+  }
   if (name !== 'book-card' || arg !== Bk.forget) Bk.forget = '';
   if (name === 'book-list') { cur = { screen: name }; bookShowList(); }
   else if (name === 'book-card') { cur = { screen: name, id: arg }; bookShowCard(arg); }

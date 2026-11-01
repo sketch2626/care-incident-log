@@ -6,6 +6,7 @@ Run:  python server.py            (opens http://localhost:8765 in the browser)
 Everything is stored in %APPDATA%\\CareIncidentLog\\incidents.db (set TRACKER_DATA to
 use another folder) and backed up daily to its backups\\ folder. Nothing leaves this computer.
 """
+import base64
 import csv
 import importlib.util
 import io
@@ -23,6 +24,7 @@ from contextlib import closing
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from secrets import token_hex
 from urllib.parse import parse_qs, urlparse
 
 import address_book  # M19: the sealed address book; skills reach it only through ctx.people
@@ -559,6 +561,33 @@ BOOK_HER = frozenset("daughter sister mother mom momma mama wife niece aunt aunt
                      "girlfriend stepdaughter stepmother".split())
 BOOK_HIM = frozenset("son brother father dad daddy papa husband nephew uncle grandson grandfather grandpa boyfriend "
                      "stepson stepfather".split())
+
+
+# M19 piece 7: a helper's copy. The sealed bytes wait here for one download, and the words are never held at all.
+BOOK_COPY_S = 600
+BOOK_COPY_ID = re.compile(r"/api/book/copy/([0-9a-f]{32})")
+BOOK_COPY_BODY = address_book.MAX_COPY * 4 // 3 + 4096  # the biggest file in base64, and the words
+BOOK_COPY_NO_ONE = "There's no one in your address book yet."
+BOOK_COPY_CANT = "This laptop can't open an address book right now, so nothing changed."
+BOOK_COPY_FAILED = "That didn't work just now, so nothing changed."
+BOOK_COPY_GONE = "That copy has run out. Make a new one."
+BOOK_COPIES = {}  # token: (bytes, when it lapses). One at a time
+BOOK_COPIES_LOCK = threading.Lock()
+
+
+def book_copy_hold(data):
+    token = token_hex(16)
+    with BOOK_COPIES_LOCK:
+        BOOK_COPIES.clear()
+        BOOK_COPIES[token] = (data, time.monotonic() + BOOK_COPY_S)
+    return token
+
+
+def book_copy_take(token):
+    """The bytes once, or None. Asking for them drops them, in time or not."""
+    with BOOK_COPIES_LOCK:
+        data, lapses = BOOK_COPIES.pop(token, (None, 0))
+    return data if time.monotonic() < lapses else None
 
 
 class BookRefused(Exception):
@@ -1604,10 +1633,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
         return True
 
-    def _body(self):
+    def _body(self, limit=MAX_BODY):
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            if not 0 <= n <= MAX_BODY:
+            if not 0 <= n <= limit:
                 raise ValueError
             raw = self.rfile.read(n)
             self._read = n
@@ -2008,6 +2037,41 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send(WAKE.hold(on, body.get("why")))
         return None
 
+    def _book_copy(self, method, path):
+        """M19 piece 7: a helper's copy. These work on a locked book too, which is why they're not in _book. The words pass
+        through once each way and nothing here keeps, logs or forwards them."""
+        found = BOOK_COPY_ID.fullmatch(path)
+        if method == "GET" and found:  # a plain link, like the spreadsheet's, so the token is what guards it
+            data = book_copy_take(found.group(1))
+            if data is None:
+                return self._send({"error": BOOK_COPY_GONE, "code": "gone"}, 404)
+            name = f"MaryAddressBook-{datetime.now():%Y-%m-%d}.carebook"
+            return self._send(data, ctype="application/octet-stream",
+                              extra={"Content-Disposition": f'attachment; filename="{name}"'})
+        if method != "POST" or path not in ("/api/book/copy", "/api/book/bring-in"):
+            return None
+        making = path == "/api/book/copy"
+        try:
+            if making:
+                if not BOOK.people(include_hidden=True):
+                    return self._send({"error": BOOK_COPY_NO_ONE, "code": "empty"}, 409)
+                words, data = BOOK.make_copy()
+                return self._send({"words": words, "token": book_copy_hold(data)})
+            if BOOK.why_locked() in (address_book.WHY_UNAVAILABLE, address_book.WHY_FILE):
+                return self._send({"error": BOOK_COPY_CANT, "code": "cant"}, 409)
+            try:
+                body = self._body(BOOK_COPY_BODY)
+                data = base64.b64decode(body.get("file"), validate=True)
+            except (TypeError, ValueError):
+                raise address_book.CopyRefused() from None
+            return self._send(BOOK.bring_in(address_book.read_copy(data, body.get("words"))))
+        except address_book.CopyRefused as e:
+            return self._send({"error": str(e), "code": "refused"}, 400)
+        except address_book.BookLocked:
+            return self._send({"error": BOOK_LOCKED if making else BOOK_COPY_CANT, "code": "locked"}, 409)
+        except address_book.BookError:
+            return self._send({"error": BOOK_COPY_FAILED, "code": "failed"}, 500)
+
     def _book(self, method, path):
         """M19 piece 5: the address book screens. There's no delete: forget goes by voice, through her forget path. A
         locked book answers locked and refuses writes, and nothing here ever makes or wipes anything to get round that."""
@@ -2062,6 +2126,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._wake(method, path, q)
         if path == "/api/mail" or path.startswith("/api/mail/"):  # M15d: holds no log connection while an email goes out
             return self._mail(method, path)
+        if path in ("/api/book/copy", "/api/book/bring-in") or path.startswith("/api/book/copy/"):  # M19 piece 7
+            return self._book_copy(method, path)
         if path == "/api/book" or path.startswith("/api/book/"):  # M19: the sealed book holds no log connection
             return self._book(method, path)
         with connect() as conn:

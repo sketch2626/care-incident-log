@@ -95,7 +95,7 @@ class Listed(unittest.TestCase):
                 self.assertEqual(f["kind"], "secret")
                 self.assertFalse(f["fill"])
         self.assertTrue(all(not f["fill"] for f in self.fields if f["kind"] == "secret"))
-        self.assertEqual({f["id"] for f in self.fields if f["kind"] == "secret"}, {"i-gemini_key", "mailPass"})
+        self.assertEqual({f["id"] for f in self.fields if f["kind"] == "secret"}, {"i-gemini_key", "copyWords", "mailPass"})
 
     def test_fields_nobody_decided_on_stay_out(self):
         ids = [f["id"] for f in self.fields]
@@ -167,7 +167,7 @@ class Card(unittest.TestCase):
           assert(!text.includes('HUNTER2') && !text.includes('hunter2'));
           assert.deepStrictEqual(a.fields.filter(f => f.kind === 'secret'), b.fields.filter(f => f.kind === 'secret'));
           assert.deepStrictEqual(a.fields.filter(f => f.kind === 'secret'), [
-            { field: 'i-gemini_key', label: 'Smart helper key', kind: 'secret' }, { field: 'mailPass', label: 'App password', kind: 'secret' }]);
+            { field: 'i-gemini_key', label: 'Smart helper key', kind: 'secret' }, { field: 'copyWords', label: 'The six words', kind: 'secret' }, { field: 'mailPass', label: 'App password', kind: 'secret' }]);
           assert.strictEqual(a.screen, 'My info');
           assert.strictEqual(a.fields.find(f => f.field === 'i-room').value, '214');
         """)

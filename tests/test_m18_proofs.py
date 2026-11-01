@@ -126,6 +126,7 @@ class SecretsGoNowhere(unittest.TestCase):
         ids = re.findall(r'<input\b[^>]*type="password"[^>]*\bid="([^"]+)"', html) + \
             re.findall(r'<input\b[^>]*\bid="([^"]+)"[^>]*type="password"', html)
         self.assertGreaterEqual(len(ids), 2)
+        ids.append("copyWords")  # M19: the six words are a plain text box, so a helper can read them, and just as secret
         rc, _, err = screens_node(r"""
           const ids = %s;
           const secrets = MaryScreens.LIST.reduce((a, s) => a.concat((s.fields || []).filter(f => f.kind === 'secret')), []);

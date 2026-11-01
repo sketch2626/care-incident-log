@@ -802,6 +802,8 @@ SAY_TOO_LONG = "That's too long for a card. We can shorten it, or I can make it 
 SAY_NOTHING_READY = "Nothing's ready to send yet."
 SAY_NO_EMAIL = "Your email isn't set up, so this one can go by printing. Want it printed?"
 SAY_CANT_SEND = "I can't send that one as it is. Want it printed?"
+SAY_BOOK_LOCKED = "Your address book is locked right now, so I can't look them up. A helper can open it."  # M19
+SAY_BOOK_LOCKED_SAVE = "Your address book is locked right now, so I can't change it. A helper can open it."  # M19
 SAY_NO_PICTURE = "The picture wouldn't make. I can send the words as a plain message, or print it."
 SAY_PRINT_OFFER = "Would you like it printed so it can be mailed?"
 # M17: with no printer she offers nothing and says it's saved. %s is card, message or page (_what).
@@ -817,7 +819,6 @@ OCCASION_WORDS = {"birthday": "birthday", "get_well": "get well", "sympathy": "s
                   "christmas": "Christmas", "thanksgiving": "Thanksgiving"}
 CONTENT_FIELDS = ("kind", "id", "person", "occasion", "line", "front", "words", "signature", "verse", "verse_off",
                   "left_out", "hand")  # a change to any of these means the look no longer shows what would go
-CONTACTS_MAX = 500
 DETAIL_MAX = 120
 ADDRESS_MAX = 254
 ADDRESS_LINES = 3  # M18: how many lines of theirs an address waits for a yes or a keep answer before it's let go
@@ -1216,58 +1217,27 @@ def print_card(ctx):
     return _reply(SAY_FOLD if file.endswith("-print.svg") else SAY_SHEET, printing=True)
 
 
-# Contacts: one store key per person. An address leaves here only in a page effect, never in a result, a say or view.
+# Contacts live in the sealed address book, through ctx.people. An address leaves there only in a page effect, never
+# in a result, a say or view.
 
 def _norm(name):
     text = clean(str(name or "")).lower().replace("\u2019", "'").strip()
     return " ".join(re.sub(r"^(?:my|our)\s+", "", text).split())
 
 
-def _contact_slug(name):
-    return _slug(name, 60) or "".join("%x" % ord(letter) for letter in name)[:60]
-
-
-def _contacts(ctx):
-    found = (ctx.store.get("contact-" + slug) for slug in ctx.store.get("contacts", []))
-    return [record for record in found if record]
-
-
-def _find(ctx, name):
-    """By exact name, else first name or relationship, without case. More than one back means she asks which."""
-    wanted, every = _norm(name), _contacts(ctx)
-    if not wanted:
-        return []
-    return [c for c in every if _norm(c["name"]) == wanted] or [
-        c for c in every if _norm(c["name"]).split()[:1] == [wanted] or _norm(c.get("relationship")) == wanted] or [
-        c for c in every if _both_named(c, wanted)]
-
-
-def _both_named(contact, wanted):  # M18
-    """"My daughter Sarah": the relationship and the first name together. Either one alone never gets here."""
-    words, first, relation = wanted.split(), _norm(contact["name"]).split()[:1], _norm(contact.get("relationship"))
-    return bool(first and relation) and first[0] in words and set(relation.split()) <= set(words)
-
-
-def _put_contact(ctx, record):
-    slug = _contact_slug(record["name"])
-    slugs = ctx.store.get("contacts", [])
-    if slug not in slugs:
-        if len(slugs) >= CONTACTS_MAX:
-            return False
-        ctx.store.put("contacts", slugs + [slug])
-    ctx.store.put("contact-" + slug, record)
-    return True
-
-
-def _new_contact(name):
+def _said_relation(name):
+    """"My son", for someone new: how they said it is the relationship too."""
     plain = re.sub(r"^my\s+", "", name, flags=re.I)
-    return {"name": name, "relationship": plain if plain != name else "", "email": "", "facebook": "", "phone": "",
-            "asked": False, "no_keep": False}
+    return {"relationship": plain} if plain != name else {}
 
 
-def _contact_of(ctx, name):
-    hits = _find(ctx, name)
-    return hits[0] if hits else _new_contact(name)
+def _cant_keep(ctx):
+    return SAY_BOOK_LOCKED_SAVE if ctx.people.locked() else "I can't keep any more people."
+
+
+def _nobody(ctx):
+    """No one by that name. A locked book says so: it must never sound as if they're gone."""
+    return _reply(SAY_BOOK_LOCKED, known=False, book_locked=True) if ctx.people.locked() else {"known": False}
 
 
 def _which(hits, **facts):
@@ -1334,12 +1304,12 @@ def _paused(reason):
                   "trust first." % ASKS_WORDS[reason], paused=True, sent=False)
 
 
-def _ask_address(ctx, name, bad=False):
+def _ask_address(ctx, name, bad=False, locked=False):
     ctx.state.pop("address_wait", None)
     ctx.state["send_view"] = {"kind": "need_address", "name": name}
     ctx.effect("show_screen")
     ctx.effect("need_address", {"name": name, "bad": bad})
-    say = "That doesn't look like an address. " if bad else ""
+    say = "That doesn't look like an address. " if bad else SAY_BOOK_LOCKED + " " if locked else ""
     return _reply(say + "What's %s email address? You can say it, or a helper can type it." % _whose(name),
                   need_address=True, sent=False)
 
@@ -1356,13 +1326,25 @@ def _picture_current(ctx, draft):
     return draft.get("mail_rev") == draft.get("rev") and ctx.files.exists("card-%s-mail.jpg" % draft["id"])
 
 
-def _arm(ctx, draft, who, address):
+def _show_look(ctx, held):
+    """The look on the page. For someone in the book the core adds the address on its way out, so it's never held here."""
+    if held.get("handle"):
+        ctx.people.show_address(held["handle"], "look", held["effect"])
+    else:
+        ctx.effect("look", held.get("effect", {}))
+
+
+def _arm(ctx, draft, who, address, contact):
+    """Arms the gate. With an address just told and checked it goes as it is, in memory only; otherwise to contact in the book."""
     subject, body = _email(draft)
     pictures = []
     if draft["kind"] == "card":
         name = "card-%s-mail.jpg" % draft["id"]
         pictures = [{"name": name, "data": ctx.files.read_bytes(name)}]
-    armed = ctx.arm_send(who, address, subject, body, pictures)
+    if address:
+        armed = ctx.arm_send(who, address, subject, body, pictures)
+    else:
+        armed = ctx.people.send_to(contact, subject, body, pictures)
     if not armed["ok"]:
         reason = armed.get("reason")
         if reason in ASKS_WORDS:
@@ -1373,16 +1355,20 @@ def _arm(ctx, draft, who, address):
             return _cant_go(ctx, SAY_NO_EMAIL, SAY_NO_EMAIL_LATER)
         return _cant_go(ctx, SAY_CANT_SEND, SAY_CANT_SEND_LATER)
     line = ctx.send_state()["line"]
-    data = {"look": armed["look"], "name": who, "email": address, "kind": draft["kind"], "rev": draft.get("rev", 0)}
+    data = {"look": armed["look"], "name": who, "kind": draft["kind"], "rev": draft.get("rev", 0)}
+    if address:
+        data["email"] = address
     if draft["kind"] == "card":
         data["front"] = "card-%s-front.svg" % draft["id"]
     else:
         data["file"] = "letter-%s.svg" % draft["id"]
     short = _short_from(line)
-    ctx.state["held"] = {"look": armed["look"], "person": who, "address": address, "short": short, "effect": data}
+    held = {"look": armed["look"], "person": who, "short": short, "effect": data}
+    held.update({"address": address} if address else {"handle": contact})
+    ctx.state["held"] = held
     ctx.state["send_view"] = {"kind": "look", "name": short}
     ctx.effect("show_screen")
-    ctx.effect("look", data)
+    _show_look(ctx, held)
     return _reply(line, look_up=True, sent=False)
 
 
@@ -1399,13 +1385,13 @@ def _send_flow(ctx):
     name = draft.get("person", "")
     if not name:
         return _reply(SAY_WHO, need_person=True, sent=False)
-    hits = _find(ctx, name)
+    hits = ctx.people.find(name)
     if len(hits) > 1:
         return _which(hits, need_person=True, sent=False)
     contact = hits[0] if hits else None
-    address = _waiting_address(ctx, name, contact) or (contact or {}).get("email")
-    if not address:
-        return _ask_address(ctx, name)
+    address = _waiting_address(ctx, name, contact)
+    if not address and not (contact and contact["has_email"]):
+        return _ask_address(ctx, name, locked=ctx.people.locked())
     state = ctx.send_state()
     if state["state"] in ("counting", "sending"):
         return {"counting": True}
@@ -1415,7 +1401,7 @@ def _send_flow(ctx):
         _keep(ctx, dict(draft, look_wanted=True))
         ctx.effect("make_mail", {"id": draft["id"], "rev": draft.get("rev", 0)})
         return _reply("One moment.", sent=False)
-    return _arm(ctx, draft, contact["name"] if contact else name, address)
+    return _arm(ctx, draft, contact["name"] if contact else name, address, contact)
 
 
 def _with_the_send(ctx):  # M18
@@ -1423,16 +1409,16 @@ def _with_the_send(ctx):  # M18
     draft = _draft(ctx)
     if not draft or not draft.get("rev") or ctx.state.get("keepsake"):
         return False
-    name, hits = draft.get("person", ""), _find(ctx, draft.get("person", ""))
+    name, hits = draft.get("person", ""), ctx.people.find(draft.get("person", ""))
     return bool(_waiting_address(ctx, name, hits[0] if len(hits) == 1 else None))
 
 
 def _offer_keep(ctx, wait):  # M18
-    """An address they told her with nothing being sent, checked with them. It stays only if they say so, in contacts."""
+    """An address they told her with nothing being sent, checked with them. It stays only if they say so, in the book."""
     ctx.state.pop("address_wait", None)
     ctx.effect("leave_screen")
-    hits = _find(ctx, wait["person"])
-    if len(hits) == 1 and hits[0].get("email", "").lower() == wait["address"]:
+    hits = ctx.people.find(wait["person"])
+    if len(hits) == 1 and ctx.people.detail(hits[0], "email").lower() == wait["address"]:
         return _reply("I've already got that one.", kept=True)
     ctx.state["address_told"] = {key: wait.get(key, "") for key in ("person", "address", "relationship")}
     return _reply("Keep %s address for next time?" % _whose(wait["person"]), keep_question=True)
@@ -1442,12 +1428,13 @@ def _keep_told(ctx, told, keep):  # M18
     """Their answer about an address told outside a send. A no changes nothing, so an address already saved stays."""
     if keep is not True:
         return _reply("All right.", kept=False)
-    hits = _find(ctx, told["person"])
-    record = dict(hits[0] if len(hits) == 1 else _new_contact(told["person"]), email=told["address"], asked=True, no_keep=False)
+    hits = ctx.people.find(told["person"])
+    fields = {} if len(hits) == 1 else _said_relation(told["person"])
+    fields.update(email=told["address"], asked=True, no_keep=False)
     if told.get("relationship"):
-        record["relationship"] = told["relationship"]
-    kept = _put_contact(ctx, record)
-    return _reply("Kept." if kept else "I can't keep any more people.", kept=kept)
+        fields["relationship"] = told["relationship"]
+    kept = bool(ctx.people.keep(hits[0]["name"] if len(hits) == 1 else told["person"], fields))
+    return _reply("Kept." if kept else _cant_keep(ctx), kept=kept)
 
 
 def _asked_address(heard, contact):  # M18
@@ -1510,19 +1497,18 @@ def address_right(ctx, right):
 
 @_locked
 def keep_address(ctx, keep):
-    told = ctx.state.pop("address_told", None)  # M18: told outside a send. Below is M15c's question, as it was
+    told = ctx.state.pop("address_told", None)  # M18: told outside a send
     if told:
         return _keep_told(ctx, told, keep)
-    sent = ctx.state.pop("just_sent", None)
+    sent = ctx.state.get("just_sent")  # M19: a send already kept it, so all that's left to say is "don't keep it"
     if not sent:
         return _reply(_then_print(ctx) or "All right.", kept=False)
-    record = dict(_contact_of(ctx, sent["person"]), asked=True)
     if keep is True:
-        record.update(email=sent["address"], no_keep=False)
-    else:
-        record.update(email="", no_keep=True)
-    kept = _put_contact(ctx, record) and keep is True
-    return _reply(_then_print(ctx, "Kept." if kept else "All right."), kept=kept)
+        return _reply("Kept.", kept=True)
+    if not ctx.people.unkeep(sent["person"]):
+        return _reply(SAY_BOOK_LOCKED_SAVE, kept=True)
+    ctx.state.pop("just_sent", None)
+    return _reply("All right.", kept=False)
 
 
 @_locked
@@ -1530,59 +1516,66 @@ def save_contact(ctx, name, relationship="", facebook="", phone=""):
     name = _said(name, NAME_MAX)
     if not name:
         return _reply("Who should I remember?", saved=False)
-    hits = [c for c in _contacts(ctx) if _norm(c["name"]) == _norm(name)]
-    record = dict(hits[0]) if hits else _new_contact(name)
+    fields = _said_relation(name)
     for field, value in (("relationship", relationship), ("facebook", facebook), ("phone", phone)):
         value = _said(value, DETAIL_MAX)
         if value:
-            record[field] = value
-    if not _put_contact(ctx, record):
-        return _reply("I can't keep any more people.", saved=False)
+            fields[field] = value
+    if not ctx.people.keep(name, fields):
+        return _reply(_cant_keep(ctx), saved=False)
     return _reply("I've got %s." % name, saved=True)
 
 
 @_locked
 def find_contact(ctx, name):
-    hits = _find(ctx, _said(name, NAME_MAX))
+    hits = ctx.people.find(_said(name, NAME_MAX))
     if len(hits) > 1:
         return _which(hits, known=True)
     if not hits:
-        return {"known": False}
-    return {"known": True, "name": hits[0]["name"], "relationship": hits[0].get("relationship", ""),
-            "has_email": bool(hits[0].get("email"))}
+        return _nobody(ctx)
+    return {"known": True, "name": hits[0]["name"], "relationship": hits[0]["relationship"],
+            "has_email": hits[0]["has_email"]}
 
 
 @_locked
 def contact_address(ctx, name):  # M18
     """A saved address for her to read out or put in a box, and only when their own words just asked for it."""
-    hits = _find(ctx, _said(name, NAME_MAX))
+    hits = ctx.people.find(_said(name, NAME_MAX))
     if len(hits) > 1:
         return _which(hits, known=True)
     if not hits:
-        return {"known": False}
-    found = {"known": True, "name": hits[0]["name"], "has_email": bool(hits[0].get("email"))}
+        return _nobody(ctx)
+    found = {"known": True, "name": hits[0]["name"], "has_email": hits[0]["has_email"]}
     if not found["has_email"]:
         return found
     if not _asked_address(ctx.heard, hits[0]):
         return dict(found, not_asked=True, note="They didn't ask for the address. Use the name: a send needs no address.")
-    return dict(found, address=hits[0]["email"], note="For what they asked, this once. Spell it, or put it in the box.")
+    return dict(found, address=ctx.people.detail(hits[0], "email"),
+                note="For what they asked, this once. Spell it, or put it in the box.")
+
+
+def _exactly(ctx, words):
+    """This exact name: someone in the list, else a "don't keep" mark, which has no handle and goes by its name."""
+    found = [hit for hit in ctx.people.find(words) if _norm(hit["name"]) == _norm(words)]
+    marks = ctx.people.marks(words)
+    return found or ([{"name": words}] if marks["asked"] or marks["no_keep"] else [])
 
 
 def _forget_hits(ctx, about, own_name):
-    """The contacts about means, whether it means only their address ("Mark's address"), and the name it came to."""
+    """The people about means, whether it means only their address ("Mark's address"), and the name it came to."""
     words = str(about or "").strip(" .!?").replace("\u2019", "'")
     if own_name:
-        return [c for c in _contacts(ctx) if _norm(c["name"]) == _norm(words)], False, words
+        return _exactly(ctx, words), False, words
     for pattern in FORGET_ADDRESS_RES:
         found = pattern.fullmatch(words.lower())
         if found:
             raw = found.group(1)
             for name in (re.sub(r"'s$|'$", "", raw), raw, raw[:-1] if raw.endswith("s") else raw):
-                hits = _find(ctx, name)
+                hits = ctx.people.find(name)
                 if hits:
-                    return [c for c in hits if c.get("email")], True, name
+                    return [hit for hit in hits if hit["has_email"]], True, name
             return [], True, re.sub(r"'s$|'$", "", raw)
-    return _find(ctx, words), False, words
+    return ctx.people.find(words) or _exactly(ctx, words), False, words
 
 
 def _holding(ctx, hits, wanted, own_name):
@@ -1603,25 +1596,20 @@ def _everything(about):
 
 @_locked
 def on_forget(ctx, about, own_name=False):
-    """A real forget. Their addresses and names come back so the core can drop them from talk history and mail.log."""
+    """A real forget. Their addresses and names come back so the core can drop them from talk history and mail.log.
+    "Everything" leaves the address book alone: only what's held in memory goes."""
     if _everything(about):
-        hits, only_address = _contacts(ctx), False
+        hits, only_address = [], False
         keys = [key for key in ("address_wait", "address_told", "just_sent", "held") if key in ctx.state]  # M18: address_told
     else:
         hits, only_address, wanted = _forget_hits(ctx, about, own_name)
         keys = _holding(ctx, hits, wanted, own_name)
-    addresses = [c["email"] for c in hits if c.get("email")] + [ctx.state[key]["address"] for key in keys]
+    addresses = [ctx.state[key]["address"] for key in keys if ctx.state[key].get("address")]
     texts = []
-    for contact in hits:
-        slug = _contact_slug(contact["name"])
-        if only_address:
-            ctx.store.put("contact-" + slug, dict(contact, email=""))
-            continue
-        texts += [contact[field] for field in ("name", "facebook", "phone") if contact.get(field)]
-        ctx.store.delete("contact-" + slug)
-    if not only_address:
-        gone = {_contact_slug(c["name"]) for c in hits}
-        ctx.store.put("contacts", [slug for slug in ctx.store.get("contacts", []) if slug not in gone])
+    for hit in hits:
+        gone = ctx.people.forget(hit if "id" in hit else hit["name"], only_address)
+        addresses += gone["addresses"]
+        texts += gone["texts"]
     for key in keys:
         ctx.state.pop(key, None)
     if "held" in keys:
@@ -1635,7 +1623,7 @@ def on_forget(ctx, about, own_name=False):
 def forget_matches(ctx, about):
     """How many people a forget of about would touch: only the count, no names and no addresses."""
     if _everything(about):
-        return len(_contacts(ctx))
+        return 0
     hits, _, wanted = _forget_hits(ctx, about, False)
     return max(len(hits), 1 if _holding(ctx, hits, wanted, False) else 0)
 
@@ -1650,7 +1638,7 @@ def _gate_turn(ctx, action):
         return _reply("Going to %s." % ("their email" if short == "them" else short + "'s email"), counting=True)
     if action == "stopped":
         ctx.state["send_view"] = {"kind": "look", "name": short}
-        ctx.effect("look", held.get("effect", {}))
+        _show_look(ctx, held)
         return _reply("Stopped. It hasn't gone.", stopped=True)
     if action == "say_line":
         return _reply(state["line"])
@@ -1804,18 +1792,19 @@ def _when_sent(moment):
 
 
 def _sent(ctx, held):
-    """It went. The keep question comes once, and only for an address that isn't saved."""
-    short, person = held["short"], held["person"]
+    """It went. A new address goes in the book and she says so, and "don't keep it" takes it back. Only no_keep stops it."""
+    short, person, address = held["short"], held["person"], held.get("address")
     time, part = _when_sent(datetime.datetime.now())
     ctx.state.pop("address_wait", None)
+    ctx.state.pop("just_sent", None)  # "don't keep it" only ever means the latest send
     ctx.state["last_sent"] = {"name": short, "time": time, "part": part, "date": _today().isoformat()}
     ctx.effect("sent", {"name": short, "time": time, "part": part})
-    contact = _contact_of(ctx, person)
-    if contact.get("email") or contact.get("asked") or contact.get("no_keep"):
-        return _reply(_then_print(ctx, "Sent to %s." % short), sent=True)
-    _put_contact(ctx, dict(contact, asked=True))
-    ctx.state["just_sent"] = {"person": person, "address": held["address"]}
-    return _reply("Sent to %s. Keep %s address for next time?" % (short, _whose(short)), sent=True, keep_question=True)
+    has_email = any(hit["has_email"] for hit in ctx.people.find(person))
+    if address and not has_email and not ctx.people.marks(person)["no_keep"]:
+        if ctx.people.keep(person, dict(_said_relation(person), email=address, asked=True)):
+            ctx.state["just_sent"] = {"person": person, "address": address}
+            return _reply(_then_print(ctx, "Sent to %s. It's in your book now." % short), kept=True, sent=True)
+    return _reply(_then_print(ctx, "Sent to %s." % short), sent=True)
 
 
 def _not_sent(ctx, held, result):
@@ -1833,7 +1822,7 @@ def _stale(ctx, held):
     """The gate said no at the end of the count: back to the look if there is one, else the card."""
     if held and ctx.send_state()["state"] == "look":
         ctx.state["send_view"] = {"kind": "look", "name": held["short"]}
-        ctx.effect("look", held["effect"])
+        _show_look(ctx, held)
     else:
         _no_look(ctx)
         draft = _draft(ctx)
@@ -1945,7 +1934,7 @@ def _send_seen(state):
     if state.get("address_told"):  # M18
         return "Waiting to hear whether to keep %s address. " % _whose(state["address_told"]["person"])
     if sent and sent["date"] == _today().isoformat():
-        ask = "Waiting to hear whether to keep the address. " if state.get("just_sent") else ""
+        ask = "The address is in their book now. If they say not to keep it, use keep_address. " if state.get("just_sent") else ""
         return "Sent to %s, %s %s. %s" % (sent["name"], sent["time"].lower(), sent["part"], ask)
     return ""
 

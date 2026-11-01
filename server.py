@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 import address_book  # M19: the sealed address book; skills reach it only through ctx.people
 import assist
+import book_move  # M19: the old contacts' one move into the book
 import mail_core  # M15d: the resident's own email
 import mary
 import send_gate
@@ -197,6 +198,7 @@ def init_db():
             conn.execute("INSERT INTO settings (key, value) VALUES ('andyflow_enabled', '1')")
     init_memories()  # M9c
     move_gemini_key()  # M15d: before the backup, so a new copy doesn't hold it
+    book_move.run(DB_PATH, BACKUPS, BOOK, DATA / "book_move.log")  # M19: before the backup too, for the same reason
     backup_db()
     backup_memories()  # M9c
     BOOK.backup()  # M19: once a day, and never while the book is locked
@@ -472,6 +474,7 @@ def public_settings(conn):
     """Settings for the page. The Gemini key never leaves the server; the page only learns whether one is set."""
     s = get_settings(conn)
     s.pop("gemini_key", None)  # a leftover row, only when a move couldn't happen
+    s.pop(book_move.DONE_KEY, None)  # M19: the move's own note. PUT takes only SETTING_KEYS, so the page can't set it
     s["gemini_key_set"] = bool(gemini_key(conn))
     return s
 

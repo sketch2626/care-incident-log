@@ -1,7 +1,7 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folders at a scratch folder)
 
-"""M15c: the messages skill's contacts and the keep question, run by a real SkillHost with a real send gate on a fake
-clock and a fake mailer. Full send flows are in their own tests."""
+"""M15c: the messages skill's contacts and keeping an address, run by a real SkillHost with a real send gate and a real
+address book (M19) on a fake clock and a fake mailer. Full send flows are in their own tests."""
 import base64
 import json
 import shutil
@@ -10,7 +10,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import address_book
 import mary
+import secret_store
 import send_gate
 import skills_core
 
@@ -46,6 +48,7 @@ class Base(unittest.TestCase):
         self.host.gate = send_gate.SendGate(self.mailer, clock=lambda: self.now)
         self.host.mail_ready = lambda: True
         self.host.mailer = self.mailer
+        self.host.book = address_book.AddressBook(self.dir, secret_store.SecretStore(self.dir))
         self.seen = []  # everything that goes near Gemini, or is said aloud
 
     @property
@@ -73,11 +76,16 @@ class Base(unittest.TestCase):
         self.act("plain_message", person=person, words="Thinking of you.", signature="Dad")
 
     def contact(self, name):
-        return self.ctx.store.get("contact-" + self.mod._contact_slug(name))
+        """Their row in the book, by this exact name, hidden marks too."""
+        return next((p for p in self.host.book.people(include_hidden=True) if p["name"] == name), None)
 
     def stored(self):
         store = self.ctx.store
         return json.dumps({key: store.get(key) for key in store.keys()})
+
+    def everywhere(self):
+        """The skill's store and the book together: everywhere an address could be kept."""
+        return self.stored() + json.dumps(self.host.book.people(include_hidden=True))
 
     def send(self):
         """A plain message, from the look to the end of the count."""
@@ -198,48 +206,145 @@ class AddressTests(Base):
 
     def test_a_saved_draft_never_holds_an_address(self):
         self.address_then_send()
-        self.assertNotIn(ADDRESS, self.stored())  # nothing is kept until they say so
+        self.assertNotIn(ADDRESS, self.stored())  # the book is the one place it's kept
         self.assertNotIn(ADDRESS, json.dumps(self.ctx.state.get("draft")))
 
 
 class KeepTests(Base):
-    def test_asked_once_and_a_yes_keeps_it(self):
+    def test_a_first_send_keeps_it_and_says_so_with_no_question(self):
         self.address_then_send()
         self.assertEqual(self.mailer.sent[0][0], ADDRESS)
-        self.assertIn("Sent to Mark. Keep Mark's address for next time?", self.last["say"])
-        self.assertTrue(self.contact("Mark")["asked"])
-        self.assertEqual(self.contact("Mark")["email"], "")
-        self.assertTrue(self.act("keep_address", keep=True)["kept"])
-        self.assertNotIn("just_sent", self.ctx.state)
+        self.assertEqual(self.last["say"], "Sent to Mark. It's in your book now. Would you like it printed so it can be mailed?")
+        self.assertTrue(self.last["response"]["kept"])
+        self.assertNotIn("keep_question", self.last["response"])
         self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+        self.assertTrue(self.contact("Mark")["asked"])
+        self.assertEqual(self.ctx.state["just_sent"]["person"], "Mark")
         self.letter()
         self.act("send_it")
         self.send()
         self.assertEqual(self.last["say"], "Sent to Mark. Would you like it printed so it can be mailed?")
         self.assertEqual(len(self.mailer.sent), 2)
 
-    def test_a_no_never_stores_it_and_it_is_not_asked_again(self):
+    def test_dont_keep_it_takes_it_back_and_it_is_not_kept_again(self):
         self.address_then_send()
         self.assertFalse(self.act("keep_address", keep=False)["kept"])
+        self.assertEqual(self.last["say"], "All right.")
         self.assertTrue(self.contact("Mark")["no_keep"])
-        self.assertNotIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, self.everywhere())
         self.assertNotIn("just_sent", self.ctx.state)
-        self.letter()  # the same words again: the address is needed again, and the question isn't asked
+        self.letter()  # the same words again: the address is needed again, and it isn't kept
         self.assertTrue(self.act("send_it")["need_address"])
         self.act("give_address", address=SPOKEN)
         self.act("address_right", right=True)
         self.send()
-        self.assertNotIn("Keep", self.last["say"])
-        self.assertNotIn(ADDRESS, self.stored())
+        self.assertEqual(self.last["say"], "Sent to Mark. Would you like it printed so it can be mailed?")
+        self.assertNotIn(ADDRESS, self.everywhere())
+
+    def test_a_no_keep_from_before_is_respected(self):
+        self.assertTrue(self.ctx.people.unkeep("Mark"))
+        self.address_then_send()
+        self.assertEqual(self.mailer.sent[0][0], ADDRESS)
+        self.assertEqual(self.last["say"], "Sent to Mark. Would you like it printed so it can be mailed?")
+        self.assertNotIn(ADDRESS, self.everywhere())
+        self.assertNotIn("just_sent", self.ctx.state)
+
+    def test_a_stale_asked_flag_no_longer_stops_a_keep(self):
+        self.assertIsNotNone(self.ctx.people.keep("Mark", {"asked": True}))
+        self.address_then_send()
+        self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+
+    def test_keep_true_after_a_send_is_harmless_and_dont_keep_it_still_works(self):
+        self.address_then_send()
+        self.assertTrue(self.act("keep_address", keep=True)["kept"])
+        self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+        self.assertFalse(self.act("keep_address", keep=False)["kept"])
+        self.assertEqual(self.contact("Mark")["email"], "")
+
+    def test_dont_keep_it_means_only_the_latest_send(self):
+        self.address_then_send()
+        self.assertIsNotNone(self.ctx.people.keep("Amy", {"email": "amy.park@example.org"}))
+        self.letter("Amy")
+        self.act("send_it")
+        look = self.effect("look")["look"]
+        self.event(type="look_up", look=look)
+        self.host.her_words(self.ctx.send_state()["line"])
+        self.assertEqual(self.host.resident_said("send it")["action"], "count")
+        self.now += 5.1
+        self.event(type="count_done", look=look)
+        self.assertNotIn("just_sent", self.ctx.state)
+        self.act("keep_address", keep=False)
+        self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+        self.assertEqual(self.contact("Amy")["email"], "amy.park@example.org")
 
     def test_close_clears_what_was_held(self):
         self.address_then_send()
         self.act("close")
         self.assertNotIn("just_sent", self.ctx.state)
         self.assertNotIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, json.dumps(self.ctx.state, default=str))
 
     def test_keep_with_nothing_held_keeps_nothing(self):
         self.assertFalse(self.act("keep_address", keep=True)["kept"])
+
+
+class BookTests(Base):
+    """M19: someone in the book. The address reaches the gate and the page from the core, and the skill never holds it."""
+
+    def saved(self):
+        self.assertIsNotNone(self.ctx.people.keep("Mark", {"email": ADDRESS}))
+
+    def lock_book(self):
+        self.host.book.lock()
+        secret_store.SecretStore(self.dir).delete(address_book.KEY_NAME)
+        self.assertEqual(self.host.book.state(), "locked")
+
+    def test_the_look_carries_the_address_and_the_state_holds_none(self):
+        self.saved()
+        self.letter()
+        self.assertTrue(self.act("send_it")["look_up"])
+        self.assertEqual(self.effect("look")["email"], ADDRESS)
+        self.assertNotIn(ADDRESS, json.dumps(self.ctx.state, default=str))
+        self.assertNotIn("address", self.ctx.state["held"])
+        self.assertNotIn(ADDRESS, " ".join(self.seen))
+        self.send()
+        self.assertEqual(self.mailer.sent[0][0], ADDRESS)
+        self.assertEqual(self.last["say"], "Sent to Mark. Would you like it printed so it can be mailed?")
+        self.assertNotIn(ADDRESS, json.dumps(self.ctx.state, default=str))
+
+    def test_a_locked_book_says_so_and_claims_nothing(self):
+        self.saved()
+        self.lock_book()
+        self.letter()
+        self.assertTrue(self.act("send_it")["need_address"])
+        self.assertEqual(self.last["say"], "Your address book is locked right now, so I can't look them up. A helper can "
+                                           "open it. What's Mark's email address? You can say it, or a helper can type it.")
+        self.act("give_address", address=SPOKEN)
+        self.act("address_right", right=True)
+        self.send()
+        self.assertEqual(self.mailer.sent[0][0], ADDRESS)
+        self.assertEqual(self.last["say"], "Sent to Mark. Would you like it printed so it can be mailed?")
+        self.assertNotIn("kept", self.last["response"])
+        self.assertNotIn("just_sent", self.ctx.state)
+
+    def test_a_locked_book_never_sounds_as_if_they_are_gone(self):
+        self.saved()
+        self.lock_book()
+        for tool in ("find_contact", "contact_address"):
+            out = self.act(tool, name="Mark")
+            self.assertTrue(out["book_locked"], tool)
+            self.assertEqual(self.last["say"], "Your address book is locked right now, so I can't look them up. A helper "
+                                               "can open it.")
+
+    def test_a_locked_book_keeps_nothing_and_says_so(self):
+        self.saved()
+        self.lock_book()
+        self.assertFalse(self.act("save_contact", name="Tyler")["saved"])
+        self.assertIn("locked", self.last["say"])
+        self.act("give_address", address=SPOKEN, person="Tyler")
+        self.act("address_right", right=True)
+        self.assertFalse(self.act("keep_address", keep=True)["kept"])
+        self.assertIn("locked", self.last["say"])
 
 
 class HeldSendTests(Base):
@@ -304,7 +409,6 @@ class HeldSendTests(Base):
 class ForgetTests(Base):
     def kept(self):
         self.address_then_send()
-        self.act("keep_address", keep=True)
 
     def test_forget_marks_address_removes_only_the_email(self):
         self.kept()
@@ -313,6 +417,7 @@ class ForgetTests(Base):
         out = self.mod.on_forget(self.ctx, "Mark’s email", False)
         self.assertEqual(out, {"addresses": [ADDRESS], "texts": []})
         self.assertEqual((self.contact("Mark")["email"], self.contact("Mark")["phone"]), ("", "555-0100"))
+        self.assertTrue(self.contact("Mark")["no_keep"])  # so a later send doesn't bring it back
         self.assertEqual(self.mod.forget_matches(self.ctx, "Mark's address"), 0)
 
     def test_forget_mark_removes_the_whole_contact(self):
@@ -320,7 +425,7 @@ class ForgetTests(Base):
         out = self.mod.on_forget(self.ctx, "Mark", False)
         self.assertEqual((out["addresses"], out["texts"]), ([ADDRESS], ["Mark"]))
         self.assertIsNone(self.contact("Mark"))
-        self.assertEqual(self.ctx.store.get("contacts"), [])
+        self.assertEqual(self.host.book.people(include_hidden=True), [])
 
     def test_forget_reaches_a_no_keep_record(self):
         self.address_then_send()
@@ -339,13 +444,15 @@ class ForgetTests(Base):
         self.assertEqual(self.mod.on_forget(self.ctx, "Mark", True), {"addresses": [], "texts": []})
         self.assertEqual(self.mod.on_forget(self.ctx, "Mark Hollis", True)["texts"], ["Mark Hollis"])
 
-    def test_everything(self):
+    def test_everything_leaves_the_book_and_clears_what_is_held(self):
         self.kept()
         self.act("save_contact", name="Ann")
-        self.assertEqual(self.mod.forget_matches(self.ctx, "everything"), 2)
+        self.assertEqual(self.mod.forget_matches(self.ctx, "everything"), 0)
         out = self.mod.on_forget(self.ctx, "everything", False)
-        self.assertEqual((out["addresses"], out["texts"]), ([ADDRESS], ["Ann", "Mark"]))
-        self.assertEqual(self.ctx.store.get("contacts"), [])
+        self.assertEqual(out, {"addresses": [ADDRESS], "texts": []})  # the one held in memory, so mail.log still clears
+        self.assertNotIn("just_sent", self.ctx.state)
+        self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+        self.assertIsNotNone(self.contact("Ann"))
 
     def test_nothing_about_a_stranger(self):
         self.kept()

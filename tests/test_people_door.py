@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 import address_book
@@ -496,6 +497,73 @@ class TheApp(unittest.TestCase):
         helpers.reset_db()
         self.assertEqual(server.BOOK.state(), "open")
         self.assertEqual(server.BOOK.count(), 0)
+
+
+class Forgetting(Door):
+    NOTHING = {"addresses": [], "texts": []}
+
+    def forget(self, *args, **kw):
+        return self.ask(self.full(), lambda ctx: ctx.people.forget(*args, **kw), "messages")[0]
+
+    def rolling_ids(self):
+        with closing(sqlite3.connect(self.book.backup_path)) as conn:
+            return [row[0] for row in conn.execute("SELECT id FROM people")]
+
+    def test_by_name_is_a_real_delete_and_the_rolling_copy_goes_at_once(self):
+        self.book.backup(fresh=True)
+        self.assertIn(self.sarah, self.rolling_ids())
+        self.assertEqual(self.forget("sarah lee"),
+                         {"addresses": [ADDRESS], "texts": sorted(["Sarah Lee", "555-0100", "Likes lilies"])})
+        self.assertIsNone(self.book.get(self.sarah))
+        self.assertNotIn(self.sarah, self.rolling_ids())
+
+    def test_a_hidden_mark_goes_and_none_is_left(self):
+        self.assertEqual(self.forget("Tom"), {"addresses": [], "texts": ["Tom"]})
+        self.assertIsNone(self.book.get(self.hidden))
+
+    def test_a_handle_takes_that_person_and_their_mark_and_no_one_else_by_name(self):
+        mark = self.book.add({"name": "Sarah Lee", "no_keep": True, "hidden": True})
+        other = self.book.add({"name": "Sarah Lee", "email": "other@example.org"})
+        self.assertEqual(self.forget({"id": self.sarah})["addresses"], [ADDRESS])
+        self.assertIsNone(self.book.get(self.sarah))
+        self.assertIsNone(self.book.get(mark))
+        self.assertIsNotNone(self.book.get(other))
+
+    def test_only_the_address_is_the_unkeep_rule(self):
+        self.book.backup(fresh=True)
+        before = self.book.backup_path.read_bytes()
+        self.assertEqual(self.forget("Sarah Lee", only_address=True), {"addresses": [ADDRESS], "texts": []})
+        person = self.book.get(self.sarah)
+        self.assertEqual((person["email"], person["phone"], person["no_keep"], person["hidden"]),
+                         ("", "555-0100", True, False))
+        self.assertNotEqual(self.book.backup_path.read_bytes(), before)
+
+    def test_only_the_address_with_nothing_else_leaves_a_hidden_mark(self):
+        amy = self.book.add({"name": "Amy", "email": "amy@example.org"})
+        self.forget("Amy", only_address=True)
+        self.assertEqual((self.book.get(amy)["email"], self.book.get(amy)["hidden"]), ("", True))
+
+    def test_only_the_address_with_no_address_changes_nothing(self):
+        self.assertEqual(self.forget("Mark", only_address=True), self.NOTHING)
+        self.assertFalse(self.book.get(self.mark)["no_keep"])
+
+    def test_a_doctor_is_out_of_reach(self):
+        self.assertEqual(self.forget("Dr Jones"), self.NOTHING)
+        self.assertEqual(self.forget({"id": self.doctor}), self.NOTHING)
+        self.assertIsNotNone(self.book.get(self.doctor))
+
+    def test_a_made_up_handle_or_a_stranger_takes_nothing(self):
+        for who in ({"id": "nobody"}, {}, None, "Nobody"):
+            self.assertEqual(self.forget(who), self.NOTHING)
+        self.assertEqual(self.book.count(), 3)
+
+    def test_it_needs_the_full_door(self):
+        self.assertEqual(self.ask(self.plain(), lambda ctx: ctx.people.forget("Sarah Lee"))[0], self.NOTHING)
+        self.assertIsNotNone(self.book.get(self.sarah))
+
+    def test_a_broken_book_forgets_nothing_and_raises_nothing(self):
+        host = self.full(book=Broken())
+        self.assertEqual(self.ask(host, lambda ctx: ctx.people.forget("Sarah Lee"), "messages")[0], self.NOTHING)
 
 
 if __name__ == "__main__":

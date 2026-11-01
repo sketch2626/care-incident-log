@@ -111,7 +111,7 @@
     },
     {
       "name": "keep_address",
-      "description": "Their answer when you asked about keeping the address for next time: true to keep it.",
+      "description": "Their answer about keeping an address. After a send it's already kept, so false when they say don't keep it. Told with nothing sent: true to keep it.",
       "inputSchema": {"type": "object", "properties": {
         "keep": {"type": "boolean", "description": "true if they want it kept"}
       }, "required": ["keep"]},
@@ -183,7 +183,7 @@
     }
   ],
   "storage": true,
-  "needs": {"internet_hosts": [], "mic": false, "send_mail": true, "modes": ["live", "normal", "offline"]},
+  "needs": {"internet_hosts": [], "mic": false, "send_mail": true, "contacts": true, "contacts_full": true, "modes": ["live", "normal", "offline"]},
   "offline": "works",
   "default_on": true
 }

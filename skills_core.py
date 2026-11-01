@@ -53,6 +53,7 @@ NEEDS_KEYS = {"internet_hosts", "mic", "modes", "send_mail",  # M15d: send_mail
 CONTACTS_FULL_SKILLS = {"messages"}  # M19: the only cards that may read or write a detail
 PERSON_DETAILS = ("email", "phone", "cell", "address", "facebook", "birthday", "notes")  # M19
 KEEP_FIELDS = ("relationship", *PERSON_DETAILS, "asked", "no_keep")  # M19: what ctx.people.keep may change
+FORGET_TEXTS = ("name", "phone", "cell", "address", "facebook", "notes")  # M19: what a forget hands back to scrub
 MODES = {"live", "normal", "offline"}
 RESERVED_ACTIONS = {"view", "on_event", "set_skill", "open_skill", "use_skill"}  # M13b: open_skill, use_skill
 
@@ -716,19 +717,47 @@ def _keep_person(book, name, fields):
     return _person_handle(book.get(row_id))
 
 
+def _drop_address(book, person):
+    change = {"email": "", "no_keep": True}
+    return book.update(person["id"], {**change, "hidden": _mark_only(address_book._merged(person, change))})
+
+
 def _unkeep_person(book, name):
     found = _named(book, name)
     if not found:
         return bool(book.add({"name": name, "no_keep": True, "hidden": True}))
-    change = {"email": "", "no_keep": True}
-    return all([book.update(person["id"], {**change, "hidden": _mark_only(address_book._merged(person, change))})
-                for person in found])
+    done = all([_drop_address(book, person) for person in found])
+    book.backup(fresh=True)  # the address leaves the rolling copy too
+    return done
+
+
+def _forget_person(book, who, only_address):
+    """who is a name, for everyone by it, or a handle, for that person and any hidden mark of theirs. only_address is
+    the unkeep rule, so it stays gone. Otherwise book.remove, which rewrites the rolling copy, and no hidden mark stays."""
+    if isinstance(who, str):
+        found = _named(book, who)
+    else:
+        person = _reachable(book, _handle_id(who))
+        found = [person, *[other for other in _named(book, person["name"]) if other["hidden"]]] if person else []
+    addresses = sorted({person["email"] for person in found if person["email"]})
+    if only_address:
+        for person in found:
+            if person["email"]:
+                _drop_address(book, person)
+        if addresses:
+            book.backup(fresh=True)
+        return {"addresses": addresses, "texts": []}
+    texts = sorted({person[field] for person in found for field in FORGET_TEXTS if person[field]})
+    for person in found:
+        book.remove(person["id"])
+    return {"addresses": addresses, "texts": texts}
 
 
 class _People:
     """ctx.people. Every method is a closure, so no attribute here holds the book or the host."""
 
-    __slots__ = ("find", "everyone", "locked", "count", "send_to", "show_address", "detail", "marks", "keep", "unkeep")
+    __slots__ = ("find", "everyone", "locked", "count", "send_to", "show_address", "detail", "marks", "keep", "unkeep",
+                 "forget")
 
     def __init__(self, methods):
         for name in self.__slots__:
@@ -800,6 +829,9 @@ def _people_door(host, skill, ctx):
     def unkeep(name):
         return reads(False, _unkeep_person, name, may=full)
 
+    def forget(who, only_address=False):
+        return reads({"addresses": [], "texts": []}, _forget_person, who, only_address, may=full)
+
     return _People(locals())
 
 
@@ -809,8 +841,9 @@ class SkillContext:
     (M17), and people (M19), the address book's one door. With needs.contacts: people.find(words) and everyone() give
     handles (who, and which details exist, never a value), and locked(), count(), send_to(handle, subject, body,
     pictures=()) and show_address(handle, kind, data). With needs.contacts_full, for the skills in
-    CONTACTS_FULL_SKILLS: detail(handle, field), marks(name), keep(name, fields) and unkeep(name). Without the
-    card's permission each of those answers nothing, and a skill never holds an address through the first set."""
+    CONTACTS_FULL_SKILLS: detail(handle, field), marks(name), keep(name, fields), unkeep(name) and
+    forget(name_or_handle, only_address=False). Without the card's permission each of those answers nothing, and a
+    skill never holds an address through the first set."""
 
     def __init__(self, host, skill):
         self._host = host

@@ -116,7 +116,7 @@ def _norm(name):  # the same as _norm in skills/messages/skill.py
     return " ".join(re.sub(r"^(?:my|our)\s+", "", text).split())
 
 
-def _both_named(person, wanted):  # the same as _both_named in skills/messages/skill.py
+def _both_named(person, wanted):
     """"My daughter Sarah": the relationship and the first name together. Either one alone never gets here."""
     words, first, relation = wanted.split(), _norm(person["name"]).split()[:1], _norm(person["relationship"])
     return bool(first and relation) and first[0] in words and set(relation.split()) <= set(words)

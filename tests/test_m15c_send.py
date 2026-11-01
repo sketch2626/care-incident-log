@@ -2,6 +2,7 @@ from tests import helpers  # noqa: F401  (must be first: points the data folders
 
 """M15c, end to end: the real server routes, a real SkillHost with a real send gate on a fake clock, a real Mailer talking
 to a fake loopback TLS SMTP server, and a fake Gemini. No real mail, accounts or keys."""
+import address_book
 import base64
 import json
 import shutil
@@ -71,6 +72,7 @@ class Flow(unittest.TestCase):
         self.host.mailer = self.mailer.send_for_skill
         self.host.gate = send_gate.SendGate(self.mailer, clock=lambda: self.now)
         self.host.mail_ready = lambda: True
+        self.host.book = address_book.AddressBook(self.dir, secret_store.SecretStore(self.dir))
         self.addCleanup(setattr, memory_core, "FORGET_REACH", memory_core.FORGET_REACH)
         memory_core.FORGET_REACH = skills_core.ForgetReach(self.host)
         server.set_skill_host_for_tests(self.host)
@@ -137,15 +139,17 @@ class Flow(unittest.TestCase):
         store = self.ctx.store
         return json.dumps({key: store.get(key) for key in store.keys()})
 
+    def everywhere(self):
+        """The skill's store and the book together: everywhere an address could be kept."""
+        return self.stored() + json.dumps(self.host.book.people(include_hidden=True))
+
     def log_rows(self):
         return [json.loads(x) for x in self.log.read_text(encoding="utf-8").splitlines()] if self.log.exists() else []
 
     # ----- setting up a send -----
     def keep_email(self, person="Mark", address=ADDRESS, relationship=""):
-        record = dict(self.mod._contact_of(self.ctx, person), email=address)
-        if relationship:
-            record["relationship"] = relationship
-        self.assertTrue(self.mod._put_contact(self.ctx, record))
+        fields = {"email": address, **({"relationship": relationship} if relationship else {})}
+        self.assertIsNotNone(self.ctx.people.keep(person, fields))
 
     def ready(self, person="Mark", words="Thinking of you.", saved=True, shown=True, line=True, address=SPOKEN):
         """A plain message with the look up, and the look drawn. Returns the send_it say."""
@@ -490,24 +494,25 @@ class ChangedContent(Flow):
 
 
 class KeepOnce(Flow):
-    def test_no_is_never_asked_again(self):
+    def test_dont_keep_it_holds_for_good(self):
         out = self.full_send(saved=False)
-        self.assertIn("Keep Mark's address for next time?", out["say"])
+        self.assertIn("Sent to Mark. It's in your book now.", out["say"])
+        self.assertNotIn("Keep", out["say"])
         self.call("keep_address", keep=False)
-        self.assertNotIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, self.everywhere())
         self.last_say = self.full_send(saved=False)
-        self.assertNotIn("Keep", self.last_say["say"])
-        self.assertNotIn(ADDRESS, self.stored())
+        self.assertNotIn("your book", self.last_say["say"])
+        self.assertNotIn(ADDRESS, self.everywhere())
         self.assertEqual(self.sent(), 2)
         # and it asks for the address again, since none was kept
         self.call("plain_message", person="Mark", words="Again.", signature="Dad")
         self.assertTrue(self.call("send_it")["response"].get("need_address"))
 
-    def test_yes_is_kept_and_asked_once(self):
+    def test_kept_on_the_first_send_and_said_once(self):
         out = self.full_send(saved=False)
-        self.assertIn("Keep Mark's address for next time?", out["say"])
-        self.call("keep_address", keep=True)
-        self.assertIn(ADDRESS, self.stored())
+        self.assertIn("It's in your book now.", out["say"])
+        self.assertIn(ADDRESS, self.everywhere())
+        self.assertNotIn(ADDRESS, self.stored())
         self.call("plain_message", person="Mark", words="Again.", signature="Dad")
         again = self.call("send_it")
         self.assertFalse(again["response"].get("need_address"))
@@ -518,14 +523,25 @@ class KeepOnce(Flow):
         self.count()
         self.now += 5
         out = self.done()
-        self.assertNotIn("Keep", out["say"])
+        self.assertNotIn("your book", out["say"])
         self.assertEqual(self.sent(), 2)
 
-    def test_each_person_is_asked_once(self):
+    def test_each_person_is_told_once(self):
         self.full_send("Mark", saved=False)
-        self.call("keep_address", keep=True)
         out = self.full_send("Amy", saved=False, address="amy dot park at example dot org")
-        self.assertIn("Keep Amy's address for next time?", out["say"])
+        self.assertIn("Sent to Amy. It's in your book now.", out["say"])
+
+
+class BookSend(Flow):
+    """M19: the look for someone in the book, through the real routes."""
+
+    def test_stopping_the_count_draws_the_look_through_the_book(self):
+        self.ready()
+        self.count()
+        self.heard("stop")
+        self.assertEqual(self.effects()["look"]["email"], ADDRESS)
+        self.assertNotIn(ADDRESS, json.dumps(self.ctx.state, default=str))
+        self.assertNotIn(ADDRESS, "".join(self.seen))
 
 
 class Forget(Flow):
@@ -547,7 +563,7 @@ class Forget(Flow):
         return self.post("/api/mary/skills/call", {"name": tool, "args": {"about": about, "confirmed": True}})
 
     def contact(self, name):
-        return self.ctx.store.get("contact-" + self.mod._contact_slug(name))
+        return next((p for p in self.host.book.people(include_hidden=True) if p["name"] == name), None)
 
     def facts(self):
         return json.dumps([m["text"] for m in server.mary_memory().store.active(limit=50)])
@@ -586,7 +602,7 @@ class Forget(Flow):
         self.assertIn("tomato soup", self.facts())
         self.assertEqual(self.to_list(), ["", AMY])
         self.assertIsNotNone(self.contact("Amy"))
-        self.assertNotIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, self.everywhere())
         self.assertNotIn(ADDRESS, "".join(self.seen))
         self.assertNotIn(ADDRESS, self.mod.view(self.ctx.state))
 
@@ -615,13 +631,13 @@ class Forget(Flow):
         self.assertIsNone(self.contact("Mark Hollis"))
         self.assertIsNotNone(self.contact("Mark Jones"))
 
-    def test_everything(self):
+    def test_everything_leaves_the_book_and_clears_mail_log(self):
         out = self.post("/api/mary/skills/call", {"name": "forget_memory", "args": {"about": "everything"}})
         self.assertFalse(out["response"].get("needs_yes", False) and out["response"].get("forgotten"))
         if out["response"].get("needs_yes"):
             self.post("/api/mary/skills/call", {"name": "forget_memory", "args": {"about": "everything", "confirmed": True}})
-        self.assertIsNone(self.contact("Mark"))
-        self.assertIsNone(self.contact("Amy"))
+        self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+        self.assertEqual(self.contact("Amy")["email"], AMY)
         self.assertEqual(self.to_list(), ["", ""])
 
     def test_a_contact_with_no_memory_rows(self):

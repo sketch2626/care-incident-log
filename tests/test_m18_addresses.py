@@ -271,7 +271,7 @@ class Contacts(Base):
         self.act("give_address", address=SPOKEN, person="Sarah")
         self.assertTrue(self.act("address_right", right=False)["need_address"])
         self.assertEqual(self.ctx.state.get("address_wait"), None)
-        self.assertNotIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, self.everywhere())
 
     def test_a_no_to_keeping_leaves_a_saved_address_alone(self):
         self.saved()
@@ -358,13 +358,17 @@ class Contacts(Base):
         self.mod.on_resident_line(self.ctx, True)
         self.assertEqual(self.ctx.state["address_wait"]["address"], ADDRESS)
 
-    def test_keep_question_after_a_send_is_as_it_was(self):
+    def test_a_send_keeps_it_and_says_so(self):
         self.address_then_send()
-        self.assertEqual(self.last["say"], "Sent to Mark. Keep Mark's address for next time?")
+        self.assertEqual(self.last["say"], "Sent to Mark. It's in your book now. Would you like it printed so it can be mailed?")
+        self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+
+    def test_dont_keep_it_after_a_send(self):
+        self.address_then_send()
         self.assertFalse(self.act("keep_address", keep=False)["kept"])
         self.assertEqual((self.contact("Mark")["email"], self.contact("Mark")["no_keep"]), ("", True))
 
-    def test_keep_question_after_a_send_keeps_it(self):
+    def test_keep_answer_after_a_send_changes_nothing(self):
         self.address_then_send()
         self.assertTrue(self.act("keep_address", keep=True)["kept"])
         self.assertEqual(self.contact("Mark")["email"], ADDRESS)
@@ -382,7 +386,8 @@ class Contacts(Base):
         self.assertNotIn(ADDRESS, json.dumps(self.ctx.state))
         log = self.dir / "skills.log"
         self.assertNotIn(ADDRESS, log.read_text("utf-8"))
-        self.assertIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, self.stored())
+        self.assertIn(ADDRESS, self.everywhere())
 
 
 class Screens(unittest.TestCase):

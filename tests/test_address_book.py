@@ -420,14 +420,27 @@ class Find(Base):
         self.assertEqual(self.found(None), [])
         self.assertEqual(self.found("my"), [])
 
-    def test_the_same_answers_as_the_messages_skill(self):
+    def test_the_same_answers_the_messages_skill_gave(self):
+        """Its own search went in M19 piece 3. This is that search as it was, so the book can't drift from it."""
         from skills.messages import skill
+        norm = skill._norm
+
+        def both_named(contact, wanted):
+            words, first, relation = wanted.split(), norm(contact["name"]).split()[:1], norm(contact.get("relationship"))
+            return bool(first and relation) and first[0] in words and set(relation.split()) <= set(words)
+
+        def old_find(every, name):
+            wanted = norm(name)
+            if not wanted:
+                return []
+            return [c for c in every if norm(c["name"]) == wanted] or [
+                c for c in every if norm(c["name"]).split()[:1] == [wanted] or norm(c.get("relationship")) == wanted] or [
+                c for c in every if both_named(c, wanted)]
+
         contacts = [{"name": p["name"], "relationship": p["relationship"]} for p in self.book.people()]
-        ctx = mock.Mock()
-        with mock.patch.object(skill, "_contacts", return_value=contacts):
-            for words in ("Sarah", "sarah miller", "my daughter", "my daughter Sarah", "son", "tom", "nobody", ""):
-                self.assertEqual([p["name"] for p in self.book.find(words)],
-                                 [c["name"] for c in skill._find(ctx, words)], words)
+        for words in ("Sarah", "sarah miller", "my daughter", "my daughter Sarah", "son", "tom", "nobody", ""):
+            self.assertEqual([p["name"] for p in self.book.find(words)],
+                             [c["name"] for c in old_find(contacts, words)], words)
 
 
 class Removing(Base):

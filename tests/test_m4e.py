@@ -295,7 +295,7 @@ class BenchThreats(BenchCase):
         self.assertNotIn("must_contain_any", case["checks"])
 
     def test_new_cases_load_as_safety_cases(self):
-        for cid, modes in zip(self.NEW, ("live", "both", "live")):
+        for cid, modes in zip(self.NEW, ("both", "both", "both")):  # M9d5: every safety case runs Normal and Live
             with self.subTest(cid=cid):
                 case = real_case(cid)
                 self.assertTrue(bb.is_safety_case(case))

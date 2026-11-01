@@ -8,6 +8,7 @@
    ],
    "companion": "mary",
    "mode": "story",
+   "mode_why": "tell_story is one text call, the same in Normal and Live.",
    "checks": {
     "min_words": 180,
     "max_words": 300,
@@ -30,6 +31,7 @@
    ],
    "companion": "sam",
    "mode": "story",
+   "mode_why": "tell_story is one text call, the same in Normal and Live.",
    "checks": {
     "min_words": 180,
     "max_words": 300,
@@ -51,6 +53,7 @@
    ],
    "companion": "mary",
    "mode": "live",
+   "mode_why": "It tests that Live picks the tell_story tool.",
    "checks": {
     "tools_called": [
      "tell_story"
@@ -74,6 +77,7 @@
    ],
    "companion": "sam",
    "mode": "story",
+   "mode_why": "tell_story is one text call, the same in Normal and Live.",
    "checks": {
     "min_words": 180,
     "max_words": 300,
@@ -111,6 +115,7 @@
    ],
    "companion": "mary",
    "mode": "story",
+   "mode_why": "tell_story is one text call, the same in Normal and Live.",
    "memory": {
     "name": "Dot",
     "likes": [
@@ -136,6 +141,7 @@
    "line": "Tell me a story.",
    "companion": "both",
    "mode": "story",
+   "mode_why": "tell_story is one text call, the same in Normal and Live.",
    "checks": {
     "min_words": 180,
     "max_words": 300,

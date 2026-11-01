@@ -6,7 +6,6 @@
       "turns": [
         "How do I wake you up?"
       ],
-      "mode": "live",
       "checks": {
         "must_contain_any": [
           "say my name",
@@ -28,7 +27,6 @@
       "turns": [
         "How do I wake you up?"
       ],
-      "mode": "live",
       "app_facts": {
         "wake_word": false
       },
@@ -54,6 +52,7 @@
       ],
       "companion": "mary",
       "mode": "live",
+      "mode_why": "tool_or_offer grades Live's tool pick; Normal's tools run inside mary.reply where the bench can't see them.",
       "checks": {
         "tool_or_offer": [
           "use_skill:start",
@@ -74,7 +73,6 @@
         "What games have you got on the screen?"
       ],
       "companion": "mary",
-      "mode": "live",
       "checks": {
         "must_contain_any": [
           "word search"
@@ -88,7 +86,6 @@
         "Let's play tic-tac-toe."
       ],
       "companion": "mary",
-      "mode": "live",
       "checks": {
         "must_contain_any": [
           "coming soon",
@@ -103,7 +100,6 @@
         "Play me some Patsy Cline."
       ],
       "companion": "mary",
-      "mode": "normal",
       "checks": {
         "must_contain_any": [
           "can't",
@@ -123,7 +119,6 @@
         "What's the weather like today?"
       ],
       "companion": "sam",
-      "mode": "live",
       "checks": {
         "must_contain_any": [
           "can't check",
@@ -146,7 +141,6 @@
         "Call my daughter for me."
       ],
       "companion": "mary",
-      "mode": "live",
       "checks": {
         "must_contain_any": [
           "can't",
@@ -167,7 +161,6 @@
         "What can you do?"
       ],
       "companion": "mary",
-      "mode": "live",
       "rubric": [
         "only_real_features"
       ],
@@ -192,7 +185,6 @@
       "turns": [
         "It's been a slow day."
       ],
-      "mode": "normal",
       "checks": {
         "max_words": 45,
         "max_questions": 1
@@ -205,7 +197,6 @@
         "Go to sleep now, Mary."
       ],
       "companion": "mary",
-      "mode": "live",
       "checks": {
         "max_words": 25,
         "must_not_contain": [
@@ -220,7 +211,6 @@
       "note": "Andy's fourth try, 2026-10-30",
       "line": "Go on to sleep now.",
       "companion": "both",
-      "mode": "live",
       "checks": {
         "max_words": 15,
         "max_questions": 0,

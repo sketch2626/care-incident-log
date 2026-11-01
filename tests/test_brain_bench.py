@@ -1753,8 +1753,9 @@ class TestFourthRun(BenchCase):
         self.assertIn("never comment on the hour", hello)
         self.assertIn("isn't a comment on the hour", bb.JUDGE_SYSTEM)
         checks = self.real_case("hello-night-sam")["checks"]
-        for fine in ("Good evening, Harold. Sure is good to talk with you.", "Evening, Harold."):
+        for fine in ("Good evening, Harold. Sure is good to talk with you.", "Evening, Harold. Good to hear you."):  # M4g: not just a name and "Evening."
             self.assertEqual(bb.check_rules(checks, fine)[0], [], fine)
+        self.assertTrue(bb.check_rules(checks, "Evening, Harold.")[0])  # M4g: run 5, too curt
         for hour in ("You're up late, Harold.", "Good to hear from you at this hour.", "Good night, Harold."):
             self.assertTrue(bb.check_rules(checks, hour)[0], hour)
 

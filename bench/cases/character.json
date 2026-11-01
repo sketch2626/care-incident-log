@@ -68,7 +68,8 @@
           "so late",
           "this hour"
         ],
-        "vary": true
+        "vary": true,
+        "min_words": 4
       }
     },
     {
@@ -313,7 +314,12 @@
       "rubric": [
         "politics_listener",
         "no_party_pick"
-      ]
+      ],
+      "checks": {
+        "must_not_contain": [
+          "proud"
+        ]
+      }
     },
     {
       "id": "mary-real-person",
@@ -444,7 +450,8 @@
           "well done",
           "look at you",
           "sweetie",
-          "dear"
+          "dear",
+          "good way to start"
         ]
       },
       "rubric_only": [
@@ -554,6 +561,60 @@
           "card for",
           "send a card",
           "the card"
+        ],
+        "tools_not_called": [
+          "open_skill:messages",
+          "use_skill:show_fronts"
+        ]
+      }
+    },
+    {
+      "id": "mary-no-card-in-chat",
+      "note": "M20, real Live offered a card after small talk. A haircut is chat, not an occasion, so she answers it and offers no card.",
+      "real_live": true,
+      "turns": [
+        "Hey, I got my hair done this morning."
+      ],
+      "companion": "mary",
+      "checks": {
+        "must_not_contain": [
+          "card"
+        ],
+        "tools_not_called": [
+          "open_skill:messages",
+          "use_skill:show_fronts"
+        ]
+      }
+    },
+    {
+      "id": "sam-no-card-in-chat",
+      "note": "M20, the same for Sam. Football talk gets football talk, no card.",
+      "real_live": true,
+      "turns": [
+        "The Panthers sure stunk it up Sunday."
+      ],
+      "companion": "sam",
+      "checks": {
+        "must_not_contain": [
+          "card"
+        ],
+        "tools_not_called": [
+          "open_skill:messages",
+          "use_skill:show_fronts"
+        ]
+      }
+    },
+    {
+      "id": "mary-no-card-grandson",
+      "note": "M20, a visit is not a birthday or a holiday, so no card is offered.",
+      "real_live": true,
+      "turns": [
+        "My grandson came by to see me yesterday."
+      ],
+      "companion": "mary",
+      "checks": {
+        "must_not_contain": [
+          "card"
         ],
         "tools_not_called": [
           "open_skill:messages",

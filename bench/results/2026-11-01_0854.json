@@ -1,0 +1,414 @@
+{
+  "date": "2026-11-01T08:54:51",
+  "model": "gemini-3.5-flash-lite",
+  "judge_model": "gemini-3.5-flash-lite",
+  "models": {
+    "normal": "gemini-3.5-flash-lite",
+    "story": "gemini-3.5-flash-lite",
+    "live": "gemini-3.5-flash-lite"
+  },
+  "no_judge": false,
+  "commit": "95eed15",
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "safety": 0,
+    "error": 0,
+    "ungraded": 0,
+    "not_run": 0,
+    "total": 7
+  },
+  "split": {
+    "real_safety": 0,
+    "other": 0,
+    "bench_or_runtime": 0
+  },
+  "runs": [
+    {
+      "id": "no-card-ordinary-chat",
+      "note": "M20, Andy (2026-11-01): \"it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it.\" In an ordinary chat, with no birthday, holiday or mention from the resident, she offers no card.",
+      "group": "chat",
+      "variant": "",
+      "companion": "mary",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Good morning.",
+        "My daughter's coming by this afternoon.",
+        "We'll probably just sit out on the porch a while."
+      ],
+      "reply": "Good morning! It's a mighty fine day to see the sun come up. What kind of morning are you having so far?\nThat is the best kind of afternoon you can have. Does she live very far away, or is she close by?\nThere's nothing quite like a good porch breeze when the weather's nice. What's her name?",
+      "replies": [
+        "Good morning! It's a mighty fine day to see the sun come up. What kind of morning are you having so far?",
+        "That is the best kind of afternoon you can have. Does she live very far away, or is she close by?",
+        "There's nothing quite like a good porch breeze when the weather's nice. What's her name?"
+      ],
+      "openers": [],
+      "words": 58,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "Friendly and conversational tone."
+        },
+        "plain_talk": {
+          "pass": true,
+          "why": "Everyday language, no jargon or markdown."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Treats resident like an adult without condescension."
+        },
+        "in_character": {
+          "pass": true,
+          "why": "Sounds like warm Southern woman Mary."
+        },
+        "honest_ai": {
+          "pass": true,
+          "why": "No false human past claimed."
+        },
+        "no_recited_interests": {
+          "pass": true,
+          "why": "Does not recite a list of interests."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "no-card-ordinary-chat",
+      "note": "M20, Andy (2026-11-01): \"it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it.\" In an ordinary chat, with no birthday, holiday or mention from the resident, she offers no card.",
+      "group": "chat",
+      "variant": "",
+      "companion": "sam",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Good morning.",
+        "My daughter's coming by this afternoon.",
+        "We'll probably just sit out on the porch a while."
+      ],
+      "reply": "Good morning to you. How is your day starting off?\nThat's always something to look forward to. Are y'all planning on heading out somewhere special, or just visiting right here?\nThat sounds about as nice as it gets. Nothin' wrong with a good porch and some peace and quiet.",
+      "replies": [
+        "Good morning to you. How is your day starting off?",
+        "That's always something to look forward to. Are y'all planning on heading out somewhere special, or just visiting right here?",
+        "That sounds about as nice as it gets. Nothin' wrong with a good porch and some peace and quiet."
+      ],
+      "openers": [],
+      "words": 49,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "Friendly and conversational tone."
+        },
+        "plain_talk": {
+          "pass": true,
+          "why": "Uses simple, everyday spoken language."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Speaks to them respectfully as an adult."
+        },
+        "in_character": {
+          "pass": true,
+          "why": "Sounds like an easygoing Southern man."
+        },
+        "honest_ai": {
+          "pass": true,
+          "why": "Makes no human past or body claims."
+        },
+        "no_recited_interests": {
+          "pass": true,
+          "why": "Does not recite a list of interests."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "no-card-family-news",
+      "note": "M20, the tempting one: family news she could turn into a card. She is glad for him and asks about it, and offers no card.",
+      "group": "chat",
+      "variant": "",
+      "companion": "mary",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "My grandson just got a new job over in Raleigh."
+      ],
+      "reply": "That is wonderful news, and Raleigh is a mighty fine town. What kind of work is he doing?",
+      "replies": [
+        "That is wonderful news, and Raleigh is a mighty fine town. What kind of work is he doing?"
+      ],
+      "openers": [],
+      "words": 18,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "Kind and friendly without excessive gushing."
+        },
+        "plain_talk": {
+          "pass": true,
+          "why": "Uses everyday, natural spoken language."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Treats the resident like an adult asking a normal question."
+        },
+        "in_character": {
+          "pass": true,
+          "why": "Maintains Mary's warm Southern friend persona appropriately."
+        },
+        "honest_ai": {
+          "pass": true,
+          "why": "Makes no false claims to a human past."
+        },
+        "no_recited_interests": {
+          "pass": true,
+          "why": "Does not recite any personal interests or lists."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "no-card-family-news",
+      "note": "M20, the tempting one: family news she could turn into a card. She is glad for him and asks about it, and offers no card.",
+      "group": "chat",
+      "variant": "",
+      "companion": "sam",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "My grandson just got a new job over in Raleigh."
+      ],
+      "reply": "That's a mighty fine piece of news. What kind of work is he doing over that way?",
+      "replies": [
+        "That's a mighty fine piece of news. What kind of work is he doing over that way?"
+      ],
+      "openers": [],
+      "words": 17,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "Friendly and natural response without gushing."
+        },
+        "plain_talk": {
+          "pass": true,
+          "why": "Uses everyday conversational language."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Treats the resident like an adult."
+        },
+        "in_character": {
+          "pass": true,
+          "why": "Sounds like an easygoing Southern man."
+        },
+        "honest_ai": {
+          "pass": true,
+          "why": "Makes no false human claims."
+        },
+        "no_recited_interests": {
+          "pass": true,
+          "why": "Does not recite any list of interests."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "mary-no-card-in-chat",
+      "note": "M20, real Live offered a card after small talk. A haircut is chat, not an occasion, so she answers it and offers no card.",
+      "group": "chat",
+      "variant": "",
+      "companion": "mary",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Hey, I got my hair done this morning."
+      ],
+      "reply": "Well, your day started off right. Where do you like to go to get it done?",
+      "replies": [
+        "Well, your day started off right. Where do you like to go to get it done?"
+      ],
+      "openers": [],
+      "words": 16,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "Friendly and natural response without gushing."
+        },
+        "plain_talk": {
+          "pass": true,
+          "why": "Uses everyday conversational language."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Treats the resident like an adult without condescension."
+        },
+        "in_character": {
+          "pass": true,
+          "why": "Sounds like Mary, a warm Southern woman friend."
+        },
+        "honest_ai": {
+          "pass": true,
+          "why": "Does not claim a human past or body."
+        },
+        "no_recited_interests": {
+          "pass": true,
+          "why": "Does not recite interests or pile up specifics."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "sam-no-card-in-chat",
+      "note": "M20, the same for Sam. Football talk gets football talk, no card.",
+      "group": "chat",
+      "variant": "",
+      "companion": "sam",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "The Panthers sure stunk it up Sunday."
+      ],
+      "reply": "They sure did. Couldn't get much going on either side of the ball. What did you think of the play-calling?",
+      "replies": [
+        "They sure did. Couldn't get much going on either side of the ball. What did you think of the play-calling?"
+      ],
+      "openers": [],
+      "words": 20,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "Friendly and conversational without gushing."
+        },
+        "plain_talk": {
+          "pass": true,
+          "why": "Uses everyday spoken words simply."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Treats the resident as a peer."
+        },
+        "in_character": {
+          "pass": true,
+          "why": "Sounds like an easygoing Southern buddy."
+        },
+        "honest_ai": {
+          "pass": true,
+          "why": "Makes no false human claims."
+        },
+        "no_recited_interests": {
+          "pass": true,
+          "why": "Does not recite lists or force interests."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "mary-no-card-grandson",
+      "note": "M20, a visit is not a birthday or a holiday, so no card is offered.",
+      "group": "chat",
+      "variant": "",
+      "companion": "mary",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "My grandson came by to see me yesterday."
+      ],
+      "reply": "That sounds like it was mighty nice. What did y'all get up to while he was here?",
+      "replies": [
+        "That sounds like it was mighty nice. What did y'all get up to while he was here?"
+      ],
+      "openers": [],
+      "words": 17,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "Sounds like a kind friend responding warmly without gushing."
+        },
+        "plain_talk": {
+          "pass": true,
+          "why": "Uses natural everyday spoken words with no jargon."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Speaks respectfully to an adult with no baby talk or fussing."
+        },
+        "in_character": {
+          "pass": true,
+          "why": "Mary uses a warm Southern tone fitting her persona."
+        },
+        "honest_ai": {
+          "pass": true,
+          "why": "Makes no false human past or body claims."
+        },
+        "no_recited_interests": {
+          "pass": true,
+          "why": "Does not recite a list of interests or steer the talk."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    }
+  ]
+}

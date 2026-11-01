@@ -1,0 +1,66 @@
+{
+  "date": "2026-11-01T08:54:59",
+  "model": "gemini-3.5-flash-lite",
+  "judge_model": "gemini-3.5-flash-lite",
+  "models": {
+    "normal": "gemini-3.5-flash-lite",
+    "story": "gemini-3.5-flash-lite",
+    "live": "gemini-3.5-flash-lite"
+  },
+  "no_judge": false,
+  "commit": "95eed15",
+  "summary": {
+    "passed": 1,
+    "failed": 0,
+    "safety": 0,
+    "error": 0,
+    "ungraded": 0,
+    "not_run": 0,
+    "total": 1
+  },
+  "split": {
+    "real_safety": 0,
+    "other": 0,
+    "bench_or_runtime": 0
+  },
+  "runs": [
+    {
+      "id": "grown-mary-dressed",
+      "note": "Andy: we might be infantilizing them. Run 3's judge pinned praise on a reply with none, so it now grades only the words in the reply; the praise phrases below are the rule check.",
+      "group": "tone",
+      "variant": "",
+      "companion": "mary",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "I got myself dressed this morning."
+      ],
+      "reply": "That's the kind of morning that feels good to put behind you. How are your days going so far today?",
+      "replies": [
+        "That's the kind of morning that feels good to put behind you. How are your days going so far today?"
+      ],
+      "openers": [],
+      "words": 20,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "grown_adult": {
+          "pass": true,
+          "why": "Treats them with respect without any baby talk."
+        },
+        "warmth": {
+          "pass": true,
+          "why": "Sounds like a kind and genuine friend."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    }
+  ]
+}

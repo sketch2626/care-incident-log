@@ -835,8 +835,10 @@ SPOKEN_ADDRESS = ((r"\b(?:capital|cap|upper case|uppercase|lower case|lowercase)
                   (r"\s*\bunderscore\b\s*", "_"),
                   (r"\s*\b(?:dash|hyphen)\b\s*", "-"),
                   (r"\s*\bplus\b\s*", "+"))
-FORGET_ADDRESS_RES = (re.compile(r"(?:the\s+)?(.+?)\s+(?:e-?mail(?:\s+address)?|address)"),
-                      re.compile(r"(?:the\s+|my\s+)?(?:e-?mail(?:\s+address)?|address)\s+(?:for|of)\s+(.+)"))
+_FORGET_FIELD = r"(?P<field>e-?mail(?:\s+address)?|(?:mailing|street|home)\s+address|address)"  # M19
+FORGET_ADDRESS_RES = (re.compile(r"(?:the\s+)?(?P<who>.+?)\s+" + _FORGET_FIELD),
+                      re.compile(r"(?:the\s+|my\s+)?" + _FORGET_FIELD + r"\s+(?:for|of)\s+(?P<who>.+)"))
+FORGET_ASK = "ask"  # M19: a bare "address" with both filled, so she asks which
 SAY_FOLD = ("It prints on one sheet of paper. Fold the top half back behind, printed side out, then fold it left to "
             "right. Mailing it needs some help from the facility.")
 SAY_SHEET = "It prints on one sheet of paper. Mailing it needs some help from the facility."
@@ -1554,28 +1556,41 @@ def contact_address(ctx, name):  # M18
                 note="For what they asked, this once. Spell it, or put it in the box.")
 
 
-def _exactly(ctx, words):
-    """This exact name: someone in the list, else a "don't keep" mark, which has no handle and goes by its name."""
+def _exactly(ctx, words, exact=True):
+    """This exact name: someone in the list, else a "don't keep" mark, which has no handle and goes by its name.
+    exact False: a mark counts however it's named."""
     found = [hit for hit in ctx.people.find(words) if _norm(hit["name"]) == _norm(words)]
-    marks = ctx.people.marks(words)
+    marks = ctx.people.marks(words, exact)
     return found or ([{"name": words}] if marks["asked"] or marks["no_keep"] else [])
 
 
+def _address_hits(hits, field):  # M19
+    """Who holds what they named, and which field: the one named, else the only one filled, else FORGET_ASK."""
+    if field:
+        return [hit for hit in hits if hit["has_" + field]], field
+    hits = [hit for hit in hits if hit["has_email"] or hit["has_address"]]
+    if any(hit["has_email"] and hit["has_address"] for hit in hits):
+        return hits, FORGET_ASK
+    return hits, "email" if any(hit["has_email"] for hit in hits) else "address"
+
+
 def _forget_hits(ctx, about, own_name):
-    """The people about means, whether it means only their address ("Mark's address"), and the name it came to."""
+    """The people about means, what it takes of them (False for all of it, "email", "address" for the mailing address,
+    or FORGET_ASK), and the name it came to."""
     words = str(about or "").strip(" .!?").replace("\u2019", "'")
     if own_name:
         return _exactly(ctx, words), False, words
     for pattern in FORGET_ADDRESS_RES:
         found = pattern.fullmatch(words.lower())
         if found:
-            raw = found.group(1)
+            raw, said = found.group("who"), found.group("field")
+            field = "email" if said.startswith("e") else "" if said == "address" else "address"  # M19
             for name in (re.sub(r"'s$|'$", "", raw), raw, raw[:-1] if raw.endswith("s") else raw):
                 hits = ctx.people.find(name)
                 if hits:
-                    return [hit for hit in hits if hit["has_email"]], True, name
-            return [], True, re.sub(r"'s$|'$", "", raw)
-    return ctx.people.find(words) or _exactly(ctx, words), False, words
+                    return (*_address_hits(hits, field), name)
+            return [], field or "email", re.sub(r"'s$|'$", "", raw)
+    return ctx.people.find(words) or _exactly(ctx, words, exact=False), False, words
 
 
 def _holding(ctx, hits, wanted, own_name):
@@ -1594,6 +1609,11 @@ def _everything(about):
     return str(about or "").strip().lower() == "everything"
 
 
+def _several(hits):  # M19
+    """More than one person by different names: she asks which, and nothing goes until she knows."""
+    return len({_norm(hit["name"]) for hit in hits}) > 1
+
+
 @_locked
 def on_forget(ctx, about, own_name=False):
     """A real forget. Their addresses and names come back so the core can drop them from talk history and mail.log.
@@ -1603,7 +1623,9 @@ def on_forget(ctx, about, own_name=False):
         keys = [key for key in ("address_wait", "address_told", "just_sent", "held") if key in ctx.state]  # M18: address_told
     else:
         hits, only_address, wanted = _forget_hits(ctx, about, own_name)
-        keys = _holding(ctx, hits, wanted, own_name)
+        if only_address == FORGET_ASK or (_several(hits) and not own_name):  # M19
+            return {"addresses": [], "texts": []}
+        keys = [] if only_address == "address" else _holding(ctx, hits, wanted, own_name)
     addresses = [ctx.state[key]["address"] for key in keys if ctx.state[key].get("address")]
     texts = []
     for hit in hits:
@@ -1614,9 +1636,26 @@ def on_forget(ctx, about, own_name=False):
         ctx.state.pop(key, None)
     if "held" in keys:
         _no_look(ctx)
-    if keys or hits:
+    if keys or (hits and only_address != "address"):
         ctx.state.pop("last_sent", None)
     return {"addresses": sorted(set(addresses)), "texts": sorted(set(texts))}
+
+
+@_locked
+def forget_question(ctx, about):  # M19
+    """What she must ask before this forget, or None: {"which": names} when it could be several people, {"field": name}
+    for a bare "address" with both filled, or {"person": name, "relationship": word} for the whole person."""
+    if _everything(about):
+        return None
+    hits, only_address, _ = _forget_hits(ctx, about, False)
+    people = [hit for hit in hits if "id" in hit]
+    if _several(people):
+        return {"which": sorted({hit["name"] for hit in people})}
+    if not people or (only_address and only_address != FORGET_ASK):
+        return None
+    if only_address:
+        return {"field": people[0]["name"]}
+    return {"person": people[0]["name"], "relationship": people[0]["relationship"]}
 
 
 @_locked

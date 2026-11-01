@@ -168,6 +168,7 @@ class AddressBook:
         self._secrets = secrets
         self._lock = threading.RLock()
         self._backup_stale = False  # a fresh rewrite failed and the old copy couldn't be removed either
+        self.on_change = None  # called as (kind, person_id, record or None) after a committed add, update, remove or clear
         self._forget()
 
     def __repr__(self):
@@ -283,6 +284,15 @@ class AddressBook:
 
     # Writing
 
+    def _changed(self, kind, row_id=None, record=None):
+        """Tells on_change what was just committed. A fault there never reaches the book's caller."""
+        if self.on_change is None:
+            return
+        try:
+            self.on_change(kind, row_id, dict(record) if record else None)
+        except Exception:
+            pass
+
     def _sealer(self):
         """The cipher for a write. This is the only place a key is ever made, and _aes is empty only when _try_open has
         just found a book with no rows and no meta. A key the store won't give back is never used."""
@@ -322,6 +332,7 @@ class AddressBook:
                 raise BookFull()
             row_id = token_hex(16)
             self._store(row_id, record)
+            self._changed("add", row_id, record)
         return row_id
 
     def update(self, row_id, fields):
@@ -335,6 +346,7 @@ class AddressBook:
             if old["hidden"] and not record["hidden"] and self._shown() >= MAX_PEOPLE:
                 raise BookFull()
             self._store(row_id, record)
+            self._changed("update", row_id, record)
         return True
 
     def remove(self, row_id):
@@ -347,6 +359,7 @@ class AddressBook:
                 conn.execute("DELETE FROM people WHERE id=?", (row_id,))
             del self._cache[row_id]
             self.backup(fresh=True)
+            self._changed("remove", row_id)
         return True
 
     def clear(self):
@@ -362,6 +375,7 @@ class AddressBook:
                 conn.execute("VACUUM")
             self._cache, self._damaged = {}, 0
             self.backup(fresh=True)
+            self._changed("clear")
         return removed
 
     # Reading
@@ -380,10 +394,10 @@ class AddressBook:
                      if include_hidden or not record["hidden"]]
         return sorted(found, key=lambda person: (person["name"].casefold(), person["id"]))
 
-    def find(self, words):
+    def find(self, words, include_hidden=False):
         """By exact name, else first name or relationship, else relationship and first name together, without case.
-        Hidden marks never match. More than one back means she asks which."""
-        wanted, every = _norm(words), self.people()
+        Hidden marks match only when asked for. More than one back means she asks which."""
+        wanted, every = _norm(words), self.people(include_hidden)
         if not wanted:
             return []
         return [p for p in every if _norm(p["name"]) == wanted] or [

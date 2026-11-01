@@ -700,6 +700,11 @@ def _named(book, name):
     return sorted(found, key=lambda person: person["hidden"])
 
 
+def _marked(book, name):
+    """Whoever the book finds by this name, however it's said, hidden marks too. Never a doctor."""
+    return [person for person in book.find(name, include_hidden=True) if person["kind"] != "doctor"]
+
+
 def _mark_only(record):
     """A row stays hidden when all it says is "don't keep this": no_keep, with no detail left."""
     return record["no_keep"] and not any(record[field] for field in PERSON_DETAILS)
@@ -717,8 +722,8 @@ def _keep_person(book, name, fields):
     return _person_handle(book.get(row_id))
 
 
-def _drop_address(book, person):
-    change = {"email": "", "no_keep": True}
+def _drop_address(book, person, field="email"):
+    change = {"address": ""} if field == "address" else {"email": "", "no_keep": True}
     return book.update(person["id"], {**change, "hidden": _mark_only(address_book._merged(person, change))})
 
 
@@ -733,12 +738,21 @@ def _unkeep_person(book, name):
 
 def _forget_person(book, who, only_address):
     """who is a name, for everyone by it, or a handle, for that person and any hidden mark of theirs. only_address is
-    the unkeep rule, so it stays gone. Otherwise book.remove, which rewrites the rolling copy, and no hidden mark stays."""
+    the unkeep rule, so it stays gone; "address" instead blanks only the mailing address, which comes back with the texts.
+    Otherwise book.remove, which rewrites the rolling copy, and no hidden mark stays."""
     if isinstance(who, str):
-        found = _named(book, who)
+        found = _named(book, who) or [person for person in _marked(book, who) if person["hidden"]]
     else:
         person = _reachable(book, _handle_id(who))
         found = [person, *[other for other in _named(book, person["name"]) if other["hidden"]]] if person else []
+    if only_address == "address":
+        lines = sorted({person["address"] for person in found if person["address"]})
+        for person in found:
+            if person["address"]:
+                _drop_address(book, person, "address")
+        if lines:
+            book.backup(fresh=True)
+        return {"addresses": [], "texts": lines}
     addresses = sorted({person["email"] for person in found if person["email"]})
     if only_address:
         for person in found:
@@ -817,9 +831,9 @@ def _people_door(host, skill, ctx):
             return ""
         return reads("", lambda book: (_reachable(book, _handle_id(handle)) or {}).get(field, ""), may=full)
 
-    def marks(name):
+    def marks(name, exact=False):
         def read(book):
-            found = _named(book, name)
+            found = _named(book, name) if exact else _marked(book, name)
             return {"asked": any(p["asked"] for p in found), "no_keep": any(p["no_keep"] for p in found)}
         return reads({"asked": False, "no_keep": False}, read, may=full)
 
@@ -841,8 +855,9 @@ class SkillContext:
     (M17), and people (M19), the address book's one door. With needs.contacts: people.find(words) and everyone() give
     handles (who, and which details exist, never a value), and locked(), count(), send_to(handle, subject, body,
     pictures=()) and show_address(handle, kind, data). With needs.contacts_full, for the skills in
-    CONTACTS_FULL_SKILLS: detail(handle, field), marks(name), keep(name, fields), unkeep(name) and
-    forget(name_or_handle, only_address=False). Without the card's permission each of those answers nothing, and a
+    CONTACTS_FULL_SKILLS: detail(handle, field), marks(name, exact=False), keep(name, fields), unkeep(name) and
+    forget(name_or_handle, only_address=False), where only_address is True or "email", or "address" for the mailing
+    address. Without the card's permission each of those answers nothing, and a
     skill never holds an address through the first set."""
 
     def __init__(self, host, skill):
@@ -1057,6 +1072,7 @@ class ForgetReach:  # M15c
 
     def __init__(self, host):
         self.count = host.forget_count
+        self.ask = host.forget_ask  # M19
         self.forget = host.forget_reach
 
 
@@ -1738,6 +1754,14 @@ class SkillHost:
         """How many contacts match about, across each skill's optional forget_matches(ctx, about)."""
         counts = [self._optional(skill, "forget_matches", about) for skill in list(self.skills.values())]
         return sum(count for count in counts if type(count) is int and count > 0)
+
+    def forget_ask(self, about):  # M19
+        """What she must ask before this forget, from the first skill whose optional forget_question(ctx, about) says."""
+        for skill in list(self.skills.values()):
+            out = self._optional(skill, "forget_question", about)
+            if isinstance(out, dict):
+                return out
+        return None
 
     def forget_reach(self, about, own_name=False):
         """A real forget reaches what skills hold, on or off, through each one's optional on_forget(ctx, about, own_name),

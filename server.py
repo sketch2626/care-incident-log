@@ -341,6 +341,7 @@ def init_memories():
     try:
         with closing(connect_memories()) as conn, conn:
             conn.executescript(memory_core.MEMORIES_SCHEMA)
+            memory_core.upgrade_dates(conn)  # M19
         split_memories()
         with closing(connect()) as conn, conn:
             memory_core.migrate_json(path, memory_core.MemoryStore(connect_memories), conn)  # once, by key memories_moved
@@ -351,6 +352,7 @@ def init_memories():
         path.with_name(path.name + ".tmp").unlink(missing_ok=True)
     except (sqlite3.Error, OSError):
         pass
+    sync_book_dates()  # M19
 
 
 def clean_incident(data):
@@ -510,6 +512,54 @@ def mary_memory():
 
 def memory_store():  # M9c: any change may be the day's backup; a delete always rewrites it
     return memory_core.MemoryStore(connect_memories, on_change=lambda deleted: backup_memories(fresh=deleted))
+
+
+def _book_changed(kind, person_id, record):  # M19: runs inside the book's lock, on the thread that changed it
+    """Keeps the book's birthdays and her reminder dates in step."""
+    if kind == "clear":
+        memory_store().clear_book_dates()
+    else:
+        taken = memory_core.book_taken(BOOK.people(include_hidden=True), person_id)
+        memory_store().book_date(person_id, None if kind == "remove" else record, taken)
+
+
+def _set_birthday(person_id, month, day):  # M19: a day corrected in talk. Its on_change finds the row already moved
+    person = BOOK.get(person_id)
+    if person:
+        year = person["birthday"][:-5]
+        birthday = f"{year}{month:02d}-{day:02d}"
+        BOOK.update(person_id, {"birthday": birthday if address_book._birthday(birthday) else birthday[-5:]})
+
+
+class _BookLink:  # M19: memory_core imports neither server nor the book
+    people = staticmethod(lambda: BOOK.people(include_hidden=True))
+    find = staticmethod(lambda words: BOOK.find(words))
+    set_birthday = staticmethod(_set_birthday)
+
+
+BOOK.on_change = _book_changed
+memory_core.BOOK_LINK = _BookLink
+
+
+def sync_book_dates():  # M19
+    """Puts the book's birthdays and her dates back in step at each start, so a write that couldn't reach her memories'
+    file, or a move made before it was ready, catches up. A locked book waits. Never raises."""
+    try:
+        people, store = BOOK.people(include_hidden=True), memory_store()
+        have = store.book_people()
+        for person in people:
+            if person["birthday"] or person["id"] in have:
+                store.book_date(person["id"], person, memory_core.book_taken(people, person["id"]))
+        if not BOOK.damaged():  # a row that won't open today may open tomorrow
+            for person_id in have - {person["id"] for person in people}:
+                store.book_date(person_id, None)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def clear_book():  # M19
+    """Clears the book on its own, and gives back how many went. Its dates go through on_change; her memories stay."""
+    return BOOK.clear()
 
 
 def mary_remove_memory(memory_id):  # M9c: the Remove button

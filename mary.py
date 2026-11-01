@@ -631,12 +631,26 @@ NAME_FORGOTTEN_TEXT = "All right, I won't use a name."  # M9c
 NOTHING_TO_FORGET_TEXT = "I don't have anything saved about that."
 OFFER_DROPPED_TEXT = "All right, I won't write that down."
 FORGET_ASK_TEXT = "Should I forget everything about your {}?"
+FORGET_PERSON_TEXT = "Forget {name}? {Own} address, {own} birthday reminders and what I remember about {them} all go for good."  # M19
+FORGET_WHICH_TEXT = "Which one, {}?"  # M19
+FORGET_FIELD_TEXT = "The email or the mailing address?"  # M19
+_THEIR = {"own": "their", "them": "them"}  # M19: no guessing: only a word that settles it changes this
+_HER = {"own": "her", "them": "her"}
+_HIS = {"own": "his", "them": "him"}
+_KIN_WORDS = {**dict.fromkeys("daughter wife mother sister aunt niece granddaughter".split(), _HER),
+              **dict.fromkeys("son husband father brother uncle nephew grandson".split(), _HIS)}
 FORGET_FAILED_TEXT = "I couldn't do that just now. Please say yes again in a little while."
 REMINDERS_STOPPED_TEXT = "All right, I won't bring that up again."  # M15a
 RECALL_NOTE = "Newer dates win when two disagree. Only say what is here; never make up a memory."
 RECALL_EMPTY_NOTE = "Nothing saved about that. Say so; don't guess."
 FORGET_EMPTY_NOTE = "Nothing saved matches that. Say so kindly, in one line."
 FORGET_OFFER_NOTE = "They meant the note you just offered to write. Nothing was written and nothing was forgotten."
+FORGET_SAY_NOTE = ('Nothing is gone yet. Ask in exactly these words: "{}" If they say yes, call forget_memory again with '
+                   "the same words and confirmed true.")  # M19
+FORGET_WHICH_NOTE = ('Nothing is gone yet. Ask in exactly these words: "{}" When they answer, call forget_memory with the '
+                     "full name they chose.")  # M19
+FORGET_FIELD_NOTE = ('Nothing is gone yet. Ask in exactly these words: "{}" When they answer, call forget_memory again with '
+                     "their answer, for example: the email.")  # M19
 FORGET_ASK_NOTE = ("Ask in one line whether to forget everything about this, and call forget_memory again with confirmed "
                    "true if they say yes.")
 FORGOT_NOTE = "Done. Say so in one line, and never bring it up again, even if it came up earlier in this talk."
@@ -701,8 +715,9 @@ def _forget_yes(text):  # M9c
     return is_yes(_FORGET_IT.sub(" ", _plain(str(text or ""))))
 
 
-def _forget_asked(about):  # M9c
-    return {"about": about, "at": datetime.now().isoformat(timespec="seconds")}
+def _forget_asked(about, field=""):  # M9c; M19: field names whose "email or mailing address?" is waiting
+    asked = {"about": about, "at": datetime.now().isoformat(timespec="seconds")}
+    return {**asked, "field": field} if field else asked
 
 
 def _forget_count(store, about):  # M15c
@@ -711,12 +726,50 @@ def _forget_count(store, about):  # M15c
     return len(store.matching(about)) + (others(about) if callable(others) else 0)
 
 
+def _forget_question(store, about):  # M19
+    asks = getattr(store, "asks", None)
+    return (asks(about) or {}) if callable(asks) else {}
+
+
+def forget_line(asked):  # M19
+    """Her words for what store.asks gave. A person's words use "Their" unless the relationship settles it."""
+    if asked.get("which"):
+        return FORGET_WHICH_TEXT.format(" or ".join(asked["which"]))
+    if asked.get("field"):
+        return FORGET_FIELD_TEXT
+    words = str(asked.get("relationship") or "").lower().split()
+    pronouns = next((_KIN_WORDS[word] for word in words if word in _KIN_WORDS), _THEIR)
+    return FORGET_PERSON_TEXT.format(name=asked["person"], Own=pronouns["own"].capitalize(), **pronouns)
+
+
+def _fields_said(text):  # M19
+    """Which of a person's addresses their answer picks: "email", "mailing address", both, or neither."""
+    said = str(text or "")
+    both = re.search(r"\bboth\b", said, _I)
+    return [field for field, words in (("email", r"\be-?mail\b"), ("mailing address", r"\b(?:mailing|street|home)\b"))
+            if both or re.search(words, said, _I)]
+
+
+def _field_answer(waiting, about):  # M19
+    """The fields a second forget_memory picks, when it's still about the person her question was about."""
+    other = memory_core._meaningful(about) - memory_core._meaningful("email e-mail mailing street home address both one")
+    known = memory_core._meaningful(waiting["field"]) | memory_core._meaningful(waiting["about"])
+    return _fields_said(about) if other <= known else []
+
+
+def forget_fields(memory, who, fields):  # M19
+    """Their answer to "The email or the mailing address?" is the yes, so it runs. Returns the texts removed."""
+    return [text for field in fields for text in forget_everything(memory, f"{who}'s {field}")]
+
+
 def forget_everything(memory, about):  # M9c
     """Really deletes everything about it, then what her talk history holds of it. Returns the texts removed."""
     gone = memory.store.forget(about)
     memory.pending_forget = None
     if gone:
         memory.scrub(gone, about)
+        for name in list(getattr(memory.store, "names_gone", None) or ()):  # M19: a line that says only "Sarah"
+            memory.scrub(gone, about, name=name)
     return gone
 
 
@@ -725,12 +778,13 @@ def forget_name(memory, word=""):  # M9c
     then neither uses a name nor asks for one (memory.name_forgotten) until they offer one. word: the name they said in
     "stop calling me <word>", gone too. Returns the texts removed. The caller must save memory."""
     names = [n for n in dict.fromkeys((" ".join(memory.name.split()), " ".join(str(word or "").split()))) if n]
-    gone = []
+    gone, taken = [], []
     for name in names:
         gone += memory.store.forget_name(name) if memory.store is not None else []
+        taken += list(getattr(memory.store, "names_gone", None) or ())  # M19
         memory.facts = [f for f in memory.facts if not memory_core.holds_name(f, name)]
     memory.scrub(gone)  # also marks the turn as one that truly forgot, even with nothing saved
-    for name in names:
+    for name in names + taken:
         memory.scrub(gone, about=name, name=name)
     memory.name = ""
     memory.name_forgotten = True
@@ -768,20 +822,30 @@ def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall, forget
             about = " ".join(str(args.get("about") or "").split())
             if about.lower().rstrip(".!") in ("that", "this", "it"):  # she passed "forget that" along word for word
                 about = ""
-            gone, count = [], 0
+            gone, count, asked = [], 0, {}
             if about:
                 waiting = _forget_waiting(memory.pending_forget)
-                if args.get("confirmed") is True and waiting and memory_core.same_about(waiting["about"], about):
+                field = waiting.get("field", "") if waiting else ""  # M19
+                fields = _field_answer(waiting, about) if field else []
+                if fields:
+                    gone = forget_fields(memory, field, fields)
+                elif args.get("confirmed") is True and waiting and not field and memory_core.same_about(waiting["about"], about):
                     gone = forget_everything(memory, about)
                 else:
+                    asked = _forget_question(memory.store, about)  # M19
                     count = _forget_count(memory.store, about)  # M15c
-                    memory.pending_forget = _forget_asked(about) if count else None
+                    waits = asked.get("field") or (count and not asked.get("which"))
+                    memory.pending_forget = _forget_asked(about, asked.get("field", "")) if waits else None
             elif not offer_waiting:
                 gone = memory.store.forget("")
                 if gone:
                     memory.scrub(gone)
-            if count:
-                response = {"needs_yes": True, "count": count, "note": FORGET_ASK_NOTE}
+            if asked.get("which") or asked.get("field"):  # M19
+                response = {"needs_which": True,
+                            "note": (FORGET_WHICH_NOTE if asked.get("which") else FORGET_FIELD_NOTE).format(forget_line(asked))}
+            elif count:
+                response = {"needs_yes": True, "count": count,
+                            "note": FORGET_SAY_NOTE.format(forget_line(asked)) if asked else FORGET_ASK_NOTE}  # M19
             elif gone:
                 response = {"forgotten": len(gone), "note": FORGOT_NOTE}
                 say = FORGOT_TEXT  # if her next words never come, the resident still hears it was done
@@ -822,10 +886,11 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
             return ""
         about = hit.group(1)
         if about:  # the same one-line question as with Gemini; reply takes the yes
-            if not _forget_count(memory.store, about):  # M15c
+            asked = _forget_question(memory.store, about)  # M19
+            if not asked and not _forget_count(memory.store, about):  # M15c
                 return NOTHING_TO_FORGET_TEXT
-            memory.pending_forget = _forget_asked(about)
-            return FORGET_ASK_TEXT.format(about)
+            memory.pending_forget = None if asked.get("which") else _forget_asked(about, asked.get("field", ""))
+            return forget_line(asked) if asked else FORGET_ASK_TEXT.format(about)
         if offer_waiting:  # "forget that" to "Would you like me to write that down?"
             return OFFER_DROPPED_TEXT
         gone = memory.store.forget("")
@@ -1677,7 +1742,9 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         gated = gated if isinstance(gated, dict) and gated.get("skip_brain") else None
     said_yes = bool(prior) and is_yes(text) and not gated
     waiting = _forget_waiting(memory.pending_forget) if store is not None else None  # M9c
-    forget_yes = bool(waiting) and not kind and not said_yes and not gated and _forget_yes(text)
+    field = waiting.get("field", "") if waiting else ""  # M19: their answer to "the email or the mailing address?"
+    fields = _fields_said(text) if field else []
+    forget_yes = bool(waiting) and not kind and not said_yes and not gated and (bool(fields) if field else _forget_yes(text))
     if waiting and not kind and is_decline(text):
         memory.pending_forget = None
     safety_line = ""
@@ -1722,7 +1789,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             emit(SAVED_TEXT)
     elif forget_yes:  # M9c
         try:
-            gone = forget_everything(memory, waiting["about"])
+            gone = forget_fields(memory, field, fields) if field else forget_everything(memory, waiting["about"])
         except Exception:
             memory.pending_forget = waiting  # so the next "yes" can try again
             set_mood("sorry")

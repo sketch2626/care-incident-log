@@ -142,6 +142,8 @@
     talkOrder: [],               // the modes the server says will work, best first ([] = the computer's own voice)
     voiceMode: '',               // the voice for spoken sentences now: 'normal' | 'offline' | '' (speechSynthesis)
     fallbackSaid: false,         // the "my best voice isn't working" line, once per conversation
+    liveFailed: false,           // M17: Live dropped in the last talk; it gets a new try at the next one
+    forcedSaid: {},              // M17: the reasons she has already said out loud since this page opened
     ttsSpent: false,             // M4a: the Gemini voice has used up its free turns for today (status, or a swap)
     convo: null                  // the open conversation (startTalk), or null
   };
@@ -1268,6 +1270,56 @@
     S.fallbackSaid = true;
     return say(MSG.fallback);
   }
+  // M17: the resident's pick stays saved. When something else is really in use, forcedNow() says why: .line is what she
+  // says, once per reason, through say() so it stays in the brain's history; .note shows under the picker in My info.
+  function modeInUse() {
+    var m = nextMode(S.talkOrder, null);
+    if (m === 'live' && (S.liveFailed || !liveSupported())) { m = nextMode(S.talkOrder, 'live'); }
+    return m || '';
+  }
+  function forcedNow() {
+    if (!S.statusLoaded) { return null; }
+    var words = { live: 'Live', normal: 'Normal', offline: 'Offline' };
+    var chosen = S.talkMode || 'live', now = modeInUse(), word = words[chosen], using = words[now] || "this computer's own voice";
+    var why = '', line = '', reason = '';
+    if (now !== chosen) {
+      if (chosen !== 'offline' && !S.hasKey) {
+        why = 'nokey'; reason = 'no Gemini key is ready';
+        line = "I can't use " + word + " without a Gemini key, so I'm using " + using + ' for now.';
+      } else if (chosen === 'live' && !liveSupported()) {
+        why = 'nolive'; reason = "Live won't run on this computer";
+        line = "Live won't run on this computer, so I'm using " + using + ' for now.';
+      } else if (chosen === 'live' && S.liveFailed) {
+        why = 'livefail'; reason = "Live didn't work just now";   // liveFallback has already said its line
+      } else if (chosen === 'offline') {
+        why = 'nooffline'; reason = "the offline voice isn't set up on this computer";
+        line = "My offline voice isn't set up on this computer, so I'm using this computer's own voice for now.";
+      } else {
+        why = 'other'; reason = word + " isn't working right now";
+        line = "I can't use " + word + " right now, so I'm using " + using + ' for now.';
+      }
+    } else if (now === 'normal' && S.ttsSpent) {
+      why = 'limit'; reason = "today's Gemini voice is used up"; using = 'the offline voice';
+      line = "I've used up my Gemini voice for today, so I'm using my offline voice until tomorrow.";
+    }
+    if (!why && S.typingOnly && now !== 'live') {
+      return { why: 'nomic', line: "I can't hear the microphone right now, so you'll need to type to me.",
+        note: "The microphone isn't working, so you'll need to type for now." };
+    }
+    if (!why) { return null; }
+    return { why: why, line: line,
+      note: 'Right now ' + (S.companion === 'him' ? 'he' : 'she') + ' is using ' + using + ', because ' + reason + '. Your pick is still saved.' };
+  }
+  function sayForcedOnce() {
+    var f = forcedNow();
+    if (!f || !f.line || S.forcedSaid[f.why]) { return Promise.resolve(); }
+    S.forcedSaid[f.why] = true;
+    return say(f.line);
+  }
+  function fillModeNote() {
+    var box = $('modeNote'), f = forcedNow();
+    if (box) { box.textContent = f ? f.note : ''; }
+  }
 
   // --- M4a: her hello, in her own words from the same brain as her talk. Thinking while it comes. On any failure, or
   // with no key, the scripted line (say() saves that one). saved: the server has already put it in the history.
@@ -1302,7 +1354,7 @@
     var mode = nextMode(S.talkOrder, null);
     if (mode === 'live' && !liveSupported()) { mode = nextMode(S.talkOrder, 'live'); }
     if (mode !== 'live' && S.typingOnly && opts.say) {   // M4a
-      firstLine(opts).then(function (l) {
+      sayForcedOnce().catch(log).then(function () { return firstLine(opts); }).then(function (l) {   // M17
         if (l.text) { return say(l.text, opts.mood || 'happy', undefined, l.saved); }
       }).catch(log);
       return Promise.resolve(false);
@@ -1314,6 +1366,7 @@
       talked: mode !== 'live' };   // M15a: a Live talk has talked only once its line opened, or Normal took over
     S.convo = c;
     S.fallbackSaid = false;
+    if (mode === 'live') { S.liveFailed = false; }   // M17: a new try at Live
     S.voiceMode = speechModeFor(mode);
     updateTalkButton();
     wakeHoldCheck();   // M6
@@ -1321,6 +1374,9 @@
       startLive(c, opts.hello || liveHello());   // M4a: with the time of day
     } else {
       lockTalkVoice(c).then(function () {   // M4a: from a fresh status, so a spent voice is never tried
+        if (S.convo !== c || c.ending) { return undefined; }
+        return sayForcedOnce().catch(log);   // M17: she says so first, instead of switching quietly
+      }).then(function () {
         if (S.convo !== c || c.ending) { return; }
         if (!opts.say) { convoListen(c, true); return; }
         firstLine(opts).then(function (l) {   // M4a: her hello first, then she listens
@@ -1640,6 +1696,7 @@
     clearTimeout(c.cutTimer);  // M17
     c.story = null;            // M4a: only Live can go on with it
     c.mode = nextMode(S.talkOrder, 'live');
+    S.liveFailed = true;       // M17: the note under the picker says so
     S.voiceMode = speechModeFor(c.mode);
     newTurn();
     setPhase('idle');
@@ -2677,6 +2734,7 @@
     ], function (it) { return (S.talkMode || 'live') === it.v; }, function (it) {
       saveSetting({ talk_mode: it.v }, fillVoices);   // the voice list follows the talk mode
     });
+    fillModeNote();   // M17
     radioRows($('waitList'), [
       { v: 2.5, t: 'Usual', h: 'About 2 and a half seconds of quiet.' },
       { v: 4, t: 'More time', h: 'About 4 seconds. You can also say “give me more time”.' }
@@ -3044,6 +3102,7 @@
     if (st.wake_word != null) { S.wakeWord = !!st.wake_word; }
     if (st.wake_ready != null) { S.wakeReady = !!st.wake_ready; }
     wakeSync();
+    if (M.panel === 'infoPanel') { fillModeNote(); }   // M17
     var c = st.companion === 'him' ? 'him' : 'mary';
     if (c !== S.companion) { setCompanion(c, { noSave: true }); } else { applyLook(c); refreshLabels(); }
   }

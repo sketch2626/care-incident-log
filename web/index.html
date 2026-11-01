@@ -5,8 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Care Incident Log</title>
 <link rel="stylesheet" href="styles.css">
+<!-- M17: marks the page before first paint, so the screen asked for shows without home flashing first -->
+<script>(function(){var c=document.documentElement.classList,m=/[?&]from=mary(&|$)/.test(location.search);if(m)c.add('from-mary');if(m||location.hash.length>1)c.add('routing');})();</script>
 </head>
 <body>
+<!-- M17: shown on every screen when Mary sent the resident here (/?from=mary): the one big way back, always in view -->
+<div class="marybar"><button class="bigbtn alt" id="backToMary" type="button"><span aria-hidden="true">&larr;</span>&nbsp;Back to&nbsp;<span id="backName">Mary</span></button></div>
 <main class="wrap">
 <div id="banner" class="banner" role="alert" hidden></div>
 
@@ -319,8 +323,6 @@
     <p class="note" id="memMsg" aria-live="polite"></p>
     <div id="memList"></div>
   </div>
-  <!-- Shown when Mary sent the resident here (/?from=mary): a big way back, no key combos -->
-  <a class="bigbtn alt" id="backToMary" href="/mary.html" hidden>Back to <span id="backName">Mary</span></a>
 </section>
 
 </main>

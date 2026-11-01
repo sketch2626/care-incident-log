@@ -147,6 +147,14 @@ input[type=date],input[type=time]{display:block;width:100%;max-width:440px;min-h
 .bigbtn{display:flex;align-items:center;justify-content:center;width:100%;max-width:760px;min-height:96px;margin:14px 0;background:var(--brand);color:#fff;border:3px solid var(--brand);border-radius:22px;font-size:32px;font-weight:700;text-decoration:none}
 .bigbtn.alt{background:#fff;color:var(--brand)}
 .bigbtn[aria-disabled=true]{opacity:.55;cursor:not-allowed}
+/* M17: nothing shows until route() has picked the screen; the startup always clears this, even when loading failed */
+html.routing .wrap,html.routing .marybar{visibility:hidden}
+/* M17: the way back to Mary or Sam. Sticky, so it keeps its own space and nothing hides under it */
+.marybar{display:none;position:sticky;top:0;z-index:50;padding:10px 20px;background:var(--bg);border-bottom:3px solid #d6cab6}
+html.from-mary .marybar{display:block}
+html.from-mary{scroll-padding-top:116px}
+.marybar .bigbtn{max-width:760px;min-height:80px;margin:0 auto}
+@media print{.marybar{display:none!important}}
 .infocard{max-width:760px}
 .skillscard{margin-top:20px}
 .smarth.first{margin-top:0;padding-top:0;border-top:0}

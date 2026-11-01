@@ -92,9 +92,10 @@ class HomePageTests(unittest.TestCase):
     def test_my_info_has_way_back_to_mary(self):
         html, js, mary = read("index.html"), read("app.js"), read("mary/app.js")
         self.assertIn("window.location.href = '/?from=mary#info'", mary)
-        self.assertIn('<a class="bigbtn alt" id="backToMary" href="/mary.html" hidden>', html)
+        self.assertIn('<button class="bigbtn alt" id="backToMary" type="button">', html)  # M17: a real button, top of every screen
+        self.assertNotIn('href="/mary.html" hidden', html)
         self.assertIn("get('from') === 'mary'", js)
-        self.assertIn("$('#backToMary').hidden = !FROM_MARY", js)
+        self.assertIn("$('#backToMary').addEventListener('click'", js)
         self.assertIn("s.companion === 'him' ? 'Sam' : 'Mary'", js)
 
     def test_mail_card_stays_out_of_save_and_keeps_the_password_in_its_box(self):

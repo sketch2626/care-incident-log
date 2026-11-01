@@ -542,6 +542,8 @@ td.num { text-align: center; }
 .sig .long { flex: 3; }
 .sig .short { flex: 1; }
 .foot { margin-top: 18px; font-size: 9pt; font-style: italic; }
+@media screen { .backbar button { font: bold 22px Arial, Helvetica, sans-serif; min-height: 64px; padding: 8px 30px; margin: 0 0 14px;
+  background: #fff; border: 3px solid #000; border-radius: 12px; cursor: pointer; } }
 @media screen { .scroll { overflow-x: auto; } .rec { min-width: 1300px; } }
 @media print {
   .noprint { display: none !important; }
@@ -612,6 +614,7 @@ def build_report_html(rows, settings, date_from="", date_to=""):
 <style>{_CSS}</style>
 </head>
 <body>
+<div class="backbar noprint"><button type="button" id="reportBack" onclick="if(history.length>1){{history.back()}}else{{location.href='/'}}">Back</button></div>
 <div class="toolbar noprint">
   <button type="button" onclick="window.print()">Print or save as PDF</button>
   <span>Choose &ldquo;Save as PDF&rdquo; as the destination to keep a copy. Landscape paper is set for you.</span>

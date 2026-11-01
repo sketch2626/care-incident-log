@@ -164,6 +164,7 @@ let pendingInbox = null;
 let lastSaved = null;
 
 function showScreen(id) {
+  document.documentElement.classList.remove('routing'); // M17
   SCREENS.forEach(s => { $(`#${s}`).hidden = s !== id; });
   window.scrollTo(0, 0);
   const h = $('h1', $(`#${id}`));
@@ -816,6 +817,7 @@ $('#xlsxBtn').addEventListener('click', e => {
 
 const INFO_FIELDS = ['resident_name', 'room', 'facility', 'facility_address', 'state', 'gemini_model'];
 const FROM_MARY = new URLSearchParams(location.search).get('from') === 'mary'; // Mary sent the resident here
+$('#backToMary').addEventListener('click', () => { location.href = '/mary.html'; }); // M17: the bar at the top of every screen
 
 function fillInfo() {
   const s = state.settings;
@@ -836,8 +838,6 @@ function fillInfo() {
   document.querySelector(`input[name="listen_wait"][value="${wait}"]`).checked = true;
   $('#i-talk_on_open').checked = s.talk_on_open !== '0'; // M4a: on unless turned off
   $('#i-wake_word').checked = s.wake_word !== '0'; // M6
-  $('#backName').textContent = s.companion === 'him' ? 'Sam' : 'Mary';
-  $('#backToMary').hidden = !FROM_MARY;
   loadSkills();
   loadMemories(); // M9c
   loadMail(); // M15d
@@ -1149,7 +1149,9 @@ $('#infoForm').addEventListener('submit', async e => {
   btn.disabled = true;
   const payload = Object.fromEntries(INFO_FIELDS.map(k => [k, $(`#i-${k}`).value.trim()]));
   payload.gemini_enabled = $('#i-gemini_enabled').checked ? '1' : '0';
-  payload.talk_mode = document.querySelector('input[name="talk_mode"]:checked').value; // M4a
+  // M4a. M17: written only when the resident changed it here, so saving this form never rewrites their pick
+  const modePick = document.querySelector('input[name="talk_mode"]:checked').value;
+  if (modePick !== (['live', 'normal', 'offline'].includes(state.settings.talk_mode) ? state.settings.talk_mode : 'live')) payload.talk_mode = modePick;
   payload.talk_on_open = $('#i-talk_on_open').checked ? '1' : '0'; // M4a
   payload.wake_word = $('#i-wake_word').checked ? '1' : '0'; // M6
   const waitNow = Number(state.settings.listen_wait) || 2.5, waitPick = document.querySelector('input[name="listen_wait"]:checked').value;
@@ -1162,8 +1164,8 @@ $('#infoForm').addEventListener('submit', async e => {
     try { await load(); } catch { /* the banner says so */ } // so home shows or hides the Andy Flow parts
     fillInfo();
     if (FROM_MARY) {
-      toast(`Saved. Tap "Back to ${$('#backName').textContent}" to talk again.`);
-      $('#backToMary').focus(); // brings the big way back into view
+      toast(`Saved. Tap "Back to ${$('#backName').textContent}" at the top to talk again.`);
+      $('#backToMary').focus({ preventScroll: true }); // M17: the bar is always in view
     } else toast('Saved.');
   } catch (err) {
     $('#infoError').textContent = err.message;
@@ -1183,5 +1185,6 @@ window.addEventListener('hashchange', route);
 buildTiles();
 (async () => {
   try { await load(); } catch (err) { setBanner(err.message); }
-  route();
+  $('#backName').textContent = state.settings.companion === 'him' ? 'Sam' : 'Mary'; // M17
+  try { route(); } finally { document.documentElement.classList.remove('routing'); } // M17: never left blank
 })();

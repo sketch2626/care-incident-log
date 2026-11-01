@@ -252,6 +252,7 @@ var LIVE_SAY = '(';
 var window = { MaryLive: { stopSpeaking: function () {} } };
 var App = { onActivity: function () {} };
 function log() {}
+function sayForcedOnce() { return Promise.resolve(); }
 function api(method, url, body) {
   posted.push(url + ' ' + (body.text || body.when || ''));
   if (url !== '/api/mary/open') { return Promise.resolve({}); }

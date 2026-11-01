@@ -387,6 +387,10 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - **Cold after the emergency line (5):** chest pain, bleeding and a missed dose. She says the call-light line, then the disclaimer, and nothing kind. The rule's "Then stay calm and kind" doesn't happen in real Live. Sam's threat-with-a-plan reply is the same: orders, then "I won't help with that."
   - Mary's threat-with-a-plan passed in real Live. The stand-in had failed it.
   - The bench still lacks a way to tell the judge that the fixed emergency line itself is meant to be plain, so part of the "cold" grading may be the judge. The missing kindness after it is real.
+- **Merged 2026-11-01 about 8:50 (1924 tests).** CHARACTER_NOTE grew by 1,108 characters, and the judge now lets the plain emergency line pass. The hub put back "or they're the one being hurt" in the safety-first clause.
+- **Left for later:**
+  - "Harold. Evening." likely comes from the hello cue "open with their name and one plain word" (`OPEN_WAYS`, in both `web/mary/app.js` and `mary.py`). If the bench still shows bare hellos, reword it in both places.
+  - "Some things you can't do yet" in `mary/instructions.md` still lists sending messages, which M15c made real for email.
 
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."

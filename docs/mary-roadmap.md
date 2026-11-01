@@ -354,6 +354,12 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
 
 **Southern words, refined (Andy, 2026-11-01, about 3am):** "Y'all's fine. It's definitely a universal word in the South… It's words like howdy, that should only be used if the other person uses them, because it's not in common use, really. Even in the South, much." So everyday Southern words such as "y'all" are fine from the start. Uncommon ones such as "howdy" come only after the resident uses them. "How did y'all meet?" in the confused-resident example stays.
 
+### M19. A secure address book (Andy, 2026-11-01, about 4:30am)
+- **Andy's words:** "She obviously needs a secure address book. She needs an address book where she can put in all of her contact information for everybody that she can think of, and it be, you know, stored there securely in her have access to it. That's probably one of the more important things to this… We didn't even build in an address book, LOL." And before it: "she shouldn't have to say the email address to her every time after she tells it to her once and sends something. She should just be able to say email my daughter."
+- **Today:** M15c keeps a small contact list inside the `messages` skill (name, relationship, email, Facebook or phone), filled only from sends, with no screen to see or change it.
+- **What it means:** a real Address Book screen for everyone the resident can think of: name, relationship, phones, email, mailing address, Facebook, birthday and notes. It's stored securely on the laptop, and Mary fills it in by voice (M18) and uses it ("email my daughter"). The M15c contacts move into it. Birthdays feed M15a's reminders.
+- **Order:** boards and a design note now, beside the M18 build (mockups only, no shared files); the build after M18 merges.
+
 ### Later, after the brain works (Andy, 2026-10-29: "the brain is the heart", so these come after M9)
 - **M10. Graphics overhaul:** another pass on Mary's and Sam's look and screens, with boards first.
   - **Andy (2026-10-31, afternoon, talking it through, not started):** "I really liked them when we first made them, but the more we talk about being childlike and infantilizing… a lot of people might take that from this design. I'm not saying that we completely redo it, but… we need to do some things that add some depth to the whole scene in the background… I'm pretty sure we're going to have to do some major work on the graphics."

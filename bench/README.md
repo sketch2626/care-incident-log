@@ -9,12 +9,14 @@ From the project folder:
 ```
 python tools/brain_bench.py --key-from-app       everything, with the key saved in the app
 python tools/brain_bench.py                      everything, with GEMINI_API_KEY set
-python tools/brain_bench.py --list               show the runs; needs no key
+python tools/brain_bench.py --list               show the runs and the cost; needs no key
+python tools/brain_bench.py --key-from-app --real-live   a safety pass on the real Live model
+python tools/brain_bench.py --real-live --list   the real-Live runs and cost; needs no key
 python tools/brain_bench.py --mode prompt        check the safety text only; needs no key
 python tools/brain_bench.py --key-from-app --raw  the brain against the bare model
 ```
 
-Other flags: `--cases DIR`, `--only TEXT` (part of an id), `--companion mary|sam`, `--mode normal|live|story|prompt`, `--max N` (runs that call Gemini; safety runs go first), `--delay S`, `--model M`, `--judge-model M` (limits are per model, so a different model spares Mary's daily limit), `--no-judge`, `--no-save`, `--raw`, `--raw-prompt line|none`, `--variant FILE`, `--replay FILE`, `-v`.
+Other flags: `--cases DIR`, `--only TEXT` (part of an id), `--companion mary|sam`, `--mode normal|live|story|prompt`, `--max N` (runs that call Gemini; safety runs go first; with `--real-live` it is 12 unless you say more), `--delay S`, `--model M`, `--judge-model M` (limits are per model, so a different model spares Mary's daily limit), `--no-judge`, `--no-save`, `--raw`, `--raw-prompt line|none`, `--variant FILE`, `--replay FILE`, `--real-live`, `--live-model M` (the model for `--real-live`, default `gemini-3.8-live`), `-v`.
 
 It prints one summary line, then a split into real safety failures, other failures, and bench or runtime problems, then each one in plain words, then each story's length. Results land in `bench/results/`; don't commit them.
 
@@ -26,7 +28,7 @@ It prints one summary line, then a split into real safety failures, other failur
 
 Each run ends as exactly one of: passed, failed, safety, error (couldn't run), ungraded, not_run. Only "passed" is a pass.
 
-A run that times out or comes back empty gets one retry with a 45-second wait, and so does a judge call that times out. The report names the runs that needed it. Key, rate-limit and server errors aren't retried this way.
+A run that times out or comes back empty gets one retry with a 45-second wait, and so does a judge call that times out. A judge answer that comes back malformed is asked for once more, and if it still has pieces, those are kept (salvaged) rather than thrown away. The report names the runs that needed it. Key, rate-limit and server errors aren't retried this way.
 
 **What gets graded:**
 - **Normal:** what the app really says: `mary.reply`'s text, then the page's own `cleanSpeech`, read from `web/mary/app.js`. A square bracket that survives that is really spoken, so it fails.
@@ -34,7 +36,7 @@ A run that times out or comes back empty gets one retry with a 45-second wait, a
 - **Live emergencies:** when `mary.is_emergency` fires on the graded line, the page hushes her, shows the fixed line and has Live say it (`liveEmergency` in `web/mary/app.js`). A text call never sees that, so `safety_all` also counts the fixed line, the way a resident hears it. Nothing else does: `max_words`, `must_not_contain` and `safety_none` read her words only. The line is saved as `app_line`, and the judge gets it as `app_said_first`.
 - **Live story cases:** real Live reads the `tell_story` text aloud, but a text call only gets a line about it. So the story is graded, and her opener only gets the bracket check. If she stops at the opener with no tool call, the bench calls `mary.tell_story` itself and adds a NOTE; `tools_called` still fails in that case.
 
-Before anything calls Gemini, and in `--list`, it prints about how many requests the run will make, and to which model. Retries aren't counted.
+Before anything calls Gemini, and in `--list`, it prints about how many requests the run will make, and to which model (one line per model, Mary's first). Retries aren't counted. With a key it also suggests a judge model that isn't Mary's, from Google's own list of models. With no key, `--list` just says in general that a different judge model spares her daily limit.
 
 If Gemini says the day's limit is gone, the bench stops at once with no retry. The run it hit and every later one are not run, the finished results still print and save, a line says how far it got, and the exit code is 2. A per-minute limit waits as long as Gemini asks (`retryDelay`, then `Retry-After`, at most 60 s) and retries.
 
@@ -65,6 +67,42 @@ python tools/brain_bench.py --key-from-app --variant bench/variants/lean-mary.md
 - **Exit code:** only the real brain counts. A variant's safety failure prints under the table as `lean SAFETY id (...): reasons`, with the reply.
 - `--variant` with `--no-judge` is refused. Results gain `"variants"` (names and word counts) and `variant` on each run.
 
+## Normal first
+
+- Every case runs in both Normal and Live unless its `mode_why` says why not. That is a short plain line on a case that runs in one mode only (for example `hello-evening-mary`, whose opener only Live sends). A case on mode `both` can't have one.
+- Normal is what residents mostly use, so it runs first in every plan, and `--max` keeps it.
+- The "live" runs here are a STAND-IN: Live's instructions on the text model. They are not real Live. For real Live, see below.
+- The report's per-mode lines name each model, for example "Normal, gemini-3.5-flash-lite".
+- The facts say `talk_choice` is normal in Normal and story runs.
+
+## Real Live
+
+`--real-live` runs a safety pass on the real Live model, as text, over its own socket (stdlib only, no extra package).
+
+- It builds the session the way the app does, with `voices.live_token`'s real setup: her instructions, tools and voice.
+- The same checks and the same judge grade it. What she says is read from the transcription, which is graded, and the text parts are the fallback.
+- The runs are every safety case that gets a reply, plus every case marked `"real_live": true`. There are three kinds: an emergency number, other safety, and talking down. They go round-robin, one of each kind in turn, and every case gets one run before any gets a second.
+- `--max` is 12 unless you say more. Real Live has its own daily limit, apart from Mary's.
+- The judge still spends Mary's model. Add `--judge-model` to spare her, or `--no-judge`. With `--no-judge`, the safety items only the judge grades are not verified.
+- On an emergency the page hushes her and says its fixed line. That isn't replayed here; `app_line` stands in for it, the way it does in Normal.
+- `--live-model` picks another Live model. It can't be mixed with `--raw`, `--variant` or `--mode`.
+
+## Comparing with runs 1 to 5
+
+Old totals can't be compared with new ones: the case list changed, and the new plan has more runs (Normal now runs every case). Compare per mode. The old runs, from each file's `runs` (`bench/results/`, checked against `docs/status.md`):
+
+| Run | File | Normal | Story | Live stand-in | Total |
+|---|---|---|---|---|---|
+| 1 | 2026-10-30_2051 | 11/24 | 3/6 | 0/56 | 16/88 |
+| 2 | 2026-10-31_0059 | 16/24 | 5/6 | 38/56 | 61/88 |
+| 3 | 2026-10-31_0552 | 21/24 | 6/6 | 45/60 | 74/92 |
+| 4 | 2026-10-31_0657 | 23/24 | 5/6 | 51/60 | 81/92 |
+| 5 | 2026-11-01_0240 | 24/26 | 6/6 | 62/69 | 94/103 |
+
+Each total also counts the 2 prompt checks, which passed every time. Run 5 was started as `2026-10-31_1044`, which stopped at Gemini's daily limit (48 of 101 ran); `2026-11-01_0240` is the full run, so it is the one in the table.
+
+A full run now makes 169 runs: Normal 77, Live stand-in 84, Story 6, Prompt 2 (from `--list`). So a new total can't be set beside 94/103. Set each mode beside its old line instead. `--replay FILE` reads the old files and now prints per-mode lines too.
+
 ## The case format
 
 Cases live in `bench/cases/*.json`, each file shaped `{"cases": [...]}`.
@@ -87,13 +125,15 @@ Cases live in `bench/cases/*.json`, each file shaped `{"cases": [...]}`.
 Only `id` and `turns` are required. A single `"line"` works in place of `turns`. One run = case x companion x mode x repeat.
 
 - **companion:** `mary`, `sam` or `both` (default).
-- **mode:** `normal`, `live`, `story`, `prompt` or `both` (normal + live, default). A story case takes one line.
+- **mode:** `normal`, `live`, `story`, `prompt` or `both` (normal + live, default). A story case takes one line. Leave it out whenever the case makes sense in both.
+- **mode_why:** one plain line saying why a case runs in only one mode. A case on any mode but `both` needs it; a case on `both` can't have it.
+- **real_live:** `true` on a case that isn't a safety case but should also join the `--real-live` pass (the talking-down cases). Safety cases join it without this.
 - **check_turn:** the last turn is checked unless this is `"all"`.
 - **app_facts:** overrides the fixed facts about her app, for example `{"talk_mode": "button"}`. It may include `wake_word`; the default is on (`{"wake_word": false}` means "Hey Mary" is off on this computer).
 - **allow_banned:** phrases from the banned list that this case may say.
 - **group:** `story`, `chat` or `tone`, for `--raw`. Without it, `stories.json` means story, `character.json` means chat, and any other file has no group.
 
-**Rule checks (`checks`):** `min_words`, `max_words`, `must_contain` (all), `must_contain_any` (at least one), `must_not_contain`, `max_questions`, `vary` (with `repeat` over 1, the first 6 words must differ), `ends_whole` (true: the reply must end a sentence, after any closing quotes), `tools_called` and `tools_not_called` (live only), `tool_or_offer` (live only: she used one of these tools or said one of these phrases).
+**Rule checks (`checks`):** `min_words`, `max_words`, `must_contain` (all), `must_contain_any` (at least one), `must_not_contain`, `max_questions`, `vary` (with `repeat` over 1, the first 6 words must differ), `ends_whole` (true: the reply must end a sentence, after any closing quotes), `tools_called` and `tools_not_called` (graded in Live only; in a Normal run they are skipped, since Normal's tools run out of the bench's sight), `tool_or_offer` (Live only: she used one of these tools or said one of these phrases). A case on mode `both` may carry them.
 
 **Safety checks (a miss is a SAFETY failure):**
 - `safety_all`: a list of groups, each a list of phrases. At least one phrase of each group must appear.
@@ -131,7 +171,7 @@ A turn written `{LIVE_HELLO:evening}` is filled in with the real hello from `web
 
 ## Replay: grade a saved run again
 
-`python tools/brain_bench.py --replay FILE` re-grades a results file from `bench/results/` with today's cases and rule checks. It calls no Gemini and needs no key. Judge verdicts stay the old ones, shown as "judge (old verdict)". Runs whose case is gone or whose lines changed are listed under "Needs a fresh run".
+`python tools/brain_bench.py --replay FILE` re-grades a results file from `bench/results/` with today's cases and rule checks, and prints a line for each mode. It calls no Gemini and needs no key. Judge verdicts stay the old ones, shown as "judge (old verdict)". Runs whose case is gone or whose lines changed are listed under "Needs a fresh run".
 
 ## How to add a case
 

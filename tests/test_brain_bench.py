@@ -1031,6 +1031,54 @@ class TestEndsWholeAndNewCases(BenchCase):
         self.assertIn("not_saccharine", bb.rubric_for(cases["story-not-saccharine"], "story"))
 
 
+class TestRealCaseModes(BenchCase):
+    SINGLE = {"hello-evening-mary": "live", "hello-night-sam": "live", "story-live-tool": "live",
+              "app-word-search": "live", "story-mary-plain": "story", "story-sam-plain": "story",
+              "story-sam-fishing": "story", "story-with-memory-horses": "story", "story-not-saccharine": "story",
+              "safety-sections-kept": "prompt", "safety-crisis-numbers-in-prompt": "prompt"}
+
+    def test_single_mode_cases_say_why_and_nothing_else_is_single(self):
+        cases = {c["id"]: c for c in bb.load_cases()}
+        for cid, case in cases.items():
+            if case["mode"] == "both":
+                self.assertEqual(case["mode_why"], "", cid)
+            else:
+                self.assertTrue(case["mode_why"].strip(), cid)
+        self.assertEqual({cid: c["mode"] for cid, c in cases.items() if c["mode"] != "both"}, self.SINGLE)
+
+    def test_normal_does_not_drift_below_live(self):
+        runs = bb.plan_runs(bb.load_cases())
+        count = lambda m: sum(1 for r in runs if r["mode"] == m)
+        self.assertGreaterEqual(count("normal"), count("live") - 8)
+
+    def test_real_live_cases_are_marked(self):
+        cases = {c["id"]: c for c in bb.load_cases()}
+        for cid in ("grown-mary-dressed", "grown-sam-crossword", "mary-help-vote"):
+            self.assertTrue(cases[cid]["real_live"], cid)
+
+    def test_southern_words_rule(self):
+        checks = {c["id"]: c for c in bb.load_cases()}["plain-resident-no-southern-words"]["checks"]
+        self.assertEqual(bb.check_rules(checks, "How did y'all meet?")[0], [])
+        self.assertEqual(bb.check_rules(checks, "I was just fixing to ask.")[0], [])
+        self.assertEqual(len(bb.check_rules(checks, "Howdy there.")[0]), 1)
+
+    def test_no_card_cases(self):
+        cases = {c["id"]: c for c in bb.load_cases()}
+        self.assertEqual(cases["no-card-ordinary-chat"]["check_turn"], "all")
+        for cid in ("no-card-ordinary-chat", "no-card-family-news"):
+            case = cases[cid]
+            self.assertEqual(case["mode"], "both")
+            self.assertEqual(len(bb.check_rules(case["checks"], "Want me to make a card for her?")[0]) >= 1, True)
+            self.assertEqual(bb.check_rules(case["checks"], "That sounds like a nice afternoon.")[0], [])
+
+            def graded(mode):
+                run = dict(bb.new_run(case, "mary", mode, 1), replies=["That sounds lovely."], tools=["open_skill:messages"])
+                bb.grade_rules(run)
+                return run["failures"]
+            self.assertTrue(any("open_skill:messages" in f for f in graded("live")))
+            self.assertEqual(graded("normal"), [])
+
+
 class TestVariants(BenchCase):
     LEAN = "You are the lean test brain."
 

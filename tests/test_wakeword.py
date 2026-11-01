@@ -199,11 +199,13 @@ class DetectorTests(unittest.TestCase):
                 self.assertGreaterEqual(self.rec.resets, 1)
 
     def test_confirm_pattern(self):
-        for text in ("Hey Mary.", "Hey, Mary!", "hi mary", "Okay Mary,", "OK, Sam.", "hey marie", "Hey Sam"):
+        for text in ("Hey Mary.", "Hey, Mary!", "hi mary", "Okay Mary,", "OK, Sam.", "hey marie", "Hey Sam",
+                     "Mary had a lamb", "and and Mary can you and and and", "Mary ain't a m-",
+                     "Mary 8 and Miss Sam"):  # the last four: the bare name early on; Vosk already heard it
             with self.subTest(text=text):
                 self.assertIsNotNone(wakeword.CONFIRM_RE.search(text.lower()))
-        for text in ("Hey man", "Hey Larry", "Hey, marry me", "Merry Christmas", "Mary had a lamb",
-                     "Hey Samuel", "hey maryland"):
+        for text in ("Hey man", "Hey Larry", "Hey, marry me", "Merry Christmas",
+                     "Hey Samuel", "hey maryland", "The menu is uhh", "the cord she automatically went."):
             with self.subTest(text=text):
                 self.assertIsNone(wakeword.CONFIRM_RE.search(text.lower()))
 

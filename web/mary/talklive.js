@@ -689,6 +689,18 @@
     });
   }
 
+  // M17: a microphone that goes away ends the line at once, so the page falls back instead of talking to nobody.
+  function watchMic(s, stream) {
+    try {
+      stream.getTracks().forEach(function (track) {
+        if (!track.addEventListener) return;
+        track.addEventListener('ended', function () {
+          if (alive(s)) endSession(s, 'closed', {note: 'mic lost'});
+        });
+      });
+    } catch (e) { /* nothing to watch */ }
+  }
+
   // Opens the microphone first (its Allow question can take a while, and Google's token only lasts a minute),
   // then gets the token and opens the line. Call it from a tap so the browser lets it play and record.
   function begin(s) {
@@ -727,6 +739,7 @@
       }
       clearTimeout(s.connectTimer);   // M4a: the microphone answered; openSocket() sets the connect timer
       s.stream = stream;
+      watchMic(s, stream);   // M17
       s.micAt = performance.now();
       s.micMs = Math.round(s.micAt - s.tapAt);
       if (s.inCtx.resume) s.inCtx.resume().catch(function () {});
@@ -824,6 +837,29 @@
     return !!(S && !S.ended && S.talking);
   }
 
+  // M17: true when she should be sounding but her clock has stood still this long (a dead audio device). The page checks
+  // every second. resume() gets one try first.
+  var STALL_MS = 5000;
+  function stalled() {
+    var s = S;
+    if (!s || s.ended || !s.talking || !s.outCtx) {
+      if (s) s.stallAt = 0;
+      return false;
+    }
+    var clock = s.outCtx.currentTime, now = performance.now();
+    if (!s.stallAt || clock !== s.stallClock) {
+      s.stallClock = clock;
+      s.stallAt = now;
+      s.stallResumed = false;
+      return false;
+    }
+    if (!s.stallResumed) {
+      s.stallResumed = true;
+      try { if (s.outCtx.resume) s.outCtx.resume().catch(function () {}); } catch (e) { /* closing */ }
+    }
+    return now - s.stallAt >= STALL_MS;
+  }
+
   function setVolume(v) {
     v = Number(v);
     if (isNaN(v)) return;
@@ -847,6 +883,7 @@
     stopSpeaking: stopSpeaking,
     isOpen: isOpen,
     isSpeaking: isSpeaking,
+    stalled: stalled,          // M17
     setVolume: setVolume
   };
 })();

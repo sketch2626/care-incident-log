@@ -1131,15 +1131,18 @@ class WakeLink:
                 self._polled = time.monotonic()
         return self._reply(event, s)
 
-    def hold(self, on):
-        """POST /api/wake/hold {"on": true|false}: hold the wake word while she talks, listens or thinks, or while
-        a Live session uses the browser's microphone. Either way the pause after a wake ends now."""
+    def hold(self, on, why=None):
+        """POST /api/wake/hold {"on": true|false, "why": text}: hold the wake word while she talks, listens or thinks,
+        or while a Live session uses the browser's microphone. Either way the pause after a wake ends now. why: the
+        page declined a wake, and wake.log says why."""
         with self._cond:
             self._hold_until = time.monotonic() + WAKE_HOLD_S if on else 0.0
             (wakeword.pause if on else wakeword.resume)("page")
             if self._woke_until:
                 self._woke_until = 0.0
                 wakeword.resume("woke")
+        if why:
+            wake_log("ignored", why=str(why)[:80])
         if on:
             self._ensure_watch()
         return {"ok": True, "held": bool(on), "hold_s": WAKE_HOLD_S if on else 0, "status": self.status()}
@@ -1194,8 +1197,10 @@ class WakeLink:
     def _ensure_started(self, companion):
         wakeword.set_companion(companion)
         with self._ctl:
-            if self._started:
+            if self._started and wakeword.alive():
                 return
+            if self._started:  # the worker thread died: nothing else would ever bring it back
+                wake_log("restart", why="the listening thread had stopped")
             try:
                 wakeword.start(on_wake=self._on_wake, on_note=self._on_note)
             except Exception as e:  # not set up here: a plain message for status and the log
@@ -1212,6 +1217,8 @@ class WakeLink:
         self._seq += 1
         self._event = {"type": kind, "name": ev.get("name"), "seq": self._seq, "time": ev.get("time"),
                        "companion": ev.get("companion")}
+        if kind == "wake":
+            self._event["greeted"] = bool(ev.get("greeted"))  # the page's note guard needs "Hey Mary", not the bare name
         self._cond.notify_all()
 
     def _on_wake(self, ev):  # wakeword's worker thread, no wakeword lock held
@@ -1230,6 +1237,8 @@ class WakeLink:
         elif note.get("type") == "almost":
             wake_log("almost", name=note.get("name"), vosk=note.get("stage1_text"),
                      whisper=note.get("confirm_text"), ms=note.get("confirm_ms"))
+        elif note.get("type") == "mic":
+            wake_log("mic", reason=note.get("reason"))
 
     def _log_problem(self, problem):
         with self._cond:
@@ -1431,10 +1440,12 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send({"ok": True})
         if method == "POST" and path == "/api/mary/heard":
             # The same emergency check as Normal talk, on Live's transcript of what the resident said.
-            text = str(self._body().get("text") or "")[:2000]
+            body = self._body()
+            text = str(body.get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
             say = ""
-            send = gate_heard(text, kind)  # M15c: a garbled line still reaches the gate, as a miss
+            # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
+            send = {} if body.get("note") else gate_heard(text, kind)
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "say": "", "garbled": True, **send})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
@@ -1702,8 +1713,9 @@ class Handler(SimpleHTTPRequestHandler):
         if method == "GET" and path == "/api/wake/status":
             return self._send(WAKE.status())
         if method == "POST" and path == "/api/wake/hold":
-            on = str(self._body().get("on")).strip().lower() in ("1", "true", "yes", "on")
-            return self._send(WAKE.hold(on))
+            body = self._body()
+            on = str(body.get("on")).strip().lower() in ("1", "true", "yes", "on")
+            return self._send(WAKE.hold(on, body.get("why")))
         return None
 
     def _route(self, method):

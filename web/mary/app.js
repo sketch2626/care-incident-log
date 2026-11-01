@@ -42,6 +42,8 @@
   // --- M4a: hands-free conversations and talk modes (Live, Normal, Offline; the computer's own voice last) ---
   // QUIET_END_S above follows the saved listen_wait (status and settings effects).
   var CONVO_IDLE_S = 15;         // a conversation ends after this much quiet: nobody talking, she isn't speaking
+  var LIVE_STUCK_S = 180;        // M17: a Live talk with nothing real happening for this long is stuck, and closes
+  var NOTE_BUSY_MS = 120000;     // M17: the longest a note in the test drawer counts as being dictated, since the last sign
   var BYE_MAX_WORDS = 6;         // a goodbye is a short turn; a long story that says "goodbye" is not one
   var BYE_RE = /\b(?:good[\s-]?bye|bye now|bye[\s-]bye|that['’]?s all for now|talk to you later|good[\s-]?night|see you later|(?:go|going|get) (?:on )?(?:back )?to sleep|(?:go|get|take) (?:some |a )?(?:rest|nap)|(?:you can|go on and|time to) (?:rest|sleep)|rest now|that['’]?(?:s| will| ?ll) (?:be )?(?:all|enough) for (?:now|today|tonight))\b/i;   // M4a: and "go to sleep"
   // M4a: "I can't get to sleep", "my chest hurts, I need rest", "why did she go to sleep?" are about something else: she must keep listening
@@ -88,6 +90,9 @@
   }
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_SAY = '(Say this out loud, word for word, and nothing else: ';   // M4a: say() while Live is open
+  var LIVE_FALSE_CUT_MS = 2500;  // M17: cut off with nobody's words coming after this long: a noise cut her off
+  var LIVE_PICK_UP = '(A noise cut you off. Pick up right where you left off, in your own words.)';   // M17: not LIVE_SAY, or she would read this out
+  var END_TALK_HELD = { ok: false, note: 'Not ended. They are dictating a note, not talking to you. Say nothing and keep listening.' };   // M17
   // M4d: her exact words, because Live says the line itself and could drop the number (saidSafety checks it)
   var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say these exact words first, word for word, then add at most one short, calm line of your own to stay with them: ';
   // --- end M4a ---
@@ -1098,6 +1103,11 @@
   function liveSpeaking() {
     try { return !!(window.MaryLive && window.MaryLive.isSpeaking()); } catch (e) { return false; }
   }
+  // M17: a note is being dictated into the test drawer, so the words Live's open mic hears aren't meant for her. Capped,
+  // so a forgotten focus can't block a real goodbye for good. Callers look at S.noteBusy first.
+  function noteBusyNow() {
+    return Date.now() - S.noteBusy < NOTE_BUSY_MS;
+  }
   // M15c: the send count's hooks, for skills/messages/screen.js. In Normal the count holds the mic: a talk's own listen
   // waits until it lets go, so the words it hears go to /api/mary/heard and never start a reply. Her line isn't touched.
   function holdMic() {
@@ -1343,6 +1353,7 @@
     clearInterval(c.idleTimer);
     clearTimeout(c.byeTimer);
     clearTimeout(c.byeWait);   // M4a
+    clearTimeout(c.cutTimer);  // M17
     c.ending = true;
     if (S.convo === c) { S.convo = null; }
     c.story = null;   // M4a: a story never outlives the talk
@@ -1397,6 +1408,8 @@
   var WAKE_OFF_MS = 30000;       // the setting is off on the server: ask again this rarely
   var WAKE_POLL_MAX_MS = 30000;  // the server answers within 20 s; give up on a poll after this
   var WAKE_HOLD_RENEW_MS = 30000;  // the server lets a hold go after 90 s
+  var WAKE_STUCK_MS = 90000;     // M17: a phase left on this long with no talk and no voice goes back to resting
+  var WAKE_READY_RETRY_MS = 60000;   // M17: a poll that saw ready:false stopped: look at the status again this often
   var WAKE_SAY = "Yes? I'm here.";
   var WAKE_HELLO = "(They just called your name to get your attention. Answer in a few warm words, like 'Yes? I'm here.', then listen.)";
   var W = { polling: false, inFlight: false, seq: 0, lastEv: 0, timer: null, abort: null, heardTimer: null,
@@ -1452,16 +1465,33 @@
     });
   }
 
-  // She may answer her name only on the everyday screen, resting, with no talk, no typing box and no first run.
-  function wakeCanAnswer() {
-    return S.screen === 'everyday' && !S.firstRun && !S.convo && S.phase === 'idle' && $('typing').hidden;
+  // M17: why she can't answer her name right now, '' if she can. A name the server confirmed always wakes her, whatever
+  // is on screen (Andy): only these decline. A note being dictated can say her bare name, so there it takes "Hey Mary".
+  function wakeWhyNot(ev) {
+    if (S.screen === 'emergency') { return 'emergency'; }
+    if (S.firstRun) { return 'first run'; }
+    if (S.micHeld) { return 'send count'; }
+    if (S.convo) { return 'talk open'; }
+    if (S.phase !== 'idle') { return 'busy ' + S.phase; }
+    if (S.noteBusy && noteBusyNow() && !(ev && ev.greeted)) { return 'note'; }
+    return '';
+  }
+  // M17: a wake nobody answered goes in the wake log. A free page also lets the server listen again now, or it would
+  // stay paused WAKE_WOKE_S.
+  function wakeDeclined(why) {
+    api('POST', '/api/wake/hold', { on: wakeBusy(), why: why }).catch(log);
   }
   function onWakeEvent(ev) {
     var n = Number(ev && ev.seq) || 0;
     if (n && n <= W.lastEv) { return; }
     if (n) { W.lastEv = n; }
-    if (W.held || !wakeCanAnswer()) { return; }
+    var no = wakeWhyNot(ev);
+    if (no) {
+      if (ev.type === 'wake') { wakeDeclined(no); }
+      return;
+    }
     if (ev.type === 'heard') {
+      if (W.held) { return; }
       try { face.setActivity('listening'); } catch (e) { log(e); }   // M4b's ear waves: "I hear you", no words
       clearTimeout(W.heardTimer);
       W.heardTimer = setTimeout(function () {
@@ -1471,17 +1501,41 @@
       clearTimeout(W.heardTimer);
       if (menuOpen()) { closeMenu(false); }
       if (M.panel) { closePanel(false); }
+      if (!$('typing').hidden) { closeTyping(false); }   // M17: her name beats the typing box
       startTalk({ say: WAKE_SAY, mood: 'happy', hello: WAKE_HELLO }).then(function (ok) {
-        if (!ok && !S.convo && S.phase === 'idle') { faceAct(); }
-      }, log);
+        if (ok) { return; }
+        if (!S.convo && S.phase === 'idle') { faceAct(); }
+        wakeDeclined('talk did not start');
+      }, function (e) { log(e); wakeDeclined('talk failed'); });
     }
   }
 
   // Busy = a talk is open (Live included) or she is speaking, listening or thinking.
   function wakeBusy() { return !!S.convo || S.phase !== 'idle'; }
+  // M17: nothing may leave her asleep for good. A phase left on with nothing behind it goes back to resting (finishLive can
+  // leave 'thinking'), and a poll that saw ready:false stopped for good, so the status gets another look now and then.
+  function wakeUnstick(now) {
+    if (S.convo || S.phase === 'idle' || Sp.sess || S.screen === 'emergency' || S.listenAbort) {   // an open listen ends by itself
+      W.stuckAt = 0;
+    } else if (!W.stuckAt) {
+      W.stuckAt = now;
+    } else if (now - W.stuckAt >= WAKE_STUCK_MS) {
+      W.stuckAt = 0;
+      log(new Error('Stuck on ' + S.phase + ' with no talk: back to resting'));
+      spCancel();
+      newTurn();
+      setPhase('idle');
+    }
+    if (!W.polling && S.wakeWord && !S.wakeReady && now - (W.readyAt || 0) >= WAKE_READY_RETRY_MS) {
+      W.readyAt = now;
+      refreshStatus();
+    }
+  }
   function wakeHoldCheck() {
     if (typeof W === 'undefined' || !W) { return; }
-    var busy = wakeBusy(), now = Date.now();
+    var now = Date.now();
+    wakeUnstick(now);
+    var busy = wakeBusy();
     if (!W.polling && !W.held) { return; }
     if (busy === W.held && !(busy && now - W.holdAt >= WAKE_HOLD_RENEW_MS)) { return; }
     W.held = busy;
@@ -1501,6 +1555,7 @@
     c.story = null;       // M4a: a restart ends the story with its old session
     c.heardTrack = null;  // M4a
     clearTimeout(c.byeWait);   // M4a
+    clearTimeout(c.cutTimer);  // M17
     try { if (window.MaryVoice) { window.MaryVoice.cancel(); } } catch (e) { log(e); }
     newTurn();
     setPhase('thinking');
@@ -1511,23 +1566,24 @@
         screen: skillScreen(),
         aside: asideSkill(),   // M13b
         plain: !!c.plain,   // M4a: no language hint, after a start that failed with it
-        onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = Date.now(); showCaption(fixNumbers(t)); } },   // M4d: saidText stays raw
+        onCaption: function (t) { c.saidText = String(t || ''); if (mine()) { c.lastAct = c.lastLife = Date.now(); showCaption(fixNumbers(t)); } },   // M4d: saidText stays raw
         // M4a: liveHeardPiece: the story's cut-in, the early goodbye, and garbled lines (true = don't show it)
         // Andy (2026-10-30): his own words are never shown; only her words go on screen
-        onHeard: function (t) { if (mine()) { c.lastAct = Date.now(); liveHeardPiece(c, t); } },
-        onHeardDone: function (t) { liveHeard(c, t); },   // M4a: even after the talk ended or restarted (never missed)
+        onHeard: function (t) { if (mine()) { c.lastAct = c.lastLife = Date.now(); liveHeardPiece(c, t); } },
+        onHeardDone: function (t) { c.lastLife = Date.now(); liveHeard(c, t); },   // M4a: even after the talk ended or restarted (never missed)
         onToolCancel: function (ids) { if (mine()) { liveToolCancelled(c, ids); } },   // M4a
         onSpeaking: function (on) { if (mine()) { liveSpeakingChanged(c, on); } },
         onInterrupted: function () {   // M4a: liveSaid; a cut-in holds the story until they ask for the rest
+          var said = String(c.saidText || '').trim();   // M17: liveSaid clears it
           liveSaid(c);
-          if (mine()) { c.lastAct = Date.now(); if (c.story) { c.story.paused = true; } }
+          if (mine()) { c.lastAct = Date.now(); if (c.story) { c.story.paused = true; } liveCutWait(c, said); }
         },
         onTurnComplete: function () { liveTurnEnded(c, mine()); },   // M4a: liveSaid. M4d: and the checks on her words
         onToolCall: function (tc) { return liveToolCall(c, tc); },
-        onActivity: function () { if (mine()) { c.lastAct = Date.now(); } },
+        onActivity: function () { if (mine()) { c.lastAct = c.lastLife = Date.now(); } },
         // M4b: her words on her playback clock, the ear waves, and thinking until her first sound
         onCaptionPiece: function (t) { if (mine()) { capLivePiece(t); } },
-        onAudioChunk: function (at, dur, ctx) { if (mine()) { if (c.story) { c.story.sounded = true; } capLiveAudio(at, dur, ctx); } },
+        onAudioChunk: function (at, dur, ctx) { if (mine()) { c.lastLife = Date.now(); if (c.story) { c.story.sounded = true; } capLiveAudio(at, dur, ctx); } },
         onAudioDone: function () { if (mine()) { capLiveDone(); storyNext(c); } },   // M4a: storyNext, once a turn is fully heard
         onCut: function () { if (mine()) { capCut(); } },
         onMicLevel: function (rms, voice) { if (mine()) { liveMicLevel(voice); } },
@@ -1538,7 +1594,7 @@
       if (!mine()) { return; }          // ended or restarted while it was opening
       c.open = true;
       c.talked = true;   // M15a
-      c.lastAct = Date.now();
+      c.lastAct = c.lastLife = Date.now();
       try { window.MaryLive.setVolume(S.volume); } catch (e) { log(e); }
       setPhase('listening');
       capListening();   // M4b: no words while listening (round 6)
@@ -1581,6 +1637,7 @@
     clearInterval(c.idleTimer);
     clearTimeout(c.byeTimer);
     clearTimeout(c.byeWait);   // M4a
+    clearTimeout(c.cutTimer);  // M17
     c.story = null;            // M4a: only Live can go on with it
     c.mode = nextMode(S.talkOrder, 'live');
     S.voiceMode = speechModeFor(c.mode);
@@ -1685,10 +1742,34 @@
     if (!Sp.sess && S.phase !== 'thinking') { setPhase('idle'); }
   }
 
+  // M17: speaking, a tool, a panel and a story each keep a talk open, so a stuck one would hold the talk and the wake word
+  // for good. True when the talk ended here. Her sound standing still ends like a dropped line; nothing real for
+  // LIVE_STUCK_S closes the talk. A long story's sound can all arrive early, so her speaking counts as life.
+  function liveGoneQuiet(c, now) {
+    var stalled = false;
+    try { stalled = !!window.MaryLive.stalled(); } catch (e) { log(e); }
+    if (stalled) {
+      log(new Error('Live ended: stalled'));
+      try { window.MaryLive.stop('stalled'); } catch (e2) { log(e2); }
+      liveFallback(c);
+      return true;
+    }
+    if (liveSpeaking()) { c.lastLife = now; }
+    if (now - (c.lastLife || now) < LIVE_STUCK_S * 1000) { return false; }
+    log(new Error('Live talk closed: nothing real for ' + LIVE_STUCK_S + ' s'));
+    spCancel();
+    finishLive(c);
+    newTurn();
+    setPhase('idle');
+    return true;
+  }
+
   function liveIdleCheck(c) {
     if (S.convo !== c || !c.live) { clearInterval(c.idleTimer); return; }
     if (c.ending || !c.open) { return; }
     var now = Date.now();
+    if (S.screen === 'emergency') { c.lastLife = now; }
+    else if (liveGoneQuiet(c, now)) { return; }
     if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || uiOpen()) { c.lastAct = now; return; }   // M4b: or a panel
     if (c.story && !c.story.paused) {       // M4a: a story between parts is busy, unless its next part never came
       if (now - c.story.askedAt < STORY_STALL_MS) { c.lastAct = now; return; }
@@ -1704,8 +1785,9 @@
     c.heard = text;
     c.lastAct = Date.now();
     c.numFixed = false;   // M4d
+    c.cutTried = false;   // M17
     var tail = heardFinal(c.heardTrack, text);   // M4a: their last words, not what built up before a pause
-    var p = api('POST', '/api/mary/heard', { text: text }, { ms: 8000 }).then(function (j) {
+    var p = api('POST', '/api/mary/heard', { text: text, note: !!(S.noteBusy && noteBusyNow()) }, { ms: 8000 }).then(function (j) {   // M17: a dictated "send it" sends nothing; the emergency check still runs
       return j || {};
     }, function (e) {
       log(e);                               // tools still run; the server's skills gate checks again
@@ -1727,7 +1809,7 @@
       }
       if (S.convo !== c || !c.live) { return; }
       if ((j && j.garbled) || notEnglish(tail)) { return; }   // M4a: a garbled line is never a goodbye
-      if (isGoodbye(tail)) { endConvo(c, 'bye'); }
+      if (isGoodbye(tail) && !(S.noteBusy && noteBusyNow())) { endConvo(c, 'bye'); }   // M17: not words for a note
     });
     return p;
   }
@@ -1909,16 +1991,31 @@
     if (c.story && c.toolGone[c.story.id]) { c.story.paused = true; }
   }
 
+  // M17: a hand click near a laptop's mic can make Live report a cut-in with nobody speaking, and she stops mid-sentence.
+  // If she was cut off with words already said and none of theirs come, she picks it up, once per turn of theirs. A real
+  // cut-in brings their words, and liveHeardPiece drops the wait.
+  function liveCutWait(c, said) {
+    clearTimeout(c.cutTimer);
+    if (!said || c.cutTried || c.ending || c.story || S.screen === 'emergency') { return; }
+    c.cutTimer = setTimeout(function () {
+      if (S.convo !== c || !c.live || c.ending || c.story || c.toolBusy > 0 || S.screen === 'emergency' || liveSpeaking()) { return; }
+      c.cutTried = true;
+      c.lastAct = Date.now();
+      greetLive(LIVE_PICK_UP);
+    }, LIVE_FALSE_CUT_MS);
+  }
+
   // Every growing piece of what the resident is saying (Live's onHeard). True = a garbled line: not shown, never a
   // goodbye or a cut-in. Real words while she is quiet between parts hold the story; a goodbye that then stays quiet
   // ends the talk, and later pieces only cancel it if what they've said stops being a goodbye.
   function liveHeardPiece(c, t) {
+    clearTimeout(c.cutTimer);   // M17: someone is speaking, so that cut-in was real
     c.heardTrack = c.heardTrack || { text: '', mark: 0, at: 0 };
     t = String(t == null ? '' : t);
     var tail = heardTail(c.heardTrack, t, Date.now());
     if (S.heardWatch) { try { S.heardWatch(tail); } catch (e) { log(e); } }   // M15c: the send count watches for a stop word
     if (notEnglish(t) || notEnglish(tail)) { return true; }
-    var bye = !c.ending && S.screen !== 'emergency' && isGoodbye(tail);
+    var bye = !c.ending && S.screen !== 'emergency' && !(S.noteBusy && noteBusyNow()) && isGoodbye(tail);   // M17: not words for a note
     var st = c.story;
     if (st && !st.paused && (bye || (!liveSpeaking() && !SILENCE_NOISE.test(tail)))) { st.paused = true; }
     clearTimeout(c.byeWait);
@@ -1969,7 +2066,10 @@
       // M4a: story_more and end_talk are the page's own; end_talk is never answered, so she says nothing more
       var own = [], rest = [];
       calls.forEach(function (fc) {
-        if (fc.name === 'end_talk') { liveEndTalk(c); }
+        if (fc.name === 'end_talk' && S.noteBusy && noteBusyNow() && !c.ending) {   // M17: it heard a note, so the talk goes
+          own.push({ id: fc.id, name: fc.name, response: END_TALK_HELD });          // on, and Live waits for an answer
+        }
+        else if (fc.name === 'end_talk') { liveEndTalk(c); }
         else if (fc.name === 'story_more') { own.push({ id: fc.id, name: fc.name, response: storyTake(c) }); }
         else { rest.push(fc); }
       });
@@ -1984,11 +2084,11 @@
     }).then(function (r) {
       if (calls.some(function (fc) { return /^(forget_name|set_their_name|forget_memory)$/.test(fc.name); })) { refreshName(); }   // M9c
       c.toolBusy--;
-      c.lastAct = Date.now();
+      c.lastAct = c.lastLife = Date.now();
       return r;
     }, function (e) {
       c.toolBusy--;
-      c.lastAct = Date.now();
+      c.lastAct = c.lastLife = Date.now();
       log(e);
       throw e;
     });
@@ -2033,7 +2133,7 @@
         return say(MSG.notCaught, 'talking').then(function () { convoNext(c); });
       }
       c.misses = 0;
-      if (isGoodbye(text)) { return convoBye(c, text); }
+      if (isGoodbye(text) && !(S.noteBusy && noteBusyNow())) { return convoBye(c, text); }   // M17: not words for a note
       return talkTo(text).then(function () { convoNext(c); });
     }).catch(function (e) {
       if (S.convo !== c) { return undefined; }
@@ -3089,6 +3189,8 @@
     watchHeard: function (fn) { S.heardWatch = fn || null; },   // M15c: gets each growing tail of Live's transcript
     countMic: { hold: holdMic, listen: countListen, stop: function () { if (S.stopNow) { S.stopNow(); } }, drop: dropCountListen, free: freeMic },   // M15c
     screenNote: screenNote,                  // M7a: a silent note to Live about what changed on a screen
+    keepTalk: function () { if (S.convo) { S.convo.lastAct = S.convo.lastLife = Date.now(); } App.onActivity(); },   // M17: the test drawer's hand at work isn't silence. Never speaks
+    noteBusy: function (on) { S.noteBusy = on ? Date.now() : 0; },   // M17: the test drawer: a note is being dictated
     openMenu: openMenu,                      // M4b
     closeMenu: closeMenu,                    // M4b
     sideBySide: sideBySide,                  // M4b: a skill's screen beside her face (skills.js does this for aside:true)

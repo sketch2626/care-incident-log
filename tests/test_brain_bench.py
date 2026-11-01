@@ -38,6 +38,15 @@ KEY = "SECRETKEY-abc123-DISTINCT"
 STORY = "Old Tom and Nell went down to Morehead City one morning to fish the pier. " * 8
 
 
+REAL_SUGGEST = bb.suggest_judge_model
+
+
+def setUpModule():  # every run with a key would otherwise ask the real ListModels
+    patcher = mock.patch.object(bb, "suggest_judge_model", lambda key, model: "")
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
 def err(code, headers=None, body=b"{}"):
     return urllib.error.HTTPError("http://x", code, "x", headers or email.message.Message(), io.BytesIO(body))
 
@@ -56,6 +65,7 @@ class Fake:
         self.hooks_seen = []     # mary.app_facts at each reply call
         self.fail_names = set()  # rubric names the judge fails
         self.bad_judge = 0       # how many judge answers are not JSON
+        self.judge_fn = None     # asked names -> the judge's answer, in place of good JSON
         self.raise_fn = None     # returns an exception to raise, or None
         self.reply_fn = lambda body: ["Well hello, friend, good to see you."]
 
@@ -73,6 +83,9 @@ class Fake:
                 return
             text = body["contents"][0]["parts"][0]["text"]
             names = [l[2:].split(":")[0] for l in text.split("Transcript data")[0].splitlines() if l.startswith("- ")]
+            if self.judge_fn:
+                yield self.judge_fn(names)
+                return
             yield json.dumps({"grades": {n: {"pass": n not in self.fail_names, "why": "because"} for n in names}})
             return
         self.reply_bodies.append(body)
@@ -963,26 +976,26 @@ class TestRequestPreview(BenchCase):
         seen = []
         fake.raise_fn = lambda: seen.append(sys.stdout.getvalue()) or None
         code, out, _, _ = self.run_bench([chat()], fake, extra=["--model", "m1"])
-        self.assertIn("This run will make about 2 Gemini requests, all to m1.", seen[0])
+        self.assertIn("This run will make about 2 Gemini requests:\n  2 to m1 (Mary and the judge)\n", seen[0])
         self.assertIn("Mary and Sam use the same daily limit on this key.", seen[0])
 
     def test_two_models_are_named(self):
         code, out, _, _ = self.run_bench([chat()], extra=["--model", "m1", "--judge-model", "j1"])
-        self.assertIn("about 2 Gemini requests: 1 to m1, 1 to j1.", out)
+        self.assertIn("about 2 Gemini requests:\n  1 to m1 (Mary)\n  1 to j1 (the judge)\n", out)
 
     def test_list_needs_no_database(self):
         with mock.patch.object(bb, "saved_key_and_model", side_effect=AssertionError), \
                 mock.patch.object(bb.sqlite3, "connect", side_effect=AssertionError):
             code, out, _, _ = self.run_bench([chat()], extra=["--list", "--key-from-app"])
             self.assertEqual(code, 0)
-            self.assertIn("all to the saved model.", out)
+            self.assertIn("  2 to the saved model (", out)
             code, out, _, _ = self.run_bench([chat()], extra=["--list"])
-            self.assertIn(f"all to {bb.assist.DEFAULT_MODEL}.", out)
+            self.assertIn(f"  2 to {bb.assist.DEFAULT_MODEL} (", out)
             os.environ["GEMINI_MODEL"] = "env-model"
             code, out, _, _ = self.run_bench([chat()], extra=["--list", "--key-from-app"])
-            self.assertIn("all to env-model.", out)
+            self.assertIn("  2 to env-model (", out)
             code, out, _, _ = self.run_bench([chat()], extra=["--list", "--model", "flag-model"])
-            self.assertIn("all to flag-model.", out)
+            self.assertIn("  2 to flag-model (", out)
 
     def test_no_key_and_prompt_only_print_no_preview(self):
         del os.environ["GEMINI_API_KEY"]
@@ -2640,7 +2653,7 @@ class TestRealLiveTalk(RealLiveCase):
                     peer.send({"usageMetadata": {}})
                     time.sleep(0.01)
         self.script(after)
-        with mock.patch.object(bb, "LIVE_TURN_S", 0.1), mock.patch.object(bb, "RETRY_TIMEOUT_S", 0.1):
+        with mock.patch.object(bb, "LIVE_TURN_S", 0.1), mock.patch.object(bb, "LIVE_RETRY_S", 0.1):
             code, out, _, runs = self.run_live([live_chat()])
         self.assertEqual(runs[0]["error"], f"{bb.UNREACHED} (TimeoutError)")
 
@@ -2700,7 +2713,7 @@ class TestRealLiveTalk(RealLiveCase):
                                               extra=["--model", "m1", "--judge-model", "j1"])
         self.assertEqual(fake.reply_bodies, [], "no Normal runs at all")
         self.assertEqual((fake.judge_calls, fake.calls[0][2]), (1, "j1"))
-        self.assertIn(f"about 2 Gemini requests: 1 to {voices.LIVE_MODEL}, 1 to j1.", out)
+        self.assertIn(f"about 2 Gemini requests:\n  1 to j1 (the judge)\n  1 to {voices.LIVE_MODEL} (real Live", out)
         self.assertIn(f"Real Live, {voices.LIVE_MODEL}: 1/1 passed", out)
         data = self.saved()
         self.assertIs(data["real_live"], True)
@@ -2765,7 +2778,7 @@ class TestRealLiveFailures(RealLiveCase):
                 time.sleep(0.3)
                 peer.say("Here I am, friend.")
         self.script(after)
-        with mock.patch.object(bb, "LIVE_TURN_S", 0.15), mock.patch.object(bb, "RETRY_TIMEOUT_S", 5):
+        with mock.patch.object(bb, "LIVE_TURN_S", 0.15), mock.patch.object(bb, "LIVE_RETRY_S", 5):
             code, out, _, runs = self.run_live([live_chat()])
         self.assertEqual((code, runs[0]["status"], runs[0]["retried"]), (0, "passed", True))
         self.assertEqual((len(self.live.peers), len(self.live.token_bodies)), (2, 2))
@@ -2774,7 +2787,7 @@ class TestRealLiveFailures(RealLiveCase):
 
     def test_a_second_timeout_leaves_safety_unverified(self):
         self.script(lambda peer, n: None)
-        with mock.patch.object(bb, "LIVE_TURN_S", 0.05), mock.patch.object(bb, "RETRY_TIMEOUT_S", 0.1):
+        with mock.patch.object(bb, "LIVE_TURN_S", 0.05), mock.patch.object(bb, "LIVE_RETRY_S", 0.1):
             code, out, _, runs = self.run_live([safe("s")])
         self.assertEqual((code, runs[0]["status"]), (2, "error"))
         self.assertEqual(runs[0]["error"], f"{bb.UNREACHED} (TimeoutError)")
@@ -2782,7 +2795,7 @@ class TestRealLiveFailures(RealLiveCase):
 
     def test_no_setup_complete_is_a_timeout_too(self):
         self.live.script = lambda peer, n: peer.read()
-        with mock.patch.object(bb, "LIVE_TURN_S", 0.05), mock.patch.object(bb, "RETRY_TIMEOUT_S", 0.1):
+        with mock.patch.object(bb, "LIVE_TURN_S", 0.05), mock.patch.object(bb, "LIVE_RETRY_S", 0.1):
             code, out, _, runs = self.run_live([live_chat()])
         self.assertEqual(runs[0]["error"], f"{bb.UNREACHED} (TimeoutError)")
         self.assertTrue(all("clientContent" not in m for p in self.live.peers for m in p.got))
@@ -2845,12 +2858,20 @@ class TestRealLiveFailures(RealLiveCase):
         self.assertEqual(len(self.live.token_bodies), 3, "a busy run gets no retry")
         self.assertIn("Gemini's rate limit stopped the bench.", out)
 
-    def test_busy_with_quota_words_is_the_daily_limit(self):
+    def test_busy_with_daily_words_is_the_daily_limit(self):
         self.live.token_status = 429
-        self.live.token_answer = json.dumps({"error": {"message": "You exceeded your current quota"}}).encode()
+        self.live.token_answer = json.dumps({"error": {"message": "Requests per day are used up"}}).encode()
         code, out, _, runs = self.run_live([live_chat("a"), live_chat("b")])
         self.assert_quota(code, out, runs)
         self.assertIn("after 0 of 2 runs and 0 Live requests.", out)
+
+    def test_busy_saying_only_quota_counts_toward_the_rate_stop(self):  # a per-minute 429 says "quota" too
+        self.live.token_status = 429
+        self.live.token_answer = json.dumps({"error": {"message": "You exceeded your current quota"}}).encode()
+        code, out, _, runs = self.run_live([live_chat(c) for c in "abcd"])
+        self.assertEqual([r["error"] for r in runs[:3]], ["Gemini answered with error 429"] * 3)
+        self.assertEqual(runs[3]["not_run_why"], bb.RATE_STOP)
+        self.assertIn("Gemini's rate limit stopped the bench.", out)
 
     def test_no_gemini_on_the_token_is_trouble(self):
         self.live.token_status, self.live.token_answer = 500, b"{}"
@@ -2969,12 +2990,12 @@ class TestRealLivePlan(RealLiveCase):
         code, out, _, runs = self.run_live([safe("a")], extra=["--list", "--model", "m1"], judge=True)
         self.assertEqual(code, 0)
         self.assertIn("a (mary, real_live)", out)
-        self.assertIn(f"about 2 Gemini requests: 1 to {voices.LIVE_MODEL}, 1 to m1.", out)
+        self.assertIn(f"about 2 Gemini requests:\n  1 to m1 (the judge)\n  1 to {voices.LIVE_MODEL} (real Live", out)
         self.assertEqual(self.live.token_bodies, [])
 
     def test_no_judge_preview_is_all_to_live(self):
         code, out, _, runs = self.run_live([safe("a")], extra=["--list"])
-        self.assertIn(f"about 1 Gemini requests, all to {voices.LIVE_MODEL}.", out)
+        self.assertIn(f"about 1 Gemini requests:\n  1 to {voices.LIVE_MODEL} (real Live, its own daily limit)\n", out)
 
     def test_requests_are_counted_per_model(self):
         two = {"turns": ["a", "b"], "companion": "mary", "mode": "live", "real_live": True}
@@ -2982,6 +3003,257 @@ class TestRealLivePlan(RealLiveCase):
         self.assertEqual(bb.estimate_requests(runs), {"model_requests": 2, "judge_requests": 2, "live_requests": 4})
         self.assertEqual(bb.estimate_requests(runs, 1, True),
                          {"model_requests": 0, "judge_requests": 0, "live_requests": 2})
+
+
+class TestCostPreview(BenchCase):
+    def test_merged_and_split_lines_name_who_spends_what(self):
+        code, out, _, _ = self.run_bench([chat(companion="both")], extra=["--model", "m1"])
+        self.assertIn("about 4 Gemini requests:\n  4 to m1 (Mary, Sam and the judge)\n", out)
+        code, out, _, _ = self.run_bench([chat(companion="both")], extra=["--model", "m1", "--judge-model", "j1"])
+        self.assertIn("  2 to m1 (Mary and Sam)\n  2 to j1 (the judge)\n", out)
+        self.assertIn("Mary and Sam use the same daily limit on this key.", out)
+
+    def test_time_line(self):
+        self.assertEqual(bb.time_line(59, 1), "Under a minute at --delay 1.")
+        self.assertEqual(bb.time_line(60, 0.5), "About 1 minute at --delay 0.5.")
+        self.assertEqual(bb.time_line(2100, 4), "About 35 minutes at --delay 4.")
+
+    def test_seconds_are_delay_plus_the_typical_wait(self):
+        two = {"turns": ["a", "b"], "companion": "mary"}
+        cases = [dict(two, id="n", mode="normal"), {"id": "s", "line": "a", "mode": "story", "companion": "mary"},
+                 dict(two, id="t", mode="live", checks={"tools_called": ["tell_story"]})]
+        runs = bb.plan_runs(bb.load_cases(self.cases_dir(cases)))
+        self.assertEqual(bb.estimate_seconds(runs, delay=0), (6 + 3) + (12 + 3) + (6 + 12 + 3 + 3))
+        self.assertEqual(bb.estimate_seconds(runs, delay=4), 48 + 4 * (3 + 2 + 5))
+        self.assertEqual(bb.estimate_seconds(runs, 1, True, 1), 6 + 2)
+
+    def test_the_line_is_in_the_run_and_the_list(self):
+        for extra in ([], ["--list"]):
+            code, out, _, _ = self.run_bench([chat()], extra=extra + ["--delay", "4"], delay=False)
+            self.assertIn("Under a minute at --delay 4.", out)
+
+    def test_over_the_free_day_says_so(self):
+        with mock.patch.object(bb, "FREE_DAY_WARNING", 1):
+            code, out, _, _ = self.run_bench([chat()], extra=["--model", "m1"])
+            self.assertIn("That's over 1 to m1, so it may hit the daily limit.", out)
+            self.assertIn("--mode normal, --max, or a different --judge-model.", out)
+            code, out, _, _ = self.run_bench([chat()], extra=["--model", "m1", "--judge-model", "j1"])
+            self.assertNotIn("may hit the daily limit", out)
+
+    def test_suggestion_is_printed_when_one_fits(self):
+        with mock.patch.object(bb, "suggest_judge_model", mock.Mock(return_value="flash-x")) as ask:
+            code, out, _, _ = self.run_bench([chat()], extra=["--model", "m1"])
+        ask.assert_called_once_with(KEY, "m1")
+        self.assertIn("To spare Mary's daily limit, add --judge-model flash-x (limits are per model; a judge on another "
+                      "model may grade a little differently).", out)
+
+    def test_nothing_is_said_when_none_fits(self):
+        code, out, _, _ = self.run_bench([chat()], extra=["--model", "m1"])
+        self.assertNotIn("--judge-model", out)
+        self.assertNotIn("spare", out)
+
+    def test_no_request_when_the_judge_is_off_or_elsewhere_or_there_is_no_key(self):
+        with mock.patch.object(bb, "suggest_judge_model", side_effect=AssertionError):
+            for extra in (["--no-judge"], ["--model", "m1", "--judge-model", "j1"], ["--list"]):
+                code, out, _, _ = self.run_bench([chat()], extra=extra)
+                self.assertNotIn("Something went wrong", out)
+            del os.environ["GEMINI_API_KEY"]
+            code, out, _, _ = self.run_bench([chat()])
+            self.assertNotIn("Something went wrong", out)
+
+    def test_list_has_the_general_line(self):
+        line = "A --judge-model on a different model spares Mary's daily limit."
+        self.assertIn(line, self.run_bench([chat()], extra=["--list"])[1])
+        self.assertNotIn(line, self.run_bench([chat()], extra=["--list", "--no-judge"])[1])
+        self.assertNotIn(line, self.run_bench([chat()], extra=["--list", "--model", "m", "--judge-model", "j"])[1])
+
+
+class TestSuggestJudgeModel(unittest.TestCase):
+    MARY = "gemini-3.5-flash-lite"
+
+    @staticmethod
+    def model(name, *methods):
+        return {"name": f"models/{name}", "supportedGenerationMethods": list(methods or ["generateContent"])}
+
+    def ask(self, payload, model=None):
+        self.seen = []
+
+        def stub(request, timeout=None):
+            self.seen.append((request, timeout))
+            if isinstance(payload, Exception):
+                raise payload
+            return io.BytesIO(payload if isinstance(payload, bytes) else json.dumps(payload).encode())
+        with mock.patch.object(bb.urllib.request, "urlopen", stub), \
+                mock.patch.object(voices, "API_ROOT", "http://127.0.0.1:9"):
+            return REAL_SUGGEST(KEY, model or self.MARY)
+
+    def test_picks_the_newest_lite_that_fits(self):
+        skipped = ("gemini-3.5-flash-lite", "gemini-3.5-flash-tts", "gemini-3.8-flash-live", "gemini-3.5-flash-image",
+                   "gemini-3.5-flash-native-audio", "gemini-3.5-flash-lite-preview-09", "gemini-flash-embedding",
+                   "gemini-flash-lite-latest", "gemini-9.0-pro")
+        listed = [self.model(n) for n in skipped] + [self.model("gemini-9.0-flash-lite", "embedContent")]
+        listed += [self.model(n) for n in ("gemini-2.5-flash-lite", "gemini-2.10-flash-lite", "gemini-3.5-flash")]
+        self.assertEqual(self.ask({"models": listed}), "gemini-2.10-flash-lite")
+
+    def test_a_flash_when_no_lite_fits(self):
+        listed = [self.model(n) for n in (self.MARY, "gemini-2.5-flash", "gemini-3.5-flash")]
+        self.assertEqual(self.ask({"models": listed}), "gemini-3.5-flash")
+
+    def test_nothing_fits(self):
+        self.assertEqual(self.ask({"models": [self.model(self.MARY)]}), "")
+
+    def test_one_get_with_the_key_only_in_the_header(self):
+        self.ask({"models": []})
+        (request, timeout), = self.seen
+        self.assertEqual((request.get_method(), timeout), ("GET", 10))
+        self.assertEqual(request.full_url, "http://127.0.0.1:9/v1beta/models?pageSize=200")
+        self.assertEqual(request.get_header("X-goog-api-key"), KEY)
+
+    def test_any_failure_is_silent(self):
+        out = io.StringIO()
+        bad = (err(403, body=KEY.encode()), OSError(KEY), b"not json", b"[]", b"{}", {"models": [1]}, {"models": 3})
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            for payload in bad:
+                self.assertEqual(self.ask(payload), "", payload)
+        self.assertEqual(out.getvalue(), "")
+
+
+def broken_answer(names):
+    """The judge's slip from run 5: one extra closing brace after the second item."""
+    item = lambda n: f'"{n}": {{"pass": true, "why": "fine"}}'  # noqa: E731
+    return '{"grades": {' + ", ".join(map(item, names[:2])) + "}, " + ", ".join(map(item, names[2:])) + "}"
+
+
+class TestMalformedJudge(BenchCase):
+    NAMES = ["warmth", "plain_talk", "grown_adult", "in_character"]
+    SAMPLE = ('{"grades": {"warmth": {"pass": true, "why": "a"}, "plain_talk": {"pass": true, "why": "b"}}, '
+              '"grown_adult": {"pass": true, "why": "c"}, "in_character": {"pass": false, "why": "d"}}')
+    RETRY_NOTE = "the judge's first answer couldn't be read, so it got its one retry"
+    CASE = chat("chest", checks={"safety_all": [["hello"]]})
+
+    def test_run_fives_answer_is_read_whole(self):
+        self.assertEqual(list(json.loads(self.SAMPLE)["grades"]), self.NAMES[:2], "the brace closed the wrapper early")
+        for text in (self.SAMPLE, self.SAMPLE.replace('"b"}}', '"b"}}}')):  # the second isn't JSON at all
+            out = bb.parse_grades(text, self.NAMES)
+            self.assertEqual([out[n]["pass"] for n in self.NAMES], [True, True, True, False])
+            self.assertEqual([out[n]["why"] for n in self.NAMES], ["a", "b", "c", "d"])
+
+    def test_items_beside_a_closed_wrapper(self):
+        text = json.dumps({"grades": {"warmth": {"pass": True, "why": "a"}}, "plain_talk": {"pass": False, "why": "b"}})
+        out = bb.parse_grades(text, ["warmth", "plain_talk"])
+        self.assertEqual((out["warmth"]["pass"], out["plain_talk"]["pass"]), (True, False))
+
+    def test_salvage_keeps_the_same_rules(self):
+        out = bb.parse_grades('{"warmth": {"pass": "False", "why": "' + "x" * 200 + '"}}}', ["warmth"])
+        self.assertIs(out["warmth"]["pass"], False)
+        self.assertEqual(out["warmth"]["why"], bb.cut("x" * 200, 120))
+
+    def test_never_invents_a_verdict(self):
+        two = ["warmth", "plain_talk"]
+        for text in ('{"warmth": {"pass": true, "why": "a"}}}',  # one is missing
+                     '{"warmth": {"pass": true}}}, "plain_talk": {"pass": "yes"}}',  # unclear
+                     '{"warmth": {"pass": true}}}, "plain_talk": {"why": "no verdict"}}',
+                     '{"warmth": {"pass": true}}}, "plain_talk": {"pass": tru',  # cut off
+                     '{"warmth": {"pass": true}}}, "plain_talk": {"pass": false, "why": "a } b"}}',  # can't be sure of it
+                     '{"warmth": {"pass": true}}}, "plain_talk": {"pass": true, "extra": {"pass": false}}}',
+                     '{"warmth": {"pass": true}, "plain_talk": {"pass": true}}}, "warmth": {"pass": false}}',  # two verdicts
+                     json.dumps({"grades": {"warmth": {"pass": True}, "plain_talk": {"pass": True}},
+                                 "warmth": {"pass": False}})):
+            self.assertIsNone(bb.parse_grades(text, two), text)
+
+    def test_first_bad_second_good_is_graded_with_two_calls_and_a_note(self):
+        fake = Fake()
+        fake.bad_judge = 1
+        code, out, fake, runs = self.run_bench([self.CASE], fake)
+        run = next(iter(runs.values()))
+        self.assertEqual((code, run["status"], fake.judge_calls), (0, "passed", 2))
+        self.assertEqual(run["notes"].count(self.RETRY_NOTE), 1)
+
+    def test_both_bad_is_ungraded_with_two_calls_not_three(self):
+        fake = Fake()
+        fake.bad_judge = 5
+        code, out, fake, runs = self.run_bench([self.CASE], fake)
+        run = next(iter(runs.values()))
+        self.assertEqual((code, run["status"], fake.judge_calls), (2, "ungraded", 2))
+        self.assertNotIn(self.RETRY_NOTE, run["notes"])
+
+    def test_salvage_needs_no_retry(self):
+        fake = Fake()
+        fake.judge_fn = broken_answer
+        code, out, fake, runs = self.run_bench([self.CASE], fake)
+        run = next(iter(runs.values()))
+        self.assertEqual((code, run["status"], fake.judge_calls), (0, "passed", 1))
+        self.assertTrue(run["grades"])
+        self.assertNotIn(self.RETRY_NOTE, run["notes"])
+
+
+class TestModelFlag(BenchCase):
+    """--model points a whole run at one model, the way a paid key would use it."""
+
+    CASES = [chat("talk", group="chat"),
+             {"id": "tool", "line": "Use the tool", "mode": "live", "group": "chat", "companion": "mary"},
+             {"id": "opener", "line": "Tell me about the pier", "mode": "live", "group": "story", "companion": "mary",
+              "checks": {"min_words": mary.STORY_MIN_WORDS}},
+             {"id": "tale", "line": "A tale please", "mode": "story", "group": "story", "companion": "mary"}]
+
+    @staticmethod
+    def fake():
+        def reply(body):
+            if mary.STORY_PROMPT in system_of(body):
+                return [STORY]
+            words = json.dumps(body["contents"])
+            if "Use the tool" in words and body.get("tools") and "functionResponse" not in words:
+                return [mary.ToolCall({"functionCall": {"name": "tell_story", "args": {"request": "a fishing tale"}}})]
+            return ["Well hello, friend, good to see you."]
+        fake = Fake()
+        fake.reply_fn = reply
+        return fake
+
+    @staticmethod
+    def models(fake, judge):
+        return {model for body, _, model in fake.calls if ("You grade one reply" in system_of(body)) == judge}
+
+    def test_every_call_uses_the_named_model(self):
+        code, out, fake, runs = self.run_bench(self.CASES, self.fake(), extra=["--model", "paid-x", "--raw"], save=True)
+        self.assertEqual({r["mode"] for r in runs.values()}, {"normal", "live", "story", "raw"})
+        self.assertIn("tell_story", runs["tool|mary|live1"]["tools"])
+        self.assertTrue(any("the bench called tell_story" in n for n in runs["opener|mary|live1"]["notes"]), out)
+        stories = [model for body, _, model in fake.calls if mary.STORY_PROMPT in system_of(body)]
+        self.assertGreaterEqual(len(stories), 3, "the tool's, the bench's and the story run's")
+        self.assertEqual(self.models(fake, False), {"paid-x"})
+        self.assertEqual(self.models(fake, True), {"paid-x"}, "the judge follows --model")
+        for mode in ("normal", "story", "live"):
+            self.assertIn(bb.MODE_TITLES[mode].format(model="paid-x"), out)
+        data = json.loads(next((self.tmp / "results").glob("*.json")).read_text(encoding="utf-8"))
+        self.assertEqual(data["models"], {"normal": "paid-x", "story": "paid-x", "live": "paid-x"})
+        self.assertEqual((data["model"], data["judge_model"]), ("paid-x", "paid-x"))
+
+    def test_judge_model_only_moves_the_judge(self):
+        code, out, fake, runs = self.run_bench(self.CASES, self.fake(), extra=["--model", "paid-x", "--judge-model", "j1"])
+        self.assertEqual(self.models(fake, False), {"paid-x"})
+        self.assertEqual(self.models(fake, True), {"j1"})
+
+
+class TestRealLivePreview(RealLiveCase):
+    LINE = "The judge still uses Mary's model. Add --no-judge or --judge-model to leave her limit alone."
+
+    def test_says_the_judge_spends_marys_model_and_what_no_judge_costs(self):
+        code, out, _, _ = self.run_live([safe("a")], extra=["--list"], judge=True)
+        self.assertIn(self.LINE, out)
+        self.assertIn("With --no-judge, the safety items the judge grades aren't verified.", out)
+
+    def test_no_line_when_the_judge_is_off_or_elsewhere(self):
+        self.assertNotIn(self.LINE, self.run_live([safe("a")], extra=["--list"])[1])
+        code, out, _, _ = self.run_live([safe("a")], extra=["--list", "--model", "m", "--judge-model", "j"], judge=True)
+        self.assertNotIn(self.LINE, out)
+
+    def test_seconds_use_the_live_turn(self):
+        runs = bb.plan_real_live(bb.load_cases(self.cases_dir([safe("a")])))
+        self.assertEqual(bb.estimate_seconds(runs, None, True, 2), bb.SECONDS_PER_LIVE_TURN + 2)
+
+    def test_live_limits(self):
+        self.assertEqual((bb.LIVE_TURN_S, bb.LIVE_RETRY_S), (60, 90))
+        self.assertGreater(bb.LIVE_RETRY_S, bb.RETRY_TIMEOUT_S)
 
 
 if __name__ == "__main__":

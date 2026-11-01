@@ -80,10 +80,17 @@ RETRY_CODES = (429, 500, 503)
 RETRY_WAITS = (5, 15, 30)
 RETRY_AFTER_MAX_S = 60
 RETRY_TIMEOUT_S = 45  # the one retry of a run or judge call that timed out or came back empty
-LIVE_TURN_S = 30  # wall clock for one turn of real Live; its one retry gets RETRY_TIMEOUT_S
+LIVE_TURN_S = 60  # wall clock for one turn of real Live; her audio may come near speaking speed
+LIVE_RETRY_S = 90  # the same for its one retry
 LIVE_TAIL_S = 0.75  # the quiet that ends a turn or lets a tool answer go out (see real_live_turn)
 LIVE_MAX_MESSAGE = 8 * 1024 * 1024  # bytes; her audio comes in small chunks, so anything near this is wrong
 REAL_LIVE_MAX = 12  # runs in a --real-live pass unless --max says more
+SECONDS_PER_REQUEST = 3  # the preview's typical wait for one text turn or one judge call
+SECONDS_PER_STORY = 12  # for one story
+SECONDS_PER_LIVE_TURN = 10  # for one turn of real Live
+FREE_DAY_WARNING = 400  # requests to one model: runs 3 and 4 used about 370 in a day before the limit hit
+# Not for a judge: "latest" names may be aliases of Mary's own model, so they'd share her limit
+JUDGE_MODEL_SKIP = ("tts", "live", "image", "audio", "embedding", "preview", "latest")
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"  # RFC 6455's fixed text for Sec-WebSocket-Accept
 UNREACHED = "Gemini couldn't be reached"
 EMPTY_ANSWER = "Gemini gave an empty answer"
@@ -1334,7 +1341,7 @@ def live_token_failed(e, run):
         raise KeyRefused() from None
     if e.kind != "busy":
         run["error"] = f"{UNREACHED} (Live token: {e.kind})"
-    elif says_quota(e.detail):
+    elif DAILY_LIMIT.search(e.detail):  # not says_quota: a 429 here says "quota" even for a per-minute limit
         raise QuotaGone(voices.LIVE_MODEL) from None
     else:
         run["error"] = "Gemini answered with error 429"
@@ -1357,7 +1364,7 @@ def talk_real_live(run, memory, key, model, gemini):
     sends and the same checks as a live run. The page's hush-and-say on an emergency isn't replayed: app_line stands in
     for it, as it does for the stand-in. model stays Mary's: tell_story goes there, on real Live as in the app."""
     who = COMPANION_IDS[run["companion"]]
-    limit = RETRY_TIMEOUT_S if gemini.patient else LIVE_TURN_S
+    limit = LIVE_RETRY_S if gemini.patient else LIVE_TURN_S
     session = None
     try:
         gemini.pace()
@@ -1503,9 +1510,38 @@ def judge_body(run, names):
             "generationConfig": {"temperature": 0, "maxOutputTokens": 2000, "responseMimeType": "application/json"}}
 
 
+def one_grade(grade):
+    """{pass, why} from one judged item, or None unless its verdict is a plain true or false."""
+    verdict = grade.get("pass") if isinstance(grade, dict) else None
+    if isinstance(verdict, str):
+        verdict = {"true": True, "false": False}.get(verdict.strip().lower())
+    if not isinstance(verdict, bool):
+        return None
+    return {"pass": verdict, "why": cut(grade.get("why") or "", 120)}
+
+
+def salvage_grades(text, names):
+    """The asked items picked out of an answer whose brackets went wrong, each one whole on its own. None if any is
+    missing or unclear, or if the answer gives one item two verdicts: on a safety case a wrong verdict is worse than
+    none."""
+    out = {}
+    for name in names:
+        items = []
+        for piece in re.findall(rf'"{re.escape(name)}"\s*:\s*\{{[^{{}}]*\}}', text):
+            try:
+                items.append(one_grade(json.loads(piece.partition(":")[2])))
+            except ValueError:
+                return None
+        if not items or None in items or len({item["pass"] for item in items}) > 1:
+            return None
+        out[name] = items[0]
+    return out or None
+
+
 def parse_grades(text, names):
     """{name: {pass, why}} for exactly the asked names, or None unless every one is there. Copes with a code fence or
-    words around the JSON, a missing "grades" wrapper, and "pass" as the words true or false."""
+    words around the JSON, a missing "grades" wrapper, "pass" as the words true or false, and misplaced brackets, which
+    can leave items outside "grades" (see salvage_grades)."""
     text = str(text)
     try:
         data = json.loads(text)
@@ -1513,20 +1549,13 @@ def parse_grades(text, names):
         try:
             data = json.loads(text[text.find("{"):text.rfind("}") + 1])  # The outermost {...}
         except ValueError:
-            return None
+            data = None
     grades = data.get("grades", data) if isinstance(data, dict) else None
-    if not isinstance(grades, dict):
-        return None
-    out = {}
-    for name in names:
-        grade = grades.get(name)
-        verdict = grade.get("pass") if isinstance(grade, dict) else None
-        if isinstance(verdict, str):
-            verdict = {"true": True, "false": False}.get(verdict.strip().lower())
-        if not isinstance(verdict, bool):
-            return None
-        out[name] = {"pass": verdict, "why": cut(grade.get("why") or "", 120)}
-    return out
+    if isinstance(grades, dict) and (grades is data or not set(names) & set(data)):
+        out = {name: one_grade(grades.get(name)) for name in names}
+        if None not in out.values():
+            return out
+    return salvage_grades(text, names)
 
 
 def strict_judge_body(body, names):
@@ -1552,6 +1581,8 @@ def ask_judge(run, names, key, model):
             return None, f"the judge couldn't be reached ({type(e).__name__})"
         grades = parse_grades(text, names)
         if grades is not None:
+            if second_try:
+                run["notes"].append("the judge's first answer couldn't be read, so it got its one retry")
             return grades, ""
         raw = text.strip() or raw
     return None, "the judge's answer wasn't usable: " + (cut(scrub(raw), JUDGE_ANSWER_KEPT) or "it was empty")
@@ -2008,40 +2039,126 @@ def list_runs(runs, max_runs=None):
     say(f"{len(runs)} runs")
 
 
+def calling(runs, max_runs=None):
+    """The runs that call Gemini, as far as --max lets them."""
+    runs = [run for run in runs if run["mode"] != "prompt"]
+    return runs if max_runs is None else runs[:max(max_runs, 0)]
+
+
+def told_requests(run):
+    """The requests a case that needs tell_story adds: the story, and her words after it."""
+    return 2 if run["mode"] in LIVE_MODES and "tell_story" in run["case"]["checks"].get("tools_called", ()) else 0
+
+
 def estimate_requests(runs, max_runs=None, no_judge=False):
     """About how many requests the runs make, retries aside: {"model_requests", "judge_requests"}, and "live_requests"
     when there are real-Live runs, which go to the Live model. Their tell_story requests go to Mary's model."""
-    asked = judged = live = used = 0
-    for run in runs:
-        if run["mode"] == "prompt" or (max_runs is not None and used >= max_runs):
-            continue
-        used += 1
+    asked = judged = live = 0
+    for run in calling(runs, max_runs):
         if run["mode"] == "real_live":
             live += len(run["turns"])
         else:
             asked += 1 if run["mode"] == "story" else len(run["turns"])
-        if run["mode"] in LIVE_MODES and "tell_story" in run["case"]["checks"].get("tools_called", ()):
-            asked += 2
+        asked += told_requests(run)
         judged += 0 if no_judge or not rubric_for(run["case"], run["mode"]) else 1
     return {"model_requests": asked, "judge_requests": judged, **({"live_requests": live} if live else {})}
 
 
-def say_preview(runs, max_runs, no_judge, model, judge_model, live_model=""):
+def estimate_seconds(runs, max_runs=None, no_judge=False, delay=1):
+    """About how long the runs take: each request costs delay plus the typical wait for its answer."""
     counts = estimate_requests(runs, max_runs, no_judge)
-    where = {}  # model -> requests, because limits are per model
-    for name, count in ((live_model, counts.get("live_requests", 0)), (model, counts["model_requests"]),
-                        (judge_model, counts["judge_requests"])):
-        if count:
-            where[name] = where.get(name, 0) + count
-    total = sum(where.values())
-    if not total:
-        return
-    if len(where) == 1:
-        say(f"This run will make about {total} Gemini requests, all to {next(iter(where))}.")
+    waits = counts["judge_requests"] * SECONDS_PER_REQUEST
+    for run in calling(runs, max_runs):
+        turns = len(run["turns"])
+        if run["mode"] == "real_live":
+            waits += turns * SECONDS_PER_LIVE_TURN
+        elif run["mode"] == "story":
+            waits += SECONDS_PER_STORY
+        else:  # a raw run of a story case gets story settings
+            waits += turns * (SECONDS_PER_STORY if run["case"]["mode"] == "story" else SECONDS_PER_REQUEST)
+        if told_requests(run):
+            waits += SECONDS_PER_STORY + SECONDS_PER_REQUEST
+    return waits + delay * sum(counts.values())
+
+
+def time_line(seconds, delay):
+    """The preview's time estimate, to the minute."""
+    minutes = round(seconds / 60)
+    if seconds < 60:
+        how_long = "Under a minute"
     else:
-        each = ", ".join(f"{count} to {name}" for name, count in where.items())
-        say(f"This run will make about {total} Gemini requests: {each}.")
+        how_long = "About 1 minute" if minutes == 1 else f"About {minutes} minutes"
+    return f"{how_long} at --delay {delay:g}."
+
+
+def and_list(names):
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def model_version(name):
+    """The first number in a model's name, as a tuple so 2.10 beats 2.5; empty when it has none."""
+    found = re.search(r"\d+(?:\.\d+)*", name)
+    return tuple(int(n) for n in found.group().split(".")) if found else ()
+
+
+def suggest_judge_model(key, model):
+    """A flash model for the judge that isn't Mary's, or "" when none fits or anything goes wrong. One ListModels
+    request, which spends no generate quota. The key goes only in the header, and a failure says nothing, so the key
+    can't land in an error."""
+    try:
+        request = urllib.request.Request(f"{voices.API_ROOT}/v1beta/models?pageSize=200",
+                                         headers={"x-goog-api-key": key})
+        with urllib.request.urlopen(request, timeout=10) as answer:
+            listed = json.loads(answer.read().decode("utf-8", "replace"))["models"]
+        names = [item["name"].removeprefix("models/") for item in listed
+                 if "generateContent" in item.get("supportedGenerationMethods", ())]
+    except Exception:
+        return ""
+    mine = model.removeprefix("models/")
+    fits = [name for name in names
+            if "flash" in name and name != mine and not any(word in name for word in JUDGE_MODEL_SKIP)]
+    return max(fits, key=lambda name: ("lite" in name, model_version(name), name), default="")
+
+
+def say_judge_model(key, model, live_model):
+    """What the judge sharing Mary's model costs her, and the way out if there is one."""
+    if live_model:
+        say("The judge still uses Mary's model. Add --no-judge or --judge-model to leave her limit alone. "
+            "With --no-judge, the safety items the judge grades aren't verified.")
+    other = suggest_judge_model(key, model) if key else ""
+    if other:
+        say(f"To spare Mary's daily limit, add --judge-model {other} "
+            "(limits are per model; a judge on another model may grade a little differently).")
+    elif not key and not live_model:
+        say("A --judge-model on a different model spares Mary's daily limit.")
+
+
+def say_preview(runs, max_runs, no_judge, model, judge_model, live_model="", delay=1, key=""):
+    """The run's cost, before it spends anything. key is only for the judge-model suggestion; --list passes none, so it
+    stays offline."""
+    counts = estimate_requests(runs, max_runs, no_judge)
+    people = [PEOPLE[who] for who in PEOPLE if any(run["companion"] == who for run in calling(runs, max_runs))]
+    where = {}  # model -> [requests, who makes them], because limits are per model
+    for name, count, who in ((model, counts["model_requests"], people),
+                             (judge_model, counts["judge_requests"], ["the judge"]),
+                             (live_model, counts.get("live_requests", 0), ["real Live, its own daily limit"])):
+        if count:
+            line = where.setdefault(name, [0, []])
+            line[0] += count
+            line[1] += who
+    if not where:
+        return
+    say(f"This run will make about {sum(count for count, _ in where.values())} Gemini requests:")
+    for name, (count, who) in where.items():
+        say(f"  {count} to {name} ({and_list(who)})")
+    say(time_line(estimate_seconds(runs, max_runs, no_judge, delay), delay))
     say("Mary and Sam use the same daily limit on this key.")
+    for name, (count, _) in where.items():
+        if count > FREE_DAY_WARNING:
+            say(f"That's over {FREE_DAY_WARNING} to {name}, so it may hit the daily limit. To stay under it, use "
+                "--mode normal, --max, or a different --judge-model.")
+    if judge_model == model and counts["judge_requests"]:
+        say_judge_model(key, model, live_model)
 
 
 def replay_grades(run, old):
@@ -2154,13 +2271,13 @@ def bench(args):
         list_runs(runs, args.max)
         saved = "the saved model" if args.key_from_app else assist.DEFAULT_MODEL
         model = args.model or os.environ.get("GEMINI_MODEL") or saved  # never opens the database
-        say_preview(runs, args.max, args.no_judge, model, args.judge_model or model, live_model)
+        say_preview(runs, args.max, args.no_judge, model, args.judge_model or model, live_model, args.delay)
         return 0
     key, model = pick_key_and_model(args.key_from_app, args.model)
     _secret = key
     judge_model = args.judge_model or model
     if key:
-        say_preview(runs, args.max, args.no_judge, model, judge_model, live_model)
+        say_preview(runs, args.max, args.no_judge, model, judge_model, live_model, args.delay, key)
     info = execute(runs, key, model, judge_model, args.delay, args.max, args.no_judge, args.verbose)
     brain = [r for r in runs if is_brain(r)]  # the other arms are for the comparison, never a verdict
     print_report(brain, args.no_judge, model_names(model, live_model))

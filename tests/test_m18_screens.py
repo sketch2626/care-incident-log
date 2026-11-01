@@ -127,7 +127,7 @@ class Listed(unittest.TestCase):
         declared = {d["name"]: d for d in mary.LIVE_PAGE_TOOLS}
         self.assertEqual(set(declared) - {"story_more", "end_talk"}, {"use_screen"})   # one screen tool, not seven
         props = declared["use_screen"]["parameters"]["properties"]
-        self.assertEqual(set(props), {"action", "name", "field", "value", "turns_back"})
+        self.assertEqual(set(props), {"action", "name", "field", "value", "turns_back", "when", "category"})   # piece 5: when, category
         self.assertTrue(all(p["type"] == "string" for p in props.values()))
         for name in self.tools:   # every action named in the description reaches one of the seven functions
             self.assertIn(name, self.tools)

@@ -969,16 +969,20 @@ LIVE_PAGE_TOOLS = [
                      "box in field, then explain it in your own words. fill = put value in the box in field, then say "
                      "it back and ask if it's right. put_back = undo your last fill of the box in field. their_words = "
                      "copy their own words into Your words, exactly as they said them (you can't give it any words). "
-                     "go_back = go back to you, the same as tapping you."),
+                     "go_back = go back to you, the same as tapping you. read_incidents = read back what they saved, only "
+                     "when they ask; it works on any screen, and when and category narrow it."),
      "parameters": {"type": "object", "properties": {
-         "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back."},
+         "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents."},
          "name": {"type": "string", "description": "For open: the screen, one of " + ", ".join(LIVE_SCREEN_NAMES) + "."},
          "field": {"type": "string", "description": "For explain, fill, put_back: the field from look."},
          "value": {"type": "string", "description": ("For fill: what goes in it, from what they said. A date as YYYY-MM-DD, "
                                                     "a time as HH:MM, a choice by its label.")},
          "turns_back": {"type": "string", "description": ("For their_words: which thing they said. 1 is what they said "
                                                           "before asking you, 2 the time before that, up to 4. 0 is the "
-                                                          "turn they asked in.")}},
+                                                          "turn they asked in.")},
+         "when": {"type": "string", "description": "For read_incidents: latest, a day as YYYY-MM-DD, or a month as YYYY-MM."},
+         "category": {"type": "string", "description": ("For read_incidents: one of call_light, meal, bathing, toileting, "
+                                                        "medication, repositioning, staff, safety, other.")}},
          "required": ["action"]}},
 ]
 LIVE_CORE_TOOLS = LIVE_MEMORY_TOOLS + [LIVE_STORY_TOOL] + LIVE_PAGE_TOOLS  # M4a: every Live chat on her own screen gets these

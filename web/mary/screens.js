@@ -9,7 +9,8 @@
      MaryScreens.pickHeard(turns, back)  the turn their_words pastes
      MaryScreens.reset()                 the frame loaded a new page
    env is the page's: doc() the log's document when it's in view, else null; panel() the open panel's id, else null;
-   openDeep(hash); openPanel(id); back(); turns, the turns heard in this talk.
+   openDeep(hash); openPanel(id); back(); turns, the turns heard in this talk; incidents() the saved log; companion() 'mary'
+   or 'sam'.
    No value here is ever logged or sent to the server. A tool's answer goes to Live and nowhere else. */
 (function () {
   'use strict';
@@ -34,6 +35,11 @@
   var SAVED_NO = "That one shows by itself after you save.";
   var OFF_NO = "That one isn't switched on here.";
   var SLOW_NO = "That didn't open just now.";
+  var READ_UNASKED = "I only read your notes when you ask me to.";
+  var READ_WHEN_NO = "I can look by a day or by a month. Tell me which.";
+  var READ_GROUP_NO = "I don't know that group. Tell me what kind of problem it was.";
+  var READ_FAIL_NO = "I couldn't get to your notes just now.";
+  var READ_NONE = "There's nothing saved for that.";
 
   var GROUPS = [
     { key: 'call_light', label: 'No one answered my call light' },
@@ -148,10 +154,13 @@
   var ROOM_PX = 24;                                            // clear space around a lit field
   var ARRIVE_MS = 4000, ARRIVE_POLL_MS = 60;                   // DEEP_READY_MS in app.js
   var KEEP_TURNS = 5, KEEP_FILLS = 5;
+  var READ_MOST = 10;                                          // piece 5: notes read in one go
+  var ASK_WORDS = /\b(?:read|reading|hear|tell|what did|saved|wrote|write|written|incidents?|notes?|last|lists?|happened)\b/i;
 
   var Lit = { el: null };
   var Typing = { finish: null };
-  var Undo = {};   // per field, the value before each of her fills. Held here only, never logged
+  var Undo = {};   // per field, what was there before each of her fills. Held here only, never logged
+  var Months = { after: null };   // piece 5: the heard turn behind her offer to go by month
 
   function no(say) { return { ok: false, say: say }; }
 
@@ -304,9 +313,16 @@
     all.forEach(function (r) { r.checked = r.value === value; if (r.checked) { on = r; } });
     if (on) { fire(win, on, 'input'); fire(win, on, 'change'); }
   }
-  function remember(f, old) {
-    var list = Undo[f.id] = Undo[f.id] || [];
-    list.push(old);
+  // Piece 5: the log's form keeps count of her fills, so its record can say she helped. Only that form: not My info.
+  function formHelp(env) {
+    var doc = env.doc(), win = doc && here(env).id === 'write' ? doc.defaultView : null;
+    return (win && win.maryHelp) || null;
+  }
+  // changed: this fill really put something new in. form: which form it counted in, as the box may be another form's by then.
+  function remember(f, old, changed, env) {
+    var list = Undo[f.id] = Undo[f.id] || [], help = formHelp(env);
+    list.push({ old: old, form: help ? help.form() : 0, counted: !!(help && changed) });
+    if (help && changed) { help.step(1, env.companion ? env.companion() : 'mary'); }
     if (list.length > KEEP_FILLS) { list.shift(); }
   }
   function refusal(f, el) {
@@ -389,11 +405,11 @@
     light(doc, f, el);
     if (f.radio) {
       var was = radios(doc, f).filter(function (r) { return r.checked; })[0];
-      remember(f, was ? was.value : '');
+      remember(f, was ? was.value : '', (was ? was.value : '') !== c.v, env);
       setChoice(doc, f, c.v);
       return done();
     }
-    remember(f, el.value);
+    remember(f, el.value, el.value !== c.v, env);
     if (f.kind !== 'text') {   // a date or a time box only holds a whole value
       setVal(win, el, c.v);
       fire(win, el, 'input');
@@ -411,7 +427,10 @@
     var list = Undo[f.id];
     if (!el || !list || !list.length) { return no(NO_UNDO); }
     finishTyping();
-    var old = list.pop(), win = doc.defaultView;
+    var help = formHelp(env);
+    if (help && list[list.length - 1].form && list[list.length - 1].form !== help.form()) { return no(NO_UNDO); }   // another form's old value stays out of this one
+    var last = list.pop(), old = last.old, win = doc.defaultView;
+    if (help && last.counted) { help.step(-1); }
     light(doc, f, el);
     if (f.radio) { setChoice(doc, f, old); }
     else {
@@ -491,11 +510,64 @@
     if (now.trim() && now.trim().slice(-text.length) === text) {
       return { ok: true, done: 'Those words are already in the box.', saved: false };
     }
-    remember(f, now);
+    remember(f, now, true, env);
     setVal(win, el, now.trim() ? now.replace(/\s+$/, '') + '\n' + text : text);
     fire(win, el, 'input');
     fire(win, el, 'change');
     return { ok: true, done: 'Their own words are in the box, just as they said them. Nothing is saved.', saved: false };
+  }
+
+  // Piece 5. The latest thing heard must hold an ask word, or it must answer her offer to go by month.
+  function askedToRead(env) {
+    var t = env.turns || [], last = t[t.length - 1];
+    if (!last) { return false; }
+    return ASK_WORDS.test(String(last.text || '')) || (!!Months.after && t[t.length - 2] === Months.after);
+  }
+  function findGroup(want) {
+    var w = String(want).trim().toLowerCase().replace(/^write_/, '');
+    return GROUPS.filter(function (g) { return g.key === w || g.label.toLowerCase() === w; })[0] || null;
+  }
+  function readRow(r) {   // a list of what goes out, so a source, an id or anything added later never does
+    var g = findGroup(r.category), sev = String(r.severity || '');
+    return { date: r.occurred_date || '', time: r.occurred_time || '', category: (g || GROUPS[8]).label,
+      severity: sev.charAt(0).toUpperCase() + sev.slice(1), words: r.description || '', staff: r.staff_involved || '',
+      reported_to: r.reported_to || '', outcome: r.outcome || '', witnesses: r.witnesses || '', helped: r.helped_note || '' };
+  }
+  function countMonths(rows) {
+    var seen = {}, out = [];
+    rows.forEach(function (r) {
+      var m = String(r.occurred_date || '').slice(0, 7);
+      if (!seen[m]) { seen[m] = { month: m, count: 0 }; out.push(seen[m]); }
+      seen[m].count++;
+    });
+    return out.slice(0, 12);
+  }
+  // The rows come newest first from the server. What she gets goes to Live and nowhere else.
+  function readIncidents(args, env) {
+    if (!askedToRead(env)) { return no(READ_UNASKED); }
+    var t = env.turns, heard = t[t.length - 1];
+    var when = String(args.when == null ? '' : args.when).trim().toLowerCase();
+    var cat = String(args.category == null ? '' : args.category).trim();
+    var group = cat ? findGroup(cat) : null;
+    if (cat && !group) { return no(READ_GROUP_NO); }
+    if (when && when !== 'latest' && !/^\d{4}-\d{2}(?:-\d{2})?$/.test(when)) { return no(READ_WHEN_NO); }
+    Months.after = null;
+    return Promise.resolve().then(env.incidents).then(function (rows) {
+      var hit = (Array.isArray(rows) ? rows : []).filter(function (r) {
+        if (r.deleted_at || (group && r.category !== group.key)) { return false; }
+        return !when || when === 'latest' || String(r.occurred_date || '').indexOf(when) === 0;
+      });
+      if (when === 'latest') { hit = hit.slice(0, 1); }
+      if (!hit.length) { return { ok: true, count: 0, incidents: [], say: READ_NONE }; }
+      var out = { ok: true, count: hit.length, incidents: hit.slice(0, READ_MOST).map(readRow),
+        note: "Read what's there and add nothing to it. It stays out of your memories." };
+      if (hit.length > READ_MOST) {
+        out.by_month = countMonths(hit);
+        out.more = 'There are ' + hit.length + ' in all, and these are the newest ' + READ_MOST + '. Say how many, and offer to go by month.';
+        Months.after = heard;
+      }
+      return out;
+    }, function () { return no(READ_FAIL_NO); });
   }
 
   var TOOLS = {
@@ -505,17 +577,18 @@
     put_back: putBack,
     open_screen: openScreen,
     go_back: goBack,
-    their_words: theirWords
+    their_words: theirWords,
+    read_incidents: readIncidents
   };
 
-  // M18: Live gets ONE declared tool, use_screen, with an action. It goes to the same seven functions, in order.
+  // M18: Live gets ONE declared tool, use_screen, with an action. It goes to the same functions, in order.
   var USE_NAME = 'use_screen';
   var ACTIONS = { look: 'look_at_screen', explain: 'explain_field', fill: 'fill_field', put_back: 'put_back',
-                  open: 'open_screen', go_back: 'go_back', their_words: 'their_words' };
+                  open: 'open_screen', go_back: 'go_back', their_words: 'their_words', read_incidents: 'read_incidents' };
   function useScreen(args, env) {
     var a = args || {}, tool = ACTIONS.hasOwnProperty(String(a.action)) ? ACTIONS[a.action] : null;
     if (!tool) { return no(UNLISTED_NO); }
-    var inner = { field: a.field, value: a.value, name: a.name };
+    var inner = { field: a.field, value: a.value, name: a.name, when: a.when, category: a.category };
     if (tool === 'their_words') {
       var t = typeof a.turns_back === 'string' ? a.turns_back.trim() : a.turns_back;
       if (!/^[0-4]$/.test(String(t))) { return no("I couldn't tell which of your words you meant."); }
@@ -545,6 +618,7 @@
     reset: function () {
       finishTyping();
       Undo = {};
+      Months.after = null;
       Lit.el = null;
     }
   };

@@ -2812,7 +2812,9 @@
       openDeep: openDeep,
       openPanel: function (id) { if (menuOpen()) { closeMenu(false); } openPanel(id); },
       back: bandBack,
-      turns: (c && c.turns) || []
+      turns: (c && c.turns) || [],
+      incidents: function () { return api('GET', '/api/incidents', null, { ms: 8000 }); },   // piece 5
+      companion: function () { return S.companion === 'him' ? 'sam' : 'mary'; }
     };
   }
   // On moving screens Live hears the name and nothing else, as a silent note (no reply). Never during a story or an

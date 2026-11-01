@@ -409,13 +409,25 @@ const formNow = () => ({
 });
 const addKey = () => (add.editing ? `edit:${add.editing.id}` : add.inbox ? `inbox:${add.inbox.kind}:${add.inbox.source_id}` : `new:${add.cat || ''}`);
 
+// Piece 5: how many of her fills are in this form right now, so its record can say she helped. Counts, never a value.
+// web/mary/screens.js calls this directly (same origin). Each draft and each edit keeps its own count.
+let formNo = 0;
+var maryHelp = { // a var, so screens.js finds it on this window
+  form: () => add.formId,
+  step(by, who) {
+    add.helpFills = Math.max(0, (add.helpFills || 0) + by);
+    if (by > 0) add.helpWho = who;
+  },
+};
+const helpedBy = () => (add.helpFills ? add.helpWho : (add.editing && add.editing.helped_by) || '');
+
 function keepDraft() {
   if (!IN_MARY || add.saved) return;
   const form = formNow();
   if (JSON.stringify(form) === add.clean) return;
   const key = addKey();
   drafts.delete(key); // the newest goes last
-  drafts.set(key, { form, cat: add.cat, formal: add.formal, formalFor: add.formalFor, whenTouched: add.whenTouched, customWait: add.customWait });
+  drafts.set(key, { form, cat: add.cat, formal: add.formal, formalFor: add.formalFor, whenTouched: add.whenTouched, customWait: add.customWait, formId: add.formId, helpFills: add.helpFills, helpWho: add.helpWho });
 }
 
 function takeDraft(key) {
@@ -427,7 +439,7 @@ function takeDraft(key) {
 
 function putDraft(d) {
   const f = d.form;
-  Object.assign(add, { formal: d.formal, formalFor: d.formalFor, whenTouched: d.whenTouched, customWait: d.customWait });
+  Object.assign(add, { formal: d.formal, formalFor: d.formalFor, whenTouched: d.whenTouched, customWait: d.customWait, formId: d.formId, helpFills: d.helpFills, helpWho: d.helpWho });
   $('#words').value = f.words;
   $('#day').value = f.day;
   $('#time').value = f.time;
@@ -444,7 +456,7 @@ function unlit() { $$('.m9-lit').forEach(el => el.classList.remove('m9-lit')); }
 
 function initAdd({ cat = null, incident = null, inboxItem = null } = {}) {
   const g = inboxItem ? inboxItem.guess || {} : null;
-  add = { editing: incident, inbox: inboxItem, cat: null, formal: '', formalFor: '', whenTouched: false, busy: false, customWait: 0 };
+  add = { editing: incident, inbox: inboxItem, cat: null, formal: '', formalFor: '', whenTouched: false, busy: false, customWait: 0, formId: ++formNo, helpFills: 0, helpWho: '' };
   $('#form').reset();
   $('#groupopts').hidden = true;
   $('#moreDetails').open = true; // names and who they told are the proof, so keep it in view
@@ -788,6 +800,7 @@ $('#form').addEventListener('submit', async e => {
       wait_minutes: pickedWait ? w.wait : (guessed.wait_minutes ?? ''),
       never_came: pickedWait ? w.never : !!guessed.never_came,
       formal_summary: formal,
+      helped_by: helpedBy(), // piece 5
     };
     EXTRA_FIELDS.forEach(k => { payload[k] = $(`#${k}`).value.trim(); });
     const editing = add.editing;
@@ -835,6 +848,8 @@ function renderSaved(id) {
   $('#rWhen').textContent = longDate(inc.occurred_date) + (inc.occurred_time ? `, ${fmtTime(inc.occurred_time)}` : ' (time not noted)');
   $('#rSum').textContent = inc.formal_summary || fallbackSummary(inc);
   $('#rWords').textContent = inc.description ? `“${inc.description}”` : '(No words written)';
+  $('#rHelped').textContent = inc.helped_note || ''; // piece 5: apart from their words
+  $('#rHelpedL').hidden = $('#rHelped').hidden = !inc.helped_note;
   return true;
 }
 
@@ -849,6 +864,7 @@ function entryHTML(i) {
     <b>${esc(c.tile)}</b>
     <span>${esc(meta)}</span>
     ${i.description ? `<span class="quote">“${esc(i.description)}”</span>` : ''}
+    ${i.helped_note ? `<span>${esc(i.helped_note)}</span>` : ''}
     <div class="entryacts">
       <button type="button" class="tinybtn" data-edit="${i.id}" aria-label="Edit note ${esc(no)}">Edit</button>
       <button type="button" class="tinybtn danger" data-del="${i.id}" aria-label="Remove note ${esc(no)}">Remove</button>

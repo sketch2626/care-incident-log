@@ -75,7 +75,8 @@ CATEGORIES = {
 SEVERITIES = {"minor", "serious", "dangerous"}
 TEXT_FIELDS = ["occurred_date", "occurred_time", "category", "description", "severity",
                "staff_involved", "reported_to", "outcome", "witnesses", "source", "source_id",
-               "formal_summary"]
+               "formal_summary", "helped_by"]
+HELPED_BY = ("mary", "sam")  # M18 piece 5: who helped fill in the form; set by the form, never by a tool
 SETTING_KEYS = {"resident_name", "room", "facility", "facility_address", "state",
                 "gemini_enabled", "gemini_model",  # M15d: the Gemini key isn't here, it lives in SECRETS
                 "companion", "voice_rate", "voice_volume", "andyflow_enabled",
@@ -108,6 +109,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     outcome TEXT NOT NULL DEFAULT '',
     witnesses TEXT NOT NULL DEFAULT '',
     formal_summary TEXT NOT NULL DEFAULT '',
+    helped_by TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'manual',
     source_id TEXT NOT NULL DEFAULT '',
     logged_at TEXT NOT NULL,
@@ -184,6 +186,8 @@ def init_db():
         conn.executescript(SCHEMA)
         if "formal_summary" not in {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}:
             conn.execute("ALTER TABLE incidents ADD COLUMN formal_summary TEXT NOT NULL DEFAULT ''")
+        if "helped_by" not in {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}:  # M18 piece 5
+            conn.execute("ALTER TABLE incidents ADD COLUMN helped_by TEXT NOT NULL DEFAULT ''")
         # The Andy Flow link is the resident's choice and starts off. A log that already holds entries
         # imported from Andy Flow was connected before this setting existed, so it keeps the link, once.
         if "andyflow_enabled" not in get_settings(conn) and conn.execute(
@@ -367,6 +371,7 @@ def clean_incident(data):
     if row["severity"] not in SEVERITIES:
         row["severity"] = "minor"
     row["source"] = row["source"] or "manual"
+    row["helped_by"] = row["helped_by"] if row["helped_by"] in HELPED_BY else ""
     try:  # "30", 30, "30.0" and 30.5 all mean 30; anything else is "not known"
         wait = int(float(str(data.get("wait_minutes")).strip()))
     except (ValueError, OverflowError):
@@ -651,7 +656,8 @@ def mary_voices():
 def mary_write_incident(incident):
     """The resident said yes to 'Would you like me to write that down?': log her guess. Returns the new id."""
     with closing(connect()) as conn:
-        new_id = insert_incident(conn, clean_incident({**incident, "source": "mary"}))
+        helped = "sam" if get_settings(conn).get("companion") == "him" else "mary"  # M18: she wrote this one, so it says so
+        new_id = insert_incident(conn, clean_incident({**incident, "source": "mary", "helped_by": helped}))
         conn.commit()
     backup_db()  # Mary's window stays open for days: her first save of a day makes that day's backup
     return new_id
@@ -1772,6 +1778,7 @@ class Handler(SimpleHTTPRequestHandler):
                 rows = list_incidents(conn, q("from"), q("to"))
                 for r in rows:
                     r["summary"] = reports.summary_for(r)  # same sentence the state report prints
+                    r["helped_note"] = reports.helped_note(r)  # M18 piece 5: same line as the report
                 return self._send(rows)
             if method == "GET" and path == "/api/settings":
                 return self._send(public_settings(conn))
@@ -1836,8 +1843,11 @@ class Handler(SimpleHTTPRequestHandler):
                     mark_seen(conn, data["inbox_kind"], data["inbox_id"], "added")
                 return self._send({"id": new_id}, 201)
             if method == "PUT" and m:
-                row = clean_incident(self._body())
+                body = self._body()
+                row = clean_incident(body)
                 row.pop("source"), row.pop("source_id")
+                if "helped_by" not in body:  # M18 piece 5: an edit that doesn't say keeps what's there
+                    row.pop("helped_by")
                 row["updated_at"] = now()
                 cur = conn.execute(f"UPDATE incidents SET {', '.join(k + ' = ?' for k in row)} "
                                    "WHERE id = ? AND deleted_at IS NULL", [*row.values(), int(m.group(1))])

@@ -167,3 +167,12 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
   *{animation:none!important;transition:none!important}
   .mf-dim,.mf-dim.on{transition:opacity .4s ease!important}        /* reduced motion: a quick fade, not a slow one */
 }
+
+/* M18: the deeper screens, over her face. Closed, it stays laid out and only can't be seen or touched, so the form in it
+   keeps what was typed and how far it was scrolled. The band never scrolls; the frame scrolls on its own. */
+.deep{position:fixed;inset:0;z-index:60;background:#fffdf8;visibility:hidden;pointer-events:none}
+.deep.up{visibility:visible;pointer-events:auto}
+.deep-band{position:absolute;top:0;left:0;right:0;height:156px;box-sizing:border-box;display:flex;align-items:center;justify-content:flex-end;
+  padding:0 28px;background:#fff0d2;border-bottom:4px solid #2b1f17}
+.deep-band .back{align-self:center}
+#deepFrame{position:absolute;top:156px;left:0;display:block;width:100%;height:calc(100% - 156px);border:0;background:#fffdf8}

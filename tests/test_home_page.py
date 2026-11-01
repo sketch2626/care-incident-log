@@ -91,7 +91,7 @@ class HomePageTests(unittest.TestCase):
 
     def test_my_info_has_way_back_to_mary(self):
         html, js, mary = read("index.html"), read("app.js"), read("mary/app.js")
-        self.assertIn("window.location.href = '/?from=mary#info'", mary)
+        self.assertIn("openDeep('#info')", mary)  # M18: a frame on her own page, so a talk goes on
         self.assertIn('<button class="bigbtn alt" id="backToMary" type="button">', html)  # M17: a real button, top of every screen
         self.assertNotIn('href="/mary.html" hidden', html)
         self.assertIn("get('from') === 'mary'", js)

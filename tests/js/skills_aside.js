@@ -27,7 +27,7 @@ function fn(sig) {
   return rest.slice(0, end) + '\n  }\n';
 }
 const page = { setAttribute() {}, classList: { toggle() {} } };
-const show = new Function('S', '$', 'screens', 'face', 'log', fn('function show(name, opts) {') + 'return show;')(
+const show = new Function('S', '$', 'screens', 'face', 'log', 'function deepSync() {}\n' + fn('function show(name, opts) {') + 'return show;')(
   S, () => page, screens, { setEmergency() {} }, e => { throw e; });
 
 const slides = [], events = [];

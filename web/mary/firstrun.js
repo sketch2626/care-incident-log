@@ -514,7 +514,8 @@
   function overlaysClosed() {
     var m = $('menu'), t = $('typing'), nb = $('nameBox');
     var panel = D.querySelector('.overlay.sheet:not([hidden])');   // M4b: Things Mary can do, My info, Choose
-    return (!m || m.hidden) && (!t || t.hidden) && (!nb || nb.hidden) && !panel;
+    var deep = D.querySelector('.deep.up');   // M18: she doesn't doze off behind a form
+    return (!m || m.hidden) && (!t || t.hidden) && (!nb || nb.hidden) && !panel && !deep;
   }
 
   // The dim layer sits inside her face, between the glow layers and the face (.mf-root > .mf-dim before .mf-fit),

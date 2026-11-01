@@ -158,6 +158,68 @@ function fallbackSummary(i) {
 
 /* ---------- Routing ---------- */
 
+/* ---------- M18: inside Mary's page ---------- */
+
+// Mary opens these screens in a frame on her own page, so going deeper never ends a talk. Her page and this one talk by
+// postMessage, to this origin only and checked both ways. A message says what happened, never what was typed.
+const IN_MARY = document.documentElement.classList.contains('in-mary');
+
+function toMary(what, more) {
+  if (!IN_MARY) return;
+  try { window.parent.postMessage({ type: 'mary-deep', what, ...more }, location.origin); } catch { /* she goes on without it */ }
+}
+
+// Hands at work on a form aren't quiet: at most one word every 5 s, so her talk doesn't time out.
+let maryActAt = 0;
+function maryActivity() {
+  const now = Date.now();
+  if (now - maryActAt < 5000) return;
+  maryActAt = now;
+  toMary('activity');
+}
+
+// The computer has one recorder. While the form holds it she holds the wake word, which lets go of the mic.
+let micTold = false;
+function micOpen() { return mic.state === 'listening' || mic.state === 'working' || !!field.id || field.busy; }
+function tellMaryMic() {
+  const on = micOpen();
+  if (on === micTold) return;
+  micTold = on;
+  toMary('mic', { on });
+}
+
+// While a talk is open she has the microphone, so the form's Tap and talk buttons step aside.
+function maryTalking(on) {
+  document.documentElement.classList.toggle('mary-talking', on);
+  if (!on || !micOpen()) return;
+  teardownMic();
+  $('#detailStatus').textContent = '';
+  checkMic(); // puts the buttons right for when the talk ends
+}
+
+// Her page hid this frame with the mic running: stop the way tapping Stop does, so the words already said stay in the box.
+async function micLetGo() {
+  for (let n = 0; (mic.state === 'working' || field.busy) && n < 600; n++) await new Promise(r => setTimeout(r, 50));
+  if (mic.state === 'listening') await stopTalk();
+  else if (field.id) await talkInto(field.id);
+}
+
+if (IN_MARY) {
+  ['pointerdown', 'input'].forEach(t => document.addEventListener(t, maryActivity, true));
+  // Any link to her page closes this frame instead of loading her inside it.
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (a && a.pathname === '/mary.html') { e.preventDefault(); toMary('close'); }
+  }, true);
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin || e.source !== window.parent) return;
+    const d = e.data;
+    if (!d || d.type !== 'mary-deep') return;
+    if (d.what === 'talk') maryTalking(!!d.on);
+    else if (d.what === 'hide') micLetGo();
+  });
+}
+
 const SCREENS = ['home', 'add', 'saved', 'list', 'inbox', 'report', 'info'];
 let cur = { screen: 'home' };
 let pendingInbox = null;
@@ -169,6 +231,7 @@ function showScreen(id) {
   window.scrollTo(0, 0);
   const h = $('h1', $(`#${id}`));
   if (h) h.focus({ preventScroll: true });
+  toMary('screen', { name: id }); // M18
 }
 
 function go(name, replace) {
@@ -508,6 +571,7 @@ function teardownMic() {
   field.id = null;
   field.busy = false;
   mic.state = 'checking';
+  tellMaryMic(); // M18
 }
 
 $('#mic').addEventListener('click', () => {
@@ -565,6 +629,7 @@ function syncTalkButtons() {
   });
   if (field.id || field.busy) $('#mic').disabled = true;
   else $('#mic').disabled = mic.state === 'loading' || mic.state === 'working';
+  tellMaryMic(); // M18
 }
 
 async function talkInto(id) {
@@ -590,10 +655,14 @@ async function talkInto(id) {
   if (field.id || field.busy || mic.state !== 'idle') return;
   field.busy = true;
   syncTalkButtons();
+  const t = mic.token; // M18: a talk can open while this starts
   try {
     await post('/api/listen/start');
-    field.id = id;
-    note.textContent = "I'm listening. Tap Stop when you're done.";
+    if (t !== mic.token) api('/api/listen/stop?raw=1', { method: 'POST' }).catch(() => {}); // nobody is left to stop it
+    else {
+      field.id = id;
+      note.textContent = "I'm listening. Tap Stop when you're done.";
+    }
   } catch (err) { note.textContent = err.message; }
   field.busy = false;
   syncTalkButtons();
@@ -665,6 +734,7 @@ $('#form').addEventListener('submit', async e => {
     pendingInbox = null;
     try { await load(); } catch { /* the saved screen can still show what was just written */ }
     add.busy = false;
+    toMary('saved'); // M18
     go(`saved/${id}`);
   } catch (err) {
     add.busy = false;
@@ -817,7 +887,7 @@ $('#xlsxBtn').addEventListener('click', e => {
 
 const INFO_FIELDS = ['resident_name', 'room', 'facility', 'facility_address', 'state', 'gemini_model'];
 const FROM_MARY = new URLSearchParams(location.search).get('from') === 'mary'; // Mary sent the resident here
-$('#backToMary').addEventListener('click', () => { location.href = '/mary.html'; }); // M17: the bar at the top of every screen
+$('#backToMary').addEventListener('click', () => { if (IN_MARY) toMary('close'); else location.href = '/mary.html'; }); // M17: the bar at the top of every screen
 
 function fillInfo() {
   const s = state.settings;
@@ -1112,7 +1182,9 @@ async function loadMemories() {
 // paste_text (desktop.py), or the browser's clipboard in a plain web browser.
 // The key is never shown; it goes into the hidden box and only Save sends it.
 async function readClipboard() {
-  const app = window.pywebview && window.pywebview.api;
+  let app = window.pywebview && window.pywebview.api;
+  // M18: in Mary's frame the app's bridge is on her page. The words come straight back here, never through a message.
+  if (!app) try { app = window.parent.pywebview && window.parent.pywebview.api; } catch { /* no app window */ }
   if (app && typeof app.paste_text === 'function') return ((await app.paste_text()) || '').trim();
   if (navigator.clipboard && navigator.clipboard.readText) return (await navigator.clipboard.readText()).trim();
   throw new Error('no clipboard');
@@ -1163,7 +1235,12 @@ $('#infoForm').addEventListener('submit', async e => {
     state.settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
     try { await load(); } catch { /* the banner says so */ } // so home shows or hides the Andy Flow parts
     fillInfo();
-    if (FROM_MARY) {
+    toMary('saved'); // M18: a key saved here reaches her at once
+    if (IN_MARY) {
+      // M18: the way back is her own band, still at the top, and a talk may be going on
+      const who = state.settings.companion === 'him' ? 'Sam' : 'Mary';
+      toast(`Saved. Tap "Back to ${who}" at the top when you're done.`);
+    } else if (FROM_MARY) {
       toast(`Saved. Tap "Back to ${$('#backName').textContent}" at the top to talk again.`);
       $('#backToMary').focus({ preventScroll: true }); // M17: the bar is always in view
     } else toast('Saved.');

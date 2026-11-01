@@ -153,6 +153,11 @@ html.routing .wrap,html.routing .marybar{visibility:hidden}
 .marybar{display:none;position:sticky;top:0;z-index:50;padding:10px 20px;background:var(--bg);border-bottom:3px solid #d6cab6}
 html.from-mary .marybar{display:block}
 html.from-mary{scroll-padding-top:116px}
+/* M18: inside Mary's page her own band has the way back, so this bar stays out */
+html.in-mary .marybar{display:none}
+html.in-mary{scroll-padding-top:0}
+/* M18: while a talk is open she has the microphone, so the form's Tap and talk buttons step aside */
+html.mary-talking #micwrap,html.mary-talking [data-talk]{display:none!important}
 .marybar .bigbtn{max-width:760px;min-height:80px;margin:0 auto}
 @media print{.marybar{display:none!important}}
 .infocard{max-width:760px}

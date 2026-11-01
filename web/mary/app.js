@@ -25,6 +25,8 @@
    M4a: MaryApp.startTalk() opens a hands-free conversation in the first working talk mode (Live, Normal, Offline,
    then the computer's own voice); MaryApp.endTalk(), MaryApp.inTalk(). listenReason can also be 'idle'.
 
+   M18: MaryApp.openDeep(hash) opens a deeper screen in a frame on this page; MaryApp.closeDeep() hides it.
+
    No ?. or ?? here, so the ES2017 syntax checker parses it. */
 (function () {
   'use strict';
@@ -133,6 +135,7 @@
     listenAbort: null,
     listenReason: '',
     emSeq: 0,
+    formMic: false,   // M18: the form in the deep view has the microphone
     lightPressed: false,
     helpAsked: false,
     lightTimer: null,
@@ -892,6 +895,7 @@
       try { screens[prev].leave(name); } catch (e) { log(e); }
     }
     S.screen = name;
+    deepSync();   // M18: nothing covers the emergency buttons
     var root = $('scr');
     root.setAttribute('data-screen', name);
     root.classList.toggle('urgent', name === 'emergency');
@@ -1527,6 +1531,7 @@
     if (S.screen === 'emergency') { return 'emergency'; }
     if (S.firstRun) { return 'first run'; }
     if (S.micHeld) { return 'send count'; }
+    if (S.formMic) { return 'form mic'; }   // M18
     if (S.convo) { return 'talk open'; }
     if (S.phase !== 'idle') { return 'busy ' + S.phase; }
     if (S.noteBusy && noteBusyNow() && !(ev && ev.greeted)) { return 'note'; }
@@ -1566,8 +1571,11 @@
     }
   }
 
-  // Busy = a talk is open (Live included) or she is speaking, listening or thinking.
-  function wakeBusy() { return !!S.convo || S.phase !== 'idle'; }
+  // Busy = a talk is open (Live included), she is speaking, listening or thinking, or the form in the deep view has the mic.
+  function wakeBusy() {
+    if (S.formMic) { return true; }   // M18
+    return !!S.convo || S.phase !== 'idle';
+  }
   // M17: nothing may leave her asleep for good. A phase left on with nothing behind it goes back to resting (finishLive can
   // leave 'thinking'), and a poll that saw ready:false stopped for good, so the status gets another look now and then.
   function wakeUnstick(now) {
@@ -2185,6 +2193,7 @@
       if (S.convo !== c || my !== S.turn) { return undefined; }
       if (!text) {
         // M4a: a second miss in a row (a mic that isn't recording, a noisy room) ends the talk instead of nagging
+        if (S.listenReason === 'idle' && c.formAt && Date.now() - c.formAt < CONVO_IDLE_S * 1000) { convoNext(c); return undefined; }   // M18: hands at work on a form aren't quiet
         if (S.listenReason === 'idle' || c.misses >= 1) { endConvo(c, 'idle'); return undefined; }
         c.misses++;
         return say(MSG.notCaught, 'talking').then(function () { convoNext(c); });
@@ -2588,6 +2597,112 @@
     if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }
   }
 
+  // ---------------------------------------------------------------- M18: the deep view
+  // Deeper screens (web/index.html) open in a frame on this page, so her page never unloads: Live, the mic and the wake
+  // word go on. S.screen stays as it was and the deep view is no part of uiOpen(), so a talk starts, carries on and ends
+  // as it does on her face, and no timer closes it. Closing only hides it, so a half-filled form survives.
+  // Messages are { type: 'mary-deep', what, ... }, to this origin only, and never carry what was typed.
+  var DEEP_URL = '/?from=mary&in=mary';
+  var Deep = { open: false, src: false, talk: null, screen: '' };
+
+  function deepPost(msg) {
+    msg.type = 'mary-deep';
+    try { $('deepFrame').contentWindow.postMessage(msg, window.location.origin); } catch (e) { log(e); }
+  }
+  function deepUp() { return Deep.open && S.screen !== 'emergency'; }
+  function deepOnLog() {   // false until it loads, and on the printable report when no new window opened
+    try {
+      var l = $('deepFrame').contentWindow.location;
+      return l.pathname === '/' && /[?&]in=mary(&|$)/.test(l.search);
+    } catch (e) { return false; }
+  }
+  // The form's mic counts as busy for the wake word only while the form is in view, so the wake word can't get stuck off.
+  function deepMicOff() {
+    if (!S.formMic) { return; }
+    S.formMic = false;
+    wakeHoldCheck();   // M18
+  }
+  // Shows or hides the deep view to match. Every screen change comes through here, so the emergency screen is never under it.
+  function deepSync() {
+    var el = $('deep');
+    if (!el) { return; }
+    var up = deepUp();
+    if (up === el.classList.contains('up')) { return; }
+    el.classList.toggle('up', up);
+    el.setAttribute('aria-hidden', up ? 'false' : 'true');
+    if (up) { return; }
+    deepPost({ what: 'hide' });   // a mic left running stops and keeps its words
+    deepMicOff();
+  }
+  function openDeep(hash) {
+    var f = $('deepFrame');
+    if (!f) { return false; }
+    if (menuOpen()) { closeMenu(false); }
+    closePanel(false);
+    hash = hash || '';
+    if (!deepOnLog()) {
+      Deep.src = true;
+      f.src = DEEP_URL + hash;
+    } else if (hash) {
+      f.contentWindow.location.hash = hash;   // never a reload, so half-typed work survives
+    }
+    Deep.open = true;
+    deepSync();
+    setTimeout(function () { try { if (deepUp()) { $('deepBack').focus(); } } catch (e) { /* nothing */ } }, 30);
+    return true;
+  }
+  function closeDeep() {
+    if (!Deep.open) { return; }
+    Deep.open = false;
+    deepSync();
+    try { $('menuBtn').focus(); } catch (e) { /* nothing */ }
+    deepCameBack();
+  }
+  // Coming back used to reload her page. Now she re-reads what may have changed, and a key saved in the frame takes her
+  // off the no-key screen the way starting up does (with a talk already open she only leaves it).
+  function deepCameBack() {
+    return refreshStatus().then(function () {
+      if (S.screen !== 'nokey' || !S.hasKey) { return; }
+      if (S.convo) { show('everyday'); return; }
+      if (S.firstRun) { App.startFirstRun(); } else { App.enterMain(); }
+    }).catch(log);
+  }
+  // A talk open, or any listen of hers: she has the one recorder, so the form's Tap and talk buttons step aside.
+  function deepTalkSync() {
+    if (!Deep.src) { return; }
+    var on = !!S.convo || S.phase === 'listening';
+    if (on === Deep.talk) { return; }
+    Deep.talk = on;
+    deepPost({ what: 'talk', on: on });
+  }
+  // A page loaded in the frame. It knows nothing yet, and if the last one had the mic, nobody is left to let go of it.
+  function onDeepLoad() {
+    var held = S.formMic;
+    Deep.screen = '';
+    Deep.talk = null;
+    deepMicOff();
+    if (held && !S.convo && S.phase === 'idle') { api('POST', '/api/listen/stop?raw=1', {}).catch(log); }
+    deepTalkSync();
+  }
+  function onDeepMessage(ev) {
+    var f = $('deepFrame');
+    if (ev.origin !== window.location.origin || !f || ev.source !== f.contentWindow) { return; }
+    var d = ev.data;
+    if (!d || d.type !== 'mary-deep') { return; }
+    if (d.what === 'close') { closeDeep(); }
+    else if (d.what === 'screen') { Deep.screen = String(d.name || ''); }
+    else if (d.what === 'saved') { refreshStatus().catch(log); }
+    else if (d.what === 'activity') {
+      if (S.convo) { S.convo.formAt = Date.now(); }
+      App.keepTalk();
+    }
+    else if (d.what === 'mic') {
+      S.formMic = !!d.on && deepUp();
+      wakeHoldCheck();   // M18
+    }
+  }
+  // ---------------------------------------------------------------- end M18
+
   // A big row: its words, an optional second line, and what a tap does.
   function rowBtn(text, sub, onTap, attrs) {
     var b = D.createElement('button');
@@ -2678,7 +2793,7 @@
     else if (act === 'switch') { skillMenu('switch_companion', 'happy').then(function (ok) { if (!ok) { switchCompanion(); } }); }
     // --- end skills hook ---
     else if (act === 'type') { openTyping(); }
-    else if (act === 'notes') { window.location.href = '/?from=mary'; }
+    else if (act === 'notes') { if (!openDeep('')) { window.location.href = '/?from=mary'; } }   // M18
   }
 
   // --- Choose Mary or Sam
@@ -3201,7 +3316,12 @@
     D.addEventListener('keydown', onUiTouch, true);
     $('lightBtn').addEventListener('click', onLightPressed);
     $('okBtn').addEventListener('click', onOkNow);
-    $('infoBtn').addEventListener('click', function () { window.location.href = '/?from=mary#info'; });
+    $('infoBtn').addEventListener('click', function () { if (!openDeep('#info')) { window.location.href = '/?from=mary#info'; } });   // M18
+    $('moreSettings').addEventListener('click', function (ev) { if (openDeep('#info')) { ev.preventDefault(); } });   // M18: its href is the fallback
+    $('deepBack').addEventListener('click', function () { closeDeep(); });   // M18
+    $('deepFrame').addEventListener('load', onDeepLoad);                     // M18
+    window.addEventListener('message', onDeepMessage);                       // M18
+    setInterval(deepTalkSync, 1000);                                         // M18: a talk opening or ending reaches the form within a second
     $('typeForm').addEventListener('submit', function (ev) { ev.preventDefault(); submitTyping(); });
     $('typeCancel').addEventListener('click', function () { closeTyping(true); });
     $('typeText').addEventListener('keydown', function (ev) {
@@ -3252,6 +3372,8 @@
     noteBusy: function (on) { S.noteBusy = on ? Date.now() : 0; },   // M17: the test drawer: a note is being dictated
     openMenu: openMenu,                      // M4b
     closeMenu: closeMenu,                    // M4b
+    openDeep: openDeep,                      // M18
+    closeDeep: closeDeep,                    // M18
     sideBySide: sideBySide,                  // M4b: a skill's screen beside her face (skills.js does this for aside:true)
     refreshStatus: refreshStatus,
     enterMain: enterMain,

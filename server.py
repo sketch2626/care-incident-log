@@ -1294,8 +1294,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Frame-Options", "DENY")  # no other website may show the log inside its own page
-        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")  # no other website may show the log inside its own page
+        self.send_header("Content-Security-Policy", "frame-ancestors 'self'")  # M18: only Mary's own page may
         super().end_headers()
 
     # Only answer this computer, and only our own page (custom header blocks other websites).

@@ -2,7 +2,7 @@
   "cases": [
     {
       "id": "plain-resident-no-southern-words",
-      "note": "M17, Andy: Southern words are picked up from the resident, never a show. A plain-spoken resident gets none unprompted, and howdy never.",
+      "note": "M18, Andy: everyday Southern words such as y'all and fixing to are fine from the start. Less common ones are picked up from the resident, so a plain-spoken resident gets none of them unprompted, and no howdy unless they say it first.",
       "turns": [
         "Good morning. I slept pretty well last night.",
         "My daughter is coming to visit this afternoon."
@@ -11,8 +11,6 @@
       "checks": {
         "must_not_contain": [
           "howdy",
-          "y'all",
-          "fixing to",
           "i reckon",
           "might could",
           "mighty fine",

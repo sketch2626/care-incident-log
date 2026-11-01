@@ -16,7 +16,7 @@
      cap.setDuration(id, seconds);                         // once that sentence's audio length is known
      cap.liveAudio(at, dur, ctx);  cap.livePiece(text);    // Live: every audio chunk, every text piece
      cap.whole(text, {at, dur, ctx});                      // emergency: all of it at once
-     cap.cut();  cap.stopped();  cap.clear();  cap.setSide(true);  cap.setAside(true);  cap.plain('You said: ...', 'said');
+     cap.cut();  cap.stopped();  cap.clear();  cap.setSide(true);  cap.setAside(true);  cap.setBand(true);  cap.plain('You said: ...', 'said');
    The caption is aria-hidden (her voice speaks it); each finished sentence goes to liveRegion once. */
 (function (root) {
   'use strict';
@@ -32,6 +32,7 @@
   const GONE_MS = 600;        // a line that floated away is removed after this (its fade takes 400 ms)
   const FADE_MS = 450;        // the caption's own fade (400 ms in captions.css), then it is emptied
   const LATER = -1, NEXT = 0, DONE = 10;   // word levels; 1-9 = being said (.on.f1-.f9)
+  const BAND_CHARS = 32;      // M18: in the band, at most this many characters a line
 
   // ------------------------------------------------------------------ pure parts (tested with Node)
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
@@ -104,14 +105,16 @@
   }
 
   // Greedy line breaks by measured width, never inside a word: the line number of each word.
-  // Adding words at the end never moves the earlier ones.
-  function breakLines(widths, avail, gap) {
+  // Adding words at the end never moves the earlier ones. M18: chars and maxChars, when given, also cap a line's characters.
+  function breakLines(widths, avail, gap, chars, maxChars) {
     const out = [];
-    let line = 0, used = 0, count = 0;
+    let line = 0, used = 0, count = 0, len = 0;
     for (let i = 0; i < widths.length; i++) {
       const w = Number(widths[i]) || 0;
+      const c = chars ? Number(chars[i]) || 0 : 0;
       const n = count ? used + gap + w : w;
-      if (count && n > avail) { line++; used = w; count = 1; } else { used = n; count++; }
+      const l = count ? len + 1 + c : c;
+      if (count && (n > avail || (maxChars && l > maxChars))) { line++; used = w; count = 1; len = c; } else { used = n; count++; len = l; }
       out.push(line);
     }
     return out;
@@ -301,7 +304,9 @@
       const fresh = W.filter(function (w) { return remeasure || w.width == null; });
       fresh.forEach(function (w) { if (!w.el.parentNode) meas.appendChild(w.el); });
       fresh.forEach(function (w) { w.width = w.el.getBoundingClientRect().width; });
-      const ln = breakLines(W.map(function (w) { return w.width; }), avail(), gapPx());
+      const band = cap.classList.contains('m9-words');   // M18
+      const ln = breakLines(W.map(function (w) { return w.width; }), avail(), gapPx(),
+        band ? W.map(function (w) { return w.t.length; }) : null, band ? BAND_CHARS : 0);
       let moved = false;
       W.forEach(function (w, i) { if (w.el.parentNode !== meas && w.line !== ln[i]) moved = true; });
       if (moved) {              // the width changed (menu, window, font): lay every line out again
@@ -337,7 +342,8 @@
       lineEls.forEach(function (l, i) { l.classList.toggle('gone', i < top); });
       const last = lineEls.length - 1;
       const shown = Math.max(1, Math.min(2, last - top + 1));
-      const shift = top - (2 - shown);         // one line only: it sits on the bottom row
+      // one line only: it sits on the bottom row; in the band it is centered, halfway between the rows (M18)
+      const shift = top - (2 - shown) * (cap.classList.contains('m9-words') ? 0.5 : 1);
       track.style.transform = shift ? 'translateY(' + (-1.2 * shift).toFixed(2) + 'em)' : '';
       if (top > 0 && !pruneT) pruneT = setTimeout(prune, GONE_MS);
     }
@@ -612,6 +618,18 @@
         layout(true);
       },
 
+      // M18: small Mary's words beside her in the band (.cap.m9-words) or back at their full-page place. They are measured
+      // again and fade in where they land, and the fill carries on from the same word.
+      setBand: function (on) {
+        on = !!on;
+        if (cap.classList.contains('m9-words') === on) return;
+        cap.classList.add('moving');
+        cap.classList.toggle('m9-words', on);
+        layout(true);
+        void cap.offsetHeight;
+        cap.classList.remove('moving');
+      },
+
       // A plain line for things that are not her voice, e.g. plain('You said: ...', 'said').
       plain: function (text, kind) {
         text = String(text == null ? '' : text).trim();
@@ -662,7 +680,7 @@
     words: words, syllables: syllables, weight: weight, pause: pause, endsSentence: endsSentence,
     estimate: estimate, plan: plan, level: level, advance: advance, wordClass: wordClass,
     breakLines: breakLines, windowTop: windowTop, LiveTrack: LiveTrack,
-    MIN_FILL: MIN_FILL, MAX_FILL: MAX_FILL, RATE: RATE, LEAD: LEAD, COMMA: COMMA, END: END,
+    MIN_FILL: MIN_FILL, MAX_FILL: MAX_FILL, RATE: RATE, LEAD: LEAD, COMMA: COMMA, END: END, BAND_CHARS: BAND_CHARS,
     LATER: LATER, NEXT: NEXT, DONE: DONE
   };
 

@@ -158,8 +158,22 @@ html.in-mary .marybar{display:none}
 html.in-mary{scroll-padding-top:0}
 /* M18: while a talk is open she has the microphone, so the form's Tap and talk buttons step aside */
 html.mary-talking #micwrap,html.mary-talking [data-talk]{display:none!important}
+/* M18: in her frame the page is her plain cream, so nothing changes color when the frame shows */
+html.in-mary body{background:#fbf7ef}
 .marybar .bigbtn{max-width:760px;min-height:80px;margin:0 auto}
 @media print{.marybar{display:none!important}}
+/* M18: Save always in view, in Mary's frame or not. The row is fixed to the bottom of the window or frame; the forms' screens
+   end above it, and a field that gets focus scrolls clear of it. */
+.m9-row{position:fixed;left:0;right:0;bottom:0;z-index:15;box-sizing:border-box;display:flex;align-items:center;justify-content:flex-end;gap:24px;
+  height:88px;padding:0 28px;background:#ffffff;box-shadow:inset 0 3px 0 #d9cbb8}
+.m9-row .save,.m9-row .primary{flex:none;width:300px;max-width:100%;height:72px;min-height:72px;margin:0;padding:0 12px;background:#0f5560;color:#ffffff;border:0;
+  border-radius:18px;font:700 32px/1 "Segoe UI",system-ui,sans-serif;letter-spacing:0;box-shadow:none}
+.m9-saved{display:flex;align-items:center;gap:14px;margin:0;font:700 32px/1 "Segoe UI",system-ui,sans-serif;color:#1f1b16}
+.m9-saved svg{flex:none;width:44px;height:44px;color:#0f5560}
+#add,#info{padding-bottom:104px}
+html{scroll-padding-bottom:104px}
+body:has(#add:not([hidden])) .toast,body:has(#info:not([hidden])) .toast{bottom:104px}
+@media print{.m9-row{display:none!important}}
 .infocard{max-width:760px}
 .skillscard{margin-top:20px}
 .smarth.first{margin-top:0;padding-top:0;border-top:0}

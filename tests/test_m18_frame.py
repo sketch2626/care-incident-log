@@ -49,7 +49,9 @@ class ExitTests(unittest.TestCase):
             self.assertIn(bit, page)
         self.assertRegex(page, r'<iframe id="deepFrame" title="[^"]+"')
         self.assertNotIn(" src=", page[page.index('<iframe id="deepFrame"'):page.index("</iframe>")])  # only when first opened
-        self.assertLess(page.index("</main>"), page.index('id="deep"'))  # nothing on her screen can hold it in
+        # M18 piece 2: it moved inside #scr (was after </main>), so small Mary can sit above the band and the frame under it
+        self.assertLess(page.index('id="face"'), page.index('id="deep"'))
+        self.assertLess(page.index('id="deep"'), page.index("</main>"))
 
     def test_the_way_back_says_the_companions_name_and_is_big(self):
         page = read("mary.html")
@@ -65,7 +67,7 @@ class ExitTests(unittest.TestCase):
         css = read("mary/mary.css")
         self.assertIn("top:0;left:0;right:0;height:156px", css)
         self.assertIn("top:156px", css)
-        self.assertIn(".deep-band .back{align-self:center}", css)  # .back alone would sit at the top of the band
+        self.assertIn(".menu-btn.m9-back{", css)  # M18 piece 2: was .deep-band .back; it now has the Menu button's shape and place
         self.assertIn("height:calc(100% - 156px)", css)
 
     def test_closed_it_stays_laid_out_and_cannot_be_touched(self):
@@ -134,7 +136,8 @@ class InMaryPageTests(unittest.TestCase):
 
     def test_saving_never_touches_the_hidden_button_and_the_toast_is_true(self):
         js = read("app.js")
-        save = between(js, "toMary('saved'); // M18: a key saved here", "} else toast('Saved.');")
+        # M18 piece 2: the end marker was the plain toast('Saved.'), gone now that a check shows beside Save
+        save = between(js, "toMary('saved'); // M18: a key saved here", "$('#infoError').textContent = err.message")
         self.assertLess(save.index("if (IN_MARY)"), save.index("else if (FROM_MARY)"))
         frame = between(save, "if (IN_MARY)", "else if (FROM_MARY)")
         self.assertNotIn("focus(", frame)
@@ -203,6 +206,9 @@ function log(e) { throw e; }
 function menuOpen() { return false; }
 function closeMenu() { calls.push('closeMenu'); }
 function closePanel() { calls.push('closePanel'); }
+function panelOpen() { return false; }
+function panelBeaten() {}
+function skillScreen() { return S.skill; }
 function wakeHoldCheck() { holds++; }
 function refreshStatus() { calls.push('status'); return Promise.resolve(); }
 function show(n) { S.screen = n; calls.push('show ' + n); deepSync(); }

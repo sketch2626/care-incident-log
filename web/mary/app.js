@@ -152,7 +152,7 @@
   };
 
   var NULLFACE = { setMood: noop, setActivity: noop, setCompanion: noop, bounce: noop, destroy: noop,
-    setLoud: noop, setMenuOpen: noop, setAside: noop, setEmergency: noop };   // M4b
+    setLoud: noop, setMenuOpen: noop, setAside: noop, setSmall: noop, setEmergency: noop };   // M4b
   var face = NULLFACE;
 
   function makeFace(companion) {
@@ -239,7 +239,7 @@
   // thinking states (mockups/mary/round6/README.md, "Notes for the builder" 1-4, 6, 8) ---
   var NULLCAP = { sentence: function () { return 0; }, setDuration: noop, retime: noop, liveAudio: noop,
     livePiece: function () { return 0; }, whole: function () { return 0; }, cut: noop, stopped: noop, clear: noop,
-    setSide: noop, setAside: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
+    setSide: noop, setAside: noop, setBand: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
   var cap = NULLCAP;
   // plain: the plain line showing; owner: whose words are up (a speech session or 'live');
   // liveWhole / liveTimed / emTurn: Live on the emergency screen; liveDone: her Live turn was heard to the end
@@ -1561,7 +1561,6 @@
     } else if (ev.type === 'wake') {
       clearTimeout(W.heardTimer);
       if (menuOpen()) { closeMenu(false); }
-      if (M.panel) { closePanel(false); }
       if (!$('typing').hidden) { closeTyping(false); }   // M17: her name beats the typing box
       startTalk({ say: WAKE_SAY, mood: 'happy', hello: WAKE_HELLO }).then(function (ok) {
         if (ok) { return; }
@@ -1835,7 +1834,7 @@
     var now = Date.now();
     if (S.screen === 'emergency') { c.lastLife = now; }
     else if (liveGoneQuiet(c, now)) { return; }
-    if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || uiOpen()) { c.lastAct = now; return; }   // M4b: or a panel
+    if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || menuOpen()) { c.lastAct = now; return; }   // M4b: or the menu. M18: a panel holds no talk open
     if (c.story && !c.story.paused) {       // M4a: a story between parts is busy, unless its next part never came
       if (now - c.story.askedAt < STORY_STALL_MS) { c.lastAct = now; return; }
       c.story.paused = true;
@@ -2228,7 +2227,12 @@
   function convoNext(c) {
     if (S.convo !== c || c.ending || c.live) { return; }
     if (S.screen === 'emergency') { c.paused = true; setPhase('idle'); updateTalkButton(); return; }   // no auto-listen there
-    if ((S.screen !== 'everyday' && !skillScreen()) || uiOpen() || !$('typing').hidden) { closeConvo(c); return; }   // M4b: or a panel
+    if ((S.screen !== 'everyday' && !skillScreen()) || menuOpen()) { closeConvo(c); return; }   // M4b: or the menu. M18: a panel ends no talk
+    if (!$('typing').hidden) {
+      if (!bandUp() || Date.now() - c.lastAct > CONVO_IDLE_S * 1000) { closeConvo(c); return; }
+      setTimeout(function () { convoNext(c); }, 1000);   // M18: over the band the talk waits for the box, a while
+      return;
+    }
     if (S.phase !== 'idle' || Sp.sess) { setTimeout(function () { convoNext(c); }, 300); return; }
     convoListen(c);
   }
@@ -2505,9 +2509,14 @@
   }
   function menuOpen() { return !$('menu').hidden; }
   function uiOpen() { return menuOpen() || !!M.panel; }   // M4b: the menu or a panel is over her face
+  function panelOpen() { return !!M.panel && S.screen !== 'emergency'; }   // M18: she is small in the band for it
+  function panelBeaten() { if (M.panel && skillScreen() && skillScreen() !== M.over) { closePanel(false); } }   // M18: a screen she opens beats a panel too
   function armIdle(ms) {
     clearTimeout(M.timer);
-    M.timer = setTimeout(function () { if (M.panel) { closePanel(false); } else if (menuOpen()) { closeMenu(false); } }, ms);
+    M.timer = setTimeout(function () {
+      if (M.panel && (S.convo || S.phase !== 'idle')) { armIdle(PANEL_IDLE_MS); }   // M18: never during a talk
+      else if (M.panel) { closePanel(false); } else if (menuOpen()) { closeMenu(false); }
+    }, ms);
   }
   function menuItems() {
     return [].filter.call($('menu').querySelectorAll('.mi'), function (b) { return !b.hidden && b.offsetParent !== null; });
@@ -2571,29 +2580,39 @@
   }
   function trapTab(ev) {   // M4b: Tab stays inside an open panel (it is a dialog)
     var card = $(M.panel).querySelector('.sheetcard');
-    var f = [].filter.call(card.querySelectorAll('button, a[href]'), function (el) { return el.offsetParent !== null; });
-    if (!f.length) { return; }
-    var first = f[0], last = f[f.length - 1];
-    if (ev.shiftKey && (D.activeElement === first || !card.contains(D.activeElement))) { ev.preventDefault(); last.focus(); }
-    else if (!ev.shiftKey && (D.activeElement === last || !card.contains(D.activeElement))) { ev.preventDefault(); first.focus(); }
+    var back = $('deepBack');   // M18: the band's Back to Mary is this panel's way back
+    var f = [back].concat([].filter.call(card.querySelectorAll('button, a[href]'), function (el) { return el.offsetParent !== null; }));
+    var first = f[0], last = f[f.length - 1], at = D.activeElement, inside = at === back || card.contains(at);
+    if (ev.shiftKey && (at === first || !inside)) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && (at === last || !inside)) { ev.preventDefault(); first.focus(); }
   }
 
   function openPanel(id) {
     if (M.panel && M.panel !== id) { $(M.panel).hidden = true; }
     M.panel = id;
+    M.over = skillScreen();   // M18
     refreshLabels();
     if (id === 'canPanel') { fillCan(); } else if (id === 'infoPanel') { fillInfo(); } else if (id === 'gamesPanel') { fillGames(); } else { fillChoose(); }   // M7a: gamesPanel
+    $(id).classList.remove('leaving');
     $(id).hidden = false;
     $(id).scrollTop = 0;
+    $(id).querySelector('.sheetcard').setAttribute('aria-modal', 'false');   // M18: the way back is outside it, in the band
+    bandSync();
     armIdle(PANEL_IDLE_MS);
-    setTimeout(function () { try { $(id).querySelector('.back').focus(); } catch (e) { /* nothing */ } }, 30);
+    setTimeout(function () { try { if (M.panel === id) { $('deepBack').focus(); } } catch (e) { /* nothing */ } }, 30);
   }
   function closePanel(refocus) {
     if (!M.panel) { return; }
-    $(M.panel).hidden = true;
+    var el = $(M.panel);
     M.panel = null;
     clearTimeout(M.timer);
     stopSample();
+    bandSync();   // M18
+    if (Band.snap) { el.hidden = true; }
+    else {   // the page fades as she grows
+      el.classList.add('leaving');
+      setTimeout(function () { el.classList.remove('leaving'); if (M.panel !== el.id) { el.hidden = true; } }, BAND_FADE_MS);
+    }
     if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }
   }
 
@@ -2603,13 +2622,19 @@
   // as it does on her face, and no timer closes it. Closing only hides it, so a half-filled form survives.
   // Messages are { type: 'mary-deep', what, ... }, to this origin only, and never carry what was typed.
   var DEEP_URL = '/?from=mary&in=mary';
-  var Deep = { open: false, src: false, talk: null, screen: '' };
+  var Deep = { open: false, src: false, talk: null, screen: '', shown: false, over: undefined, readyT: 0 };
+  var Band = { small: false, snap: false, moveT: 0, wordsT: 0 };
+  var BAND_MOVE_MS = 500, BAND_FADE_MS = 300, BAND_WORDS_MS = 320, DEEP_READY_MS = 4000;
 
   function deepPost(msg) {
     msg.type = 'mary-deep';
     try { $('deepFrame').contentWindow.postMessage(msg, window.location.origin); } catch (e) { log(e); }
   }
-  function deepUp() { return Deep.open && S.screen !== 'emergency'; }
+  function deepUp() {
+    if (!Deep.open || S.screen === 'emergency') { return false; }
+    var sk = skillScreen();
+    return !sk || sk === Deep.over;
+  }
   function deepOnLog() {   // false until it loads, and on the printable report when no new window opened
     try {
       var l = $('deepFrame').contentWindow.location;
@@ -2622,14 +2647,64 @@
     S.formMic = false;
     wakeHoldCheck();   // M18
   }
+  // M18: her full screens beat the band. A skill or game she opens stays in view, and the deep view comes back when it closes.
+  // The one exception is the screen the deep view was opened from: the resident asked to go deeper from there.
+  function bandUp() { return Band.small; }
+  function bandStill() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
+  function bandRest() {
+    var root = $('scr');
+    root.classList.remove('band-move');
+    root.classList.toggle('band-rest', Band.small);
+    if (Band.small) { return; }
+    if (!D.activeElement || D.activeElement === D.body) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }   // hidden until now
+  }
+  // The band, with her small in it and her words beside her, for the deep view or a panel. Going small her words move first;
+  // growing they wait for the page to go. Emergency and reduced motion: no move.
+  function bandSync() {
+    var el = $('deep'), root = $('scr');
+    if (!el) { return; }
+    var deep = deepUp(), on = deep || panelOpen();
+    el.classList.toggle('up', on);
+    el.setAttribute('aria-hidden', on ? 'false' : 'true');
+    if (on) { el.classList.toggle('noframe', !deep); }
+    if (on === Band.small || !root) { return; }
+    Band.small = on;
+    Band.snap = S.screen === 'emergency' || bandStill();
+    clearTimeout(Band.moveT);
+    clearTimeout(Band.wordsT);
+    root.classList.toggle('band-snap', Band.snap);
+    root.classList.remove('band-rest');
+    root.classList.toggle('band-move', !Band.snap);
+    root.toggleAttribute('data-small', on);
+    try { face.setSmall(on); } catch (e) { log(e); }
+    if (on || Band.snap) { capCall(function () { cap.setBand(on); }); }
+    else { Band.wordsT = setTimeout(function () { capCall(function () { cap.setBand(false); }); }, BAND_WORDS_MS); }
+    if (Band.snap) { bandRest(); } else { Band.moveT = setTimeout(bandRest, BAND_MOVE_MS); }
+  }
+  // Back to Mary and a tap on small Mary: a panel closes first, down to the deep view if it was over one.
+  function bandBack() {
+    if (panelOpen()) { closePanel(true); } else { closeDeep(); }
+  }
+  // The frame stays hidden on a plain page until its first screen is ready, so the log never flashes. The timer is the way
+  // out if that word never comes.
+  function deepReady(on) {
+    clearTimeout(Deep.readyT);
+    $('deep').classList.toggle('ready', on);
+  }
+  function deepWait() {
+    deepReady(false);
+    Deep.readyT = setTimeout(function () { deepReady(true); }, DEEP_READY_MS);
+  }
   // Shows or hides the deep view to match. Every screen change comes through here, so the emergency screen is never under it.
   function deepSync() {
-    var el = $('deep');
-    if (!el) { return; }
+    if (!$('deep')) { return; }
+    panelBeaten();
     var up = deepUp();
-    if (up === el.classList.contains('up')) { return; }
-    el.classList.toggle('up', up);
-    el.setAttribute('aria-hidden', up ? 'false' : 'true');
+    bandSync();
+    if (up === Deep.shown) { return; }
+    Deep.shown = up;
     if (up) { return; }
     deepPost({ what: 'hide' });   // a mic left running stops and keeps its words
     deepMicOff();
@@ -2642,10 +2717,13 @@
     hash = hash || '';
     if (!deepOnLog()) {
       Deep.src = true;
+      deepWait();
       f.src = DEEP_URL + hash;
     } else if (hash) {
+      if (f.contentWindow.location.hash !== hash) { deepWait(); }
       f.contentWindow.location.hash = hash;   // never a reload, so half-typed work survives
     }
+    Deep.over = skillScreen();
     Deep.open = true;
     deepSync();
     setTimeout(function () { try { if (deepUp()) { $('deepBack').focus(); } } catch (e) { /* nothing */ } }, 30);
@@ -2654,6 +2732,7 @@
   function closeDeep() {
     if (!Deep.open) { return; }
     Deep.open = false;
+    Deep.over = undefined;
     deepSync();
     try { $('menuBtn').focus(); } catch (e) { /* nothing */ }
     deepCameBack();
@@ -2662,6 +2741,7 @@
   // off the no-key screen the way starting up does (with a talk already open she only leaves it).
   function deepCameBack() {
     return refreshStatus().then(function () {
+      if (S.screen === 'everyday' && !S.hasKey && S.statusLoaded && !S.convo && S.phase === 'idle') { show('nokey'); return; }   // the key was removed there
       if (S.screen !== 'nokey' || !S.hasKey) { return; }
       if (S.convo) { show('everyday'); return; }
       if (S.firstRun) { App.startFirstRun(); } else { App.enterMain(); }
@@ -2680,6 +2760,7 @@
     var held = S.formMic;
     Deep.screen = '';
     Deep.talk = null;
+    if (!deepOnLog()) { deepReady(true); }   // the printable report: no first-screen word comes from it
     deepMicOff();
     if (held && !S.convo && S.phase === 'idle') { api('POST', '/api/listen/stop?raw=1', {}).catch(log); }
     deepTalkSync();
@@ -2690,7 +2771,7 @@
     var d = ev.data;
     if (!d || d.type !== 'mary-deep') { return; }
     if (d.what === 'close') { closeDeep(); }
-    else if (d.what === 'screen') { Deep.screen = String(d.name || ''); }
+    else if (d.what === 'screen') { Deep.screen = String(d.name || ''); deepReady(true); }
     else if (d.what === 'saved') { refreshStatus().catch(log); }
     else if (d.what === 'activity') {
       if (S.convo) { S.convo.formAt = Date.now(); }
@@ -3070,8 +3151,8 @@
 
   function openTyping() {
     closeMenu();
-    var c = S.convo;   // M4a: Live stays open (typed words go into it); a Normal/Offline talk ends here
-    if (c && c.live) { c.lastAct = Date.now(); } else { if (c) { closeConvo(c); } newTurn(); }
+    var c = S.convo;   // M4a: Live stays open (typed words go into it); a Normal/Offline talk ends here. M18: not over the band
+    if (c && (c.live || bandUp())) { c.lastAct = Date.now(); } else { if (c) { closeConvo(c); } newTurn(); }
     $('typing').hidden = false;
     var t = $('typeText');
     t.value = '';
@@ -3079,7 +3160,7 @@
   }
   function closeTyping(refocus) {
     $('typing').hidden = true;
-    if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }   // M4b
+    if (refocus) { try { $(bandUp() ? 'deepBack' : 'menuBtn').focus(); } catch (e) { /* nothing */ } }   // M4b. M18: the Menu button is off the band
   }
   function submitTyping() {
     var t = $('typeText');
@@ -3318,7 +3399,8 @@
     $('okBtn').addEventListener('click', onOkNow);
     $('infoBtn').addEventListener('click', function () { if (!openDeep('#info')) { window.location.href = '/?from=mary#info'; } });   // M18
     $('moreSettings').addEventListener('click', function (ev) { if (openDeep('#info')) { ev.preventDefault(); } });   // M18: its href is the fallback
-    $('deepBack').addEventListener('click', function () { closeDeep(); });   // M18
+    $('deepBack').addEventListener('click', bandBack);                       // M18
+    $('smallMary').addEventListener('click', bandBack);                      // M18: the whole circle is the tap target
     $('deepFrame').addEventListener('load', onDeepLoad);                     // M18
     window.addEventListener('message', onDeepMessage);                       // M18
     setInterval(deepTalkSync, 1000);                                         // M18: a talk opening or ending reaches the form within a second

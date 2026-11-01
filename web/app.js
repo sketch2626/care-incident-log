@@ -228,6 +228,7 @@ let lastSaved = null;
 function showScreen(id) {
   document.documentElement.classList.remove('routing'); // M17
   SCREENS.forEach(s => { $(`#${s}`).hidden = s !== id; });
+  $('#infoSaved').hidden = true; // M18
   window.scrollTo(0, 0);
   const h = $('h1', $(`#${id}`));
   if (h) h.focus({ preventScroll: true });
@@ -1214,10 +1215,12 @@ function updateFlowState() { $('#flowState').textContent = $('#i-andyflow_enable
 $('#i-andyflow_enabled').addEventListener('change', updateFlowState);
 $('#infoForm').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
 
+$('#infoForm').addEventListener('input', () => { $('#infoSaved').hidden = true; }); // M18: a new change isn't saved yet
 $('#infoForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#infoSave');
   $('#infoError').hidden = true;
+  $('#infoSaved').hidden = true; // M18
   btn.disabled = true;
   const payload = Object.fromEntries(INFO_FIELDS.map(k => [k, $(`#i-${k}`).value.trim()]));
   payload.gemini_enabled = $('#i-gemini_enabled').checked ? '1' : '0';
@@ -1235,6 +1238,7 @@ $('#infoForm').addEventListener('submit', async e => {
     state.settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
     try { await load(); } catch { /* the banner says so */ } // so home shows or hides the Andy Flow parts
     fillInfo();
+    $('#infoSaved').hidden = false; // M18: the plain check beside Save; the toast below only says the way back
     toMary('saved'); // M18: a key saved here reaches her at once
     if (IN_MARY) {
       // M18: the way back is her own band, still at the top, and a talk may be going on
@@ -1243,7 +1247,7 @@ $('#infoForm').addEventListener('submit', async e => {
     } else if (FROM_MARY) {
       toast(`Saved. Tap "Back to ${$('#backName').textContent}" at the top to talk again.`);
       $('#backToMary').focus({ preventScroll: true }); // M17: the bar is always in view
-    } else toast('Saved.');
+    }
   } catch (err) {
     $('#infoError').textContent = err.message;
     $('#infoError').hidden = false;

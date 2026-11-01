@@ -13,11 +13,12 @@
      face.setMenuOpen(on)  the menu is open: she moves left (translate -105 -30), looks at it, closed smile
      face.setAside(on)     side by side with a skill: she slides into the left 40% of the window and turns toward
                            the right 60%, still big and alive, and glances between it and the person (face.css)
+     face.setSmall(on)     M18: she is small in the band; #face moves to the corner by transform and the circle crops her head
      face.setEmergency(on) emergency: the calm concerned face, a little higher (translate 0 -50),
                            a steady rose glow (never flashing). It wins over every mood and activity.
      face.bounce()         one happy hop
      face.destroy()
-     face.getState()       { companion, mood, activity, shown, listening, loud, thinking, cloud, menuOpen, aside, emergency }
+     face.getState()       { companion, mood, activity, shown, listening, loud, thinking, cloud, menuOpen, aside, small, emergency }
    Options: { companion, cloudDelay }  cloudDelay = ms in thinking before the thought cloud shows (400).
 
    Which face shows: emergency first, then activity 'listening' or 'thinking', otherwise the mood's face.
@@ -484,7 +485,7 @@
 
     let companion = 'mary', data = COMPANIONS.mary;
     let mood = 'resting', activity = 'resting';
-    let loud = false, menuOpen = false, aside = false, emergency = false, cloud = false, cloudT = 0;
+    let loud = false, menuOpen = false, aside = false, small = false, emergency = false, cloud = false, cloudT = 0;
     const cloudDelay = opts.cloudDelay >= 0 ? +opts.cloudDelay : 400;
     let faces = {}, shown = null;
     let glowNow = -1, glowSig = '';
@@ -610,6 +611,7 @@
       root.classList.toggle('mf-think', key === 'thinking');
       root.classList.toggle('mf-menu', menuOpen);
       root.classList.toggle('mf-aside', aside);
+      root.classList.toggle('mf-small', small);
       root.classList.toggle('mf-sos', emergency);
       // the thought cloud comes only after a short wait, so a quick answer never flickers it
       if (key !== 'thinking') {
@@ -692,6 +694,20 @@
       aside = !!on;
       render();
     }
+    // M18: where #face has to go for her head to land on the band's circle, for this window. mary.css does the moving.
+    function fitSmall() {
+      const box = root.parentNode;
+      if (!box || !box.clientWidth || !box.clientHeight) return;
+      const b = smallBox(box.clientWidth, box.clientHeight);
+      box.style.setProperty('--mf-small-t', 'translate(' + b.x.toFixed(2) + 'px,' + b.y.toFixed(2) + 'px) scale(' + b.scale.toFixed(5) + ')');
+      box.style.setProperty('--mf-small-clip', 'circle(' + b.r.toFixed(2) + 'px at ' + b.cx.toFixed(2) + 'px ' + b.cy.toFixed(2) + 'px)');
+    }
+    function setSmall(on) {
+      if (gone) return;
+      small = !!on;
+      fitSmall();
+      render();
+    }
     function setEmergency(on) {
       if (gone) return;
       emergency = !!on;
@@ -728,6 +744,7 @@
       Object.keys(faces).forEach(k => clearTimeout(faces[k].hideT));
       glowT.forEach(t => clearTimeout(t));
       document.removeEventListener('visibilitychange', onVisible);
+      if (global.removeEventListener) global.removeEventListener('resize', fitSmall);
       if (mql) {
         if (mql.removeEventListener) mql.removeEventListener('change', onMotion); else mql.removeListener(onMotion);
       }
@@ -742,6 +759,7 @@
     build();
     render();
     startSched();
+    if (global.addEventListener) global.addEventListener('resize', fitSmall);   // M18
 
     return {
       el: root,
@@ -751,16 +769,28 @@
       setLoud: setLoud,
       setMenuOpen: setMenuOpen,
       setAside: setAside,
+      setSmall: setSmall,
       setEmergency: setEmergency,
       bounce: bounce,
       destroy: destroy,
       getState: function () {
         return { companion: companion, mood: mood, activity: activity, shown: shown,
           listening: shown === 'listening', loud: loud && shown === 'listening', thinking: shown === 'thinking',
-          cloud: cloud, menuOpen: menuOpen, aside: aside, emergency: emergency };
+          cloud: cloud, menuOpen: menuOpen, aside: aside, small: small, emergency: emergency };
       }
     };
   }
 
-  global.MaryFace = { create: create, MOODS: MOODS.slice(), ACTIVITIES: ACTIVITIES.slice(), COMPANIONS: COMPANIONS };
+  // M18: small Mary. Her drawing is 640x400, fitted centered in the window, and the crop is viewBox 180 50 280 280 of it.
+  // Returns the scale and move that put that crop on the 132 circle at x 16, y 12, and the same circle in #face's own pixels.
+  // At 1280x800: translate(-68.86px,-11.57px) scale(.23571), as board E1 says.
+  function smallBox(w, h) {
+    const SIZE = 132, X = 16, Y = 12, VX = 180, VY = 50, CROP = 280;
+    const sw = Math.min(w, h * 1.6), u = sw / 640, left = (w - sw) / 2, top = (h - sw / 1.6) / 2;
+    const scale = SIZE / (CROP * u);
+    return { scale: scale, x: X - scale * (left + VX * u), y: Y - scale * (top + VY * u),
+      cx: left + (VX + CROP / 2) * u, cy: top + (VY + CROP / 2) * u, r: CROP / 2 * u };
+  }
+
+  global.MaryFace = { create: create, smallBox: smallBox, MOODS: MOODS.slice(), ACTIVITIES: ACTIVITIES.slice(), COMPANIONS: COMPANIONS };
 })(window);

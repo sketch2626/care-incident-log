@@ -253,7 +253,7 @@ class Contacts(Base):
         self.act("keep_address", keep=True)
 
     def ask(self, heard, name="Sarah"):
-        return self.host.call("messages__contact_address", {"name": name}, heard=heard)["response"]
+        return self.host.call("messages__read_detail", {"person": name, "field": "email"}, heard=heard)["response"]
 
     def test_told_outside_a_send_is_spelled_back_then_offered(self):
         out = self.act("give_address", address=SPOKEN, person="my daughter", relationship="daughter")
@@ -271,7 +271,7 @@ class Contacts(Base):
         self.act("give_address", address=SPOKEN, person="Sarah")
         self.assertTrue(self.act("address_right", right=False)["need_address"])
         self.assertEqual(self.ctx.state.get("address_wait"), None)
-        self.assertNotIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, self.everywhere())
 
     def test_a_no_to_keeping_leaves_a_saved_address_alone(self):
         self.saved()
@@ -300,34 +300,36 @@ class Contacts(Base):
 
     def test_both_names_needs_both(self):
         self.saved()
-        self.assertFalse(self.act("find_contact", name="my daughter in law")["known"])
-        self.assertFalse(self.act("find_contact", name="my granddaughter Sarah Ann")["known"])
-        self.assertTrue(self.act("find_contact", name="my daughter Sarah")["known"])
+        self.assertFalse(self.act("find_person", name="my daughter in law")["known"])
+        self.assertFalse(self.act("find_person", name="my granddaughter Sarah Ann")["known"])
+        self.assertTrue(self.act("find_person", name="my daughter Sarah")["known"])
 
-    def test_find_contact_never_gives_the_address(self):
+    def test_find_person_never_gives_the_address(self):
         self.saved()
-        out = self.act("find_contact", name="my daughter")
-        self.assertEqual(out, {"known": True, "name": "Sarah", "relationship": "daughter", "has_email": True})
+        out = self.act("find_person", name="my daughter")
+        self.assertEqual({key: out[key] for key in ("known", "name", "relationship", "has_email", "has_phone")},
+                         {"known": True, "name": "Sarah", "relationship": "daughter", "has_email": True, "has_phone": False})
+        self.assertNotIn(ADDRESS, json.dumps(out))
 
-    def test_contact_address_refuses_unasked(self):
+    def test_read_detail_refuses_unasked(self):
         self.saved()
         for heard in ("", "how is Sarah doing", "email my daughter", "send an email to Sarah", "send it",
                       "write to my daughter", "tell Sarah happy birthday"):
             out = self.ask(heard)
-            self.assertNotIn("address", out, heard)
+            self.assertNotIn("value", out, heard)
             self.assertTrue(out["not_asked"], heard)
             self.assertNotIn(ADDRESS, json.dumps(out))
 
-    def test_contact_address_gives_it_when_asked(self):
+    def test_read_detail_gives_it_when_asked(self):
         self.saved()
         for heard in ("what's Sarah's email address", "read me my daughter's email", "fill in the to box with Sarah",
                       "put her email in that box", "put my daughter in the to box", "what’s her address"):
-            self.assertEqual(self.ask(heard).get("address"), ADDRESS, heard)
+            self.assertEqual(self.ask(heard).get("value"), ADDRESS, heard)
 
-    def test_contact_address_with_nobody_or_no_address(self):
+    def test_read_detail_with_nobody_or_no_address(self):
         self.assertEqual(self.ask("what's Tyler's address", "Tyler"), {"known": False})
-        self.act("save_contact", name="Tyler")
-        self.assertFalse(self.ask("what's Tyler's address", "Tyler")["has_email"])
+        self.person(name="Tyler")
+        self.assertFalse(self.ask("what's Tyler's address", "Tyler")["has"])
 
     def test_waiting_address_goes_after_the_turn(self):
         self.act("give_address", address=SPOKEN, person="Sarah")
@@ -358,13 +360,17 @@ class Contacts(Base):
         self.mod.on_resident_line(self.ctx, True)
         self.assertEqual(self.ctx.state["address_wait"]["address"], ADDRESS)
 
-    def test_keep_question_after_a_send_is_as_it_was(self):
+    def test_a_send_keeps_it_and_says_so(self):
         self.address_then_send()
-        self.assertEqual(self.last["say"], "Sent to Mark. Keep Mark's address for next time?")
+        self.assertEqual(self.last["say"], "Sent to Mark. It's in your book now. Would you like it printed so it can be mailed?")
+        self.assertEqual(self.contact("Mark")["email"], ADDRESS)
+
+    def test_dont_keep_it_after_a_send(self):
+        self.address_then_send()
         self.assertFalse(self.act("keep_address", keep=False)["kept"])
         self.assertEqual((self.contact("Mark")["email"], self.contact("Mark")["no_keep"]), ("", True))
 
-    def test_keep_question_after_a_send_keeps_it(self):
+    def test_keep_answer_after_a_send_changes_nothing(self):
         self.address_then_send()
         self.assertTrue(self.act("keep_address", keep=True)["kept"])
         self.assertEqual(self.contact("Mark")["email"], ADDRESS)
@@ -382,7 +388,8 @@ class Contacts(Base):
         self.assertNotIn(ADDRESS, json.dumps(self.ctx.state))
         log = self.dir / "skills.log"
         self.assertNotIn(ADDRESS, log.read_text("utf-8"))
-        self.assertIn(ADDRESS, self.stored())
+        self.assertNotIn(ADDRESS, self.stored())
+        self.assertIn(ADDRESS, self.everywhere())
 
 
 class Screens(unittest.TestCase):
@@ -422,13 +429,13 @@ class Words(unittest.TestCase):
         part = text[text.index("Working on their screens\n"):text.index("Remembering\n- Below")]
         self.assertIn("Spell it back letter by letter and wait for their yes", part)
         self.assertIn("use the name", part)
-        self.assertIn("contact_address", part)
+        self.assertIn("read_detail", part)
 
-    def test_find_contact_still_says_so(self):
+    def test_find_person_still_says_so(self):
         manifest = json.loads((helpers.ROOT / "skills" / "messages" / "manifest.json").read_text("utf-8"))
         tools = {a["name"]: a["description"] for a in manifest["actions"]}
-        self.assertIn("Never the address itself.", tools["find_contact"])
-        self.assertIn("only when they ask", tools["contact_address"])
+        self.assertIn("never the details", tools["find_person"])
+        self.assertIn("only when their own words", tools["read_detail"])
 
 
 if __name__ == "__main__":

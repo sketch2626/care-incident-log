@@ -7,6 +7,7 @@ Takes a connect callable (server.connect_memories), and imports neither server n
 """
 import json
 import os
+import functools
 import re
 import time  # M15a
 from contextlib import closing
@@ -31,7 +32,9 @@ CREATE TABLE IF NOT EXISTS dates (
     day INTEGER,
     who TEXT,
     relation TEXT,
-    what TEXT
+    what TEXT,
+    source TEXT NOT NULL DEFAULT '',
+    person_id TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS date_done (
     date_id INTEGER,
@@ -114,6 +117,8 @@ _GOES_BY_RE = re.compile(r"^\s*(?:(?:they|he|she|(?:the\s+)?resident)\s+)?"
 FORGET_THAT_S = 3600  # "forget that" means something just saved, never a memory from months ago
 FORGET_YES_S = 300  # how long "forget about my son" waits for the resident's yes
 FORGET_REACH = None  # M15c: set by the app. count(about) and forget(about, own_name=False) reach a skill's saved people
+BOOK_LINK = None  # M19: set by the app. people(), find(words) and set_birthday(person_id, month, day); locked ones raise
+BOOK_SOURCE = "book"  # M19: a date from a card, with memory_id 0: no memory is behind it
 # Who a memory names, so "forget about my son" takes every memory about him. Only these spots count as a name, never
 # every capitalized word: "Raleigh" must not spread.
 _RELATIONS = "son daughter wife husband brother sister mother father friend grandson granddaughter"
@@ -153,6 +158,7 @@ def _today():  # M15a
 
 # --- M18: an email address is kept in one place, the messages skill's contacts, and goes through here everywhere else ---
 ADDRESS_WORDS = "(an email address)"
+DETAIL_WORDS = "[address]"  # M19: a phone number, street address or saved detail
 _TLD = r"(?:com|net|org|edu|gov|mil|info|biz|us|co|uk|ca)"
 _DOT = r"(?:\s*\.(?=[a-z0-9])|\s+\.\s+|[\s,]+(?:dot|period|point)[\s,]+)"  # "home. Us kids" is the end of a sentence
 _SPELLED = r"(?:[a-z0-9][\s,.-]+)+[a-z0-9]"  # g m a i l, or a-o-l
@@ -181,8 +187,9 @@ _NOT_NAMES = frozenset("""it its them they that this those these there here he s
     comes came stay stays stayed live lives lived work works worked email e-mail mail address website site page web
     online internet to from for of in on at by with about over under up down out back off say says said tell tells told
     call calls called""".split())
-_ONLY_ADDRESS = re.compile(r"(?:(?:[\w'’-]+\s+){0,3}(?:e-?mail|address)\b\s*(?:address\s*)?(?:is|was|:|=)?\s*)?"
-                           + re.escape(ADDRESS_WORDS) + r"\W*", re.I)
+_ONLY_ADDRESS = re.compile(r"(?:(?:[\w'’-]+\s+){0,3}(?:e-?mail|address|phone|telephone|cell|mobile|number|facebook|live[sd]?\s+at)"  # M19
+                           r"\b\s*(?:address\s*|number\s*|name\s*)?(?:is|was|:|=)?\s*)?"
+                           r"(?:" + re.escape(ADDRESS_WORDS) + "|" + re.escape(DETAIL_WORDS) + r")\W*", re.I)
 
 
 def _address_start(text, end, after_piece=False):
@@ -228,8 +235,105 @@ def only_address(text):
 # --- end M18 ---
 
 
+# --- M19 piece 6: what she keeps holds no phone number, street address or saved detail. An incident's words never come
+# through here: they stay as said ---
+BOOK_DETAILS = None  # set by the server: the book's email, phone, cell, address and facebook values; none when it's locked
+_NOT_STREET = "|".join(sorted(_NOT_NAMES | frozenset("""a an the i who kids children grandkids people folks men women
+    boys girls nurses aides times mile miles minute minutes min mins hour hours hr hrs day days week weeks month months
+    year years block blocks lane lanes way ways foot feet story stories floor floors dollar dollars percent""".split())))
+_HOUSE = r"(?<![\w$#.,/:-])(?<!\bin )(?<!since )(?<!until )(?<!room )\d{1,6}[a-z]?\s+"  # "in 1942" is a year
+_STREET_NAME = r"(?:(?!(?:" + _NOT_STREET + r")\b)[\w'.-]+\s+)"  # "3 kids on Maple Street" is no address
+_STREET = re.compile(
+    _HOUSE + _STREET_NAME + r"{1,4}?(?:street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|boulevard|blvd|parkway|pkwy|"
+    r"circle|cir|(?-i:Way|Trail|Terrace|Place))\b\.?(?:,?\s+(?:apt|apartment|unit|suite|ste)\.?\s*#?\s*\w+)?"
+    r"|" + _HOUSE + r"(?:us\s+)?" + _STREET_NAME + r"{0,4}?(?:highway|hwy)\b\.?(?:\s+\d{1,4}\b)?"
+    r"|\b(?:p\.?\s?o\.?\s*box|post\s+office\s+box)\s+\d+\b", re.I)
+_NOT_A_PHONE = r"(?![\w/-]|[.,]\d)"  # a date, a price or a longer number goes on past it
+_PHONE = re.compile(r"(?<![\w$#.,/:-])(?:(?:\+1[ \t.-]{0,3}|1[ \t.-]{1,3})?"  # "1942-1945" is no 1 and a number
+                    r"(?:\(\d{3}\)[ \t.-]{0,3}|\d{3}[ \t.-]{1,3})?\d{3}[ \t.-]{1,3}\d{4}"
+                    r"|\d{7,11})" + _NOT_A_PHONE)
+_DIGIT_WORD = r"(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)"
+_SPOKEN_PHONE = re.compile(r"\b(?:" + _DIGIT_WORD + r"[\s,.-]+){6,10}" + _DIGIT_WORD + r"\b", re.I)
+_ROOM_BEFORE = re.compile(r"\b(?:room|rm|apt|apartment|unit|suite|bed|ward|wing)\.?\s*$", re.I)
+_RUN = re.compile(r"(?<!\d)\d(?:[\s().-]{0,3}\d){6,10}(?!\d)")  # a saved number, however it's grouped
+_LETTER = re.compile(r"[^\W\d_]")
+_BOOK_VALUE_MIN = 5
+
+
+def _phone_key(text):
+    digits = re.sub(r"\D", "", text)
+    return digits[1:] if len(digits) == 11 and digits[0] == "1" else digits
+
+
+def _date_digits(digits):
+    """03141950 or 19500314: a date, written with no marks."""
+    if len(digits) != 8:
+        return False
+    years, months, days = ("18", "19", "20"), range(1, 13), range(1, 32)
+    return ((digits[:2] in years and int(digits[4:6]) in months and int(digits[6:]) in days)
+            or (int(digits[:2]) in months and int(digits[2:4]) in days and digits[4:6] in years))
+
+
+def _phone_out(found):
+    before = found.string[max(0, found.start() - 12):found.start()]
+    if _date_digits(re.sub(r"\D", "", found.group())) or _ROOM_BEFORE.search(before):
+        return found.group()
+    return DETAIL_WORDS
+
+
+def book_details(people):
+    """What scrub_details hides for these rows. Plain words that could be somebody's name or a town stay out of it: a
+    Facebook name that shares a word with a name in the book, and any one plain word, so names always stay."""
+    names = {word for person in people for word in person["name"].casefold().split()}
+    found = []
+    for person in people:
+        found += [person[field] for field in ("email", "phone", "cell") if person[field]]
+        for field in ("address", "facebook"):
+            for value in {person[field], *person[field].splitlines()}:
+                words = value.casefold().split()
+                if re.search(r"[\d_./@]", value) or (len(words) > 1 and not names.intersection(words)):
+                    found.append(value)
+    return found
+
+
+def _book_values():
+    """What the book holds now. Never raises: a book that fails must not stop a reply or a log line."""
+    if BOOK_DETAILS is None:
+        return ()
+    try:
+        return tuple(sorted({value.strip() for value in BOOK_DETAILS() if len(value.strip()) >= _BOOK_VALUE_MIN}))
+    except Exception:  # noqa: BLE001
+        return ()
+
+
+@functools.lru_cache(maxsize=1)
+def _book_matchers(values):
+    """(the saved words as one pattern or None, the saved numbers by their digits)."""
+    numbers = [value for value in values if not _LETTER.search(value) and len(_phone_key(value)) >= 7]
+    words = [r"[\s,]+".join(re.escape(word) for word in re.split(r"[\s,]+", value) if word)
+             for value in sorted(set(values) - set(numbers), key=len, reverse=True)]
+    words = [word for word in words if word]
+    pattern = re.compile(r"(?<![\w.@-])(?:" + "|".join(words) + r")(?![\w@-])", re.I) if words else None
+    return pattern, frozenset(_phone_key(value) for value in numbers)
+
+
+def scrub_details(text):
+    """scrub_addresses, plus phone numbers, street addresses and what's saved in the book, each as "[address]". For what
+    she keeps and the logs. Names, relationships, birthdays and notes stay: "Sarah's birthday is March 14" is a good memory."""
+    text = scrub_addresses(text)
+    saved, numbers = _book_matchers(_book_values())
+    if saved is not None:
+        text = saved.sub(DETAIL_WORDS, text)
+    text = _SPOKEN_PHONE.sub(DETAIL_WORDS, _STREET.sub(DETAIL_WORDS, text))
+    text = _PHONE.sub(_phone_out, text)
+    if numbers:
+        text = _RUN.sub(lambda found: DETAIL_WORDS if _phone_key(found.group()) in numbers else found.group(), text)
+    return text
+# --- end M19 piece 6 ---
+
+
 def _clean(text):
-    text = " ".join(scrub_addresses(text).split())[:MAX_TEXT].rstrip()  # M18: scrub first, so a cut can't hide one
+    text = " ".join(scrub_details(text).split())[:MAX_TEXT].rstrip()  # M18: scrub first, so a cut can't hide one
     return "" if _GEMINI_KEY.search(text) else text
 
 
@@ -382,12 +486,22 @@ def _row_id(memory_id):
     return memory_id if 0 < memory_id < 2 ** 63 else None  # SQLite refuses a bigger number
 
 
-_DATE_COLUMNS = ("id", "memory_id", "created_at", "month", "day", "who", "relation", "what")  # M15a
+_DATE_COLUMNS = ("id", "memory_id", "created_at", "month", "day", "who", "relation", "what", "source",  # M15a
+                 "person_id")  # M19
+
+
+def upgrade_dates(conn):  # M19
+    """An older file gains the two columns a book birthday needs. Safe at every start."""
+    have = {row[1] for row in conn.execute("PRAGMA table_info(dates)")}
+    for column in ("source", "person_id"):
+        if column not in have:
+            conn.execute(f"ALTER TABLE dates ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
 
 def _delete(conn, ids):  # M15a
-    """Really deletes these memories, the dates they hold up and those dates' done marks."""
-    rows = [(memory_id,) for memory_id in ids]
+    """Really deletes these memories, the dates they hold up and those dates' done marks. A book date has memory_id 0,
+    which no memory ever has, so this never reaches one."""
+    rows = [(memory_id,) for memory_id in ids if memory_id]
     conn.executemany("DELETE FROM date_done WHERE date_id IN (SELECT id FROM dates WHERE memory_id = ?)", rows)
     conn.executemany("DELETE FROM date_sent WHERE date_id IN (SELECT id FROM dates WHERE memory_id = ?)", rows)
     conn.executemany("DELETE FROM dates WHERE memory_id = ?", rows)
@@ -405,6 +519,13 @@ def _date_rows(conn):  # M15a
     return [dict(zip(_DATE_COLUMNS, row)) for row in rows]
 
 
+def _drop_dates(conn, ids):  # M19
+    rows = [(date_id,) for date_id in ids]
+    for table in ("date_done", "date_sent"):
+        conn.executemany(f"DELETE FROM {table} WHERE date_id = ?", rows)
+    conn.executemany("DELETE FROM dates WHERE id = ?", rows)
+
+
 def _label_memory(conn, label):  # M15a
     """The id of a memory saying just this label, added if none does yet."""
     new_id = _insert(conn, label, "family", "said")
@@ -416,6 +537,8 @@ def _label_memory(conn, label):  # M15a
 
 def _let_go(conn, row):  # M15a
     """Deletes the memory behind this date, leaving the date, unless another date stands on it too. True if it went."""
+    if not row["memory_id"]:  # M19: a book date has no memory behind it
+        return False
     if conn.execute("SELECT 1 FROM dates WHERE memory_id = ? AND id != ?", (row["memory_id"], row["id"])).fetchone():
         return False
     return conn.execute("DELETE FROM memories WHERE id = ?", (row["memory_id"],)).rowcount > 0
@@ -497,6 +620,88 @@ def _touched_last(rows, turns, text):  # M15a
     return None
 
 
+def _first_word(name):  # M19
+    return (str(name or "").lower().split() or [""])[0]
+
+
+def _relation_word(text):  # M19
+    return re.sub(r"^(?:my|our)\s+", "", " ".join(str(text or "").lower().split()))
+
+
+def _card_day(record):  # M19
+    """(month, day) of a card's birthday, "MM-DD" or "YYYY-MM-DD", or (None, None) with none."""
+    text = str((record or {}).get("birthday") or "")
+    return (int(text[-5:-3]), int(text[-2:])) if len(text) >= 5 else (None, None)
+
+
+def book_taken(people, person_id=None):  # M19
+    """The first names and relationships of everyone in the book but this person, which can't be taken to mean them."""
+    taken = set()
+    for person in people:
+        if person["id"] != person_id:
+            taken |= {_first_word(person["name"]), _relation_word(person["relationship"])}
+    return taken - {""}
+
+
+def _is_theirs(row, name, relation, taken):  # M19
+    """True when this date's who means this person: their full name, or their first name or relationship when nobody
+    else in the book has it (taken). A date saying another relation is someone else's: a brother Mark is not a son Mark."""
+    said = row["relation"].lower()
+    if said and relation and said != relation:
+        return False
+    who, whole, first = _who_words(row["who"]), _who_words(name), _first_word(name)
+    if not who:
+        return False
+    if whole <= who <= whole | {relation} or who == {first, relation}:
+        return True
+    return who <= ({first, relation} - set(taken) - {""})
+
+
+def _stop_words(name, relation, taken):  # M19
+    """The no_reminders keys that mean this person."""
+    return ({" ".join(name.lower().split())} | ({_first_word(name), relation} - set(taken))) - {""}
+
+
+def _book_match(found, rows, hits):  # M19
+    """The book date a birthday from talk belongs to, or None. hits: who the book finds by that name. One person is that
+    person's date. Several: the one on the same day. None found: the only date with this first name, where one name sits
+    inside the other, so "Sarah Beck" can be "Sarah" but never "Sarah Whitfield". A different relation is someone else."""
+    relation = _relation_word(found["relation"])
+
+    def fits(other):
+        return not relation or not other or other == relation
+
+    saved = {row["person_id"]: row for row in rows}
+    hits = [person for person in hits if fits(_relation_word(person["relationship"]))]
+    if len(hits) == 1:
+        return saved.get(hits[0]["id"])
+    if hits:
+        same = [saved[p["id"]] for p in hits
+                if p["id"] in saved and (saved[p["id"]]["month"], saved[p["id"]]["day"]) == (found["month"], found["day"])]
+        return same[0] if len(same) == 1 else None
+    said = _who_words(found["who"])
+    near = [row for row in rows if fits(row["relation"]) and _first_word(row["who"]) == _first_word(found["who"])
+            and (said <= _who_words(row["who"]) or _who_words(row["who"]) <= said)]
+    return near[0] if len(near) == 1 else None
+
+
+def _book_people():  # M19
+    """Everyone in the book, hidden marks too, or None with no link or a locked book."""
+    try:
+        return BOOK_LINK.people() if BOOK_LINK else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _card_birthday(person_id, month, day):  # M19
+    """The card follows a date corrected in talk. Her side is already saved, so a fault here stays here."""
+    try:
+        if BOOK_LINK:
+            BOOK_LINK.set_birthday(person_id, month, day)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _reach_gone(about, own_name=False):  # M15c
     """What a forget also took outside her memories (a contact and its address), or [] with no reach or on any error."""
     try:
@@ -512,6 +717,7 @@ class MemoryStore:
     def __init__(self, connect, on_change=None):
         self.connect = connect
         self.on_change = on_change
+        self.names_gone = []  # M19: who the last forget took from the book, for what talk history holds of them
 
     def _changed(self, deleted):
         if self.on_change:
@@ -528,6 +734,16 @@ class MemoryStore:
         if new_id is not None:
             self._changed(False)
         return new_id
+
+    def asks(self, about):  # M19
+        """What she must ask before this forget, from a skill's forget_question: {"which": names}, {"field": name} or
+        {"person": name, "relationship": word}. None when it's nothing special, with no reach or on any error."""
+        try:
+            ask = getattr(FORGET_REACH, "ask", None)
+            out = ask(about) if callable(ask) else None
+        except Exception:  # noqa: BLE001
+            return None
+        return out if isinstance(out, dict) else None
 
     def active(self, limit=None):
         """Her memories, newest first."""
@@ -617,13 +833,16 @@ class MemoryStore:
         with closing(self.connect()) as conn, conn:  # M15a
             _delete(conn, [r["id"] for r in rows])
             cleared = _unstop(conn, about)
-            if is_everything(about):
-                for table in ("date_done", "date_sent", "dates", "no_reminders"):
-                    cleared += conn.execute(f"DELETE FROM {table}").rowcount
+            if is_everything(about):  # M19: the book stays, so its dates and their done marks do too
+                talk_date = "date_id NOT IN (SELECT id FROM dates WHERE source = ?)"
+                cleared += conn.execute(f"DELETE FROM date_done WHERE {talk_date}", (BOOK_SOURCE,)).rowcount
+                cleared += conn.execute(f"DELETE FROM date_sent WHERE {talk_date}", (BOOK_SOURCE,)).rowcount
+                cleared += conn.execute("DELETE FROM dates WHERE source != ?", (BOOK_SOURCE,)).rowcount
+                cleared += conn.execute("DELETE FROM no_reminders").rowcount
         if rows or cleared:
             self._changed(True)
         gone = [r["text"] for r in rows]
-        return gone + _reach_gone(about) if str(about or "").strip() else gone  # M15c
+        return gone + self._reach(about) if str(about or "").strip() else gone  # M15c
 
     def forget_name(self, name):  # M9c
         """Really deletes every memory holding their name and returns the texts removed. M15c: FORGET_REACH takes only a
@@ -634,12 +853,125 @@ class MemoryStore:
             cleared = _unstop(conn, name)
         if rows or cleared:
             self._changed(True)
-        return [r["text"] for r in rows] + _reach_gone(name, own_name=True)  # M15c
+        return [r["text"] for r in rows] + self._reach(name, own_name=True)  # M15c
+
+    def _reach(self, about, own_name=False):  # M19
+        """_reach_gone, then what each person really removed from the book takes with them."""
+        self.names_gone = []
+        before = _book_people()
+        gone = _reach_gone(about, own_name=own_name)
+        after = _book_people() if before else None
+        if after is None:
+            return gone
+        left = {person["id"] for person in after}
+        for person in before:
+            if person["id"] not in left:
+                gone = gone + self._take_person(person, book_taken(after))
+        return gone
+
+    def _take_person(self, person, taken):  # M19
+        """Someone left the book: every memory holding their full name, their first name unless someone else in the book
+        shares it, and what matching finds for their relationship unless someone else has it, then every date and
+        no-reminder row of theirs. Returns the memories' texts."""
+        name, relation = person["name"], _relation_word(person["relationship"])
+        first_free, relation_free = _first_word(name) not in taken, relation and relation not in taken
+        rows = {r["id"]: r for r in self.active()
+                if says_name(r["text"], name) or (first_free and holds_name(r["text"], name.split()[0]))}
+        if relation_free:
+            rows.update((r["id"], r) for r in self.matching(relation))
+        stops = _stop_words(name, relation, taken)
+        with closing(self.connect()) as conn, conn:
+            _delete(conn, list(rows))
+            dates = [r["id"] for r in _date_rows(conn) if r["person_id"] == person["id"]
+                     or (not r["person_id"] and _is_theirs(r, name, relation, taken))]
+            _drop_dates(conn, dates)
+            stopped = sum(conn.execute("DELETE FROM no_reminders WHERE who = ?", (who,)).rowcount for who in stops)
+        if rows or dates or stopped:
+            self._changed(True)
+        self.names_gone += [name] + [word for word in (name.split()[0] if first_free else "",
+                                                       relation if relation_free else "") if word]
+        return [r["text"] for r in rows.values()]
+
+    def book_date(self, person_id, record, taken=()):  # M19
+        """Keeps one person's birthday row in step with their card. A birthday makes or moves the row, in place, the way
+        _move does, so its done marks stay. None, or a card with no birthday, deletes the row with its marks and their
+        no-reminder rows. A date from talk that means this person joins the row, so there's never a second reminder. The
+        same values again change nothing, so a card update that came from talk can't go round again."""
+        month, day = _card_day(record)
+        deleted = False
+        with closing(self.connect()) as conn, conn:
+            start = conn.total_changes
+            row = next((r for r in _date_rows(conn) if r["source"] == BOOK_SOURCE and r["person_id"] == person_id), None)
+            if month is None:
+                if row:
+                    _drop_dates(conn, [row["id"]])
+                    conn.executemany("DELETE FROM no_reminders WHERE who = ?",
+                                     [(who,) for who in _stop_words(row["who"], row["relation"], taken)])
+                    deleted = True
+            else:
+                name, relation = record["name"], _relation_word(record["relationship"])
+                if row is None:
+                    date_id = conn.execute(
+                        "INSERT INTO dates (memory_id, created_at, month, day, who, relation, what, source, person_id) "
+                        "VALUES (0, ?, ?, ?, ?, ?, 'birthday', ?, ?)",
+                        (_today().isoformat(), month, day, name, relation, BOOK_SOURCE, person_id)).lastrowid
+                else:
+                    date_id = row["id"]
+                    if (row["who"], row["relation"]) != (name, relation):
+                        conn.execute("UPDATE dates SET who = ?, relation = ? WHERE id = ?", (name, relation, date_id))
+                    if (row["month"], row["day"]) != (month, day):
+                        _move(conn, row, month, day)
+                for talk in _date_rows(conn):
+                    if talk["source"] != BOOK_SOURCE and talk["what"] == "birthday" and _is_theirs(talk, name, relation, taken):
+                        if (talk["month"], talk["day"]) != (month, day):
+                            _move(conn, talk, month, day)  # its memory stops saying the old day
+                        for table in ("date_done", "date_sent"):
+                            conn.execute(f"UPDATE OR IGNORE {table} SET date_id = ? WHERE date_id = ?", (date_id, talk["id"]))
+                        _drop_dates(conn, [talk["id"]])
+            changed = conn.total_changes != start
+        if changed:
+            self._changed(deleted)
+
+    def clear_book_dates(self):  # M19
+        """Every book date goes, with its marks and no-reminder rows. Dates from talk and her memories stay. Returns how many."""
+        with closing(self.connect()) as conn, conn:
+            rows = [r for r in _date_rows(conn) if r["source"] == BOOK_SOURCE]
+            _drop_dates(conn, [r["id"] for r in rows])
+            conn.executemany("DELETE FROM no_reminders WHERE who = ?",
+                             [(who,) for r in rows for who in _stop_words(r["who"], r["relation"], ())])
+        if rows:
+            self._changed(True)
+        return len(rows)
+
+    def book_people(self):  # M19
+        """The ids of everyone with a book date."""
+        with closing(self.connect()) as conn:
+            return {r["person_id"] for r in _date_rows(conn) if r["source"] == BOOK_SOURCE}
+
+    def _book_row_for(self, found):  # M19
+        """The book date this date from talk is, or None: not a birthday, no book date, or a locked book."""
+        if found["what"] != "birthday" or not found["who"] or BOOK_LINK is None:
+            return None
+        with closing(self.connect()) as conn:
+            rows = [r for r in _date_rows(conn) if r["source"] == BOOK_SOURCE]
+        try:
+            return _book_match(found, rows, BOOK_LINK.find(found["who"])) if rows else None
+        except Exception:  # noqa: BLE001 (a locked book: it acts as it did before there was a book)
+            return None
 
     def learn_date(self, found, memory_id=None):  # M15a
         """Keeps a date from parse and returns its id. Every date has a memory behind it: memory_id when it came from a
         saved fact, else one of its own whose text is its label (an auto row). The same who and what again is the same
-        date, and a different day is a correction."""
+        date, and a different day is a correction. M19: a birthday the book already holds is that row, and a different
+        day corrects the card too. The memory that said it stays."""
+        book_row = self._book_row_for(found)
+        if book_row:
+            if (found["month"], found["day"]) != (book_row["month"], book_row["day"]):
+                with closing(self.connect()) as conn, conn:
+                    _move(conn, book_row, found["month"], found["day"])
+                self._changed(False)
+                _card_birthday(book_row["person_id"], found["month"], found["day"])  # after the commit: its on_change opens this file
+            return book_row["id"]
         memory_id = _row_id(memory_id)
         label = memory_dates.label(found)
         deleted = False
@@ -648,7 +980,8 @@ class MemoryStore:
             if memory_id and not conn.execute("SELECT 1 FROM memories WHERE id = ?", (memory_id,)).fetchone():
                 memory_id = None
             key = (found["who"].casefold(), found["what"])
-            row = next((r for r in _date_rows(conn) if (r["who"].casefold(), r["what"]) == key), None)
+            row = next((r for r in _date_rows(conn) if r["source"] != BOOK_SOURCE  # M19
+                        and (r["who"].casefold(), r["what"]) == key), None)
             if row is None:
                 date_id = conn.execute(
                     "INSERT INTO dates (memory_id, created_at, month, day, who, relation, what) "
@@ -695,6 +1028,8 @@ class MemoryStore:
                 _move(conn, row, month, day)
         if moved:
             self._changed(False)
+            if row["source"] == BOOK_SOURCE:  # M19
+                _card_birthday(row["person_id"], month, day)
         return row["id"]
 
     def date_of(self, memory_id):  # M15a
@@ -810,6 +1145,14 @@ class MemoryStore:
             gone = conn.execute("DELETE FROM no_reminders WHERE who = ?", (who,)).rowcount > 0
         if gone:
             self._changed(True)
+
+    def has_passed(self, words):  # M19 piece 6b
+        """True when a word of this name or relationship belongs to someone they've said has died."""
+        with closing(self.connect()) as conn:
+            quiet = [row[0] for row in conn.execute("SELECT who FROM no_reminders WHERE why = 'passed'")]
+        quiet += [name for memory in self.active() for name in memory_dates.passed(memory["text"])]
+        said = {word for name in quiet for word in name.casefold().split()} - {"my", "the", "our"}
+        return bool(said & set(str(words or "").casefold().split()))
 
     def note_passed(self, names):  # M15a
         """Keeps these people, who have died, on the no-reminder list. A row already there stays."""

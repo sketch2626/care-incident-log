@@ -59,6 +59,7 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .mi{display:flex;flex:none;align-items:center;gap:22px;min-height:88px;padding:0 26px;font:600 32px/1.15 "Segoe UI",system-ui,sans-serif;
   color:#1f1b16;background:#ffffff;border:3px solid #d9cbb8;border-radius:24px;text-align:left;cursor:pointer}
 .mi svg{width:46px;height:46px;flex:none}
+@media (max-height:860px){.menu{gap:8px;padding:12px}.mi{min-height:76px}}   /* M19: seven rows still fit without scrolling */
 .mi.talk{background:#0f5560;border-color:#0f5560;color:#ffffff}
 .mi.talk[aria-disabled="true"]{background:#4a6f74;border-color:#4a6f74;cursor:default}
 .mi.soon{background:#f6f0e7;border-style:dashed;color:#5a4d40;cursor:default}

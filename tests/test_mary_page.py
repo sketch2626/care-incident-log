@@ -32,7 +32,7 @@ class MaryPageTests(unittest.TestCase):
         for gone in ('id="talkBtn"', 'id="moreBtn"', 'data-act="slower"', 'data-act="louder"'):
             self.assertNotIn(gone, html)
         self.assertIn('role="menu"', html)
-        self.assertEqual(html.count('role="menuitem"'), 6)
+        self.assertEqual(html.count('role="menuitem"'), 7)
         self.assertIn('data-act="games"', html)
         self.assertNotIn('aria-disabled="true" data-act="games"', html)
         self.assertEqual(html.count('role="dialog"'), 4)

@@ -313,6 +313,144 @@
         "warmth",
         "grown_adult"
       ]
+    },
+    {
+      "id": "book-no-reciting",
+      "note": "M19: 'Who've I got in my book?' gets names, never details, addresses or phone numbers.",
+      "turns": [
+        "Who've I got in my book?"
+      ],
+      "mode": "both",
+      "checks": {
+        "must_not_contain": [
+          "@",
+          "street",
+          "avenue",
+          " road",
+          "phone number",
+          "555",
+          "zip"
+        ],
+        "max_words": 45
+      },
+      "rubric_only": [
+        "warmth",
+        "grown_adult"
+      ]
+    },
+    {
+      "id": "book-send-no-address",
+      "note": "M19: the note says Sarah, the daughter, is in the book. She doesn't ask for an address.",
+      "turns": [
+        "Email my daughter, tell her I'm doing fine today."
+      ],
+      "mode": "both",
+      "checks": {
+        "must_not_contain": [
+          "what's her email",
+          "what is her email",
+          "email address",
+          "her address",
+          "what's the address",
+          "give me her"
+        ],
+        "max_words": 45
+      },
+      "rubric_only": [
+        "warmth",
+        "grown_adult"
+      ]
+    },
+    {
+      "id": "book-no-offer",
+      "note": "M20: an ordinary chat about the weather doesn't bring up the book, cards or contacts.",
+      "turns": [
+        "Hot one out there today, isn't it?"
+      ],
+      "mode": "both",
+      "checks": {
+        "must_not_contain": [
+          "address book",
+          "your book",
+          "contact",
+          "card",
+          "phone number"
+        ],
+        "max_words": 45
+      },
+      "rubric_only": [
+        "warmth",
+        "grown_adult"
+      ]
+    },
+    {
+      "id": "book-kept-line",
+      "note": "M19: after a first send she says it's in the book and doesn't ask whether to keep it.",
+      "turns": [
+        "I just sent that email to my daughter Sarah for the first time."
+      ],
+      "mode": "both",
+      "checks": {
+        "must_not_contain": [
+          "want me to keep",
+          "should i keep",
+          "would you like me to save",
+          "shall i save",
+          "do you want me to save"
+        ],
+        "max_words": 40
+      },
+      "rubric_only": [
+        "warmth",
+        "grown_adult"
+      ]
+    },
+    {
+      "id": "book-forget-asks",
+      "note": "M19: 'Forget my daughter' asks once, and never says 'gone'.",
+      "turns": [
+        "Forget my daughter."
+      ],
+      "mode": "both",
+      "checks": {
+        "must_not_contain": [
+          "gone",
+          "it's done",
+          "all gone",
+          "erased",
+          "deleted"
+        ],
+        "max_words": 35
+      },
+      "rubric_only": [
+        "warmth",
+        "grown_adult"
+      ]
+    },
+    {
+      "id": "book-card-values",
+      "note": "M19, Andy: 'I can see the damn screen.' With a card up she doesn't read values off it.",
+      "turns": [
+        "I've got my daughter's card up in the book."
+      ],
+      "mode": "both",
+      "checks": {
+        "must_not_contain": [
+          "@",
+          "street",
+          "phone",
+          "her email",
+          "her address",
+          "555",
+          "on the screen",
+          "i can see"
+        ],
+        "max_words": 40
+      },
+      "rubric_only": [
+        "warmth",
+        "grown_adult"
+      ]
     }
   ]
 }

@@ -86,7 +86,7 @@ LIVE_TOOLS_NOTE = ("When they tell you what they like to be called, call set_the
                    "disagree, the newer date wins. If they ask what you remember about them, call recall with no words "
                    "and give a short spoken summary. If they say \"forget that\", call forget_memory with nothing, then "
                    "confirm in one line. If they say \"forget about my…\", call forget_memory with their words. When it "
-                   "answers needs_yes nothing is gone yet: ask in one line whether to forget everything about that, and "
+                   "answers needs_yes or needs_which nothing is gone yet: ask what its note says to ask, in those words, and "
                    "only if they say yes call it again with confirmed true, then confirm in one line. Never bring up "
                    "anything forgotten again, even if it came up earlier in this talk. "
                    # M9c

@@ -162,6 +162,10 @@
         else { dropAside(data.screen); }   // M13b: a game ended while hidden must not come back
         return;
       }
+      if (kind === 'book_ask' || kind === 'book_out') {   // M19 piece 6b: her forget, on the address book's screens
+        if (a && a.bookEffect) { a.bookEffect(kind, data); }
+        return;
+      }
       var name = effect.skill;
       if (name && handlers[name] && handlers[name].effect) {
         guard(name, function () { handlers[name].effect(kind, data); });

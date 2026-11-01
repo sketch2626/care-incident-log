@@ -24,6 +24,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+import address_book  # M19: only for how it reads a name; skills may not import it
 import mail_core  # M15d: only for its plain words; skills may not import it
 import memory_core  # M15c: what counts as "everything"; memory_core never imports this file
 import printers  # M17: skills ask ctx.has_printer() and may not import it
@@ -47,7 +48,12 @@ OPTIONAL_FIELDS = ("screen", "sees", "settings", "slow", "vision", "memory")  # 
 ACTION_KEYS = {"name", "description", "inputSchema", "annotations", "offline_phrases", "always"}  # M13b: always
 MCP_ONLY_KEYS = {"annotations", "offline_phrases", "always"}  # M13b: always
 SCREEN_KEYS = {"menu_label", "menu_icon", "full_screen"}
-NEEDS_KEYS = {"internet_hosts", "mic", "modes", "send_mail"}  # M15d: send_mail
+NEEDS_KEYS = {"internet_hosts", "mic", "modes", "send_mail",  # M15d: send_mail
+              "contacts", "contacts_full"}  # M19
+CONTACTS_FULL_SKILLS = {"messages"}  # M19: the only cards that may read or write a detail
+PERSON_DETAILS = ("email", "phone", "cell", "address", "facebook", "birthday", "notes")  # M19
+KEEP_FIELDS = ("relationship", *PERSON_DETAILS, "asked", "no_keep")  # M19: what ctx.people.keep may change
+FORGET_TEXTS = ("name", "phone", "cell", "address", "facebook", "notes")  # M19: what a forget hands back to scrub
 MODES = {"live", "normal", "offline"}
 RESERVED_ACTIONS = {"view", "on_event", "set_skill", "open_skill", "use_skill"}  # M13b: open_skill, use_skill
 
@@ -60,10 +66,13 @@ FORBIDDEN_IMPORTS = {"server", "sqlite3", "mary", "assist", "subprocess", "ctype
                      "websocket", "websockets", "skills_core",
                      "mail_core", "secret_store", "sys", "builtins", "gc", "inspect",  # M15d
                      "send_gate",  # M15c: it holds mail_core, and a skill must not reach that through it
-                     "printers"}  # M17: ctx.has_printer() is the way in
+                     "printers",  # M17: ctx.has_printer() is the way in
+                     "address_book", "cryptography"}  # M19: ctx.people is the way in
 FORBIDDEN_NAMES = {"open", "exec", "eval", "__import__", "__builtins__",
                    "mint_ticket", "vars", "__dict__", "__self__", "__globals__", "__getattribute__",  # M15d: from these on
-                   "_host", "gate", "from_page"}  # M15c: a skill can't move a send, or say a move came from the page
+                   "_host", "gate", "from_page",  # M15c: a skill can't move a send, or say a move came from the page
+                   "__closure__", "__wrapped__", "__code__",  # M19: what's inside ctx.people's closures
+                   "effects"}  # M19: a skill adds through ctx.effect, and can't forge the host's mark
 
 TITLE_MAX = 40
 SUMMARY_MAX = 200
@@ -368,6 +377,8 @@ def manifest_problems(manifest, folder_name):
     problems += _needs_problems(manifest["needs"])
     if isinstance(manifest["needs"], dict) and manifest["needs"].get("send_mail") is True and manifest.get("slow") is not True:
         problems.append("a skill with needs.send_mail must also have \"slow\": true")  # M15d: or a send outlives its guard
+    if isinstance(manifest["needs"], dict) and "contacts_full" in manifest["needs"] and name not in CONTACTS_FULL_SKILLS:
+        problems.append("needs.contacts_full is only for the messages skill")  # M19
     problems += _screen_problems(manifest.get("screen"))
     settings = manifest.get("settings", [])
     if not isinstance(settings, list) or not all(
@@ -395,6 +406,9 @@ def _needs_problems(needs):
         problems.append("needs.mic must be true or false")
     if "send_mail" in needs and not _bool_ok(needs["send_mail"]):  # M15d
         problems.append("needs.send_mail must be true or false")
+    for key in ("contacts", "contacts_full"):  # M19
+        if key in needs and not _bool_ok(needs[key]):
+            problems.append(f"needs.{key} must be true or false")
     modes = needs.get("modes", list(MODES))
     if not isinstance(modes, list) or not set(modes) <= MODES:
         problems.append("needs.modes must list live, normal or offline")
@@ -468,6 +482,11 @@ def source_problems(path):
             problems.append(f"uses {node.id}")
         elif isinstance(node, ast.Attribute) and (node.attr in FORBIDDEN_NAMES or node.attr == "_host"):  # M15d: _host
             problems.append(f"uses {node.attr}")
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("getattr", "setattr", "delattr"):
+            name = node.args[1] if len(node.args) > 1 else None  # M19: a built-up name would walk past every check above
+            if not (isinstance(name, ast.Constant) and isinstance(name.value, str) and not name.value.startswith("_")
+                    and name.value not in FORBIDDEN_NAMES):
+                problems.append(f"uses {node.func.id} with a name it can't check")
     return sorted(set(problems))
 
 
@@ -636,10 +655,210 @@ def _page_gate(ctx):  # M15c
     return gate if gate is not None and ctx.from_page and gate.skill == ctx.name else None
 
 
+# ----- ctx.people (M19): the one door to the address book -----
+
+_SHOW_AT = "_show_address_of"  # on an effect: whose address the host adds once the skill has returned
+
+
+def _contacts_access(skill):
+    """(may use the door, may use its full half). Read from the card, and the full half only for the listed skills."""
+    needs = skill.manifest.get("needs", {})
+    full = needs.get("contacts_full") is True and skill.name in CONTACTS_FULL_SKILLS
+    return full or needs.get("contacts") is True, full
+
+
+def _name_key(name):
+    return address_book._norm(name).casefold()
+
+
+def _person_handle(person):
+    """What a skill may hold about someone: who they are and which details exist. Never a value."""
+    handle = {key: person[key] for key in ("id", "name", "relationship", "kind")}
+    handle.update((f"has_{field}", bool(person[field])) for field in PERSON_DETAILS)
+    return handle
+
+
+def _handle_id(handle):
+    return handle.get("id") if isinstance(handle, dict) else None
+
+
+def _reachable(book, person_id):
+    """The person behind an id, or None when they're gone, a hidden mark or a doctor. A made-up handle gets no further."""
+    person = book.get(person_id) if isinstance(person_id, str) else None
+    return person if person and person["kind"] != "doctor" and not person["hidden"] else None
+
+
+def _listed(book):
+    return [person for person in book.people() if person["kind"] != "doctor"]
+
+
+def _named(book, name):
+    """Everyone by exactly this name, hidden marks too, shown rows first. Never a doctor."""
+    wanted = _name_key(name)
+    found = [person for person in book.people(include_hidden=True)
+             if wanted and person["kind"] != "doctor" and _name_key(person["name"]) == wanted]
+    return sorted(found, key=lambda person: person["hidden"])
+
+
+def _marked(book, name):
+    """Whoever the book finds by this name, however it's said, hidden marks too. Never a doctor."""
+    return [person for person in book.find(name, include_hidden=True) if person["kind"] != "doctor"]
+
+
+def _mark_only(record):
+    """A row stays hidden when all it says is "don't keep this": no_keep, with no detail left."""
+    return record["no_keep"] and not any(record[field] for field in PERSON_DETAILS)
+
+
+def _keep_person(book, name, fields):
+    fields = {key: value for key, value in fields.items() if key in KEEP_FIELDS}
+    found = _named(book, name)
+    if found:
+        row_id = found[0]["id"]
+        book.update(row_id, {**fields, "hidden": _mark_only(address_book._merged(found[0], fields))})
+    else:
+        record = address_book._clean({**fields, "name": name})
+        row_id = book.add({**record, "hidden": _mark_only(record)})
+    return _person_handle(book.get(row_id))
+
+
+def _drop_address(book, person, field="email"):
+    change = {"address": ""} if field == "address" else {"email": "", "no_keep": True}
+    return book.update(person["id"], {**change, "hidden": _mark_only(address_book._merged(person, change))})
+
+
+def _unkeep_person(book, name):
+    found = _named(book, name)
+    if not found:
+        return bool(book.add({"name": name, "no_keep": True, "hidden": True}))
+    done = all([_drop_address(book, person) for person in found])
+    book.backup(fresh=True)  # the address leaves the rolling copy too
+    return done
+
+
+def _forget_person(book, who, only_address):
+    """who is a name, for everyone by it, or a handle, for that person and any hidden mark of theirs. only_address is
+    the unkeep rule, so it stays gone; "address" instead blanks only the mailing address, which comes back with the texts.
+    Otherwise book.remove, which rewrites the rolling copy, and no hidden mark stays."""
+    if isinstance(who, str):
+        found = _named(book, who) or [person for person in _marked(book, who) if person["hidden"]]
+    else:
+        person = _reachable(book, _handle_id(who))
+        found = [person, *[other for other in _named(book, person["name"]) if other["hidden"]]] if person else []
+    if only_address == "address":
+        lines = sorted({person["address"] for person in found if person["address"]})
+        for person in found:
+            if person["address"]:
+                _drop_address(book, person, "address")
+        if lines:
+            book.backup(fresh=True)
+        return {"addresses": [], "texts": lines}
+    addresses = sorted({person["email"] for person in found if person["email"]})
+    if only_address:
+        for person in found:
+            if person["email"]:
+                _drop_address(book, person)
+        if addresses:
+            book.backup(fresh=True)
+        return {"addresses": addresses, "texts": []}
+    texts = sorted({person[field] for person in found for field in FORGET_TEXTS if person[field]})
+    for person in found:
+        book.remove(person["id"])
+    return {"addresses": addresses, "texts": texts}
+
+
+class _People:
+    """ctx.people. Every method is a closure, so no attribute here holds the book or the host."""
+
+    __slots__ = ("find", "everyone", "locked", "count", "send_to", "show_address", "detail", "marks", "keep", "unkeep",
+                 "forget")
+
+    def __init__(self, methods):
+        for name in self.__slots__:
+            setattr(self, name, methods[name])
+
+
+def _people_door(host, skill, ctx):
+    """Builds ctx.people for one call. Without the card's permission, or with no book, every answer is empty, and a
+    book that fails gives the same: a skill learns nothing, and nothing raises into it or carries data."""
+    allowed, full = _contacts_access(skill)
+    refused = {"ok": False, "reason": "no_contacts"}
+
+    def reads(fallback, read, *args, may=allowed):
+        book = host.book if may else None
+        if book is None:
+            return fallback
+        try:
+            return read(book, *args)
+        except Exception:  # noqa: BLE001 (locked or damaged: the answer is empty, and the error goes nowhere)
+            return fallback
+
+    def find(words):
+        return reads([], lambda book: [_person_handle(p) for p in book.find(words) if p["kind"] != "doctor"])
+
+    def everyone():
+        return reads([], lambda book: [_person_handle(p) for p in _listed(book)])
+
+    def locked():
+        return allowed and reads(True, lambda book: book.state() != "open")
+
+    def count():
+        return reads(0, lambda book: len(_listed(book)))
+
+    def send_to(handle, subject, body, pictures=()):
+        """Arms the gate with the address, which never comes back. The same return as ctx.arm_send, plus no_address."""
+        if not allowed:
+            return dict(refused)
+        if _card_gate(host, skill) is None:
+            return {"ok": False, "reason": "no_email"}
+        person = reads(False, _reachable, _handle_id(handle))
+        if person is False:
+            return dict(refused)
+        if not person or not person["email"]:
+            return {"ok": False, "reason": "no_address"}
+        # The class's own method: a skill can replace ctx.arm_send on its ctx, and must not be handed the address that way.
+        return SkillContext.arm_send(ctx, person["name"], person["email"], subject, body, pictures)
+
+    def show_address(handle, kind, data=None):
+        """The page draws effect kind with data plus "email". SkillHost._with_addresses adds it after the skill returns."""
+        person_id = _handle_id(handle)
+        if allowed and isinstance(person_id, str) and kind not in CORE_EFFECT_KINDS:
+            SkillContext.effect(ctx, kind, data)
+            ctx.effects[-1][_SHOW_AT] = person_id
+
+    def detail(handle, field):
+        if field not in PERSON_DETAILS:
+            return ""
+        return reads("", lambda book: (_reachable(book, _handle_id(handle)) or {}).get(field, ""), may=full)
+
+    def marks(name, exact=False):
+        def read(book):
+            found = _named(book, name) if exact else _marked(book, name)
+            return {"asked": any(p["asked"] for p in found), "no_keep": any(p["no_keep"] for p in found)}
+        return reads({"asked": False, "no_keep": False}, read, may=full)
+
+    def keep(name, fields):
+        return reads(None, _keep_person, name, fields, may=full)
+
+    def unkeep(name):
+        return reads(False, _unkeep_person, name, may=full)
+
+    def forget(who, only_address=False):
+        return reads({"addresses": [], "texts": []}, _forget_person, who, only_address, may=full)
+
+    return _People(locals())
+
+
 class SkillContext:
     """What one call into a skill gets: store, state, files, effect(), settings_get/put, fetch(), look() (M4a),
-    send_mail() (M15d), asset() and font() (M15b), the send gate's arm_send() and the rest (M15c), and
-    has_printer() (M17)."""
+    send_mail() (M15d), asset() and font() (M15b), the send gate's arm_send() and the rest (M15c), has_printer()
+    (M17), and people (M19), the address book's one door. With needs.contacts: people.find(words) and everyone() give
+    handles (who, and which details exist, never a value), and locked(), count(), send_to(handle, subject, body,
+    pictures=()) and show_address(handle, kind, data). With needs.contacts_full, for the skills in
+    CONTACTS_FULL_SKILLS: detail(handle, field), marks(name, exact=False), keep(name, fields), unkeep(name) and
+    forget(name_or_handle, only_address=False), where only_address is True or "email", or "address" for the mailing
+    address. Without the card's permission each of those answers nothing, and a
+    skill never holds an address through the first set."""
 
     def __init__(self, host, skill):
         self._host = host
@@ -651,6 +870,7 @@ class SkillContext:
         self.effects = []
         self.heard = ""  # M7a: the resident's offline line, when offline mode made this call
         self.from_page = False  # M15c: True only inside SkillHost.on_event
+        self.people = _people_door(host, skill, self)  # M19
 
     def effect(self, kind, data=None):
         """Asks the page to do something: show_screen / leave_screen (its own screen) or one of its own kinds."""
@@ -852,6 +1072,7 @@ class ForgetReach:  # M15c
 
     def __init__(self, host):
         self.count = host.forget_count
+        self.ask = host.forget_ask  # M19
         self.forget = host.forget_reach
 
 
@@ -880,6 +1101,7 @@ class SkillHost:
         self.mailer = None  # M15d: set by the app: mailer(skill_name, ticket, to, subject, body, pictures) -> result
         self.gate = None  # M15c: set by the app: the send_gate.SendGate. With none, email isn't set up
         self.mail_ready = None  # M15c: set by the app: mail_ready() -> True when her email is connected
+        self.book = None  # M19: set by the app: the address_book.AddressBook. Skills reach it only through ctx.people
         self.recall = None  # M7a: set by the app: recall(words, limit=6) -> list of fact texts
         self.opened = None  # M13b: the group she opened last (memory only)
         self.aside = None  # M13b: the skill the page has set aside (memory only)
@@ -907,7 +1129,7 @@ class SkillHost:
 
     def _log(self, event, **fields):
         """One JSON line in skills.log. Callers pass only names, codes and numbers: never resident text, keys or URLs."""
-        fields = {key: memory_core.scrub_addresses(value) if isinstance(value, str) else value  # M18: the wall behind that
+        fields = {key: memory_core.scrub_details(value) if isinstance(value, str) else value  # M18: the wall behind that
                   for key, value in fields.items()}
         line = json.dumps(dict({"time": datetime.now().isoformat(timespec="seconds"), "event": event}, **fields))
         with self._log_lock:
@@ -1200,7 +1422,31 @@ class SkillHost:
         if size is None or size > RESULT_MAX or bad_effect:
             self._fail(skill, what, "BadResult", message="result not JSON, over 4 KB, or a foreign effect")
             return self._result({"error": "not_working"}, say=SAY_NOT_WORKING)
-        return self._result(response, ctx.effects, say)
+        return self._result(response, self._with_addresses(skill, ctx.effects), say)
+
+    def _address_for(self, skill, person_id):
+        """The address show_address asked for, or "" when the card has no permission or the person or address is gone."""
+        if self.book is None or not _contacts_access(skill)[0]:
+            return ""
+        try:
+            person = _reachable(self.book, person_id)
+        except Exception:  # noqa: BLE001 (a locked book draws nothing)
+            return ""
+        return person["email"] if person else ""
+
+    def _with_addresses(self, skill, effects):
+        """M19: the effects that leave, with show_address's filled in on fresh copies. This runs after the skill has
+        returned, so the skill never holds the address, and a mark that doesn't check out drops its effect."""
+        leaving = []
+        for effect in effects:
+            if _SHOW_AT not in effect:
+                leaving.append(effect)
+                continue
+            data = effect.get("data")
+            address = self._address_for(skill, effect[_SHOW_AT]) if effect.get("skill") == skill.name else ""
+            if address and isinstance(data, dict):
+                leaving.append({"skill": skill.name, "kind": effect["kind"], "data": {**data, "email": address}})
+        return leaving
 
     def call(self, fn_name, args=None, heard="", screen=None):  # M7a: heard  # M13b: screen
         """Runs one tool call from Gemini, the page or offline mode: "<skill>__<action>", "set_skill", or (M13b)
@@ -1508,6 +1754,14 @@ class SkillHost:
         """How many contacts match about, across each skill's optional forget_matches(ctx, about)."""
         counts = [self._optional(skill, "forget_matches", about) for skill in list(self.skills.values())]
         return sum(count for count in counts if type(count) is int and count > 0)
+
+    def forget_ask(self, about):  # M19
+        """What she must ask before this forget, from the first skill whose optional forget_question(ctx, about) says."""
+        for skill in list(self.skills.values()):
+            out = self._optional(skill, "forget_question", about)
+            if isinstance(out, dict):
+                return out
+        return None
 
     def forget_reach(self, about, own_name=False):
         """A real forget reaches what skills hold, on or off, through each one's optional on_forget(ctx, about, own_name),

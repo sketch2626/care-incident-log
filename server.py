@@ -6,6 +6,7 @@ Run:  python server.py            (opens http://localhost:8765 in the browser)
 Everything is stored in %APPDATA%\\CareIncidentLog\\incidents.db (set TRACKER_DATA to
 use another folder) and backed up daily to its backups\\ folder. Nothing leaves this computer.
 """
+import base64
 import csv
 import importlib.util
 import io
@@ -23,13 +24,17 @@ from contextlib import closing
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from secrets import token_hex
 from urllib.parse import parse_qs, urlparse
 
+import address_book  # M19: the sealed address book; skills reach it only through ctx.people
 import assist
+import book_move  # M19: the old contacts' one move into the book
 import mail_core  # M15d: the resident's own email
 import mary
 import send_gate
 import memory_core  # M9c
+import memory_dates  # M19: the same date reading for the address book's birthday box
 import power
 import secret_store  # M15d: the Gemini key, out of the log and its backups
 import send_gate  # M15c: the hard-wired yes
@@ -48,6 +53,7 @@ DATA = Path(os.environ.get("TRACKER_DATA") or DEFAULT_DATA)
 SECRETS = secret_store.SecretStore(DATA)  # M15d: tied to this data folder, so a scratch install sees none of the real ones
 MAIL = mail_core.Mailer(SECRETS, DATA / "mail.log")  # M15d: the log is written only when an email is tried
 MAIL.hide_old_addresses()  # M18: lines from before this version held the address itself
+BOOK = address_book.AddressBook(DATA, SECRETS)  # M19: opens nothing until it's first asked
 LEGACY_DATA = ROOT / "data"  # where versions before the desktop app kept the log
 DB_PATH = DATA / "incidents.db"
 BACKUPS = DATA / "backups"
@@ -195,8 +201,10 @@ def init_db():
             conn.execute("INSERT INTO settings (key, value) VALUES ('andyflow_enabled', '1')")
     init_memories()  # M9c
     move_gemini_key()  # M15d: before the backup, so a new copy doesn't hold it
+    book_move.run(DB_PATH, BACKUPS, BOOK, DATA / "book_move.log")  # M19: before the backup too, for the same reason
     backup_db()
     backup_memories()  # M9c
+    BOOK.backup()  # M19: once a day, and never while the book is locked
 
 
 def backup_db():
@@ -336,6 +344,7 @@ def init_memories():
     try:
         with closing(connect_memories()) as conn, conn:
             conn.executescript(memory_core.MEMORIES_SCHEMA)
+            memory_core.upgrade_dates(conn)  # M19
         split_memories()
         with closing(connect()) as conn, conn:
             memory_core.migrate_json(path, memory_core.MemoryStore(connect_memories), conn)  # once, by key memories_moved
@@ -346,6 +355,7 @@ def init_memories():
         path.with_name(path.name + ".tmp").unlink(missing_ok=True)
     except (sqlite3.Error, OSError):
         pass
+    sync_book_dates()  # M19
 
 
 def clean_incident(data):
@@ -469,6 +479,7 @@ def public_settings(conn):
     """Settings for the page. The Gemini key never leaves the server; the page only learns whether one is set."""
     s = get_settings(conn)
     s.pop("gemini_key", None)  # a leftover row, only when a move couldn't happen
+    s.pop(book_move.DONE_KEY, None)  # M19: the move's own note. PUT takes only SETTING_KEYS, so the page can't set it
     s["gemini_key_set"] = bool(gemini_key(conn))
     return s
 
@@ -504,6 +515,269 @@ def mary_memory():
 
 def memory_store():  # M9c: any change may be the day's backup; a delete always rewrites it
     return memory_core.MemoryStore(connect_memories, on_change=lambda deleted: backup_memories(fresh=deleted))
+
+
+def _book_changed(kind, person_id, record):  # M19: runs inside the book's lock, on the thread that changed it
+    """Keeps the book's birthdays and her reminder dates in step."""
+    if kind == "clear":
+        memory_store().clear_book_dates()
+    else:
+        taken = memory_core.book_taken(BOOK.people(include_hidden=True), person_id)
+        memory_store().book_date(person_id, None if kind == "remove" else record, taken)
+
+
+def _set_birthday(person_id, month, day):  # M19: a day corrected in talk. Its on_change finds the row already moved
+    person = BOOK.get(person_id)
+    if person:
+        year = person["birthday"][:-5]
+        birthday = f"{year}{month:02d}-{day:02d}"
+        BOOK.update(person_id, {"birthday": birthday if address_book._birthday(birthday) else birthday[-5:]})
+
+
+class _BookLink:  # M19: memory_core imports neither server nor the book
+    people = staticmethod(lambda: BOOK.people(include_hidden=True))
+    find = staticmethod(lambda words: BOOK.find(words))
+    set_birthday = staticmethod(_set_birthday)
+
+
+def _book_details():  # M19 piece 6: a locked book gives nothing, so words stay as they are until it opens
+    return memory_core.book_details(BOOK.people(include_hidden=True)) if BOOK.state() == "open" else []
+
+
+BOOK.on_change = _book_changed
+memory_core.BOOK_LINK = _BookLink
+memory_core.BOOK_DETAILS = _book_details
+
+# M19 piece 5: what the address book screens may read and write. kind, asked, no_keep and hidden are never the page's.
+BOOK_FORM = ("name", "relationship", "email", "phone", "cell", "address", "facebook", "birthday", "notes")
+BOOK_ID = re.compile(r"[0-9a-f]{32}")
+BOOK_LOCKED = "Your address book is locked. A helper's copy can open it."
+BOOK_FULL = "Your address book is full."
+BOOK_SAME = "That name is already in your address book."
+BOOK_NO_NAME = "A name is needed."
+BOOK_NO_BIRTHDAY = "I can't read that birthday. Try March 14 or 3/14."
+BOOK_NOT_HERE = "That person isn't in your address book."
+BOOK_HER = frozenset("daughter sister mother mom momma mama wife niece aunt auntie granddaughter grandmother grandma "
+                     "girlfriend stepdaughter stepmother".split())
+BOOK_HIM = frozenset("son brother father dad daddy papa husband nephew uncle grandson grandfather grandpa boyfriend "
+                     "stepson stepfather".split())
+
+
+# M19 piece 7: a helper's copy. The sealed bytes wait here for one download, and the words are never held at all.
+BOOK_COPY_S = 600
+BOOK_COPY_ID = re.compile(r"/api/book/copy/([0-9a-f]{32})")
+BOOK_COPY_BODY = address_book.MAX_COPY * 4 // 3 + 4096  # the biggest file in base64, and the words
+BOOK_COPY_NO_ONE = "There's no one in your address book yet."
+BOOK_COPY_CANT = "This laptop can't open an address book right now, so nothing changed."
+BOOK_COPY_FAILED = "That didn't work just now, so nothing changed."
+BOOK_COPY_GONE = "That copy has run out. Make a new one."
+BOOK_COPIES = {}  # token: (bytes, when it lapses). One at a time
+BOOK_COPIES_LOCK = threading.Lock()
+
+
+def book_copy_hold(data):
+    token = token_hex(16)
+    with BOOK_COPIES_LOCK:
+        BOOK_COPIES.clear()
+        BOOK_COPIES[token] = (data, time.monotonic() + BOOK_COPY_S)
+    return token
+
+
+def book_copy_take(token):
+    """The bytes once, or None. Asking for them drops them, in time or not."""
+    with BOOK_COPIES_LOCK:
+        data, lapses = BOOK_COPIES.pop(token, (None, 0))
+    return data if time.monotonic() < lapses else None
+
+
+class BookRefused(Exception):
+    """A plain answer to a write. The words are fixed, so they never hold a name or an address."""
+
+    def __init__(self, code, words, status=400):
+        super().__init__(words)
+        self.code, self.words, self.status = code, words, status
+
+
+def book_shown():
+    """Who the list shows. Doctors have their own part of the book, later."""
+    return [person for person in BOOK.people() if person["kind"] != "doctor"]
+
+
+def book_them(relationship):
+    """"her", "him", or "them" whenever the relationship doesn't plainly say. "Son's wife" names both, so it's "them"."""
+    words = set(re.findall(r"[a-z]+", str(relationship or "").lower()))
+    her, him = bool(words & BOOK_HER), bool(words & BOOK_HIM)
+    return "her" if her and not him else "him" if him and not her else "them"
+
+
+def book_birthday_words(birthday):
+    """"March 14" for a stored "03-14" or "1950-03-14", else ""."""
+    return memory_dates.when(int(birthday[-5:-3]), int(birthday[-2:])) if birthday else ""
+
+
+def book_birthday(text, old=""):
+    """The stored form of what was typed: "March 14", "3/14" or a stored form. The same day keeps a year already known."""
+    words = " ".join(str(text or "").split())
+    if not words:
+        return ""
+    plain = address_book._birthday(words)
+    if not plain:
+        found = memory_dates.loose_dates("birthday " + words)  # 3/14 counts only beside a birthday word
+        if len(found) != 1:
+            raise BookRefused("birthday", BOOK_NO_BIRTHDAY)
+        month, day = next(iter(found))
+        plain = f"{month:02d}-{day:02d}"
+    return old if old[-5:] == plain[-5:] else plain
+
+
+def book_fields(body, old=None):
+    """Only the form's fields, as text, with the birthday in its stored form."""
+    fields = {name: body[name] for name in BOOK_FORM if isinstance(body.get(name), str)}
+    if "birthday" in fields:
+        fields["birthday"] = book_birthday(fields["birthday"], (old or {}).get("birthday", ""))
+    if (old is None or "name" in fields) and not address_book._text(fields.get("name"), address_book.MAX_NAME):
+        raise BookRefused("name", BOOK_NO_NAME)
+    if "name" in fields:
+        wanted = address_book._norm(fields["name"])
+        if any(address_book._norm(p["name"]) == wanted and p["id"] != (old or {}).get("id") for p in book_shown()):
+            raise BookRefused("same_name", BOOK_SAME, 409)
+    return fields
+
+
+def book_person(person_id):
+    """A shown person, or None. A hidden mark or a doctor isn't one of the list's."""
+    person = BOOK.get(person_id)
+    return person if person and not person["hidden"] and person["kind"] != "doctor" else None
+
+
+def book_card(person):
+    """One card, for the page only. The screen tools send Gemini none of it."""
+    return {"state": "open", "id": person["id"], **{name: person[name] for name in BOOK_FORM},
+            "birthday_words": book_birthday_words(person["birthday"]), "them": book_them(person["relationship"])}
+
+
+def sync_book_dates():  # M19
+    """Puts the book's birthdays and her dates back in step at each start, so a write that couldn't reach her memories'
+    file, or a move made before it was ready, catches up. A locked book waits. Never raises."""
+    try:
+        people, store = BOOK.people(include_hidden=True), memory_store()
+        have = store.book_people()
+        for person in people:
+            if person["birthday"] or person["id"] in have:
+                store.book_date(person["id"], person, memory_core.book_taken(people, person["id"]))
+        if not BOOK.damaged():  # a row that won't open today may open tomorrow
+            for person_id in have - {person["id"] for person in people}:
+                store.book_date(person_id, None)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def clear_book():  # M19
+    """Clears the book on its own, and gives back how many went. Its dates go through on_change; her memories stay."""
+    return BOOK.clear()
+
+
+BOOK_FIND_MAX = 12  # M19 piece 6b: more than this and she asks them to say more
+BIRTHDAY_ASK_S = 300  # M19 piece 6b: how long her question may stay open, unsaid or unanswered
+BIRTHDAY_ASK_NOTE = ("(You just heard {name}'s birthday, and the card has none. At your next natural moment ask once, in "
+                     "exactly these words: \"Put that on {name}'s card?\" Then wait for their answer.)")
+BIRTHDAY_OPEN_NOTE = ("(They said yes, and {name}'s form is open. Fill the Birthday box with the day they told you, say it "
+                      "back and ask \"Is that right?\" Nothing is saved. Save is theirs.)")
+_birthday_ask = {}  # M19 piece 6b: the one question in play, in RAM only: {"id", "name", "said", "at"}
+
+
+def _book_id_of(name):  # M19 piece 6b
+    """Who a forget is about, for her page. Only an id."""
+    hits = [person for person in BOOK.find(name) if person["kind"] != "doctor"]
+    return hits[0]["id"] if len(hits) == 1 else ""
+
+
+def _book_count():  # M19 piece 6b
+    return BOOK.count() if BOOK.state() == "open" else 0
+
+
+mary.BOOK_HOOKS.update(count=_book_count, clear=lambda: clear_book(), id_of=_book_id_of)
+
+
+def book_lookup(words):  # M19 piece 6b
+    """Who her words could mean, for her page: ids, names and relationships, never a detail. "my daughter" is "daughter"."""
+    wanted = re.sub(r"^(?:my|the)\s+", "", " ".join(str(words or "").split())[:address_book.MAX_NAME], flags=re.I)
+    try:
+        if BOOK.state() != "open":
+            return {"state": "locked", "people": []}
+        hits = [person for person in BOOK.find(wanted) if person["kind"] != "doctor"]
+    except Exception:  # noqa: BLE001
+        return {"state": "failed", "people": []}
+    return {"state": "open", "people": [{"id": person["id"], "name": person["name"], "relationship": person["relationship"]}
+                                        for person in hits[:BOOK_FIND_MAX]]}
+
+
+def book_keep():  # M19 piece 6b
+    """The stop button under her forget question: the waiting forget ends, and nothing was removed."""
+    with _mary_lock:
+        memory = mary_memory()
+        memory.pending_forget = None
+        try:
+            memory.save()
+        except OSError:
+            pass
+    return True
+
+
+def _birthday_person(words, store):  # M19 piece 6b
+    """The one person in the list these words mean, if "Put that on their card?" may be asked at all."""
+    hits = [person for person in BOOK.find(words) if person["kind"] != "doctor"]
+    person = hits[0] if len(hits) == 1 else None
+    if not person or person["birthday"] or person.get("asked_birthday"):
+        return None
+    return None if store.has_passed(f"{person['name']} {person['relationship']}") else person
+
+
+def _birthday_turn(memory, text):  # M19 piece 6b
+    """One of their lines against "Put that on Mark's card?". A yes opens the form by id, and she fills and they save. Any
+    other answer ends it, with the mark already set. A birthday said for someone with none on their card starts it."""
+    global _birthday_ask
+    asked = _birthday_ask
+    if asked and time.monotonic() - asked["at"] > BIRTHDAY_ASK_S:
+        asked = _birthday_ask = {}
+    if asked.get("said"):
+        _birthday_ask = {}
+        if mary.is_yes(text):
+            return {"book_open": {"id": asked["id"], "note": BIRTHDAY_OPEN_NOTE.format(name=asked["name"])}}
+        return {}
+    if asked:
+        return {}
+    for words in mary.birthdays_said(memory, text):
+        person = _birthday_person(words, memory.store)
+        if person:
+            name = person["name"].split()[0]
+            _birthday_ask = {"id": person["id"], "name": name, "said": False, "at": time.monotonic()}
+            return {"book_note": BIRTHDAY_ASK_NOTE.format(name=name)}
+    return {}
+
+
+def book_heard(memory, text):  # M19 piece 6b: under _mary_lock, from /api/mary/heard
+    """What their line does to the book's two waiting questions. Nothing here saves or removes a person."""
+    out = {"forget_kept": True} if mary.forget_no(memory, text) else {}
+    try:
+        out.update(_birthday_turn(memory, text))
+    except Exception:  # noqa: BLE001 (a locked book, or a date that can't be read, asks nothing)
+        pass
+    return out
+
+
+def birthday_she_asked(text):  # M19 piece 6b: her finished Live turn
+    """Her own words are what counts as asking: from here a yes means her question, and she won't ask about them again."""
+    with _mary_lock:
+        asked = _birthday_ask
+        if not asked or asked["said"] or not re.search(r"\bcard\b", text, re.I) or asked["name"].casefold() not in text.casefold():
+            return
+        asked.update(said=True, at=time.monotonic())
+        person_id = asked["id"]
+    try:
+        BOOK.update(person_id, {"asked_birthday": True})
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def mary_remove_memory(memory_id):  # M9c: the Remove button
@@ -704,6 +978,7 @@ def skill_host():
             host.mailer = MAIL.send_for_skill  # M15d: skills send through the host and never see the password
             host.gate = send_gate.SendGate(MAIL)  # M15c: only the gate holds what can mint a ticket; skills never reach it
             host.mail_ready = lambda: MAIL.status()["connected"]  # M15c
+            host.book = BOOK  # M19: skills reach it only through ctx.people
             host.recall = lambda words, limit=6: [m["text"] for m in memory_core.MemoryStore(connect).recall(words, limit=limit)]  # M7a
             host.load(is_blocked=mary.skill_blocked)
             memory_core.FORGET_REACH = skills_core.ForgetReach(host)  # M15c: "forget Mark" reaches his contact too
@@ -766,7 +1041,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
     if name in mary.MEMORY_TOOL_NAMES:  # M9c
         with _mary_lock:
             memory = mary_memory()
-            result = mary.memory_tool(memory, name, args)
+            result = mary.memory_tool(memory, name, args, heard=heard)  # M19 piece 6b: heard
             if name in ("forget_memory", "forget_name", "stop_reminders"):  # its waiting question and the scrubbed talk history
                 try:
                     memory.save()
@@ -780,8 +1055,10 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
     else:
         value = " ".join(str(args.get("fact") or "").split())
-        if memory_core.only_address(memory_core.scrub_addresses(value)):  # M18
-            return {"response": {"ok": False, "note": ADDRESS_NOT_A_MEMORY}, "effects": [], "say": None}
+        scrubbed = memory_core.scrub_details(value)  # M19: any detail
+        if memory_core.only_address(scrubbed):  # M18
+            note = ADDRESS_NOT_A_MEMORY if memory_core.ADDRESS_WORDS in scrubbed else DETAIL_NOT_A_MEMORY
+            return {"response": {"ok": False, "note": note}, "effects": [], "say": None}
         error = "" if value else "There was no fact to save."
     if error:
         return {"response": {"ok": False, "error": error}, "effects": [], "say": None}
@@ -801,6 +1078,8 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
 
 ADDRESS_NOT_A_MEMORY = ("An email address never goes in your memories. It goes in their contacts: use give_address, "  # M18
                         "spell it back, and after their yes ask if they want it kept.")
+DETAIL_NOT_A_MEMORY = ("A phone number or street address never goes in your memories. If they want it kept, it goes in "  # M19
+                       "their address book: ask if they want the form opened, and fill it in there.")
 STORY_FAILED = {"error": "no_story",  # M4a
                 "note": "Tell a short story yourself instead, with a beginning, middle and end."}
 
@@ -821,6 +1100,8 @@ def mary_live_story_call(args):  # M4a: Live's tell_story tool
 # --- M4a: her hello from the brain, and a skill's look at a picture ---
 def close_talk():  # M15a
     """The talk is over, so a date note sent in it is done. Never raises: close_stale catches what this misses."""
+    global _birthday_ask
+    _birthday_ask = {}  # M19 piece 6b: her question goes with the talk
     with _mary_lock:
         try:
             memory_store().close_talk()
@@ -1092,7 +1373,7 @@ def wake_log(kind, **fields):
         parts = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), kind]
         for k, v in fields.items():
             if v is not None and v != "":
-                parts.append(f"{k}={json.dumps(memory_core.scrub_addresses(v), ensure_ascii=False) if isinstance(v, str) else v}")  # M18
+                parts.append(f"{k}={json.dumps(memory_core.scrub_details(v), ensure_ascii=False) if isinstance(v, str) else v}")  # M18
         line = "  ".join(parts) + "\n"
         path = DATA / "wake.log"
         with _wake_log_lock:
@@ -1352,10 +1633,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
         return True
 
-    def _body(self):
+    def _body(self, limit=MAX_BODY):
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            if not 0 <= n <= MAX_BODY:
+            if not 0 <= n <= limit:
                 raise ValueError
             raw = self.rfile.read(n)
             self._read = n
@@ -1468,12 +1749,16 @@ class Handler(SimpleHTTPRequestHandler):
         if method == "POST" and path == "/api/mary/talk/end":  # M15a: the page's word that a talk is over
             close_talk()
             return self._send({"ok": True})
+        if method == "POST" and path == "/api/mary/book/find":  # M19 piece 6b: ids for her page, never a detail
+            return self._send(book_lookup(self._body().get("words")))
+        if method == "POST" and path == "/api/mary/book/keep":  # M19 piece 6b: the stop button under her forget question
+            return self._send({"ok": book_keep()})
         if method == "POST" and path == "/api/mary/heard":
             # The same emergency check as Normal talk, on Live's transcript of what the resident said.
             body = self._body()
             text = str(body.get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
-            say = ""
+            say, book = "", {}
             # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
             send = {} if body.get("note") else gate_heard(text, kind)  # M18: the only place past here with the raw line
             save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
@@ -1488,6 +1773,7 @@ class Handler(SimpleHTTPRequestHandler):
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
                         mary.learn_dates(memory, text)  # M15a: and so does a date, with or without a tool
+                        book = {} if body.get("note") else book_heard(memory, text)  # M19 piece 6b
                     if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran
                         memory.add_turn("user", text.strip())
                     if say:
@@ -1496,7 +1782,7 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send, **save})
+            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send, **save, **book})
         if method == "POST" and path == "/api/mary/open":  # M4a: her hello, from the brain
             return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
@@ -1504,13 +1790,14 @@ class Handler(SimpleHTTPRequestHandler):
             text = mary.fix_numbers(text)  # M4d: what's remembered has the number right, whatever her voice said
             if text:  # M15c: the page's rememberSaid lands here too, so this covers all of her Live words
                 gate_her_words(text)
+                birthday_she_asked(text)  # M19 piece 6b
             quiet = _live_forgot_at is not None and time.monotonic() - _live_forgot_at < LIVE_FORGOT_QUIET_S  # M9c
             if text and not quiet and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
                 with _mary_lock:
                     memory = mary_memory()
                     last = memory.recent[-1] if memory.recent else {}
                     # M4a: the emergency words are saved by /heard; say() of the same words must not double them
-                    kept = memory_core.scrub_addresses(text)  # M18: add_turn keeps this, not what the gate had above
+                    kept = memory_core.scrub_details(text)  # M18: add_turn keeps this, not what the gate had above
                     if last.get("role") != "model" or " ".join(last["text"].split()) != kept[:mary.MAX_TURN_CHARS].strip():
                         memory.add_turn("model", text)
                         try:
@@ -1750,6 +2037,74 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send(WAKE.hold(on, body.get("why")))
         return None
 
+    def _book_copy(self, method, path):
+        """M19 piece 7: a helper's copy. These work on a locked book too, which is why they're not in _book. The words pass
+        through once each way and nothing here keeps, logs or forwards them."""
+        found = BOOK_COPY_ID.fullmatch(path)
+        if method == "GET" and found:  # a plain link, like the spreadsheet's, so the token is what guards it
+            data = book_copy_take(found.group(1))
+            if data is None:
+                return self._send({"error": BOOK_COPY_GONE, "code": "gone"}, 404)
+            name = f"MaryAddressBook-{datetime.now():%Y-%m-%d}.carebook"
+            return self._send(data, ctype="application/octet-stream",
+                              extra={"Content-Disposition": f'attachment; filename="{name}"'})
+        if method != "POST" or path not in ("/api/book/copy", "/api/book/bring-in"):
+            return None
+        making = path == "/api/book/copy"
+        try:
+            if making:
+                if not BOOK.people(include_hidden=True):
+                    return self._send({"error": BOOK_COPY_NO_ONE, "code": "empty"}, 409)
+                words, data = BOOK.make_copy()
+                return self._send({"words": words, "token": book_copy_hold(data)})
+            if BOOK.why_locked() in (address_book.WHY_UNAVAILABLE, address_book.WHY_FILE):
+                return self._send({"error": BOOK_COPY_CANT, "code": "cant"}, 409)
+            try:
+                body = self._body(BOOK_COPY_BODY)
+                data = base64.b64decode(body.get("file"), validate=True)
+            except (TypeError, ValueError):
+                raise address_book.CopyRefused() from None
+            return self._send(BOOK.bring_in(address_book.read_copy(data, body.get("words"))))
+        except address_book.CopyRefused as e:
+            return self._send({"error": str(e), "code": "refused"}, 400)
+        except address_book.BookLocked:
+            return self._send({"error": BOOK_LOCKED if making else BOOK_COPY_CANT, "code": "locked"}, 409)
+        except address_book.BookError:
+            return self._send({"error": BOOK_COPY_FAILED, "code": "failed"}, 500)
+
+    def _book(self, method, path):
+        """M19 piece 5: the address book screens. There's no delete: forget goes by voice, through her forget path. A
+        locked book answers locked and refuses writes, and nothing here ever makes or wipes anything to get round that."""
+        person_id = path[len("/api/book/"):]
+        if person_id and not BOOK_ID.fullmatch(person_id):
+            return None
+        if (method, bool(person_id)) not in (("GET", False), ("GET", True), ("POST", False), ("PUT", True)):
+            return None
+        why = BOOK.why_locked()
+        try:
+            if why:
+                if method == "GET":
+                    return self._send({"state": "locked", "why": why, "people": [], "count": 0})
+                raise address_book.BookLocked()
+            if method == "GET" and not person_id:
+                people = [{"id": p["id"], "name": p["name"], "relationship": p["relationship"]} for p in book_shown()]
+                return self._send({"state": "open", "why": "", "people": people, "count": len(people)})
+            if method == "POST":
+                return self._send(book_card(BOOK.get(BOOK.add(book_fields(self._body())))), 201)
+            old = book_person(person_id)
+            if old is None:
+                return self._send({"error": BOOK_NOT_HERE, "code": "not_here"}, 404)
+            if method == "GET":
+                return self._send(book_card(old))
+            BOOK.update(person_id, book_fields(self._body(), old))
+            return self._send(book_card(BOOK.get(person_id)))
+        except BookRefused as e:
+            return self._send({"error": e.words, "code": e.code}, e.status)
+        except address_book.BookLocked:
+            return self._send({"error": BOOK_LOCKED, "code": "locked", "state": "locked"}, 409)
+        except address_book.BookFull:
+            return self._send({"error": BOOK_FULL, "code": "full"}, 409)
+
     def _route(self, method):
         parsed = urlparse(self.path)
         path, query = parsed.path.rstrip("/"), parse_qs(parsed.query)
@@ -1771,6 +2126,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._wake(method, path, q)
         if path == "/api/mail" or path.startswith("/api/mail/"):  # M15d: holds no log connection while an email goes out
             return self._mail(method, path)
+        if path in ("/api/book/copy", "/api/book/bring-in") or path.startswith("/api/book/copy/"):  # M19 piece 7
+            return self._book_copy(method, path)
+        if path == "/api/book" or path.startswith("/api/book/"):  # M19: the sealed book holds no log connection
+            return self._book(method, path)
         with connect() as conn:
             self._conn = conn  # _send commits it first, so a reply never arrives before its save is on disk
             if method == "GET" and path == "/api/incidents":

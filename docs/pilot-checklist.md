@@ -66,7 +66,9 @@ Backend design: [backend-plan.md](backend-plan.md).
 - [ ] Decide whether and when to tell the facility about the pilot.
 
 ## 6. Setup day (each resident)
-- [ ] Install the app, set up the PIN or Windows Hello, and set the mood check-in time.
+- [ ] Install the app and set the mood check-in time.
+- [ ] Put a Windows PIN on the laptop (Andy, 2026-11-01). The address book's lock only helps once the laptop is locked: on a laptop with no Windows password, anyone who picks it up can sign in and open the book. Without a PIN, the line "Kept only on this laptop, locked." isn't true.
+- [ ] Once their people are in the address book, make a helper's copy (My info). Keep the file on a stick and the six words on paper with family.
 - [ ] Enter the facility's contacts on the My Info screen.
 - [ ] Do the starting survey.
 - [ ] Practice logging an incident by voice.

@@ -243,11 +243,11 @@ The occasions: birthdays first, then holidays, get-well, sympathy and thank-you 
 ## 6. Privacy: what goes where
 | Goes to | What | When |
 |---|---|---|
-| **Google (Gemini)** | Their spoken words for the reply, as in any talk | Every talk |
+| **Google (Gemini)** | Their spoken words for the reply, as in any talk. An address, phone number or other detail they say aloud goes too, in that reply's packet, and Google keeps it as long as other talk: up to 55 days on the paid tier. A saved detail goes only when their own words ask for it. A helper's typing in Address book avoids all of that. | Every talk |
 | **Google (picture)** | Only a description of the picture: "a largemouth bass jumping at sunrise". Never names or the message. | Only if they ask for a new picture |
 | **Their email company** | The card and message, from their own account | After their yes |
 | **Meta** | Whatever they paste and send, from their own account | Their own tap |
-| **Nobody** | Contacts, dates, saved cards, the mail secret | Stay on the laptop |
+| **Nobody** | Contacts, dates, saved cards, the mail secret | Stay on the laptop, apart from a detail they ask to hear or say aloud (see Google above) |
 
 Say it plainly in My info: on the paid tier Google keeps what's sent for 55 days for abuse checks. That goes further than the mission's line "their words stay on their laptop, except in the packet for one reply", so **the mission wording deserves a look** whatever Andy decides here.
 

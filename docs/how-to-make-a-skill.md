@@ -173,6 +173,19 @@ MarySkills.register('my_game', { aside: true, enter(el) { /* draw */ }, leave(el
 - **Text limits.** `instructions` is 400 characters at most. Each description is 200 at most. `view()` is 600 at most.
 - **Offline phrases.** Only on actions with no required inputs. No phrase may clash with another skill, or with the emergency or yes/no words. An action can read the whole line in `ctx.heard`, and it can answer `{"not_for_me": True}` when the phrase wasn't meant for it, so her normal offline line runs.
 
+### Using her address book (`needs.contacts`)
+The address book belongs to the app, not to any skill. A skill that wants to use it asks on its card, the way a phone app asks for Contacts: `"needs": {"contacts": true}`. Without that, `ctx.people` gives nothing back, not even a count. Skill code may not import `address_book` or `cryptography`.
+
+With it, a skill gets `ctx.people`:
+- `find(words)` and `everyone()` give handles: `id`, `name`, `relationship`, `kind`, and `has_email`, `has_phone` and so on, which say a detail exists. A handle never holds the detail itself. Doctors and hidden rows never show up.
+- `locked()` is true when the book can't be opened, and `count()` says how many people are listed. A locked book gives empty answers and never raises.
+- `send_to(handle, subject, body, pictures=())` holds an email for the resident's yes. It answers like `ctx.arm_send`, with one more reason, `no_address`. The card also needs `needs.send_mail`. The core fills in the address, and the skill never sees it.
+- `show_address(handle, kind, data)` asks the page to draw your effect `kind` with `data` plus `"email"`. The core adds the address after your code has returned.
+
+Skills may not read or add to `ctx.effects` directly. Use `ctx.effect`.
+
+Reading a detail and changing the book (`detail`, `marks`, `keep`, `unkeep`) need `needs.contacts_full`, which only the `messages` skill may declare. A skill keeps no copy of anyone.
+
 ## 5. How Mary learns it
 
 You do not edit her brain. When the app starts, it reads every card.

@@ -291,6 +291,7 @@ class Memory:
         self.pending_offer = None
         self.store = None  # M9c: a memory_core.MemoryStore; server sets it. None keeps the old facts list.
         self.pending_forget = None  # M9c: "forget about my son" waiting for its yes: {"about", "at"}
+        self.forget_said = ""  # M19 piece 6b: her line when a yes just took someone out of the book
         self.scrubbed = False  # M9c: True once something was truly forgotten through this object
         self._load()
 
@@ -302,7 +303,7 @@ class Memory:
             name = data.get("name")
             facts, recent = data.get("facts"), data.get("recent")  # null or odd values must not lose the name
             facts = [f for f in (facts if isinstance(facts, list) else []) if isinstance(f, str) and f.strip()]
-            recent = [{"role": t["role"], "text": memory_core.scrub_addresses(t["text"]), "at": str(t.get("at", ""))}  # M18
+            recent = [{"role": t["role"], "text": memory_core.scrub_details(t["text"]), "at": str(t.get("at", ""))}  # M18
                       for t in (recent if isinstance(recent, list) else [])
                       if isinstance(t, dict) and t.get("role") in ("user", "model") and isinstance(t.get("text"), str)]
             offer = data.get("pending_offer")
@@ -320,7 +321,7 @@ class Memory:
 
     def add_fact(self, fact, kind="", source="talk", heard=""):
         """Returns True if the fact was new. heard (M15a): the resident's words, which a date in the fact must match."""
-        fact = memory_core.scrub_addresses(fact)  # M18: and a fact that was only an address is no memory
+        fact = memory_core.scrub_details(fact)  # M18: and a fact that was only an address is no memory
         if memory_core.only_address(fact):
             return False
         if self.store is not None:  # M9c: kind and source only mean something in the store
@@ -350,7 +351,7 @@ class Memory:
             pass
 
     def add_turn(self, role, text):
-        text = memory_core.scrub_addresses(text)  # M18: before the cut, so a cut can't hide one
+        text = memory_core.scrub_details(text)  # M18: before the cut, so a cut can't hide one
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
         if role == "model" and not self.name and _ASKS_NAME.search(text):  # M4c: both routes pass through here
@@ -631,15 +632,33 @@ NAME_FORGOTTEN_TEXT = "All right, I won't use a name."  # M9c
 NOTHING_TO_FORGET_TEXT = "I don't have anything saved about that."
 OFFER_DROPPED_TEXT = "All right, I won't write that down."
 FORGET_ASK_TEXT = "Should I forget everything about your {}?"
+FORGET_PERSON_TEXT = "Forget {name}? {Own} address, {own} birthday reminders and what I remember about {them} all go for good."  # M19
+FORGET_WHICH_TEXT = "Which one, {}?"  # M19
+FORGET_FIELD_TEXT = "The email or the mailing address?"  # M19
+FORGET_BOOK_TEXT = "Clear your whole address book? Everyone in it comes out for good. Your memories stay."  # M19 piece 6b
+FORGET_OUT_TEXT = "Done. {} is out of your address book."  # M19 piece 6b: never "gone", which could be heard as a death
+FORGET_CLEARED_TEXT = "Done. {} came out of your address book."  # M19 piece 6b
+_THEIR = {"own": "their", "them": "them"}  # M19: no guessing: only a word that settles it changes this
+_HER = {"own": "her", "them": "her"}
+_HIS = {"own": "his", "them": "him"}
+_KIN_WORDS = {**dict.fromkeys("daughter wife mother sister aunt niece granddaughter".split(), _HER),
+              **dict.fromkeys("son husband father brother uncle nephew grandson".split(), _HIS)}
 FORGET_FAILED_TEXT = "I couldn't do that just now. Please say yes again in a little while."
 REMINDERS_STOPPED_TEXT = "All right, I won't bring that up again."  # M15a
 RECALL_NOTE = "Newer dates win when two disagree. Only say what is here; never make up a memory."
 RECALL_EMPTY_NOTE = "Nothing saved about that. Say so; don't guess."
 FORGET_EMPTY_NOTE = "Nothing saved matches that. Say so kindly, in one line."
 FORGET_OFFER_NOTE = "They meant the note you just offered to write. Nothing was written and nothing was forgotten."
+FORGET_SAY_NOTE = ('Nothing is gone yet. Ask in exactly these words: "{}" If they say yes, call forget_memory again with '
+                   "the same words and confirmed true.")  # M19
+FORGET_WHICH_NOTE = ('Nothing is gone yet. Ask in exactly these words: "{}" When they answer, call forget_memory with the '
+                     "full name they chose.")  # M19
+FORGET_FIELD_NOTE = ('Nothing is gone yet. Ask in exactly these words: "{}" When they answer, call forget_memory again with '
+                     "their answer, for example: the email.")  # M19
 FORGET_ASK_NOTE = ("Ask in one line whether to forget everything about this, and call forget_memory again with confirmed "
                    "true if they say yes.")
 FORGOT_NOTE = "Done. Say so in one line, and never bring it up again, even if it came up earlier in this talk."
+FORGET_OUT_NOTE = 'Done. Say exactly "{}" and nothing more, and never bring it up again.'  # M19 piece 6b
 NAME_FORGOTTEN_NOTE = "Done. Say so in one line. Don't use a name from now on, and don't ask for one."  # M9c
 NAME_FORGOTTEN_SYSTEM = "They asked you not to use a name. Don't ask for one."  # M9c
 NAME_KNOWN_NOTE = ("You already know what they like to be called. Never ask their name or what to call them, "  # M4c
@@ -693,6 +712,36 @@ def fact_source(text, typed=False):  # M9c
 
 
 _FORGET_IT = re.compile(r"\bforget (?:it all|all of it|all of that|all that|it|that|him|her|them|everything)\b", _I)
+_WHOLE_BOOK = re.compile(  # M19 piece 6b: "my book" alone could be a novel, so it needs a clearing word or "address"
+    r"(?P<lead>(?:clear|empty|wipe|erase)(?: out)? "
+    r"|(?:(?:take|get|remove|delete|clear) )?(?:everyone|everybody|all the people) (?:out of|out from|from|in) )?"
+    r"(?:all of )?(?:my |the )?(?:whole |entire )?(?P<address>address )?book(?: out)?")
+BOOK_HOOKS = {}  # M19 piece 6b: the server's count(), clear() and id_of(name). This file imports neither server nor the book
+
+
+def _book_hook(name, *args, default=0):  # M19 piece 6b
+    hook = BOOK_HOOKS.get(name)
+    return hook(*args) if callable(hook) else default
+
+
+def whole_book(about):  # M19 piece 6b
+    """True for "my address book" or "take everyone out of my book". "Everything" never matches: it leaves the book alone."""
+    said = " ".join(_plain(str(about or "")).lower().split()).strip(" .!?,")
+    found = _WHOLE_BOOK.fullmatch(said)
+    return bool(found and (found.group("lead") or found.group("address")))
+
+
+def _same_forget(waiting, about):  # M19 piece 6b
+    """The second forget_memory is about what the first asked: both the whole book, or neither and the same thing."""
+    if whole_book(waiting) or whole_book(about):
+        return whole_book(waiting) and whole_book(about)
+    return memory_core.same_about(waiting, about)
+
+
+def _yes_heard(waiting, heard):  # M19 piece 6b
+    """For the book, what Live heard must be their yes. Nothing heard is nothing to go on, as with any other forget."""
+    book = waiting.get("book_id") or whole_book(waiting["about"])
+    return not (book and heard and not _forget_yes(heard))
 
 
 def _forget_yes(text):  # M9c
@@ -701,8 +750,9 @@ def _forget_yes(text):  # M9c
     return is_yes(_FORGET_IT.sub(" ", _plain(str(text or ""))))
 
 
-def _forget_asked(about):  # M9c
-    return {"about": about, "at": datetime.now().isoformat(timespec="seconds")}
+def _forget_asked(about, field=""):  # M9c; M19: field names whose "email or mailing address?" is waiting
+    asked = {"about": about, "at": datetime.now().isoformat(timespec="seconds")}
+    return {**asked, "field": field} if field else asked
 
 
 def _forget_count(store, about):  # M15c
@@ -711,13 +761,91 @@ def _forget_count(store, about):  # M15c
     return len(store.matching(about)) + (others(about) if callable(others) else 0)
 
 
+def _forget_on_book(memory, asked):  # M19 piece 6b
+    """Marks a waiting forget as someone in the book, and gives the effect that puts up their card with its stop button."""
+    person_id = _book_hook("id_of", asked["person"], default="") if asked.get("person") and memory.pending_forget else ""
+    if not person_id:
+        return []
+    memory.pending_forget.update(book_id=person_id, book_name=asked["person"])
+    return [{"kind": "book_ask", "data": {"id": person_id}}]
+
+
+def _forget_question(store, about):  # M19
+    if whole_book(about):  # M19 piece 6b: the book, not her memories. An empty book has nothing to ask about
+        count = _book_hook("count")
+        return {"book_all": True, "count": count} if count else {}
+    asks = getattr(store, "asks", None)
+    return (asks(about) or {}) if callable(asks) else {}
+
+
+def forget_line(asked):  # M19
+    """Her words for what store.asks gave. A person's words use "Their" unless the relationship settles it."""
+    if asked.get("book_all"):  # M19 piece 6b
+        return FORGET_BOOK_TEXT
+    if asked.get("which"):
+        return FORGET_WHICH_TEXT.format(" or ".join(asked["which"]))
+    if asked.get("field"):
+        return FORGET_FIELD_TEXT
+    words = str(asked.get("relationship") or "").lower().split()
+    pronouns = next((_KIN_WORDS[word] for word in words if word in _KIN_WORDS), _THEIR)
+    return FORGET_PERSON_TEXT.format(name=asked["person"], Own=pronouns["own"].capitalize(), **pronouns)
+
+
+def _fields_said(text):  # M19
+    """Which of a person's addresses their answer picks: "email", "mailing address", both, or neither."""
+    said = str(text or "")
+    both = re.search(r"\bboth\b", said, _I)
+    return [field for field, words in (("email", r"\be-?mail\b"), ("mailing address", r"\b(?:mailing|street|home)\b"))
+            if both or re.search(words, said, _I)]
+
+
+def _field_answer(waiting, about):  # M19
+    """The fields a second forget_memory picks, when it's still about the person her question was about."""
+    other = memory_core._meaningful(about) - memory_core._meaningful("email e-mail mailing street home address both one")
+    known = memory_core._meaningful(waiting["field"]) | memory_core._meaningful(waiting["about"])
+    return _fields_said(about) if other <= known else []
+
+
+def forget_fields(memory, who, fields):  # M19
+    """Their answer to "The email or the mailing address?" is the yes, so it runs. Returns the texts removed."""
+    return [text for field in fields for text in forget_everything(memory, f"{who}'s {field}")]
+
+
 def forget_everything(memory, about):  # M9c
-    """Really deletes everything about it, then what her talk history holds of it. Returns the texts removed."""
+    """Really deletes everything about it, then what her talk history holds of it. Returns the texts removed. M19 piece 6b:
+    the whole book goes through the server's clear_book and her memories stay; memory.forget_said is then her line."""
+    asked = _forget_waiting(memory.pending_forget) or {}
+    memory.forget_said = ""
+    if whole_book(about):
+        people = _book_hook("count")
+        removed = _book_hook("clear")
+        memory.pending_forget = None
+        if not removed:
+            return []
+        people = people or removed
+        memory.forget_said = FORGET_CLEARED_TEXT.format(f"{people} {'person' if people == 1 else 'people'}")
+        return ["address book"]
     gone = memory.store.forget(about)
     memory.pending_forget = None
     if gone:
         memory.scrub(gone, about)
+        for name in list(getattr(memory.store, "names_gone", None) or ()):  # M19: a line that says only "Sarah"
+            memory.scrub(gone, about, name=name)
+    if asked.get("book_name") and (gone or getattr(memory.store, "names_gone", None)):
+        memory.forget_said = FORGET_OUT_TEXT.format(asked["book_name"])
     return gone
+
+
+_FORGET_NO = re.compile(r"^\W*(?:no(?!\s+(?:problem|worries|doubt)\b)|nope|nah|not now|not yet|don'?t|do not|never mind|nevermind"
+                        r"|keep (?:her|him|them|it|that)|leave (?:her|him|them|it))\b", _I)  # M19 piece 6b
+
+
+def forget_no(memory, text):  # M19 piece 6b: Live's /api/mary/heard
+    """A spoken no ends a forget waiting for its yes. True when it did. is_decline only knows "don't write that down"."""
+    if _forget_waiting(memory.pending_forget) and (is_decline(text) or _FORGET_NO.search(_plain(str(text or "")))):
+        memory.pending_forget = None
+        return True
+    return False
 
 
 def forget_name(memory, word=""):  # M9c
@@ -725,26 +853,29 @@ def forget_name(memory, word=""):  # M9c
     then neither uses a name nor asks for one (memory.name_forgotten) until they offer one. word: the name they said in
     "stop calling me <word>", gone too. Returns the texts removed. The caller must save memory."""
     names = [n for n in dict.fromkeys((" ".join(memory.name.split()), " ".join(str(word or "").split()))) if n]
-    gone = []
+    gone, taken = [], []
     for name in names:
         gone += memory.store.forget_name(name) if memory.store is not None else []
+        taken += list(getattr(memory.store, "names_gone", None) or ())  # M19
         memory.facts = [f for f in memory.facts if not memory_core.holds_name(f, name)]
     memory.scrub(gone)  # also marks the turn as one that truly forgot, even with nothing saved
-    for name in names:
+    for name in names + taken:
         memory.scrub(gone, about=name, name=name)
     memory.name = ""
     memory.name_forgotten = True
     return gone
 
 
-def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall, forget_memory and forget_name
+def memory_tool(memory, name, args, offer_waiting=False, heard=None):  # M9c: recall, forget_memory and forget_name
     """Runs one of her memory tools. The same shape as skills.call ({"response", "effects", "say"}), and never raises.
     Takes no lock: reply already holds server._mary_lock. offer_waiting: a note offer is open, so a bare "forget that"
     means the note, not her newest memory. forget_memory with words deletes only on a second call, confirmed, about the
     same thing, within FORGET_YES_S: Gemini can't skip the resident's yes. The texts removed never go back to Gemini.
-    After a real delete memory.scrubbed is True, and the caller must save memory."""
+    After a real delete memory.scrubbed is True, and the caller must save memory. heard (M19 piece 6b): Live's last line,
+    which for the address book must be their yes."""
     args = args if isinstance(args, dict) else {}
     say = None
+    effects = []
     try:
         if name == "recall":
             found = memory.store.recall(str(args.get("words") or ""), str(args.get("kind") or ""))
@@ -768,20 +899,37 @@ def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall, forget
             about = " ".join(str(args.get("about") or "").split())
             if about.lower().rstrip(".!") in ("that", "this", "it"):  # she passed "forget that" along word for word
                 about = ""
-            gone, count = [], 0
+            gone, count, asked = [], 0, {}
+            memory.forget_said = ""  # M19 piece 6b
             if about:
                 waiting = _forget_waiting(memory.pending_forget)
-                if args.get("confirmed") is True and waiting and memory_core.same_about(waiting["about"], about):
+                field = waiting.get("field", "") if waiting else ""  # M19
+                fields = _field_answer(waiting, about) if field else []
+                if fields:
+                    gone = forget_fields(memory, field, fields)
+                elif (args.get("confirmed") is True and waiting and not field and _same_forget(waiting["about"], about)
+                      and _yes_heard(waiting, heard)):
                     gone = forget_everything(memory, about)
                 else:
-                    count = _forget_count(memory.store, about)  # M15c
-                    memory.pending_forget = _forget_asked(about) if count else None
+                    asked = _forget_question(memory.store, about)  # M19
+                    count = asked.get("count") or _forget_count(memory.store, about)  # M15c; M19 piece 6b
+                    waits = asked.get("field") or (count and not asked.get("which"))
+                    memory.pending_forget = _forget_asked(about, asked.get("field", "")) if waits else None
+                    effects += _forget_on_book(memory, asked)  # M19 piece 6b
             elif not offer_waiting:
                 gone = memory.store.forget("")
                 if gone:
                     memory.scrub(gone)
-            if count:
-                response = {"needs_yes": True, "count": count, "note": FORGET_ASK_NOTE}
+            if asked.get("which") or asked.get("field"):  # M19
+                response = {"needs_which": True,
+                            "note": (FORGET_WHICH_NOTE if asked.get("which") else FORGET_FIELD_NOTE).format(forget_line(asked))}
+            elif count:
+                response = {"needs_yes": True, "count": count,
+                            "note": FORGET_SAY_NOTE.format(forget_line(asked)) if asked else FORGET_ASK_NOTE}  # M19
+            elif memory.forget_said:  # M19 piece 6b: someone out of the book, or all of it
+                response = {"forgotten": len(gone), "note": FORGET_OUT_NOTE.format(memory.forget_said)}
+                say = memory.forget_said
+                effects.append({"kind": "book_out", "data": {}})
             elif gone:
                 response = {"forgotten": len(gone), "note": FORGOT_NOTE}
                 say = FORGOT_TEXT  # if her next words never come, the resident still hears it was done
@@ -790,7 +938,8 @@ def memory_tool(memory, name, args, offer_waiting=False):  # M9c: recall, forget
                             "note": FORGET_OFFER_NOTE if offer_waiting and not about else FORGET_EMPTY_NOTE}
     except Exception:
         response = {"error": "memory_not_working", "note": MEMORY_BROKEN_NOTE}
-    return {"response": response, "effects": [], "say": say}
+        effects = []
+    return {"response": response, "effects": effects, "say": say}
 
 
 def _is_name_word(word, name):  # M9c
@@ -822,10 +971,11 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
             return ""
         about = hit.group(1)
         if about:  # the same one-line question as with Gemini; reply takes the yes
-            if not _forget_count(memory.store, about):  # M15c
+            asked = _forget_question(memory.store, about)  # M19
+            if not asked and not _forget_count(memory.store, about):  # M15c
                 return NOTHING_TO_FORGET_TEXT
-            memory.pending_forget = _forget_asked(about)
-            return FORGET_ASK_TEXT.format(about)
+            memory.pending_forget = None if asked.get("which") else _forget_asked(about, asked.get("field", ""))
+            return forget_line(asked) if asked else FORGET_ASK_TEXT.format(about)
         if offer_waiting:  # "forget that" to "Would you like me to write that down?"
             return OFFER_DROPPED_TEXT
         gone = memory.store.forget("")
@@ -849,6 +999,18 @@ def _no_addresses(value):  # M18
     return memory_core.scrub_addresses(value) if isinstance(value, str) else value
 
 
+def birthdays_said(memory, text):  # M19 piece 6b: for "Put that on Mark's card?"
+    """Who their own words just gave a birthday for, by name and by relation. The same rules as learn_dates. Never raises."""
+    try:
+        text = memory_core.scrub_details(text)
+        if memory.scrubbed or _SAYS_FORGET.search(_plain(text)) or memory_dates.stop_request(text):
+            return []
+        found = [one for one in memory_dates.parse(text, memory.name) if one["what"] == "birthday"]
+        return [word for one in found for word in (one["who"], one["relation"]) if word]
+    except Exception:
+        return []
+
+
 def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) both learn dates this way
     """Takes dates, deaths and "don't remind me" from the resident's own words, so it all works with no Gemini. A date a
     fact already saved changes nothing here. Never raises. Not for an emergency line: that teaches nothing."""
@@ -856,7 +1018,7 @@ def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) b
     if store is None:
         return
     try:
-        text = memory_core.scrub_addresses(text)  # M18
+        text = memory_core.scrub_details(text)  # M18
         if memory.scrubbed or _SAYS_FORGET.search(_plain(text)):  # "Forget Mark's birthday, November 7" must not save it
             return
         asked = memory_dates.stop_request(text)
@@ -955,7 +1117,8 @@ LIVE_STORY_TOOL = {
 # There is no save tool, on purpose. One tool, use_screen, with an action (Live gets about 12 tools at most). The names under open match LIST in screens.js (tests/test_m18_screens.py).
 LIVE_SCREEN_NAMES = ["notes", "write", "write_call_light", "write_meal", "write_bathing", "write_toileting",
                      "write_medication", "write_repositioning", "write_staff", "write_safety", "write_other", "list",
-                     "report", "info", "email", "inbox", "things", "games", "choose", "info_panel"]
+                     "report", "info", "email", "inbox", "things", "games", "choose", "info_panel", "book-list",
+                     "book-form", "book-helper"]
 LIVE_PAGE_TOOLS = [
     {"name": "story_more",
      "description": "When they want the rest of a story you were telling after they cut in, call this for the next part."},
@@ -966,7 +1129,8 @@ LIVE_PAGE_TOOLS = [
      "description": ("Works on the screen in front of them, only when they ask. Never on your own idea, and it never "
                      "saves or sends anything. Actions: look = the screen's name, its boxes and choices and what's in "
                      "them (call it before explain or fill; never just to describe the screen). open = open the screen "
-                     "in name; a name starting write_ opens the form for that kind of problem. explain = light up the "
+                     "in name; a name starting write_ opens the form for that kind of problem, and with who, the "
+                     "address book opens that person's card, or their form with name book-form. explain = light up the "
                      "box in field, then explain it in your own words. fill = put value in the box in field, then say "
                      "it back and ask if it's right. put_back = undo your last fill of the box in field. their_words = "
                      "copy their own words into Your words, exactly as they said them (you can't give it any words). "
@@ -975,6 +1139,7 @@ LIVE_PAGE_TOOLS = [
      "parameters": {"type": "object", "properties": {
          "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents."},
          "name": {"type": "string", "description": "For open: the screen, one of " + ", ".join(LIVE_SCREEN_NAMES) + "."},
+         "who": {"type": "string", "description": "For open: who in the address book, by name or relationship."},
          "field": {"type": "string", "description": "For explain, fill, put_back: the field from look."},
          "value": {"type": "string", "description": ("For fill: what goes in it, from what they said. A date as YYYY-MM-DD, "
                                                     "a time as HH:MM, a choice by its label.")},
@@ -1677,7 +1842,9 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         gated = gated if isinstance(gated, dict) and gated.get("skip_brain") else None
     said_yes = bool(prior) and is_yes(text) and not gated
     waiting = _forget_waiting(memory.pending_forget) if store is not None else None  # M9c
-    forget_yes = bool(waiting) and not kind and not said_yes and not gated and _forget_yes(text)
+    field = waiting.get("field", "") if waiting else ""  # M19: their answer to "the email or the mailing address?"
+    fields = _fields_said(text) if field else []
+    forget_yes = bool(waiting) and not kind and not said_yes and not gated and (bool(fields) if field else _forget_yes(text))
     if waiting and not kind and is_decline(text):
         memory.pending_forget = None
     safety_line = ""
@@ -1722,14 +1889,16 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             emit(SAVED_TEXT)
     elif forget_yes:  # M9c
         try:
-            gone = forget_everything(memory, waiting["about"])
+            gone = forget_fields(memory, field, fields) if field else forget_everything(memory, waiting["about"])
         except Exception:
             memory.pending_forget = waiting  # so the next "yes" can try again
             set_mood("sorry")
             emit(FORGET_FAILED_TEXT)
         else:
             set_mood("talking")
-            emit(FORGOT_TEXT if gone else NOTHING_TO_FORGET_TEXT)
+            if getattr(memory, "forget_said", ""):  # M19 piece 6b
+                add_effect({"kind": "book_out", "data": {}})
+            emit(getattr(memory, "forget_said", "") or (FORGOT_TEXT if gone else NOTHING_TO_FORGET_TEXT))
     elif api_key:
         raw = ""
         stream = _ReplyStream(speak, take_mood)
@@ -1789,7 +1958,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                 try:  # M9c: a locked database must never stop her reply
                     # M9c: a [remember] in the very reply that forgot must not save it straight back
                     if not memory.scrubbed and memory.add_fact(value, source=fact_source(text, typed), heard=text):  # heard: M15a
-                        remembered.append(" ".join(memory_core.scrub_addresses(value).split()))  # M18
+                        remembered.append(" ".join(memory_core.scrub_details(value).split()))  # M18
                 except Exception:
                     pass
             elif value.strip() and not name_dropped:

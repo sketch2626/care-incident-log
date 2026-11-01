@@ -3,7 +3,7 @@
   "name": "messages",
   "version": "0.2.0",
   "title": "Cards and messages",
-  "summary": "Makes greeting cards and short letters in the resident's own words, ready to print and saved on their laptop.",
+  "summary": "Makes greeting cards and short letters in the resident's own words, ready to print and saved on their laptop. Their address book is here too.",
   "instructions": "Their words, never yours. Help only if asked, in their voice, adding no feeling. Read it back. Changes by voice. Unclear who: ask aloud. Never describe the screen. Card: show_fronts, pick_front, set_words. Note: plain_message. send_it when they want it sent or seem done. Never say it went unless told. Silent during the count. Spell addresses. Say names, not addresses. Never write anyone unasked.",
   "screen": {"menu_label": "Make a card", "menu_icon": "card", "full_screen": true},
   "sees": true,
@@ -111,38 +111,44 @@
     },
     {
       "name": "keep_address",
-      "description": "Their answer when you asked about keeping the address for next time: true to keep it.",
+      "description": "Their answer about keeping an address. After a send it's already kept, so false when they say don't keep it. Told with nothing sent: true to keep it.",
       "inputSchema": {"type": "object", "properties": {
         "keep": {"type": "boolean", "description": "true if they want it kept"}
       }, "required": ["keep"]},
       "annotations": {"readOnlyHint": false, "destructiveHint": false}
     },
     {
-      "name": "save_contact",
-      "description": "Remember someone they write to. Never for an email address: give_address handles those.",
-      "inputSchema": {"type": "object", "properties": {
-        "name": {"type": "string", "description": "Their name"},
-        "relationship": {"type": "string", "description": "Like son or neighbor"},
-        "facebook": {"type": "string", "description": "Their Facebook name"},
-        "phone": {"type": "string", "description": "Their phone number"}
-      }, "required": ["name"]},
-      "annotations": {"readOnlyHint": false, "destructiveHint": false}
-    },
-    {
-      "name": "find_contact",
-      "description": "Whether you know this person: relationship, and whether an email is saved. Never the address itself.",
+      "name": "find_person",
+      "description": "Find someone in their address book by name or relationship: who they are and which details are saved, never the details. Two matches: ask which.",
+      "always": true,
       "inputSchema": {"type": "object", "properties": {
         "name": {"type": "string", "description": "A name, first name or relationship"}
       }, "required": ["name"]},
       "annotations": {"readOnlyHint": true, "destructiveHint": false}
     },
     {
-      "name": "contact_address",
-      "description": "A saved email address, only when they ask to hear it or have it put in a box. A send never needs it: use the name.",
+      "name": "read_detail",
+      "description": "One saved detail, only when their own words just asked to hear it or put it in a box. A send never needs one: use the name.",
+      "always": true,
       "inputSchema": {"type": "object", "properties": {
-        "name": {"type": "string", "description": "A name, first name or relationship"}
-      }, "required": ["name"]},
+        "person": {"type": "string", "description": "A name, first name or relationship"},
+        "field": {"type": "string", "enum": ["email", "phone", "cell", "address", "facebook", "birthday", "notes"], "description": "Which detail they asked for"}
+      }, "required": ["person", "field"]},
       "annotations": {"readOnlyHint": true, "destructiveHint": false}
+    },
+    {
+      "name": "list_people",
+      "description": "Who's in their book and how many, only when they ask: names, relationships and the count, never a detail. For how many, say the number.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": true, "destructiveHint": false},
+      "offline_phrases": ["who's in my book", "who is in my book", "who's in my address book", "who is in my address book", "how many people have i got", "how many people are in my book"]
+    },
+    {
+      "name": "add_to_book",
+      "description": "When they want someone added to their book. You can't add anyone: the result says where they do it.",
+      "inputSchema": {"type": "object", "properties": {}},
+      "annotations": {"readOnlyHint": true, "destructiveHint": false},
+      "offline_phrases": ["to my book", "to my address book"]
     },
     {
       "name": "plain_message",
@@ -183,7 +189,7 @@
     }
   ],
   "storage": true,
-  "needs": {"internet_hosts": [], "mic": false, "send_mail": true, "modes": ["live", "normal", "offline"]},
+  "needs": {"internet_hosts": [], "mic": false, "send_mail": true, "contacts": true, "contacts_full": true, "modes": ["live", "normal", "offline"]},
   "offline": "works",
   "default_on": true
 }

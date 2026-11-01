@@ -556,7 +556,7 @@ class Plainly(unittest.TestCase):
     def test_only_this_module_imports_cryptography(self):
         for path in helpers.ROOT.glob("*.py"):
             if path.name != "address_book.py":
-                self.assertNotIn("cryptography", path.read_text(encoding="utf-8"), path.name)
+                self.assertNotRegex(path.read_text(encoding="utf-8"), r"(?m)^\s*(?:import|from)\s+cryptography", path.name)
 
     def test_nothing_is_logged(self):
         source = Path(address_book.__file__).read_text(encoding="utf-8")

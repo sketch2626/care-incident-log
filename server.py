@@ -25,6 +25,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import address_book  # M19: the sealed address book; skills reach it only through ctx.people
 import assist
 import mail_core  # M15d: the resident's own email
 import mary
@@ -48,6 +49,7 @@ DATA = Path(os.environ.get("TRACKER_DATA") or DEFAULT_DATA)
 SECRETS = secret_store.SecretStore(DATA)  # M15d: tied to this data folder, so a scratch install sees none of the real ones
 MAIL = mail_core.Mailer(SECRETS, DATA / "mail.log")  # M15d: the log is written only when an email is tried
 MAIL.hide_old_addresses()  # M18: lines from before this version held the address itself
+BOOK = address_book.AddressBook(DATA, SECRETS)  # M19: opens nothing until it's first asked
 LEGACY_DATA = ROOT / "data"  # where versions before the desktop app kept the log
 DB_PATH = DATA / "incidents.db"
 BACKUPS = DATA / "backups"
@@ -197,6 +199,7 @@ def init_db():
     move_gemini_key()  # M15d: before the backup, so a new copy doesn't hold it
     backup_db()
     backup_memories()  # M9c
+    BOOK.backup()  # M19: once a day, and never while the book is locked
 
 
 def backup_db():
@@ -704,6 +707,7 @@ def skill_host():
             host.mailer = MAIL.send_for_skill  # M15d: skills send through the host and never see the password
             host.gate = send_gate.SendGate(MAIL)  # M15c: only the gate holds what can mint a ticket; skills never reach it
             host.mail_ready = lambda: MAIL.status()["connected"]  # M15c
+            host.book = BOOK  # M19: skills reach it only through ctx.people
             host.recall = lambda words, limit=6: [m["text"] for m in memory_core.MemoryStore(connect).recall(words, limit=limit)]  # M7a
             host.load(is_blocked=mary.skill_blocked)
             memory_core.FORGET_REACH = skills_core.ForgetReach(host)  # M15c: "forget Mark" reaches his contact too

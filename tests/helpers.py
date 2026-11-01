@@ -144,6 +144,10 @@ def reset_db():
     server._live_forgot_at = None
     secret_store.set_backend(SECRETS)  # M15d: also undoes a test that swapped it
     SECRETS.clear()
+    server.BOOK.lock()  # M19: its key just went, so its sealed files go too, which works on a locked book as well
+    server.BOOK._backup_stale = False
+    for path in (server.BOOK.path, server.BOOK.backup_path, server.BOOK.backup_path.with_suffix(".tmp")):
+        path.unlink(missing_ok=True)
     (server.DATA / "secret_move.log").unlink(missing_ok=True)
     try:
         server.ANDYFLOW_DB.unlink()

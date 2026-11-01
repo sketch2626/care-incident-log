@@ -106,7 +106,8 @@ class Listed(unittest.TestCase):
     def test_only_what_the_brief_allows_can_be_filled(self):
         self.assertEqual({f["id"] for f in self.fields if f["fill"]}, {
             "when", "day", "time", "wait", "staff_involved", "reported_to", "outcome", "witnesses", "repFrom", "repTo",
-            "i-resident_name", "i-room", "i-facility", "i-facility_address", "i-state", "mailAddress", "mail_provider"})
+            "i-resident_name", "i-room", "i-facility", "i-facility_address", "i-state", "mailAddress", "mail_provider",
+            *("bf-" + name for name in ("name", "relationship", "email", "phone", "cell", "address", "facebook", "birthday", "notes"))})  # M19 piece 6b
         self.assertEqual({f["id"] for f in self.fields if f["kind"] == "switch"}, {
             "i-gemini_enabled", "i-andyflow_enabled", "i-wake_word", "i-talk_on_open", "mailConnect"})
 
@@ -127,7 +128,7 @@ class Listed(unittest.TestCase):
         declared = {d["name"]: d for d in mary.LIVE_PAGE_TOOLS}
         self.assertEqual(set(declared) - {"story_more", "end_talk"}, {"use_screen"})   # one screen tool, not seven
         props = declared["use_screen"]["parameters"]["properties"]
-        self.assertEqual(set(props), {"action", "name", "field", "value", "turns_back", "when", "category"})   # piece 5: when, category
+        self.assertEqual(set(props), {"action", "name", "who", "field", "value", "turns_back", "when", "category"})   # piece 5: when, category; M19 piece 6b: who
         self.assertTrue(all(p["type"] == "string" for p in props.values()))
         for name in self.tools:   # every action named in the description reaches one of the seven functions
             self.assertIn(name, self.tools)

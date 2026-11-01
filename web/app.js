@@ -233,7 +233,8 @@ function maryAskedSave() {
     if ($('#infoSave').disabled) return;
     if (!infoTouched) return toMary('save_none', { why: 'nothing' });
     $('#infoForm').requestSubmit();
-  } else toMary('save_none', { why: 'no_form' });
+  } else if (cur.screen === 'book-form' || cur.screen === 'book-helper') bookAskedSave(); // M19 piece 6b
+  else toMary('save_none', { why: 'no_form' });
 }
 
 const SCREENS = ['home', 'add', 'saved', 'list', 'inbox', 'report', 'info', 'book-list', 'book-card', 'book-form', 'book-helper'];

@@ -824,8 +824,12 @@ ADDRESS_MAX = 254
 ADDRESS_LINES = 3  # M18: how many lines of theirs an address waits for a yes or a keep answer before it's let go
 ASKS_ADDRESS_RE = re.compile(r"\baddress\b|(?:'s|\b(?:her|his|their|my|the|that|whose))\s+e-?mail\b")  # M18: not "an email"
 ASKS_HEAR_RE = re.compile(r"\b(?:what|what's|read|tell|say|spell|give|repeat|remind|hear|know|have|got|need|find|look)\b")
-ASKS_FILL_RE = re.compile(r"\b(?:fill|put|type|enter|paste|copy|write|use|add)\b")
 ASKS_BOX_RE = re.compile(r"\b(?:fill|put|type|enter|paste|copy)\b")
+ASKS_PLACED_RE = re.compile(r"\b(?:write|use|add)\b")  # M19 piece 6b: only with somewhere to put it
+ASKS_PLACE_RE = re.compile(r"\b(?:box|form|field|blank|line|in|into|on|here|there)\b")
+ASKS_SLOT_RE = re.compile(r"\b(?:box|form|field|blank|line)\b")  # the To box needs naming: Sarah's card can go on a table
+ASKS_TOLD_RE = re.compile(r"^(?:well\s+|so\s+|oh\s+|and\s+)?(?:i|we|she|he|they)(?:'ve|\s+have|'d|\s+had)?\s+"
+                          r"(?:just\s+|already\s+)?(?:got|had|have(?!\s+to\b)|sent|saw|found|lost|wrote|used|put)\b")
 # M19 piece 6: the words that ask for each detail. "Call my daughter" and "happy birthday" ask for none, and "my phone" or
 # "my notes" are their own, so "my" stays out of these. A card "for Sarah's birthday" is a task, not an ask.
 _HERS = r"(?:'s|\b(?:her|his|their|whose))\s+"
@@ -1465,13 +1469,17 @@ def _keep_told(ctx, told, keep):  # M18
 def _asked_detail(heard, person, field):  # M19: M18's _asked_address, for any detail, as strict
     """Whether their own words ask to hear this kind of detail or put it in a box. Sending and calling need neither."""
     words = clean(heard or "").lower().replace("’", "'")
-    if ASKS_DETAIL_RES[field].search(words) and (ASKS_HEAR_RE.search(words) or ASKS_FILL_RE.search(words)
+    if ASKS_TOLD_RE.search(words):  # M19 piece 6b: "I got Sarah's email yesterday" tells her something and asks nothing
+        return False
+    if ASKS_DETAIL_RES[field].search(words) and (ASKS_HEAR_RE.search(words) or ASKS_BOX_RE.search(words)
+                                                 or (ASKS_PLACED_RE.search(words) and ASKS_PLACE_RE.search(words))
                                                  or (field == "birthday" and ASKS_WHEN_RE.search(words))):
         return True
     if field != "email":
         return False
     names = _norm(person["name"]).split()[:1] + [_norm(person.get("relationship"))]  # the To box is the email
-    return bool(ASKS_BOX_RE.search(words)) and any(name and re.search(r"\b%s\b" % re.escape(name), words) for name in names)
+    return bool(ASKS_BOX_RE.search(words) and ASKS_SLOT_RE.search(words)) and any(
+        name and re.search(r"\b%s\b" % re.escape(name), words) for name in names)
 
 
 @_locked

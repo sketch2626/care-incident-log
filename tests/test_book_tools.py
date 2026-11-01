@@ -449,7 +449,7 @@ class Words(unittest.TestCase):
                       "only when their own words ask for that detail", "It never goes in your memories.",
                       "Don't recite the book or offer it on your own", '"It\'s in your book now."',
                       "If they say don't keep it, that's done.", "ask once. A yes does it.",
-                      'Never say "gone" about a person.', "Address book, in the Menu"):
+                      'Never say "gone" about a person.', "There's no Add button."):
             self.assertIn(words, part)
         self.assertNotIn("contact_address", text)
         self.assertNotIn("find_contact", text)

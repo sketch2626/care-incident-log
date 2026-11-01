@@ -1146,6 +1146,14 @@ class MemoryStore:
         if gone:
             self._changed(True)
 
+    def has_passed(self, words):  # M19 piece 6b
+        """True when a word of this name or relationship belongs to someone they've said has died."""
+        with closing(self.connect()) as conn:
+            quiet = [row[0] for row in conn.execute("SELECT who FROM no_reminders WHERE why = 'passed'")]
+        quiet += [name for memory in self.active() for name in memory_dates.passed(memory["text"])]
+        said = {word for name in quiet for word in name.casefold().split()} - {"my", "the", "our"}
+        return bool(said & set(str(words or "").casefold().split()))
+
     def note_passed(self, names):  # M15a
         """Keeps these people, who have died, on the no-reminder list. A row already there stays."""
         rows = [(" ".join(str(name or "").lower().split()), _now()) for name in names]

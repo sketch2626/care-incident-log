@@ -648,6 +648,109 @@ def clear_book():  # M19
     return BOOK.clear()
 
 
+BOOK_FIND_MAX = 12  # M19 piece 6b: more than this and she asks them to say more
+BIRTHDAY_ASK_S = 300  # M19 piece 6b: how long her question may stay open, unsaid or unanswered
+BIRTHDAY_ASK_NOTE = ("(You just heard {name}'s birthday, and the card has none. At your next natural moment ask once, in "
+                     "exactly these words: \"Put that on {name}'s card?\" Then wait for their answer.)")
+BIRTHDAY_OPEN_NOTE = ("(They said yes, and {name}'s form is open. Fill the Birthday box with the day they told you, say it "
+                      "back and ask \"Is that right?\" Nothing is saved. Save is theirs.)")
+_birthday_ask = {}  # M19 piece 6b: the one question in play, in RAM only: {"id", "name", "said", "at"}
+
+
+def _book_id_of(name):  # M19 piece 6b
+    """Who a forget is about, for her page. Only an id."""
+    hits = [person for person in BOOK.find(name) if person["kind"] != "doctor"]
+    return hits[0]["id"] if len(hits) == 1 else ""
+
+
+def _book_count():  # M19 piece 6b
+    return BOOK.count() if BOOK.state() == "open" else 0
+
+
+mary.BOOK_HOOKS.update(count=_book_count, clear=lambda: clear_book(), id_of=_book_id_of)
+
+
+def book_lookup(words):  # M19 piece 6b
+    """Who her words could mean, for her page: ids, names and relationships, never a detail. "my daughter" is "daughter"."""
+    wanted = re.sub(r"^(?:my|the)\s+", "", " ".join(str(words or "").split())[:address_book.MAX_NAME], flags=re.I)
+    try:
+        if BOOK.state() != "open":
+            return {"state": "locked", "people": []}
+        hits = [person for person in BOOK.find(wanted) if person["kind"] != "doctor"]
+    except Exception:  # noqa: BLE001
+        return {"state": "failed", "people": []}
+    return {"state": "open", "people": [{"id": person["id"], "name": person["name"], "relationship": person["relationship"]}
+                                        for person in hits[:BOOK_FIND_MAX]]}
+
+
+def book_keep():  # M19 piece 6b
+    """The stop button under her forget question: the waiting forget ends, and nothing was removed."""
+    with _mary_lock:
+        memory = mary_memory()
+        memory.pending_forget = None
+        try:
+            memory.save()
+        except OSError:
+            pass
+    return True
+
+
+def _birthday_person(words, store):  # M19 piece 6b
+    """The one person in the list these words mean, if "Put that on their card?" may be asked at all."""
+    hits = [person for person in BOOK.find(words) if person["kind"] != "doctor"]
+    person = hits[0] if len(hits) == 1 else None
+    if not person or person["birthday"] or person.get("asked_birthday"):
+        return None
+    return None if store.has_passed(f"{person['name']} {person['relationship']}") else person
+
+
+def _birthday_turn(memory, text):  # M19 piece 6b
+    """One of their lines against "Put that on Mark's card?". A yes opens the form by id, and she fills and they save. Any
+    other answer ends it, with the mark already set. A birthday said for someone with none on their card starts it."""
+    global _birthday_ask
+    asked = _birthday_ask
+    if asked and time.monotonic() - asked["at"] > BIRTHDAY_ASK_S:
+        asked = _birthday_ask = {}
+    if asked.get("said"):
+        _birthday_ask = {}
+        if mary.is_yes(text):
+            return {"book_open": {"id": asked["id"], "note": BIRTHDAY_OPEN_NOTE.format(name=asked["name"])}}
+        return {}
+    if asked:
+        return {}
+    for words in mary.birthdays_said(memory, text):
+        person = _birthday_person(words, memory.store)
+        if person:
+            name = person["name"].split()[0]
+            _birthday_ask = {"id": person["id"], "name": name, "said": False, "at": time.monotonic()}
+            return {"book_note": BIRTHDAY_ASK_NOTE.format(name=name)}
+    return {}
+
+
+def book_heard(memory, text):  # M19 piece 6b: under _mary_lock, from /api/mary/heard
+    """What their line does to the book's two waiting questions. Nothing here saves or removes a person."""
+    out = {"forget_kept": True} if mary.forget_no(memory, text) else {}
+    try:
+        out.update(_birthday_turn(memory, text))
+    except Exception:  # noqa: BLE001 (a locked book, or a date that can't be read, asks nothing)
+        pass
+    return out
+
+
+def birthday_she_asked(text):  # M19 piece 6b: her finished Live turn
+    """Her own words are what counts as asking: from here a yes means her question, and she won't ask about them again."""
+    with _mary_lock:
+        asked = _birthday_ask
+        if not asked or asked["said"] or not re.search(r"\bcard\b", text, re.I) or asked["name"].casefold() not in text.casefold():
+            return
+        asked.update(said=True, at=time.monotonic())
+        person_id = asked["id"]
+    try:
+        BOOK.update(person_id, {"asked_birthday": True})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def mary_remove_memory(memory_id):  # M9c: the Remove button
     """Really deletes one memory and what her talk history holds of it. False if it isn't here. Under the lock: a talk
     in flight would otherwise save its old talk history back over this."""
@@ -909,7 +1012,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
     if name in mary.MEMORY_TOOL_NAMES:  # M9c
         with _mary_lock:
             memory = mary_memory()
-            result = mary.memory_tool(memory, name, args)
+            result = mary.memory_tool(memory, name, args, heard=heard)  # M19 piece 6b: heard
             if name in ("forget_memory", "forget_name", "stop_reminders"):  # its waiting question and the scrubbed talk history
                 try:
                     memory.save()
@@ -947,7 +1050,7 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
 ADDRESS_NOT_A_MEMORY = ("An email address never goes in your memories. It goes in their contacts: use give_address, "  # M18
                         "spell it back, and after their yes ask if they want it kept.")
 DETAIL_NOT_A_MEMORY = ("A phone number or street address never goes in your memories. If they want it kept, it goes in "  # M19
-                       "their address book: they add it there, in Address book in the Menu.")
+                       "their address book: ask if they want the form opened, and fill it in there.")
 STORY_FAILED = {"error": "no_story",  # M4a
                 "note": "Tell a short story yourself instead, with a beginning, middle and end."}
 
@@ -968,6 +1071,8 @@ def mary_live_story_call(args):  # M4a: Live's tell_story tool
 # --- M4a: her hello from the brain, and a skill's look at a picture ---
 def close_talk():  # M15a
     """The talk is over, so a date note sent in it is done. Never raises: close_stale catches what this misses."""
+    global _birthday_ask
+    _birthday_ask = {}  # M19 piece 6b: her question goes with the talk
     with _mary_lock:
         try:
             memory_store().close_talk()
@@ -1615,12 +1720,16 @@ class Handler(SimpleHTTPRequestHandler):
         if method == "POST" and path == "/api/mary/talk/end":  # M15a: the page's word that a talk is over
             close_talk()
             return self._send({"ok": True})
+        if method == "POST" and path == "/api/mary/book/find":  # M19 piece 6b: ids for her page, never a detail
+            return self._send(book_lookup(self._body().get("words")))
+        if method == "POST" and path == "/api/mary/book/keep":  # M19 piece 6b: the stop button under her forget question
+            return self._send({"ok": book_keep()})
         if method == "POST" and path == "/api/mary/heard":
             # The same emergency check as Normal talk, on Live's transcript of what the resident said.
             body = self._body()
             text = str(body.get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
-            say = ""
+            say, book = "", {}
             # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
             send = {} if body.get("note") else gate_heard(text, kind)  # M18: the only place past here with the raw line
             save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
@@ -1635,6 +1744,7 @@ class Handler(SimpleHTTPRequestHandler):
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
                         mary.learn_dates(memory, text)  # M15a: and so does a date, with or without a tool
+                        book = {} if body.get("note") else book_heard(memory, text)  # M19 piece 6b
                     if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran
                         memory.add_turn("user", text.strip())
                     if say:
@@ -1643,7 +1753,7 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send, **save})
+            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send, **save, **book})
         if method == "POST" and path == "/api/mary/open":  # M4a: her hello, from the brain
             return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
@@ -1651,6 +1761,7 @@ class Handler(SimpleHTTPRequestHandler):
             text = mary.fix_numbers(text)  # M4d: what's remembered has the number right, whatever her voice said
             if text:  # M15c: the page's rememberSaid lands here too, so this covers all of her Live words
                 gate_her_words(text)
+                birthday_she_asked(text)  # M19 piece 6b
             quiet = _live_forgot_at is not None and time.monotonic() - _live_forgot_at < LIVE_FORGOT_QUIET_S  # M9c
             if text and not quiet and not mary.not_english(text):  # M4a: her turn in a foreign script is noise too
                 with _mary_lock:

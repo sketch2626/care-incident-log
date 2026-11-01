@@ -40,7 +40,8 @@
   var READ_GROUP_NO = "I don't know that group. Tell me what kind of problem it was.";
   var READ_FAIL_NO = "I couldn't get to your notes just now.";
   var READ_NONE = "There's nothing saved for that.";
-  var WHO_NO = "Tell me who, and I'll find them.";
+  var BOOK_LOCKED_NO = "Your address book is locked. A helper's copy can open it.";
+  var COUNT_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'];
 
   var GROUPS = [
     { key: 'call_light', label: 'No one answered my call light' },
@@ -55,9 +56,9 @@
   ];
 
   // M19 piece 5: the address book's nine fields. Kind 'detail' is the wall: look_at_screen never reads one. A form gives
-  // only what she filled herself (Mine), and a card only which fields have something in them. fill stays false until
-  // piece 6 turns it on, field by field.
-  function bookFields(prefix) {
+  // only what she filled herself (Mine), and a card only which fields have something in them. Piece 6b: she fills a form
+  // M18's way, and never a card, which changes on that person's form.
+  function bookFields(prefix, fill) {
     return [
       { key: 'name', label: 'Name', explain: 'Their name, as they want to see it in the list.' },
       { key: 'relationship', label: 'Relationship', explain: 'Who this person is to them, like daughter or friend from church.' },
@@ -71,11 +72,11 @@
     ].map(function (f) {
       f.id = prefix + f.key;
       f.kind = 'detail';
-      f.fill = false;
+      f.fill = !!fill;
       return f;
     });
   }
-  var BOOK_FORM = bookFields('bf-');
+  var BOOK_FORM = bookFields('bf-', true);
 
   var TALK = { id: 'talk', name: 'Your own screen', explain: 'Your face, with nothing else open.', fields: [] };
 
@@ -161,15 +162,18 @@
           explain: 'Connects their email once the boxes above are filled. The tap is theirs.' }
       ] },
     { id: 'book-list', frame: 'book-list', hash: '#book-list', name: 'Address book', people: true,
+      opened: 'Ask "Who are you after?" and nothing more.',
       explain: 'The people they know: a list of names and relationships, kept only on this laptop.',
       labels: ['Find someone', 'Up', 'Down', 'Show everyone'], fields: [] },
     { id: 'book-card', frame: 'book-card', hash: null, name: 'Address book card', person: true, show: 'filled',
       explain: 'One person from the address book. You can see which details are filled in, and not what they say.',
       fields: bookFields('bc-') },
     { id: 'book-form', frame: 'book-form', hash: '#book-form', name: 'Address book form', show: 'hers',
+      opened: 'The form is open and nothing is saved. Ask who it is, in a few words.',
       explain: 'The form for one person in the address book. Nothing is kept until they save it.',
       labels: ['Save'], fields: BOOK_FORM },
     { id: 'book-helper', frame: 'book-helper', hash: '#book-helper', name: 'Address book, a helper adding people', show: 'hers',
+      opened: 'Say "Ask if you need me." and nothing more.',
       explain: 'A helper types in several people, one after another. Typed words stay on the laptop.',
       labels: ['Save and add another', 'Done'], fields: BOOK_FORM },
     { id: 'things', panel: 'canPanel', name: 'Things I can do',
@@ -280,12 +284,19 @@
     card.count = now.count;
     card.people = now.people.map(function (p) { return { name: p.name, relationship: p.relationship }; });
   }
+  function bookOf(doc) { return (doc && doc.defaultView && doc.defaultView.maryBook) || null; }
+  // Whose card this is, so she knows whose a tapped row opened. Those two words, and which boxes are filled, are all she gets.
+  function lookPerson(doc, card) {
+    var book = bookOf(doc), now = book && book.cardNow ? book.cardNow() : null;
+    if (now) { card.person = { name: now.name, relationship: now.relationship }; }
+  }
   function look(env) {
     var s = here(env), doc = env.doc(), card = { screen: s.name, about: s.explain };
     if (s.labels) { card.labels = s.labels; }
     if (s.groups) { card.groups = GROUPS.map(function (g) { return g.label; }); }
     if (doc && !s.panel) {
       if (s.people) { lookPeople(doc, card); }
+      if (s.person) { lookPerson(doc, card); }
       var fields = fieldsOf(s).map(function (f) { return cardField(doc, f, s); }).filter(Boolean);
       if (fields.length) { card.fields = fields; }
       if (fields.some(function (f) { return f.kind === 'date'; })) { card.today = isoDay(new Date()); }
@@ -371,9 +382,13 @@
     return (win && win.maryHelp) || null;
   }
   // changed: this fill really put something new in. form: which form it counted in, as the box may be another form's by then.
+  function bookForm(env) {   // piece 6b: which person's form this is, as formHelp's count is for the log's
+    var book = here(env).show === 'hers' ? bookOf(env.doc()) : null;
+    return book && book.form ? book.form() : 0;
+  }
   function remember(f, old, changed, env) {
     var list = Undo[f.id] = Undo[f.id] || [], help = formHelp(env);
-    list.push({ old: old, form: help ? help.form() : 0, counted: !!(help && changed) });
+    list.push({ old: old, form: help ? help.form() : 0, counted: !!(help && changed), book: bookForm(env) });
     if (help && changed) { help.step(1, env.companion ? env.companion() : 'mary'); }
     if (list.length > KEEP_FILLS) { list.shift(); }
   }
@@ -462,7 +477,11 @@
       return done();
     }
     remember(f, el.value, el.value !== c.v, env);
-    if (f.kind === 'detail') { Mine[f.id] = c.v; }
+    if (f.kind === 'detail') {
+      Mine[f.id] = c.v;
+      var book = bookOf(doc);
+      if (book && book.filled) { book.filled(f.key); }   // E1: the page shows the old value beside it; it never comes back here
+    }
     if (f.kind !== 'text' && f.kind !== 'detail') {   // a date or a time box only holds a whole value
       setVal(win, el, c.v);
       fire(win, el, 'input');
@@ -482,6 +501,7 @@
     finishTyping();
     var help = formHelp(env);
     if (help && list[list.length - 1].form && list[list.length - 1].form !== help.form()) { return no(NO_UNDO); }   // another form's old value stays out of this one
+    if (list[list.length - 1].book && list[list.length - 1].book !== bookForm(env)) { return no(NO_UNDO); }   // and another person's
     var last = list.pop(), old = last.old, win = doc.defaultView;
     if (help && last.counted) { help.step(-1); }
     light(doc, f, el);
@@ -521,11 +541,62 @@
       setTimeout(check, ARRIVE_POLL_MS);   // a hash change lands a moment after it's set
     });
   }
+  // Piece 6b: her lines from the boards, built from names and relationships only.
+  function firstName(p) { return String(p.name || '').trim().split(/\s+/)[0]; }
+  function bookWho(p, lead) {
+    var r = String(p.relationship || '').trim().replace(/^friend\s+(?=from\b)/i, '');
+    if (!r) { return p.name; }
+    if (/\s/.test(r)) { return p.name + (/^(?:from|at|in|of)\b/i.test(r) ? ' ' : ', ') + r; }
+    return (lead ? 'Your ' : 'your ') + r.toLowerCase();
+  }
+  function whichLine(people) {
+    var n = people.length, first = firstName(people[0]), count = COUNT_WORDS[n] || String(n);
+    var same = people.every(function (p) { return firstName(p).toLowerCase() === first.toLowerCase(); });
+    var word = same ? first + (/s$/i.test(first) ? 'es' : 's') : 'people';
+    if (n > 2) { return count + ' ' + word + '. Which one?'; }
+    var a = bookWho(people[0], true), b = bookWho(people[1], false);
+    if (a.toLowerCase() === b.toLowerCase()) { a = people[0].name; b = people[1].name; }
+    return count + ' ' + word + '. ' + a + ', or ' + b + '?';
+  }
+  function narrowTo(who, people, env) {
+    var list = byId('book-list'), there = here(env).id === list.id;
+    if (!there && !env.openDeep(list.hash)) { return no(SLOW_NO); }
+    return (there ? Promise.resolve(true) : arrive(env, list)).then(function (came) {
+      if (!came) { return no(SLOW_NO); }
+      var book = bookOf(env.doc());
+      if (book) { book.narrow(who); }
+      return { ok: true, screen: list.name, count: people.length,
+        note: 'Ask in exactly these words: "' + whichLine(people) + '" Then wait.' };
+    });
+  }
+  // The server finds who; only an id comes back to open with. One opens at once, two narrow the list, none says so.
+  function openPerson(s, who, spoken, env) {
+    if (!env.findPeople) { return no(SLOW_NO); }
+    return Promise.resolve().then(function () { return env.findPeople(who); }).then(function (got) {
+      if (!got || got.state !== 'open') { return no(BOOK_LOCKED_NO); }
+      var people = got.people || [], p = people[0];
+      if (!p) { return no("I don't see " + spoken + ' in your address book.'); }
+      if (people.length > 1) { return narrowTo(who, people, env); }
+      var to = byId(s.id === 'book-form' ? 'book-form' : 'book-card');
+      if (!env.openDeep('#' + to.id + '/' + encodeURIComponent(p.id))) { return no(SLOW_NO); }
+      return arrive(env, to).then(function (came) {
+        if (!came) { return no(SLOW_NO); }
+        return { ok: true, screen: to.name, name: p.name, relationship: p.relationship,
+          note: to.id === 'book-card' ? 'Say "Here\'s ' + firstName(p) + '." and nothing more.'
+            : 'Their form is open and nothing is saved. Fill what they tell you, one box at a time.' };
+      });
+    }, function () { return no(SLOW_NO); });
+  }
   function openScreen(args, env) {
     var hit = findOpen(args.name), s = hit && hit.s;
     if (!s) { return no(NOT_OPEN_NO); }
     if (s.id === 'saved') { return no(SAVED_NO); }
-    if (s.person) { return no(WHO_NO); }   // a card opens for someone: piece 6 finds who
+    var said = String(args.who == null ? '' : args.who).trim();
+    var who = said.replace(/^(?:my|the)\s+/i, '').replace(/['\u2019]s$/i, '');
+    if (who && (s.people || s.person || s.id === 'book-form')) {
+      return openPerson(s, who, said.replace(/^my\s+/i, 'your '), env);
+    }
+    if (s.person) { s = byId('book-list'); }   // nobody named yet: the list, and she asks who
     if (s.panel) {
       env.openPanel(s.panel);
       return { ok: true, screen: s.name };
@@ -535,7 +606,11 @@
       if (!came) { return no(s.id === 'inbox' ? OFF_NO : SLOW_NO); }
       var doc = env.doc(), to = s.scroll && doc ? doc.getElementById(s.scroll) : null;
       if (to) { scrollClear(doc, to); }
-      return { ok: true, screen: s.name };
+      var book = s.people ? bookOf(doc) : null;
+      if (book) { book.narrow(''); }   // an old find mustn't hide anyone
+      var out = { ok: true, screen: s.name };
+      if (s.opened) { out.note = s.opened; }
+      return out;
     });
   }
 
@@ -642,7 +717,7 @@
   function useScreen(args, env) {
     var a = args || {}, tool = ACTIONS.hasOwnProperty(String(a.action)) ? ACTIONS[a.action] : null;
     if (!tool) { return no(UNLISTED_NO); }
-    var inner = { field: a.field, value: a.value, name: a.name, when: a.when, category: a.category };
+    var inner = { field: a.field, value: a.value, name: a.name, who: a.who, when: a.when, category: a.category };
     if (tool === 'their_words') {
       var t = typeof a.turns_back === 'string' ? a.turns_back.trim() : a.turns_back;
       if (!/^[0-4]$/.test(String(t))) { return no("I couldn't tell which of your words you meant."); }

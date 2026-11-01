@@ -42,9 +42,9 @@ MAX_NOTES = 1000
 MAX_TEXT = 254
 
 FIELDS = ("name", "relationship", "email", "phone", "cell", "address", "facebook", "birthday", "notes", "kind",
-          "asked", "no_keep", "hidden")
+          "asked", "no_keep", "hidden", "asked_birthday")  # asked_birthday: "Put that on Mark's card?", once per person
 TEXT_FIELDS = ("name", "relationship", "email", "phone", "cell", "address", "facebook", "notes")
-FLAG_FIELDS = ("asked", "no_keep", "hidden")
+FLAG_FIELDS = ("asked", "no_keep", "hidden", "asked_birthday")
 LINES_KEPT = ("address", "notes")
 KINDS = ("person", "doctor")  # "doctor" is reserved for later: stored, with no logic of its own
 

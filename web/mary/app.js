@@ -1875,6 +1875,9 @@
         if (j.send.say) { say(String(j.send.say)); }
       }
       if (j && j.save && !j.send) { deepSaveHeard(); }   // M18 piece 4: their own plain "save it", on the server's word
+      if (j && j.forget_kept) { bookKept(true); }          // M19 piece 6b: a spoken no to her forget question
+      if (j && j.book_note) { screenNote(String(j.book_note)); }
+      if (j && j.book_open) { bookBirthday(j.book_open); }
       if (S.convo !== c || !c.live) { return; }
       if ((j && j.garbled) || notEnglish(tail)) { return; }   // M4a: a garbled line is never a goodbye
       if (isGoodbye(tail) && !(S.noteBusy && noteBusyNow())) { endConvo(c, 'bye'); }   // M17: not words for a note
@@ -2139,13 +2142,16 @@
         }
         else if (fc.name === 'end_talk') { liveEndTalk(c); }
         else if (fc.name === 'story_more') { own.push({ id: fc.id, name: fc.name, response: storyTake(c) }); }
+        else if (window.MaryScreens && (fc.name === 'messages__add_to_book' || (fc.name === 'use_skill' && fc.args && fc.args.action === 'add_to_book'))) {
+          page.push({ id: fc.id, name: 'open_screen', args: { name: 'book-form' }, asked: fc.name });   // M19 piece 6b: a blank form in Live
+        }
         else if (window.MaryScreens && window.MaryScreens.isTool(fc.name)) { page.push(fc); }   // M18: past the emergency gate above
         else { rest.push(fc); }
       });
       // M18: the screen tools, one at a time in the order she called them, so a fill can't land on a screen still opening
       return page.reduce(function (done, fc) {
         return done.then(function () { return window.MaryScreens.run(fc.name, fc.args, screenEnv(c)); }).then(function (res) {
-          own.push({ id: fc.id, name: fc.name, response: res });
+          own.push({ id: fc.id, name: fc.asked || fc.name, response: res });
         });
       }, Promise.resolve()).then(function () {
         if (!rest.length) { return { functionResponses: own }; }
@@ -2790,8 +2796,9 @@
     if (d.what === 'close') { closeDeep(); }
     else if (d.what === 'screen') { Deep.screen = String(d.name || ''); deepReady(true); screenTell(); }
     else if (d.what === 'saved') { refreshStatus().catch(log); }
-    else if (d.what === 'saved_ok') { deepSaved(SAVE_SAID.ok, true); }   // piece 4
-    else if (d.what === 'saved_fail') { deepSaved(d.label ? saveMissing(String(d.label)) : SAVE_SAID.fail, false); }
+    else if (d.what === 'saved_ok') { deepSaved(d.birthday ? SAVE_SAID.birthday : SAVE_SAID.ok, true); }   // piece 4
+    else if (d.what === 'saved_fail') { deepSaved(BOOK_SAVE_NO[d.why] || (d.label ? saveMissing(String(d.label)) : SAVE_SAID.fail), false); }
+    else if (d.what === 'book_keep') { bookKept(false); }   // M19 piece 6b: the stop button
     else if (d.what === 'save_none') { deepSaved(SAVE_SAID[d.why === 'nothing' ? 'nothing' : 'no_form'], false); }
     else if (d.what === 'activity') {
       if (S.convo) { S.convo.formAt = Date.now(); }
@@ -2814,6 +2821,7 @@
       back: bandBack,
       turns: (c && c.turns) || [],
       incidents: function () { return api('GET', '/api/incidents', null, { ms: 8000 }); },   // piece 5
+      findPeople: function (words) { return api('POST', '/api/mary/book/find', { words: words }, { ms: 8000 }); },   // M19 piece 6b
       companion: function () { return S.companion === 'him' ? 'sam' : 'mary'; }
     };
   }
@@ -2838,7 +2846,20 @@
     no_form: { live: '(No form is open, so the app saved nothing. If they meant a form, say so in one short line.)',
                plain: "There's no form open to save." },
     nothing: { live: '(Nothing on this form has changed, so there was nothing to save. Say so in one short line.)',
-               plain: "Nothing has changed, so there's nothing to save." }
+               plain: "Nothing has changed, so there's nothing to save." },
+    birthday: { live: "(The form was saved. Say 'Saved. I'll mention the birthday when it's close.' and nothing more.)",   // M19 piece 6b
+                note: "(The form was saved, with a birthday. If you speak, say 'Saved. I'll mention the birthday when it's close.')",
+                plain: "Saved. I'll mention the birthday when it's close." }
+  };
+  // M19 piece 6b: the book's refusals, as plain notes. The form stays up, with everything still typed in it.
+  function bookSaveNo(words, plain) {
+    return { live: '(The form did not save. ' + words + ' Tell them that in one short line.)',
+             note: '(The form did not save. ' + words + ')', plain: plain };
+  }
+  var BOOK_SAVE_NO = {
+    same_name: bookSaveNo('That name is already in their address book.', "That didn't save. That name is already in your address book."),
+    birthday: bookSaveNo("The app can't read that birthday. It needs the month and the day.", "That didn't save. I can't read that birthday."),
+    name: bookSaveNo('The form still needs a name.', "That didn't save. It needs a name.")
   };
   function saveMissing(label) {
     return { live: '(The form did not save. Still needed: ' + label + '. Tell them that in one short line.)',
@@ -2873,7 +2894,8 @@
     var now = Date.now();
     if (S.screen === 'emergency' || now - Deep.saveAt < SAVE_ONCE_MS) { return Promise.resolve(); }
     if (!deepUp() && skillScreen()) { return Promise.resolve(); }
-    var form = deepUp() && !panelOpen() && deepOnLog() && (Deep.screen === 'add' || Deep.screen === 'info');
+    var form = deepUp() && !panelOpen() && deepOnLog() && (Deep.screen === 'add' || Deep.screen === 'info'
+      || Deep.screen === 'book-form' || Deep.screen === 'book-helper');   // M19 piece 6b
     deepSaveEnd();
     Deep.saveAt = now;
     return new Promise(function (done) {
@@ -2898,6 +2920,53 @@
       screenNote(said.note);
       if (ok) { bandSaved(); }
     }, SAVE_TELL_MS);
+  }
+  // M19 piece 6b: what her forget and her birthday question do to the book's screens. Only an id ever reaches this code.
+  var BOOK_KEPT = { live: '(They kept them. Say so in a few words.)', note: '(They kept them. Say so in a few words.)',
+                    plain: 'All right. They stay in your book.' };
+  function bookWin() {
+    try { return (deepUp() && deepOnLog()) ? ($('deepFrame').contentWindow.maryBook || null) : null; } catch (e) { return null; }
+  }
+  // The frame may still be loading, or on its way to the screen.
+  function whenBook(screen, then) {
+    var began = Date.now();
+    (function check() {
+      var book = bookWin();
+      if (book && Deep.screen === screen) { then(book); return; }
+      if (Date.now() - began < DEEP_READY_MS) { setTimeout(check, 60); }
+    })();
+  }
+  // The stop button cancels here and she answers a note. A spoken no is already cancelled at /api/mary/heard, and she is
+  // answering it anyway, so her note is silent and she doesn't say it twice.
+  function bookKept(spoken) {
+    if (!spoken) {
+      api('POST', '/api/mary/book/keep', {}, { ms: 8000 }).catch(log);
+      saveTell(BOOK_KEPT);
+      return;
+    }
+    var book = bookWin();
+    if (!book || !book.asking()) { return; }
+    book.keep();
+    if (S.screen !== 'emergency') { screenNote(BOOK_KEPT.note); }
+  }
+  function bookEffect(kind, data) {
+    if (kind === 'book_out') {
+      var book = bookWin();
+      if (book && /^book-/.test(Deep.screen)) { book.afterForget(); }
+      return;
+    }
+    if (kind !== 'book_ask' || !S.convo || S.screen === 'emergency') { return; }
+    var id = String((data && data.id) || '');
+    if (id && openDeep('#book-card/' + encodeURIComponent(id))) {
+      whenBook('book-card', function (b) { b.forgetAsk(id); });
+    }
+  }
+  // Their yes to "Put that on Mark's card?". She fills the box the usual way, and Save stays theirs.
+  function bookBirthday(open) {
+    if (S.screen === 'emergency' || !open.id) { return; }
+    if (openDeep('#book-form/' + encodeURIComponent(String(open.id)))) {
+      whenBook('book-form', function () { greetLive(String(open.note || '')); });
+    }
   }
   // ---------------------------------------------------------------- end M18
 
@@ -3581,6 +3650,7 @@
     onActivity: noop,                        // firstrun.js replaces it: a talk started, wake her if she is sleepy
     companionName: companionName,
     applySettings: applySettings,            // skills hook (M13)
+    bookEffect: bookEffect,                  // M19 piece 6b
     currentScreen: function () { return S.screen; },
     api: api,
     getFace: function () { return face; },

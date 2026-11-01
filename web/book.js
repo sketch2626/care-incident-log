@@ -12,7 +12,7 @@ const BOOK_ROW = 92, BOOK_ROW_ROOM = 168, BOOK_ROWS_LEAST = 3;   // 84 tall and 
 
 // state: '' while loading, 'open', 'locked' or 'failed'. mode: 'add', 'change' or 'helper'.
 const Bk = { state: '', people: [], count: 0, top: 0, end: false, ticket: 0, forget: '', mode: 'add', id: '', clean: '', busy: false,
-             helperDay: '', helperCount: 0 };
+             helperDay: '', helperCount: 0, card: null, form: 0, was: new Set() };
 
 function bookMatches(people, words) {
   const w = String(words ?? '').trim().toLowerCase();
@@ -96,6 +96,7 @@ function bookCardShut(words) {
 
 async function bookShowCard(id) {
   const mine = ++Bk.ticket;
+  Bk.card = null;
   $('#bookCardBody').hidden = true;
   $('#bookStopBar').hidden = true;
   bookCardShut('');
@@ -105,6 +106,7 @@ async function bookShowCard(id) {
     if (c.state !== 'open') return bookCardShut(BOOK_SHUT.locked);
     BOOK_FORM_FIELDS.forEach(f => { $(`#bc-${f}`).textContent = f === 'birthday' ? c.birthday_words : c[f]; });
     $('#bc-relationship').textContent = bookRelation(c.relationship);
+    Bk.card = { name: c.name, relationship: c.relationship };   // all look_at_screen may tell of whose card this is
     $('#bookStop').textContent = `No, keep ${c.them}`;   // never a yes button: she asks, and a spoken yes does it
     $('#bookStopBar').hidden = Bk.forget !== id;
     $('#bookCardBody').hidden = false;
@@ -119,9 +121,23 @@ async function bookShowCard(id) {
 
 function bookValues() { return Object.fromEntries(BOOK_FORM_FIELDS.map(f => [f, $(`#bf-${f}`).value])); }
 function bookDirty() { return JSON.stringify(bookValues()) !== Bk.clean; }
+// E1: her fill on someone who already has a value. The old one shows beside it, for their eyes: no tool reads this line.
+function bookWasDraw() {
+  const saved = JSON.parse(Bk.clean || '{}');
+  BOOK_FORM_FIELDS.forEach(f => {
+    const line = $(`#bw-${f}`);
+    if (!line) return;
+    const old = saved[f] || '', show = !!Bk.id && Bk.was.has(f) && !!old.trim() && $(`#bf-${f}`).value !== old;
+    line.textContent = show ? `Was: ${old}` : '';
+    line.hidden = !show;
+  });
+}
 function bookFill(values) {
   BOOK_FORM_FIELDS.forEach(f => { $(`#bf-${f}`).value = values[f] ?? ''; });
   Bk.clean = JSON.stringify(bookValues());
+  Bk.form++;   // what she filled before this can't be put back into it
+  Bk.was.clear();
+  bookWasDraw();
 }
 function bookSay(words, saved) {
   $('#bookMsg').textContent = words;
@@ -183,6 +199,7 @@ async function bookSave() {
   Bk.busy = true;
   $('#bookSave').disabled = true;
   bookSay('', false);
+  const said = bookValues().birthday.trim(), birthday = !!said && said !== JSON.parse(Bk.clean || '{}').birthday;
   try {
     const body = JSON.stringify(bookValues());
     const c = Bk.id ? await api(`/api/book/${encodeURIComponent(Bk.id)}`, { method: 'PUT', body })
@@ -193,14 +210,19 @@ async function bookSave() {
       bookFill({});
       bookHelperCount();
       $('#bf-name').focus();
+      unlit();
+      toMary('saved_ok', { form: 'book', birthday });   // piece 6b: no field values, only that it went in
       return true;
     }
     Bk.id = c.id;   // another Save changes this person, and never adds them twice
     bookFill({ ...c, birthday: c.birthday_words });
     bookSay('', true);
+    unlit();
+    toMary('saved_ok', { form: 'book', birthday });
     return true;
   } catch (err) {
     bookSay(err.message, false);
+    toMary('saved_fail', { why: err.code || '' });   // piece 6b: which refusal, and nothing typed
     if (err.code === 'birthday') $('#bf-birthday').focus();
     if (err.code === 'name' || err.code === 'same_name') $('#bf-name').focus();
     return false;
@@ -208,6 +230,20 @@ async function bookSave() {
     Bk.busy = false;
     $('#bookSave').disabled = false;
   }
+}
+
+// Piece 6b: her page asks only on their own plain "save it". This presses Save the way a tap does, and no tool reaches it.
+function bookAskedSave() {
+  if (Bk.busy) return;
+  if (!bookDirty()) return toMary('save_none', { why: 'nothing' });
+  $('#bookForm').requestSubmit();
+}
+
+// Piece 6b: the stop under her forget question, or a spoken no: the ask closes back to the list.
+function bookKeep() {
+  Bk.forget = '';
+  $('#bookStopBar').hidden = true;
+  go('book-list');
 }
 
 /* ---------- What the rest of the page calls ---------- */
@@ -219,14 +255,13 @@ function bookInit() {
   $('#bookDown').addEventListener('click', () => bookMove(bookRowsAPage()));
   $('#bookEveryone').addEventListener('click', () => bookNarrow(''));
   $('#bookForm').addEventListener('submit', e => { e.preventDefault(); bookSave(); });
-  $('#bookForm').addEventListener('input', () => bookSay('', false));
+  $('#bookForm').addEventListener('input', () => { bookSay('', false); bookWasDraw(); });
   $('#bookAll').addEventListener('click', () => go('book-list'));
   $('#bookDone').addEventListener('click', async () => {   // what's typed is saved first, and a refusal stays on the form
     if (!bookDirty() || await bookSave()) go('book-list');
   });
   $('#bookStop').addEventListener('click', () => {
-    Bk.forget = '';
-    $('#bookStopBar').hidden = true;
+    bookKeep();
     toMary('book_keep');   // says only that they stopped it
   });
   window.addEventListener('resize', () => { if (cur.screen === 'book-list') bookDrawList(); });
@@ -252,10 +287,15 @@ window.maryBook = {
     return { state: 'open', count: Bk.count, people: people.map(p => ({ name: p.name, relationship: p.relationship })) };
   },
   narrow: bookNarrow,
+  cardNow() { return Bk.card ? { ...Bk.card } : null; },   // piece 6b: whose card, so she knows whose a tapped row opened
+  form() { return Bk.form; },                              // piece 6b: changes with each person and each save
+  filled(field) { Bk.was.add(field); bookWasDraw(); },     // piece 6b: E1's "was" line; the old value stays on this page
+  asking() { return !!Bk.forget; },                        // piece 6b
+  keep: bookKeep,                                          // piece 6b
   // E2: the person's card with its one stop button.
   forgetAsk(id) {
-    Bk.forget = id;
-    if (location.hash === `#book-card/${id}`) return bookShowCard(id);
+    Bk.forget = String(id);
+    if (location.hash === `#book-card/${id}`) return bookShowCard(Bk.forget);
     go(`book-card/${id}`);
   },
   // E3: the list at its end, with them out of it. Her caption says so, and never says "gone".

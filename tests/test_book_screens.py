@@ -263,6 +263,7 @@ const api = async (path, o) => {
 const go = n => { hash = '#' + n; };
 const told = [];
 const toMary = w => told.push(w);
+const unlit = () => {};
 let cur = {};
 const shown = [];
 const showScreen = n => shown.push(n);
@@ -506,7 +507,7 @@ class DetailKindTests(unittest.TestCase):
         rc, _, err = screens_node(body)
         self.assertEqual(rc, 0, err)
 
-    def test_every_book_field_is_a_detail_that_cant_be_filled_yet(self):
+    def test_every_book_field_is_a_detail_and_only_a_form_can_be_filled(self):
         rc, out, err = run_node(HARNESS + read("mary/screens.js") + "\nconsole.log(JSON.stringify(MaryScreens.LIST));")
         self.assertEqual(rc, 0, err)
         screens = {s["id"]: s for s in json.loads(out)}
@@ -515,7 +516,7 @@ class DetailKindTests(unittest.TestCase):
             self.assertEqual([f["id"].split("-")[1] for f in fields], ["name", "relationship", "email", "phone", "cell", "address",
                                                                       "facebook", "birthday", "notes"])
             for f in fields:
-                self.assertEqual((f["kind"], f["fill"]), ("detail", False), f["id"])
+                self.assertEqual((f["kind"], f["fill"]), ("detail", sid != "book-card"), f["id"])  # M19 piece 6b
                 self.assertTrue(f["label"] and f["explain"])
         self.assertEqual(screens["book-list"]["fields"], [])
         self.assertEqual(screens["book-form"]["fields"], screens["book-helper"]["fields"])
@@ -568,16 +569,10 @@ class DetailKindTests(unittest.TestCase):
           assert.ok(!('people' in got));
         """)
 
-    def test_she_cant_fill_yet_but_what_she_fills_comes_back_in_look(self):
+    def test_what_she_fills_comes_back_in_look_and_nothing_else(self):
         self.check(r"""
           const doc = pageOn('none');
           doc.byId['book-form'] = mk('book-form');
-          const no = await run('fill_field', { field: 'Email', value: 'a@example.com' }, envOn(doc));
-          assert.strictEqual(no.ok, false);
-          assert.strictEqual(doc.byId['bf-email'].value, '');
-          // Piece 6 turns filling on: only then, and only for what she filled.
-          const f = MaryScreens.LIST.filter(s => s.id === 'book-form')[0].fields.filter(x => x.label === 'Email')[0];
-          f.fill = true;
           const yes = await run('fill_field', { field: 'Email', value: 'a@example.com' }, envOn(doc));
           assert.strictEqual(yes.ok, true);
           doc.byId['bf-cell'].value = '919-555-0142';

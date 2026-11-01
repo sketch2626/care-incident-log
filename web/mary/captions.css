@@ -49,6 +49,21 @@
 .capA .w::after{-webkit-text-stroke:.045em var(--ink,#9b2c58)}
 .capA .w.on{transform:translateY(-5px)}
 
+/* M18: small Mary's words, beside her in the band, x 164 to 864, centered in its 156 height. These beat .capA, .cap.left and
+   #scr[data-aside] .cap. The right edge is the Back button's left edge less 20, so the words end before it at any width. */
+#scr .cap.m9-words{left:164px;right:416px;top:calc(78px - 1.2em);bottom:auto;height:2.4em;font-size:32px}
+#scr .cap.m9-words .line{justify-content:flex-start}
+#scr .cap.m9-words .line.gone{transform:translateY(-12px)}
+#scr .cap.m9-words .w{-webkit-text-stroke:9px #ffffff}
+#scr .cap.m9-words .w::before{-webkit-text-stroke:2px #4a3426}
+#scr .cap.m9-words .w::after{-webkit-text-stroke:2px var(--ink,#9b2c58)}
+#scr .cap.m9-words .w.on{transform:translateY(-3px)}
+#scr .cap.m9-words.plain{top:12px;height:132px;display:flex;align-items:center}
+#scr .cap.m9-words .cap-plain{margin:0;padding:8px 16px;font-size:24px;-webkit-line-clamp:3}
+.cap.moving{opacity:0!important;transition:none}          /* from one place to the other, then a fade in */
+@media (max-width:900px){#scr .cap.m9-words{right:300px}}
+@media (max-width:640px){#scr .cap.m9-words{right:236px}}
+
 /* A plain line (not her voice), e.g. "You said: ..." */
 .cap.plain{height:auto}
 .cap-plain{max-width:100%;margin:0 auto;width:fit-content;padding:14px 28px;
@@ -58,7 +73,7 @@
 
 @media (prefers-reduced-motion:reduce){
   /* no float or lift; words still fill */
-  .capA .w.on{transform:none}
-  .cap .line.gone{transform:none}
+  .capA .w.on,#scr .cap.m9-words .w.on{transform:none}
+  .cap .line.gone,#scr .cap.m9-words .line.gone{transform:none}
   .cap .cap-track,.cap .line,.cap .w{transition:none}
 }

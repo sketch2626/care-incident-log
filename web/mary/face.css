@@ -198,3 +198,13 @@
   .mf-loud .mf-wave{opacity:1}
   .mf-cloud .mf-w::after{animation:mf-colorin 5s linear infinite!important}
 }
+
+/* M18: small, in the band (face.setSmall, mf-small). Her room stays behind: background, glow and dim fade off (opacity only), so
+   only her drawing is left on the band's plain circle. She rests still in it: no thinking dip, no slide, no cloud. */
+.mf-bg:not(.mf-dusk){transition:opacity .4s ease}
+.mf-root.mf-small{background:transparent}
+.mf-root.mf-small .mf-bg{opacity:0}
+.mf-root.mf-small .mf-glow{opacity:0;visibility:hidden}
+.mf-root.mf-small .mf-dim{opacity:0}
+.mf-root.mf-small .mf-stage{transform:none}
+.mf-root.mf-small .mf-over{opacity:0}

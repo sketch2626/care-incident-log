@@ -51,6 +51,10 @@ _BEFORE = (r"(?:mary|sam|please|now|okay|ok|yes|yeah|alright|go ahead and|just|y
            r"|will you|then|and)")
 _WHAT = r"(?:it|that|this|the card|the message|my card|my message)"
 _AFTER = r"now|off|please|on its way|mary|sam|okay|ok|yes|yeah|alright|then"
+_SAVE_BEFORE = (r"(?:mary|sam|please|now|okay|ok|yes|yeah|alright|go ahead and|just|you can|can you|could you|would you"
+                r"|will you|then|and|let'?s|that'?s (?:good|fine|right)|looks good)")
+_SAVE_WHAT = r"(?:it|that|this|my info|my information|the form|this form|my form)"
+_SAVE_AFTER = r"now|please|mary|sam|okay|ok|yes|yeah|alright|then|for me|thanks|thank you"
 
 _FIVE_RE = re.compile(r"\b(?:five|5)[\s-]seconds?\b")
 _SECOND_RE = re.compile(r"\bseconds?\b")
@@ -125,6 +129,27 @@ def is_plain_send(text, person=""):
     while len(clauses) > 1 and re.fullmatch(rf"{after}(?: {after})*", clauses[-1]):
         clauses.pop()
     return re.fullmatch(rf"(?:{_BEFORE} )*send {_WHAT}(?: {after})*", clauses[-1]) is not None
+
+
+def is_plain_save(text):
+    """True when the words are a plain "save it" for the form on the screen, and nothing less. Built like is_plain_send:
+    any negative or delay anywhere refuses the whole line, and the last clause must fully match. A question mark on that
+    clause refuses too ("save it?", "save it, okay?"), except a plain ask of her ("Can you save it?"), since Live adds the
+    mark by itself. "keep it" never counts: it answers "Is that right?" or "keep it for
+    next time?", not the form."""
+    lower = _lower(text)
+    if _NOT_PLAIN_RE.search(lower) or len(_words(lower)) > PLAIN_WORDS_MAX:
+        return False
+    clauses = list(zip((" ".join(_words(part)) for part in _BREAK_RE.split(lower)), _BREAK_RE.findall(lower) + [""]))
+    clauses = [clause for clause in clauses if clause[0]]
+    if not clauses:
+        return False
+    after = rf"(?:{_SAVE_AFTER})(?: (?:{_SAVE_AFTER}))*"
+    while len(clauses) > 1 and "?" not in clauses[-1][1] and re.fullmatch(after, clauses[-1][0]):
+        clauses.pop()
+    words, mark = clauses[-1]
+    asked = re.match(r"(?:can|could|would|will) you ", words) is not None
+    return ("?" not in mark or asked) and re.fullmatch(rf"(?:{_SAVE_BEFORE} )*save {_SAVE_WHAT}(?: {after})?", words) is not None
 
 
 def asks_for(text):

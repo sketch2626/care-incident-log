@@ -78,9 +78,11 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
 .panel.typing .btns .btn{flex:1 1 200px;width:auto}
 
 /* M4b: in-screen panels (Things Mary can do, My info, Choose Mary or Sam): the menu's look, big and warm */
-.overlay.sheet{z-index:40;justify-content:center;align-items:flex-start;padding:24px 16px;background:rgba(43,31,23,.45)}
-.sheetcard{width:min(860px,100%);margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:14px;background:#fffdf8;
-  border:4px solid #2b1f17;border-radius:36px;box-shadow:0 22px 50px rgba(70,45,20,.28);user-select:none;-webkit-user-select:none}
+/* M18: a panel is a plain page under the band, from y 156, with her still in view: no scrim and no card edge */
+.overlay.sheet{z-index:40;top:156px;justify-content:center;align-items:flex-start;padding:0;background:#fbf7ef}
+.overlay.sheet.leaving{z-index:6;opacity:0;pointer-events:none;transition:opacity .3s linear}
+.sheetcard{width:100%;min-height:100%;margin:0;padding:24px 56px;display:flex;flex-direction:column;gap:14px;background:#fbf7ef;
+  user-select:none;-webkit-user-select:none}
 .sheetcard h2{margin:6px 0 0;font-size:40px;line-height:1.2}
 .sheetcard h3{margin:18px 0 0;font-size:32px;line-height:1.2}
 .sheetcard .lead,.sheetcard .saved-note{margin:0;font-size:26px;line-height:1.35;color:#453d34}
@@ -167,3 +169,52 @@ button:focus-visible,textarea:focus-visible{outline:5px solid #0f5560;outline-of
   *{animation:none!important;transition:none!important}
   .mf-dim,.mf-dim.on{transition:opacity .4s ease!important}        /* reduced motion: a quick fade, not a slow one */
 }
+
+/* M18: the deeper screens, over her face. Closed, it stays laid out and only can't be seen or touched, so the form in it
+   keeps what was typed and how far it was scrolled. The band never scrolls; the frame scrolls on its own. */
+/* Layers inside #scr: skill screens and first run 5, this 6, small Mary 7, her ring and tap target 8, her words 8. */
+.deep{position:fixed;inset:0;z-index:6;background:#fbf7ef;visibility:hidden;pointer-events:none;opacity:0;
+  transition:opacity .3s linear,visibility 0s linear .3s}
+.deep.up{visibility:visible;pointer-events:auto}
+.deep.up{opacity:1;transition:opacity .3s linear}
+.deep-band{position:absolute;top:0;left:0;right:0;height:156px;box-sizing:border-box;
+  background:radial-gradient(ellipse at 50% 42%,#fffaf0 0%,#fff0d2 50%,#fadcaa 100%);box-shadow:inset 0 -3px 0 rgba(43,31,23,.18)}
+#scr:has(> #face > .mf-root[data-companion="him"]) .deep-band{background:radial-gradient(ellipse at 50% 42%,#fdf8ee 0%,#f6e8cc 50%,#e9cf9f 100%);
+  box-shadow:inset 0 -3px 0 rgba(43,31,23,.18)}
+/* the plain circle she sits on, under her, on the band */
+.deep-band::before{content:"";position:absolute;left:16px;top:12px;width:132px;height:132px;border-radius:50%;
+  background:radial-gradient(circle at 50% 42%,#fffdf8 0%,#fff6e4 70%,#ffedcf 100%)}
+.menu-btn.m9-back{box-sizing:border-box;width:368px;padding:0 20px;justify-content:center}
+/* the frame shows only once its first screen is ready; on a panel the page under the band is plain */
+#deepFrame{position:absolute;top:156px;left:0;display:block;width:100%;height:calc(100% - 156px);border:0;background:#fbf7ef}
+.deep:not(.ready) #deepFrame,.deep.noframe #deepFrame{visibility:hidden}
+
+/* M18: small Mary. One face: #face itself moves to the corner by transform (face.js sets --mf-small-t and --mf-small-clip for
+   this window). The circle clips her only once she has arrived, so clip-path never animates. */
+#face{transform-origin:0 0;transition:transform .5s cubic-bezier(.45,.05,.55,.95)}
+#scr[data-small] #face{z-index:7;transform:var(--mf-small-t);pointer-events:none}
+#scr.band-move #face{z-index:7;pointer-events:none;will-change:transform}
+#scr.band-rest #face{clip-path:var(--mf-small-clip)}
+#scr.band-move .mf-root{background:transparent}
+/* the whole circle is the tap target; it comes off the moment she starts to grow, so a second tap lands on nothing */
+.m9-small{position:absolute;left:16px;top:12px;z-index:8;width:132px;height:132px;border-radius:50%;cursor:pointer;touch-action:manipulation;
+  user-select:none;-webkit-user-select:none;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .3s linear,visibility 0s linear .3s}
+#scr[data-small] .m9-small{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .3s linear}
+/* her mood ring, from the same classes as her edge glow */
+.m9-ring{position:absolute;inset:0;border-radius:50%;pointer-events:none;--glow:rgb(245,170,110);
+  box-shadow:inset 0 0 0 5px var(--glow),0 0 10px 3px var(--glow);animation:mf-edge 6s ease-in-out infinite}
+#scr:has(> #face > .mf-root[data-companion="him"]) .m9-ring{--glow:rgb(214,140,50)}
+#scr:has(> #face > .mf-root.mf-listen) .m9-ring{--glow:rgb(95,170,215);animation-duration:3s}
+#scr:has(> #face > .mf-root.mf-think) .m9-ring{--glow:rgb(160,140,215);animation-duration:8s}
+/* what belongs to her full page stays out of the band, and comes back once she is full size */
+#scr[data-small] #menuBtn,#scr.band-move #menuBtn,#scr[data-small] .nokeybox,#scr.band-move .nokeybox{visibility:hidden}
+#scr[data-small] .sheetcard .back{display:none}
+#scr[data-small] .chip.saved{left:164px;max-width:calc(100vw - 580px)}
+/* emergency and reduced motion: no move */
+#scr.band-snap #face,#scr.band-snap .deep,#scr.band-snap .m9-small{transition:none}
+@media (max-width:900px){
+  .menu-btn.m9-back{width:260px;padding:0 10px;font-size:28px;gap:8px}
+  #scr .sheetcard{padding:24px 16px}
+}
+@media (max-width:640px){.menu-btn.m9-back{width:200px;font-size:24px}}
+@media (prefers-reduced-motion:reduce){.m9-ring{animation:none}}

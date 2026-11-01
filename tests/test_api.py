@@ -131,9 +131,9 @@ class HardeningTests(unittest.TestCase):
 
     def test_pages_cannot_be_framed_by_other_sites(self):
         _, _, headers = api("GET", "/api/settings")
-        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(headers.get("X-Frame-Options"), "SAMEORIGIN")
         _, _, headers = api("GET", "/index.html")
-        self.assertIn("frame-ancestors 'none'", headers.get("Content-Security-Policy", ""))
+        self.assertIn("frame-ancestors 'self'", headers.get("Content-Security-Policy", ""))
 
     def test_head_checks_the_host_too(self):
         status, _, _ = api("HEAD", "/index.html", host="evil.example")

@@ -6,7 +6,7 @@
 <title>Care Incident Log</title>
 <link rel="stylesheet" href="styles.css">
 <!-- M17: marks the page before first paint, so the screen asked for shows without home flashing first -->
-<script>(function(){var c=document.documentElement.classList,m=/[?&]from=mary(&|$)/.test(location.search);if(m)c.add('from-mary');if(m||location.hash.length>1)c.add('routing');})();</script>
+<script>(function(){var c=document.documentElement.classList,m=/[?&]from=mary(&|$)/.test(location.search);if(m)c.add('from-mary');if(/[?&]in=mary(&|$)/.test(location.search)&&window.parent!==window)c.add('in-mary');if(m||location.hash.length>1)c.add('routing');})();</script>
 </head>
 <body>
 <!-- M17: shown on every screen when Mary sent the resident here (/?from=mary): the one big way back, always in view -->
@@ -140,7 +140,8 @@
     </div>
 
     <p class="formerr" id="formError" role="alert" hidden></p>
-    <button type="submit" class="save" id="saveBtn">Save</button>
+    <!-- M18: stays in view at the bottom; the page's scroll ends above it -->
+    <div class="m9-row"><button type="submit" class="save" id="saveBtn">Save</button></div>
   </form>
 </section>
 
@@ -157,6 +158,7 @@
       <dt>Date and time</dt><dd id="rWhen"></dd>
       <dt>Summary</dt><dd id="rSum"></dd>
       <dt>In my own words</dt><dd id="rWords"></dd>
+      <dt id="rHelpedL" hidden>Help</dt><dd id="rHelped" hidden></dd>
     </dl>
   </div>
   <a class="primary" href="#home">Done</a>
@@ -263,7 +265,8 @@
     <input class="txt" type="text" id="i-gemini_model" autocomplete="off" spellcheck="false">
 
     <p class="formerr" id="infoError" role="alert" hidden></p>
-    <button type="submit" class="primary left" id="infoSave">Save</button>
+    <!-- M18: stays in view at the bottom; the page's scroll ends above it -->
+    <div class="m9-row"><p class="m9-saved" id="infoSaved" role="status" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>Saved</p><button type="submit" class="primary left" id="infoSave">Save</button></div>
   </form>
   <!-- M15d: outside #infoForm, because the password is not part of Save. Plain text steps: nothing here opens a browser. -->
   <div class="card infocard skillscard" id="mailCard">

@@ -227,6 +227,7 @@ class LiveBrain(M4aCase):
         setup = self.token_setup(self.memory())
         names = {d["name"] for t in setup["tools"] for d in t.get("functionDeclarations", [])}
         self.assertEqual(names, {"remember_fact", "set_their_name", "recall", "forget_memory", "forget_name",  # M9c
+                                 "use_screen",  # M18
                                  "stop_reminders",  # M15a
                                  "tell_story", "story_more", "end_talk"})
         self.assertFalse(any("__" in n for n in names))
@@ -721,8 +722,9 @@ class PageTools(M4aCase):
             self.assertEqual(got, {"response": {"error": "not_here"}, "effects": [], "say": None})
 
     def test_no_empty_parameters(self):
-        for decl in mary.LIVE_PAGE_TOOLS:
-            self.assertNotIn("parameters", decl)  # Gemini refuses an OBJECT with empty properties
+        for decl in mary.LIVE_PAGE_TOOLS:  # Gemini refuses an OBJECT with empty properties
+            if "parameters" in decl:
+                self.assertTrue(decl["parameters"]["properties"], decl["name"])
 
 
 class GarbledLines(M4aCase):

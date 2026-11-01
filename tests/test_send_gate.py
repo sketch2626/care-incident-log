@@ -90,6 +90,35 @@ class PlainSend(unittest.TestCase):
         self.assertFalse(send_gate.is_plain_send("send it to Mark", ""))
 
 
+class PlainSave(unittest.TestCase):
+    def test_plain_words_count(self):
+        for line in ("save it", "Save it.", "save that", "save this", "go ahead and save it", "okay save it",
+                     "yes save it", "Yes, save it.", "save it please", "Save it, please.", "save it now", "save my info",
+                     "save the form", "that's good save it", "That's good, save it.", "that’s good save it",
+                     "Mary, save it.", "Save it, Mary.", "please save it", "just save it", "okay Mary save it please",
+                     "let's save it", "save it for me", "save that for me", "save it, thanks", "looks good save it",
+                     "can you save it", "Can you save it?", "could you save that?", "could you save that please", "would you save it", "will you save it",
+                     "Okay? Save it.", "The soup was cold. Save it."):
+            self.assertTrue(send_gate.is_plain_save(line), line)
+
+    def test_anything_less_refuses(self):
+        for line in ("Save it? I don't know yet", "save it?", "Save it?!", "save it, please?", "Save it, okay?",
+                     "Save it? Hmm.", "Save it. I guess.", "don't save it",
+                     "do not save it", "dont save it", "not yet", "save it later", "should I save it", "save me a seat",
+                     "yes", "okay", "ok", "that's right", "Yes, that's right.", "save money", "save it for later",
+                     "save it for tomorrow", "save the rest for tomorrow", "I saved it", "we saved it", "did you save it",
+                     "did it save", "is it saved", "wait, save it", "no, save it", "stop", "maybe save it",
+                     "save it if you want", "save it when you can", "save it after lunch", "never mind", "hold on",
+                     "keep it", "yes keep it", "keep that", "save", "save room for pie", "save it to my notes",
+                     "send it", "okay send it", "", "   ", "...", None,
+                     "well I told my daughter that we might go ahead and save it"):
+            self.assertFalse(send_gate.is_plain_save(line), line)
+
+    def test_save_and_send_never_cross(self):
+        self.assertFalse(send_gate.is_plain_send("save it"))
+        self.assertFalse(send_gate.is_plain_save("send it"))
+
+
 class Words(GateCase):
     def test_chatty_okay_is_neither_a_yes_nor_a_miss(self):
         self.arm()
@@ -780,11 +809,11 @@ class Mail(unittest.TestCase):
         self.mailer._done("messages", "amy@example.org", "offline")
         self.mailer.scrub_log(["MARK@example.ORG"])
         rows = self.lines()
-        self.assertEqual([row["to"] for row in rows], ["", "amy@example.org"])
+        self.assertEqual([row["to"] for row in rows], ["", mail_core.address_mark("amy@example.org")])  # M18
         self.assertEqual([(row["ok"], row["code"]) for row in rows], [(True, ""), (False, "offline")])
         self.assertTrue(rows[0]["when"])
         self.mailer.scrub_log([])
-        self.assertEqual(self.lines()[1]["to"], "amy@example.org")
+        self.assertEqual(self.lines()[1]["to"], mail_core.address_mark("amy@example.org"))  # M18
         self.mailer.scrub_log(None)
         self.assertEqual([row["to"] for row in self.lines()], ["", ""])
         self.assertEqual([path.name for path in self.dir.iterdir()], ["mail.log"])

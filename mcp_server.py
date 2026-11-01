@@ -121,14 +121,14 @@ def call_tool(name, args):
                 rows = [r for r in rows if r["category"] == args["category"]]
             return rows[:_limit(args.get("limit", 50), 50)]
         if name == "add_incident":
-            row = tracker.clean_incident({**args, "source": "claude"})
+            row = tracker.clean_incident({**args, "source": "claude", "helped_by": ""})
             return {"id": tracker.insert_incident(conn, row)}
         if name == "update_incident":
             current = conn.execute("SELECT * FROM incidents WHERE id = ? AND deleted_at IS NULL",
                                    (args["id"],)).fetchone()
             if not current:
                 raise ValueError(f"No incident with id {args['id']}.")
-            row = tracker.clean_incident({**dict(current), **args})
+            row = tracker.clean_incident({**dict(current), **args, "helped_by": current["helped_by"]})
             row.pop("source"), row.pop("source_id")
             row["updated_at"] = tracker.now()
             conn.execute(f"UPDATE incidents SET {', '.join(k + ' = ?' for k in row)} WHERE id = ?",

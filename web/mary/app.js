@@ -25,6 +25,8 @@
    M4a: MaryApp.startTalk() opens a hands-free conversation in the first working talk mode (Live, Normal, Offline,
    then the computer's own voice); MaryApp.endTalk(), MaryApp.inTalk(). listenReason can also be 'idle'.
 
+   M18: MaryApp.openDeep(hash) opens a deeper screen in a frame on this page; MaryApp.closeDeep() hides it.
+
    No ?. or ?? here, so the ES2017 syntax checker parses it. */
 (function () {
   'use strict';
@@ -133,6 +135,7 @@
     listenAbort: null,
     listenReason: '',
     emSeq: 0,
+    formMic: false,   // M18: the form in the deep view has the microphone
     lightPressed: false,
     helpAsked: false,
     lightTimer: null,
@@ -149,7 +152,7 @@
   };
 
   var NULLFACE = { setMood: noop, setActivity: noop, setCompanion: noop, bounce: noop, destroy: noop,
-    setLoud: noop, setMenuOpen: noop, setAside: noop, setEmergency: noop };   // M4b
+    setLoud: noop, setMenuOpen: noop, setAside: noop, setSmall: noop, setEmergency: noop };   // M4b
   var face = NULLFACE;
 
   function makeFace(companion) {
@@ -236,7 +239,7 @@
   // thinking states (mockups/mary/round6/README.md, "Notes for the builder" 1-4, 6, 8) ---
   var NULLCAP = { sentence: function () { return 0; }, setDuration: noop, retime: noop, liveAudio: noop,
     livePiece: function () { return 0; }, whole: function () { return 0; }, cut: noop, stopped: noop, clear: noop,
-    setSide: noop, setAside: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
+    setSide: noop, setAside: noop, setBand: noop, plain: noop, setLiveRegion: noop, showing: function () { return false; } };
   var cap = NULLCAP;
   // plain: the plain line showing; owner: whose words are up (a speech session or 'live');
   // liveWhole / liveTimed / emTurn: Live on the emergency screen; liveDone: her Live turn was heard to the end
@@ -892,6 +895,7 @@
       try { screens[prev].leave(name); } catch (e) { log(e); }
     }
     S.screen = name;
+    deepSync();   // M18: nothing covers the emergency buttons
     var root = $('scr');
     root.setAttribute('data-screen', name);
     root.classList.toggle('urgent', name === 'emergency');
@@ -1527,6 +1531,7 @@
     if (S.screen === 'emergency') { return 'emergency'; }
     if (S.firstRun) { return 'first run'; }
     if (S.micHeld) { return 'send count'; }
+    if (S.formMic) { return 'form mic'; }   // M18
     if (S.convo) { return 'talk open'; }
     if (S.phase !== 'idle') { return 'busy ' + S.phase; }
     if (S.noteBusy && noteBusyNow() && !(ev && ev.greeted)) { return 'note'; }
@@ -1556,7 +1561,6 @@
     } else if (ev.type === 'wake') {
       clearTimeout(W.heardTimer);
       if (menuOpen()) { closeMenu(false); }
-      if (M.panel) { closePanel(false); }
       if (!$('typing').hidden) { closeTyping(false); }   // M17: her name beats the typing box
       startTalk({ say: WAKE_SAY, mood: 'happy', hello: WAKE_HELLO }).then(function (ok) {
         if (ok) { return; }
@@ -1566,8 +1570,11 @@
     }
   }
 
-  // Busy = a talk is open (Live included) or she is speaking, listening or thinking.
-  function wakeBusy() { return !!S.convo || S.phase !== 'idle'; }
+  // Busy = a talk is open (Live included), she is speaking, listening or thinking, or the form in the deep view has the mic.
+  function wakeBusy() {
+    if (S.formMic) { return true; }   // M18
+    return !!S.convo || S.phase !== 'idle';
+  }
   // M17: nothing may leave her asleep for good. A phase left on with nothing behind it goes back to resting (finishLive can
   // leave 'thinking'), and a poll that saw ready:false stopped for good, so the status gets another look now and then.
   function wakeUnstick(now) {
@@ -1827,7 +1834,7 @@
     var now = Date.now();
     if (S.screen === 'emergency') { c.lastLife = now; }
     else if (liveGoneQuiet(c, now)) { return; }
-    if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || uiOpen()) { c.lastAct = now; return; }   // M4b: or a panel
+    if (S.screen === 'emergency' || liveSpeaking() || Sp.sess || c.toolBusy > 0 || menuOpen()) { c.lastAct = now; return; }   // M4b: or the menu. M18: a panel holds no talk open
     if (c.story && !c.story.paused) {       // M4a: a story between parts is busy, unless its next part never came
       if (now - c.story.askedAt < STORY_STALL_MS) { c.lastAct = now; return; }
       c.story.paused = true;
@@ -1840,6 +1847,8 @@
   function liveHeard(c, text) {
     text = String(text == null ? '' : text).trim();
     c.heard = text;
+    var turn = { text: text, bad: notEnglish(text) || !!(window.MaryScreens && window.MaryScreens.noContent(text)) };   // M18: what their_words may offer
+    c.turns = (c.turns || []).concat([turn]).slice(-12);
     c.lastAct = Date.now();
     c.numFixed = false;   // M4d
     c.cutTried = false;   // M17
@@ -1852,6 +1861,7 @@
     });
     c.heardCheck = p;
     p.then(function (j) {
+      if (j && j.garbled) { turn.bad = true; }   // M18: first, so a tool waiting on heardCheck sees it
       if (j && j.emergency) {
         if (S.convo === c && c.live) { liveEmergency(c, j); return; }
         newTurn();                                                // Live closed meanwhile: never miss it anyway
@@ -1864,6 +1874,7 @@
         for (var ai = 0; ai < acts.length; ai++) { try { window.MarySkills.apply(acts[ai]); } catch (e) { log(e); } }
         if (j.send.say) { say(String(j.send.say)); }
       }
+      if (j && j.save && !j.send) { deepSaveHeard(); }   // M18 piece 4: their own plain "save it", on the server's word
       if (S.convo !== c || !c.live) { return; }
       if ((j && j.garbled) || notEnglish(tail)) { return; }   // M4a: a garbled line is never a goodbye
       if (isGoodbye(tail) && !(S.noteBusy && noteBusyNow())) { endConvo(c, 'bye'); }   // M17: not words for a note
@@ -2121,20 +2132,28 @@
         return { functionResponses: calls.map(function (fc) { return { id: fc.id, name: fc.name, response: TOOL_REFUSED }; }) };
       }
       // M4a: story_more and end_talk are the page's own; end_talk is never answered, so she says nothing more
-      var own = [], rest = [];
+      var own = [], rest = [], page = [];
       calls.forEach(function (fc) {
         if (fc.name === 'end_talk' && S.noteBusy && noteBusyNow() && !c.ending) {   // M17: it heard a note, so the talk goes
           own.push({ id: fc.id, name: fc.name, response: END_TALK_HELD });          // on, and Live waits for an answer
         }
         else if (fc.name === 'end_talk') { liveEndTalk(c); }
         else if (fc.name === 'story_more') { own.push({ id: fc.id, name: fc.name, response: storyTake(c) }); }
+        else if (window.MaryScreens && window.MaryScreens.isTool(fc.name)) { page.push(fc); }   // M18: past the emergency gate above
         else { rest.push(fc); }
       });
-      if (!rest.length) { return { functionResponses: own }; }
-      if (!window.MarySkills) { throw new Error('skills are not loaded'); }
-      return window.MarySkills.handleLiveToolCall({ functionCalls: rest }, heard).then(function (r) {
-        r.functionResponses = own.concat(r.functionResponses);
-        return r;
+      // M18: the screen tools, one at a time in the order she called them, so a fill can't land on a screen still opening
+      return page.reduce(function (done, fc) {
+        return done.then(function () { return window.MaryScreens.run(fc.name, fc.args, screenEnv(c)); }).then(function (res) {
+          own.push({ id: fc.id, name: fc.name, response: res });
+        });
+      }, Promise.resolve()).then(function () {
+        if (!rest.length) { return { functionResponses: own }; }
+        if (!window.MarySkills) { throw new Error('skills are not loaded'); }
+        return window.MarySkills.handleLiveToolCall({ functionCalls: rest }, heard).then(function (r) {
+          r.functionResponses = own.concat(r.functionResponses);
+          return r;
+        });
       });
     }).then(function (r) {
       return storyFromTool(c, r);   // M4a: the first part of a story, answered at once
@@ -2185,6 +2204,7 @@
       if (S.convo !== c || my !== S.turn) { return undefined; }
       if (!text) {
         // M4a: a second miss in a row (a mic that isn't recording, a noisy room) ends the talk instead of nagging
+        if (S.listenReason === 'idle' && c.formAt && Date.now() - c.formAt < CONVO_IDLE_S * 1000) { convoNext(c); return undefined; }   // M18: hands at work on a form aren't quiet
         if (S.listenReason === 'idle' || c.misses >= 1) { endConvo(c, 'idle'); return undefined; }
         c.misses++;
         return say(MSG.notCaught, 'talking').then(function () { convoNext(c); });
@@ -2219,7 +2239,12 @@
   function convoNext(c) {
     if (S.convo !== c || c.ending || c.live) { return; }
     if (S.screen === 'emergency') { c.paused = true; setPhase('idle'); updateTalkButton(); return; }   // no auto-listen there
-    if ((S.screen !== 'everyday' && !skillScreen()) || uiOpen() || !$('typing').hidden) { closeConvo(c); return; }   // M4b: or a panel
+    if ((S.screen !== 'everyday' && !skillScreen()) || menuOpen()) { closeConvo(c); return; }   // M4b: or the menu. M18: a panel ends no talk
+    if (!$('typing').hidden) {
+      if (!bandUp() || Date.now() - c.lastAct > CONVO_IDLE_S * 1000) { closeConvo(c); return; }
+      setTimeout(function () { convoNext(c); }, 1000);   // M18: over the band the talk waits for the box, a while
+      return;
+    }
     if (S.phase !== 'idle' || Sp.sess) { setTimeout(function () { convoNext(c); }, 300); return; }
     convoListen(c);
   }
@@ -2471,6 +2496,7 @@
       if (turn !== S.turn) { return; }
       if (!d) { throw new Error('no answer'); }
       await finishReply(d, T);
+      if (d.save && !d.emergency) { await deepSaveHeard(); }   // M18 piece 4
     } catch (e) {
       clearTimeout(timer);
       T.dead = true;
@@ -2496,9 +2522,14 @@
   }
   function menuOpen() { return !$('menu').hidden; }
   function uiOpen() { return menuOpen() || !!M.panel; }   // M4b: the menu or a panel is over her face
+  function panelOpen() { return !!M.panel && S.screen !== 'emergency'; }   // M18: she is small in the band for it
+  function panelBeaten() { if (M.panel && skillScreen() && skillScreen() !== M.over) { closePanel(false); } }   // M18: a screen she opens beats a panel too
   function armIdle(ms) {
     clearTimeout(M.timer);
-    M.timer = setTimeout(function () { if (M.panel) { closePanel(false); } else if (menuOpen()) { closeMenu(false); } }, ms);
+    M.timer = setTimeout(function () {
+      if (M.panel && (S.convo || S.phase !== 'idle')) { armIdle(PANEL_IDLE_MS); }   // M18: never during a talk
+      else if (M.panel) { closePanel(false); } else if (menuOpen()) { closeMenu(false); }
+    }, ms);
   }
   function menuItems() {
     return [].filter.call($('menu').querySelectorAll('.mi'), function (b) { return !b.hidden && b.offsetParent !== null; });
@@ -2562,31 +2593,313 @@
   }
   function trapTab(ev) {   // M4b: Tab stays inside an open panel (it is a dialog)
     var card = $(M.panel).querySelector('.sheetcard');
-    var f = [].filter.call(card.querySelectorAll('button, a[href]'), function (el) { return el.offsetParent !== null; });
-    if (!f.length) { return; }
-    var first = f[0], last = f[f.length - 1];
-    if (ev.shiftKey && (D.activeElement === first || !card.contains(D.activeElement))) { ev.preventDefault(); last.focus(); }
-    else if (!ev.shiftKey && (D.activeElement === last || !card.contains(D.activeElement))) { ev.preventDefault(); first.focus(); }
+    var back = $('deepBack');   // M18: the band's Back to Mary is this panel's way back
+    var f = [back].concat([].filter.call(card.querySelectorAll('button, a[href]'), function (el) { return el.offsetParent !== null; }));
+    var first = f[0], last = f[f.length - 1], at = D.activeElement, inside = at === back || card.contains(at);
+    if (ev.shiftKey && (at === first || !inside)) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && (at === last || !inside)) { ev.preventDefault(); first.focus(); }
   }
 
   function openPanel(id) {
     if (M.panel && M.panel !== id) { $(M.panel).hidden = true; }
     M.panel = id;
+    M.over = skillScreen();   // M18
     refreshLabels();
     if (id === 'canPanel') { fillCan(); } else if (id === 'infoPanel') { fillInfo(); } else if (id === 'gamesPanel') { fillGames(); } else { fillChoose(); }   // M7a: gamesPanel
+    $(id).classList.remove('leaving');
     $(id).hidden = false;
     $(id).scrollTop = 0;
+    $(id).querySelector('.sheetcard').setAttribute('aria-modal', 'false');   // M18: the way back is outside it, in the band
+    bandSync();
     armIdle(PANEL_IDLE_MS);
-    setTimeout(function () { try { $(id).querySelector('.back').focus(); } catch (e) { /* nothing */ } }, 30);
+    setTimeout(function () { try { if (M.panel === id) { $('deepBack').focus(); } } catch (e) { /* nothing */ } }, 30);
   }
   function closePanel(refocus) {
     if (!M.panel) { return; }
-    $(M.panel).hidden = true;
+    var el = $(M.panel);
     M.panel = null;
     clearTimeout(M.timer);
     stopSample();
+    bandSync();   // M18
+    if (Band.snap) { el.hidden = true; }
+    else {   // the page fades as she grows
+      el.classList.add('leaving');
+      setTimeout(function () { el.classList.remove('leaving'); if (M.panel !== el.id) { el.hidden = true; } }, BAND_FADE_MS);
+    }
     if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }
   }
+
+  // ---------------------------------------------------------------- M18: the deep view
+  // Deeper screens (web/index.html) open in a frame on this page, so her page never unloads: Live, the mic and the wake
+  // word go on. S.screen stays as it was and the deep view is no part of uiOpen(), so a talk starts, carries on and ends
+  // as it does on her face, and no timer closes it. Closing only hides it, so a half-filled form survives.
+  // Messages are { type: 'mary-deep', what, ... }, to this origin only, and never carry what was typed.
+  var DEEP_URL = '/?from=mary&in=mary';
+  var Deep = { open: false, src: false, talk: null, screen: '', shown: false, over: undefined, readyT: 0,
+               saveAt: 0, asked: false, saveDone: null, tellT: 0, waitT: 0, capT: 0 };
+  var Band = { small: false, snap: false, moveT: 0, wordsT: 0 };
+  var BAND_MOVE_MS = 500, BAND_FADE_MS = 300, BAND_WORDS_MS = 320, DEEP_READY_MS = 4000;
+
+  function deepPost(msg) {
+    msg.type = 'mary-deep';
+    try { $('deepFrame').contentWindow.postMessage(msg, window.location.origin); } catch (e) { log(e); }
+  }
+  function deepUp() {
+    if (!Deep.open || S.screen === 'emergency') { return false; }
+    var sk = skillScreen();
+    return !sk || sk === Deep.over;
+  }
+  function deepOnLog() {   // false until it loads, and on the printable report when no new window opened
+    try {
+      var l = $('deepFrame').contentWindow.location;
+      return l.pathname === '/' && /[?&]in=mary(&|$)/.test(l.search);
+    } catch (e) { return false; }
+  }
+  // The form's mic counts as busy for the wake word only while the form is in view, so the wake word can't get stuck off.
+  function deepMicOff() {
+    if (!S.formMic) { return; }
+    S.formMic = false;
+    wakeHoldCheck();   // M18
+  }
+  // M18: her full screens beat the band. A skill or game she opens stays in view, and the deep view comes back when it closes.
+  // The one exception is the screen the deep view was opened from: the resident asked to go deeper from there.
+  function bandUp() { return Band.small; }
+  function bandStill() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
+  function bandRest() {
+    var root = $('scr');
+    root.classList.remove('band-move');
+    root.classList.toggle('band-rest', Band.small);
+    if (Band.small) { return; }
+    if (!D.activeElement || D.activeElement === D.body) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }   // hidden until now
+  }
+  // The band, with her small in it and her words beside her, for the deep view or a panel. Going small her words move first;
+  // growing they wait for the page to go. Emergency and reduced motion: no move.
+  function bandSync() {
+    var el = $('deep'), root = $('scr');
+    if (!el) { return; }
+    var deep = deepUp(), on = deep || panelOpen();
+    el.classList.toggle('up', on);
+    el.setAttribute('aria-hidden', on ? 'false' : 'true');
+    if (on) { el.classList.toggle('noframe', !deep); }
+    screenTell();
+    if (on === Band.small || !root) { return; }
+    Band.small = on;
+    Band.snap = S.screen === 'emergency' || bandStill();
+    clearTimeout(Band.moveT);
+    clearTimeout(Band.wordsT);
+    root.classList.toggle('band-snap', Band.snap);
+    root.classList.remove('band-rest');
+    root.classList.toggle('band-move', !Band.snap);
+    root.toggleAttribute('data-small', on);
+    try { face.setSmall(on); } catch (e) { log(e); }
+    if (on || Band.snap) { capCall(function () { cap.setBand(on); }); }
+    else { Band.wordsT = setTimeout(function () { capCall(function () { cap.setBand(false); }); }, BAND_WORDS_MS); }
+    if (Band.snap) { bandRest(); } else { Band.moveT = setTimeout(bandRest, BAND_MOVE_MS); }
+  }
+  // Back to Mary and a tap on small Mary: a panel closes first, down to the deep view if it was over one.
+  function bandBack() {
+    if (panelOpen()) { closePanel(true); } else { closeDeep(); }
+  }
+  // The frame stays hidden on a plain page until its first screen is ready, so the log never flashes. The timer is the way
+  // out if that word never comes.
+  function deepReady(on) {
+    clearTimeout(Deep.readyT);
+    $('deep').classList.toggle('ready', on);
+  }
+  function deepWait() {
+    deepReady(false);
+    Deep.readyT = setTimeout(function () { deepReady(true); }, DEEP_READY_MS);
+  }
+  // Shows or hides the deep view to match. Every screen change comes through here, so the emergency screen is never under it.
+  function deepSync() {
+    if (!$('deep')) { return; }
+    panelBeaten();
+    var up = deepUp();
+    bandSync();
+    if (up === Deep.shown) { return; }
+    Deep.shown = up;
+    if (up) { return; }
+    deepPost({ what: 'hide' });   // a mic left running stops and keeps its words
+    deepMicOff();
+  }
+  function openDeep(hash) {
+    var f = $('deepFrame');
+    if (!f) { return false; }
+    if (menuOpen()) { closeMenu(false); }
+    closePanel(false);
+    hash = hash || '';
+    if (!deepOnLog()) {
+      Deep.src = true;
+      deepWait();
+      f.src = DEEP_URL + hash;
+    } else if (hash) {
+      if (f.contentWindow.location.hash !== hash) { deepWait(); }
+      f.contentWindow.location.hash = hash;   // never a reload, so half-typed work survives
+    }
+    Deep.over = skillScreen();
+    Deep.open = true;
+    deepSync();
+    setTimeout(function () { try { if (deepUp()) { $('deepBack').focus(); } } catch (e) { /* nothing */ } }, 30);
+    return true;
+  }
+  function closeDeep() {
+    if (!Deep.open) { return; }
+    Deep.open = false;
+    Deep.over = undefined;
+    deepSync();
+    try { $('menuBtn').focus(); } catch (e) { /* nothing */ }
+    deepCameBack();
+  }
+  // Coming back used to reload her page. Now she re-reads what may have changed, and a key saved in the frame takes her
+  // off the no-key screen the way starting up does (with a talk already open she only leaves it).
+  function deepCameBack() {
+    return refreshStatus().then(function () {
+      if (S.screen === 'everyday' && !S.hasKey && S.statusLoaded && !S.convo && S.phase === 'idle') { show('nokey'); return; }   // the key was removed there
+      if (S.screen !== 'nokey' || !S.hasKey) { return; }
+      if (S.convo) { show('everyday'); return; }
+      if (S.firstRun) { App.startFirstRun(); } else { App.enterMain(); }
+    }).catch(log);
+  }
+  // A talk open, or any listen of hers: she has the one recorder, so the form's Tap and talk buttons step aside.
+  function deepTalkSync() {
+    if (!Deep.src) { return; }
+    var on = !!S.convo || S.phase === 'listening';
+    if (on === Deep.talk) { return; }
+    Deep.talk = on;
+    deepPost({ what: 'talk', on: on });
+  }
+  // A page loaded in the frame. It knows nothing yet, and if the last one had the mic, nobody is left to let go of it.
+  function onDeepLoad() {
+    var held = S.formMic;
+    if (window.MaryScreens) { window.MaryScreens.reset(); }   // piece 3: a new page, so nothing to put back
+    deepSaveEnd();   // piece 4: and no answer is coming
+    Deep.screen = '';
+    Deep.talk = null;
+    if (!deepOnLog()) { deepReady(true); }   // the printable report: no first-screen word comes from it
+    deepMicOff();
+    if (held && !S.convo && S.phase === 'idle') { api('POST', '/api/listen/stop?raw=1', {}).catch(log); }
+    deepTalkSync();
+  }
+  function onDeepMessage(ev) {
+    var f = $('deepFrame');
+    if (ev.origin !== window.location.origin || !f || ev.source !== f.contentWindow) { return; }
+    var d = ev.data;
+    if (!d || d.type !== 'mary-deep') { return; }
+    if (d.what === 'close') { closeDeep(); }
+    else if (d.what === 'screen') { Deep.screen = String(d.name || ''); deepReady(true); screenTell(); }
+    else if (d.what === 'saved') { refreshStatus().catch(log); }
+    else if (d.what === 'saved_ok') { deepSaved(SAVE_SAID.ok, true); }   // piece 4
+    else if (d.what === 'saved_fail') { deepSaved(d.label ? saveMissing(String(d.label)) : SAVE_SAID.fail, false); }
+    else if (d.what === 'save_none') { deepSaved(SAVE_SAID[d.why === 'nothing' ? 'nothing' : 'no_form'], false); }
+    else if (d.what === 'activity') {
+      if (S.convo) { S.convo.formAt = Date.now(); }
+      App.keepTalk();
+    }
+    else if (d.what === 'mic') {
+      S.formMic = !!d.on && deepUp();
+      wakeHoldCheck();   // M18
+    }
+  }
+  // Piece 3: what the screen tools (screens.js) need from this page. doc() is null until the log is in view.
+  function screenEnv(c) {
+    return {
+      doc: function () {
+        try { return (deepUp() && deepOnLog()) ? $('deepFrame').contentDocument : null; } catch (e) { return null; }
+      },
+      panel: function () { return panelOpen() ? M.panel : null; },
+      openDeep: openDeep,
+      openPanel: function (id) { if (menuOpen()) { closeMenu(false); } openPanel(id); },
+      back: bandBack,
+      turns: (c && c.turns) || [],
+      incidents: function () { return api('GET', '/api/incidents', null, { ms: 8000 }); },   // piece 5
+      companion: function () { return S.companion === 'him' ? 'sam' : 'mary'; }
+    };
+  }
+  // On moving screens Live hears the name and nothing else, as a silent note (no reply). Never during a story or an
+  // emergency. The fields go only when she asks with look_at_screen.
+  function screenTell() {
+    var c = S.convo;
+    if (!c || !c.live || c.ending || c.story || S.screen === 'emergency' || !window.MaryScreens) { return; }
+    var name = window.MaryScreens.nameHere(screenEnv(c));
+    if (name === (c.screenTold || window.MaryScreens.TALK_NAME)) { return; }
+    c.screenTold = name;
+    screenNote('Screen: ' + name);
+  }
+  // Piece 4: the save gate. Only a tap on Save or the resident's own plain "save it" saves. The server rules on the words
+  // (send_gate.is_plain_save) and this code acts only on its save: true, so no tool call and no line of hers can reach it.
+  // The frame does the same submit a tap does, and answers with no field values.
+  var SAVE_ONCE_MS = 6000, SAVE_TELL_MS = 400, SAVE_WAIT_MS = 20000, SAVE_CAP_MS = 4000;
+  var SAVE_SAID = {
+    ok: { live: "(The form was saved. Say 'Saved.' and nothing more.)", note: '(The form was saved.)', plain: 'Saved.' },
+    fail: { live: '(The form did not save. Tell them in one short line that the screen says why.)', note: '(The form did not save.)',
+            plain: "That didn't save. The screen says why." },
+    no_form: { live: '(No form is open, so the app saved nothing. If they meant a form, say so in one short line.)',
+               plain: "There's no form open to save." },
+    nothing: { live: '(Nothing on this form has changed, so there was nothing to save. Say so in one short line.)',
+               plain: "Nothing has changed, so there's nothing to save." }
+  };
+  function saveMissing(label) {
+    return { live: '(The form did not save. Still needed: ' + label + '. Tell them that in one short line.)',
+             note: '(The form did not save. Still needed: ' + label + '.)',
+             plain: "That didn't save. I still need " + label + '.' };
+  }
+  function deepSaveEnd() {
+    clearTimeout(Deep.waitT);
+    Deep.asked = false;
+    var done = Deep.saveDone;
+    Deep.saveDone = null;
+    if (done) { done(); }
+  }
+  // Her word back: in Live a note she answers, otherwise her own voice. Never over the emergency screen.
+  function saveTell(said) {
+    if (S.screen === 'emergency') { return Promise.resolve(); }
+    if (liveOn() && greetLive(said.live)) { return Promise.resolve(); }
+    return Promise.resolve(say(said.plain));
+  }
+  // A tap: the band's caption says it too, and lets go by itself unless she has started talking.
+  function bandSaved() {
+    if (!bandUp() || liveSpeaking() || Sp.sess) { return; }
+    capCall(function () { cap.plain('Saved.'); });
+    clearTimeout(Deep.capT);
+    Deep.capT = setTimeout(function () {
+      if (!liveSpeaking() && !Sp.sess) { capCall(function () { cap.plain(''); }); }
+    }, SAVE_CAP_MS);
+  }
+  // The server said this line is a plain "save it". One line saves once: Live can deliver a line twice or in pieces. A
+  // skill's own screen keeps its "save it" (messages has save_card_now). The promise ends once she has been told.
+  function deepSaveHeard() {
+    var now = Date.now();
+    if (S.screen === 'emergency' || now - Deep.saveAt < SAVE_ONCE_MS) { return Promise.resolve(); }
+    if (!deepUp() && skillScreen()) { return Promise.resolve(); }
+    var form = deepUp() && !panelOpen() && deepOnLog() && (Deep.screen === 'add' || Deep.screen === 'info');
+    deepSaveEnd();
+    Deep.saveAt = now;
+    return new Promise(function (done) {
+      Deep.saveDone = done;
+      Deep.waitT = setTimeout(deepSaveEnd, SAVE_WAIT_MS);
+      if (!form) { saveTell(SAVE_SAID.no_form).then(deepSaveEnd, deepSaveEnd); return; }
+      if (window.MaryScreens) { window.MaryScreens.finishTyping(); }   // her fill lands first, and their word beats a yes not yet said
+      Deep.asked = true;
+      deepPost({ what: 'save' });
+    });
+  }
+  // The frame's answer. Asked by their word she answers it; a tap only tells her. Waits a moment for any move to the Saved
+  // screen, because that move's silent note would cut her off.
+  function deepSaved(said, ok) {
+    var asked = Deep.asked;
+    Deep.asked = false;
+    clearTimeout(Deep.tellT);
+    Deep.tellT = setTimeout(function () {
+      if (!ok) { Deep.saveAt = 0; }   // not saved, so they can say it again
+      if (asked) { saveTell(said).then(deepSaveEnd, deepSaveEnd); return; }
+      if (S.screen === 'emergency' || !said.note) { return; }
+      screenNote(said.note);
+      if (ok) { bandSaved(); }
+    }, SAVE_TELL_MS);
+  }
+  // ---------------------------------------------------------------- end M18
 
   // A big row: its words, an optional second line, and what a tap does.
   function rowBtn(text, sub, onTap, attrs) {
@@ -2678,7 +2991,7 @@
     else if (act === 'switch') { skillMenu('switch_companion', 'happy').then(function (ok) { if (!ok) { switchCompanion(); } }); }
     // --- end skills hook ---
     else if (act === 'type') { openTyping(); }
-    else if (act === 'notes') { window.location.href = '/?from=mary'; }
+    else if (act === 'notes') { if (!openDeep('')) { window.location.href = '/?from=mary'; } }   // M18
   }
 
   // --- Choose Mary or Sam
@@ -2955,8 +3268,8 @@
 
   function openTyping() {
     closeMenu();
-    var c = S.convo;   // M4a: Live stays open (typed words go into it); a Normal/Offline talk ends here
-    if (c && c.live) { c.lastAct = Date.now(); } else { if (c) { closeConvo(c); } newTurn(); }
+    var c = S.convo;   // M4a: Live stays open (typed words go into it); a Normal/Offline talk ends here. M18: not over the band
+    if (c && (c.live || bandUp())) { c.lastAct = Date.now(); } else { if (c) { closeConvo(c); } newTurn(); }
     $('typing').hidden = false;
     var t = $('typeText');
     t.value = '';
@@ -2964,7 +3277,7 @@
   }
   function closeTyping(refocus) {
     $('typing').hidden = true;
-    if (refocus) { try { $('menuBtn').focus(); } catch (e) { /* nothing */ } }   // M4b
+    if (refocus) { try { $(bandUp() ? 'deepBack' : 'menuBtn').focus(); } catch (e) { /* nothing */ } }   // M4b. M18: the Menu button is off the band
   }
   function submitTyping() {
     var t = $('typeText');
@@ -3201,7 +3514,13 @@
     D.addEventListener('keydown', onUiTouch, true);
     $('lightBtn').addEventListener('click', onLightPressed);
     $('okBtn').addEventListener('click', onOkNow);
-    $('infoBtn').addEventListener('click', function () { window.location.href = '/?from=mary#info'; });
+    $('infoBtn').addEventListener('click', function () { if (!openDeep('#info')) { window.location.href = '/?from=mary#info'; } });   // M18
+    $('moreSettings').addEventListener('click', function (ev) { if (openDeep('#info')) { ev.preventDefault(); } });   // M18: its href is the fallback
+    $('deepBack').addEventListener('click', bandBack);                       // M18
+    $('smallMary').addEventListener('click', bandBack);                      // M18: the whole circle is the tap target
+    $('deepFrame').addEventListener('load', onDeepLoad);                     // M18
+    window.addEventListener('message', onDeepMessage);                       // M18
+    setInterval(deepTalkSync, 1000);                                         // M18: a talk opening or ending reaches the form within a second
     $('typeForm').addEventListener('submit', function (ev) { ev.preventDefault(); submitTyping(); });
     $('typeCancel').addEventListener('click', function () { closeTyping(true); });
     $('typeText').addEventListener('keydown', function (ev) {
@@ -3252,6 +3571,8 @@
     noteBusy: function (on) { S.noteBusy = on ? Date.now() : 0; },   // M17: the test drawer: a note is being dictated
     openMenu: openMenu,                      // M4b
     closeMenu: closeMenu,                    // M4b
+    openDeep: openDeep,                      // M18
+    closeDeep: closeDeep,                    // M18
     sideBySide: sideBySide,                  // M4b: a skill's screen beside her face (skills.js does this for aside:true)
     refreshStatus: refreshStatus,
     enterMain: enterMain,

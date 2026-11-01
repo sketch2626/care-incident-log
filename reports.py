@@ -157,6 +157,13 @@ _SUMMARY_BASE = {
 }
 
 
+def helped_note(incident):
+    """M18 piece 5: the one wording of the line that says the companion helped fill in the form. Empty when she didn't.
+    It stands apart from the statement, which stays the resident's exact words."""
+    who = {"mary": "Mary", "sam": "Sam"}.get(incident.get("helped_by") or "")
+    return f"Filled in with {who}'s help" if who else ""
+
+
 def summary_for(incident):
     """The formal summary if one was saved, otherwise a neutral third-person sentence."""
     saved = (incident.get("formal_summary") or "").strip()
@@ -227,6 +234,7 @@ def _prepare(rows, settings, date_from, date_to):
             "tags": tags,
             "regs": _describe(tags, pattern),
             "logged": _logged_display(r.get("logged_at")),
+            "helped": helped_note(r),
         })
         entry = by_cat.setdefault(cat, {"count": 0, "tags": [], "pattern": pattern})
         entry["count"] += 1
@@ -268,7 +276,7 @@ NAVY = "1F2A44"
 COLUMNS = [("Record No.", 14), ("Date", 11), ("Time", 7), ("Category", 18), ("Summary", 36),
            ("Resident's statement", 42), ("Wait", 9), ("No staff came", 9), ("Severity", 10),
            ("Staff involved", 16), ("Reported to", 16), ("Outcome", 22), ("Regulations", 24),
-           ("Logged at", 17)]
+           ("Logged at", 17), ("Help filling it in", 18)]
 _ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
@@ -383,7 +391,7 @@ def _sheet_record(ws, d, s):
         row = last = hdr + 1 + i
         values = [r["record_no"], r["date"], r["time"], r["category"], r["summary"], r["statement"],
                   r["wait"], "Yes" if r["never"] else "No", r["severity"], r["staff"], r["reported"],
-                  r["outcome"], r["regs"], r["logged"]]
+                  r["outcome"], r["regs"], r["logged"], r["helped"]]
         centered = {1, 2, 6, 7, 8}  # Date, Time, Wait, No staff came, Severity
         height = 1
         for j, v in enumerate(values):
@@ -553,7 +561,7 @@ td.num { text-align: center; }
 }
 """
 
-_REC_WIDTHS = [7, 6, 3.5, 6, 12, 17, 3.5, 4, 4.5, 6, 6, 8, 10, 6.5]
+_REC_WIDTHS = [7, 6, 3.5, 6, 11, 15, 3.5, 4, 4.5, 6, 6, 7, 9, 6.5, 5]
 
 
 def build_report_html(rows, settings, date_from="", date_to=""):
@@ -591,6 +599,7 @@ def build_report_html(rows, settings, date_from="", date_to=""):
             f'<td>{_esc(r["outcome"])}</td>'
             f'<td>{regs}</td>'
             f'<td>{_esc(r["logged"])}</td>'
+            f'<td>{_esc(r["helped"])}</td>'
             "</tr>")
     if not body:
         body.append(f'<tr><td colspan="{len(COLUMNS)}" class="empty">No incidents recorded in this period.</td></tr>')

@@ -302,7 +302,7 @@ class Memory:
             name = data.get("name")
             facts, recent = data.get("facts"), data.get("recent")  # null or odd values must not lose the name
             facts = [f for f in (facts if isinstance(facts, list) else []) if isinstance(f, str) and f.strip()]
-            recent = [{"role": t["role"], "text": t["text"], "at": str(t.get("at", ""))}
+            recent = [{"role": t["role"], "text": memory_core.scrub_addresses(t["text"]), "at": str(t.get("at", ""))}  # M18
                       for t in (recent if isinstance(recent, list) else [])
                       if isinstance(t, dict) and t.get("role") in ("user", "model") and isinstance(t.get("text"), str)]
             offer = data.get("pending_offer")
@@ -314,11 +314,15 @@ class Memory:
         self.name_asked = data.get("name_asked") is True  # M4c
         self.facts = facts[-MAX_FACTS:]
         self.recent = recent[-MAX_RECENT:]
-        self.pending_offer = offer if isinstance(offer, dict) else None
+        held = _OFFER_WORDS.get(str(self.path))  # M18: their own words come back from RAM, not from the file
+        self.pending_offer = held[1] if held and held[0] == offer else (offer if isinstance(offer, dict) else None)
         self.pending_forget = _forget_waiting(pending_forget)  # M9c
 
     def add_fact(self, fact, kind="", source="talk", heard=""):
         """Returns True if the fact was new. heard (M15a): the resident's words, which a date in the fact must match."""
+        fact = memory_core.scrub_addresses(fact)  # M18: and a fact that was only an address is no memory
+        if memory_core.only_address(fact):
+            return False
         if self.store is not None:  # M9c: kind and source only mean something in the store
             new_id = self.store.add(fact, kind, source)
             if new_id is None:
@@ -346,6 +350,7 @@ class Memory:
             pass
 
     def add_turn(self, role, text):
+        text = memory_core.scrub_addresses(text)  # M18: before the cut, so a cut can't hide one
         self.recent.append({"role": role, "text": text[:MAX_TURN_CHARS], "at": datetime.now().isoformat(timespec="seconds")})
         self.recent = self.recent[-MAX_RECENT:]
         if role == "model" and not self.name and _ASKS_NAME.search(text):  # M4c: both routes pass through here
@@ -381,8 +386,13 @@ class Memory:
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.pending_forget = _forget_waiting(self.pending_forget)  # M9c
-        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": self.pending_offer,
-                "pending_forget": self.pending_forget}
+        offer_out = _no_addresses(self.pending_offer)  # M18: the file never holds an address, and the incident keeps their words
+        if offer_out != self.pending_offer:
+            _OFFER_WORDS[str(self.path)] = (offer_out, self.pending_offer)
+        else:
+            _OFFER_WORDS.pop(str(self.path), None)
+        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": offer_out,
+                "pending_forget": _no_addresses(self.pending_forget)}  # M18
         tmp = self.path.with_name(self.path.name + ".tmp")
         try:
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -829,6 +839,16 @@ def offline_memory(memory, text, offer_waiting=False):  # M9c
 _SAYS_FORGET = re.compile(r"(?<!don't )(?<!dont )(?<!do not )(?<!never )\bforget\b", _I)  # M15a: "don't forget, ..." is a date
 
 
+_OFFER_WORDS = {}  # M18: one waiting offer per memory file, in RAM only: (as written to the file, their real words)
+
+
+def _no_addresses(value):  # M18
+    """A waiting note offer or forget, as memory.json may hold it."""
+    if isinstance(value, dict):
+        return {key: _no_addresses(item) for key, item in value.items()}
+    return memory_core.scrub_addresses(value) if isinstance(value, str) else value
+
+
 def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) both learn dates this way
     """Takes dates, deaths and "don't remind me" from the resident's own words, so it all works with no Gemini. A date a
     fact already saved changes nothing here. Never raises. Not for an emergency line: that teaches nothing."""
@@ -836,6 +856,7 @@ def learn_dates(memory, text):  # M15a: Normal talk and Live (/api/mary/heard) b
     if store is None:
         return
     try:
+        text = memory_core.scrub_addresses(text)  # M18
         if memory.scrubbed or _SAYS_FORGET.search(_plain(text)):  # "Forget Mark's birthday, November 7" must not save it
             return
         asked = memory_dates.stop_request(text)
@@ -926,14 +947,43 @@ LIVE_STORY_TOOL = {
         "type": "string", "description": ("What they asked for, in a few words, for example: a funny one about "
                                           "fishing on the Outer Banks. Say 'any story' if they didn't say.")}},
         "required": ["request"]}}
-# M4a: these two are answered by the page, not the server. No "parameters": they take no arguments, and Gemini
+# M4a: these are answered by the page, not the server. A tool with no arguments has no "parameters", because Gemini
 # refuses an OBJECT with empty properties.
+# M18: the screen tools are the page's too (web/mary/screens.js has the list of screens and fields and the rules, and
+# they run after the page's emergency gate). their_words takes no text: the page pastes the resident's own transcript.
+# There is no save tool, on purpose. One tool, use_screen, with an action (Live gets about 12 tools at most). The names under open match LIST in screens.js (tests/test_m18_screens.py).
+LIVE_SCREEN_NAMES = ["notes", "write", "write_call_light", "write_meal", "write_bathing", "write_toileting",
+                     "write_medication", "write_repositioning", "write_staff", "write_safety", "write_other", "list",
+                     "report", "info", "email", "inbox", "things", "games", "choose", "info_panel"]
 LIVE_PAGE_TOOLS = [
     {"name": "story_more",
      "description": "When they want the rest of a story you were telling after they cut in, call this for the next part."},
     {"name": "end_talk",
      "description": ("Call this right after your one short goodbye, when they say goodbye, tell you to go to sleep or "
                      "rest, or say they're done talking.")},
+    {"name": "use_screen",
+     "description": ("Works on the screen in front of them, only when they ask. Never on your own idea, and it never "
+                     "saves or sends anything. Actions: look = the screen's name, its boxes and choices and what's in "
+                     "them (call it before explain or fill; never just to describe the screen). open = open the screen "
+                     "in name; a name starting write_ opens the form for that kind of problem. explain = light up the "
+                     "box in field, then explain it in your own words. fill = put value in the box in field, then say "
+                     "it back and ask if it's right. put_back = undo your last fill of the box in field. their_words = "
+                     "copy their own words into Your words, exactly as they said them (you can't give it any words). "
+                     "go_back = go back to you, the same as tapping you. read_incidents = read back what they saved, only "
+                     "when they ask; it works on any screen, and when and category narrow it."),
+     "parameters": {"type": "object", "properties": {
+         "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents."},
+         "name": {"type": "string", "description": "For open: the screen, one of " + ", ".join(LIVE_SCREEN_NAMES) + "."},
+         "field": {"type": "string", "description": "For explain, fill, put_back: the field from look."},
+         "value": {"type": "string", "description": ("For fill: what goes in it, from what they said. A date as YYYY-MM-DD, "
+                                                    "a time as HH:MM, a choice by its label.")},
+         "turns_back": {"type": "string", "description": ("For their_words: which thing they said. 1 is what they said "
+                                                          "before asking you, 2 the time before that, up to 4. 0 is the "
+                                                          "turn they asked in.")},
+         "when": {"type": "string", "description": "For read_incidents: latest, a day as YYYY-MM-DD, or a month as YYYY-MM."},
+         "category": {"type": "string", "description": ("For read_incidents: one of call_light, meal, bathing, toileting, "
+                                                        "medication, repositioning, staff, safety, other.")}},
+         "required": ["action"]}},
 ]
 LIVE_CORE_TOOLS = LIVE_MEMORY_TOOLS + [LIVE_STORY_TOOL] + LIVE_PAGE_TOOLS  # M4a: every Live chat on her own screen gets these
 STORY_DEADLINE_S = 25  # M4a: a whole story, collected before Live tells it
@@ -1725,7 +1775,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                 try:  # M9c: a locked database must never stop her reply
                     # M9c: a [remember] in the very reply that forgot must not save it straight back
                     if not memory.scrubbed and memory.add_fact(value, source=fact_source(text, typed), heard=text):  # heard: M15a
-                        remembered.append(" ".join(value.split()))
+                        remembered.append(" ".join(memory_core.scrub_addresses(value).split()))  # M18
                 except Exception:
                     pass
             elif value.strip() and not name_dropped:

@@ -16,6 +16,17 @@
   <!-- Her face fills the whole window. face.js draws into this box. -->
   <div id="face"></div>
 
+  <!-- M18: the band, and the deeper screens (My notes, My info, reports) in a frame under it, so her page never unloads and a
+       talk goes on. It is inside #scr so she can sit above the band while the frame sits under it; panels use the band alone. -->
+  <div id="deep" class="deep" aria-hidden="true">
+    <div class="deep-band">
+      <button id="deepBack" class="menu-btn m9-back" type="button"><span aria-hidden="true">&#8592;</span> <span class="backLbl">Back to Mary</span></button>
+    </div>
+    <iframe id="deepFrame" title="My notes and settings" allow="clipboard-read; clipboard-write"></iframe>
+  </div>
+  <!-- M18: small Mary's tap target and mood ring. Not a button: Back to Mary, right beside it, is the keyboard way -->
+  <div id="smallMary" class="m9-small" aria-hidden="true"><div class="m9-ring"></div></div>
+
   <!-- M4b: the one button, top right (boards Menu-Mary / Menu-Sam). app.js swaps the icon and the words when it opens. -->
   <button id="menuBtn" class="menu-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menu"><svg class="ic-menu" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg><svg class="ic-hide" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"></path></svg><span id="menuBtnLbl">Menu</span></button>
 
@@ -119,6 +130,7 @@
 <script src="/mary/talklive.js"></script>
 <script src="/mary/voiceout.js"></script>
 <script src="/mary/captions.js"></script>
+<script src="/mary/screens.js"></script>
 <script src="/mary/app.js"></script>
 <script src="/mary/skills.js"></script>
 <script src="/mary/firstrun.js"></script>

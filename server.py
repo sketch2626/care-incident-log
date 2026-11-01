@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlparse
 import assist
 import mail_core  # M15d: the resident's own email
 import mary
+import send_gate
 import memory_core  # M9c
 import power
 import secret_store  # M15d: the Gemini key, out of the log and its backups
@@ -46,6 +47,7 @@ DEFAULT_DATA = Path(os.environ.get("APPDATA") or Path.home()) / "CareIncidentLog
 DATA = Path(os.environ.get("TRACKER_DATA") or DEFAULT_DATA)
 SECRETS = secret_store.SecretStore(DATA)  # M15d: tied to this data folder, so a scratch install sees none of the real ones
 MAIL = mail_core.Mailer(SECRETS, DATA / "mail.log")  # M15d: the log is written only when an email is tried
+MAIL.hide_old_addresses()  # M18: lines from before this version held the address itself
 LEGACY_DATA = ROOT / "data"  # where versions before the desktop app kept the log
 DB_PATH = DATA / "incidents.db"
 BACKUPS = DATA / "backups"
@@ -73,7 +75,8 @@ CATEGORIES = {
 SEVERITIES = {"minor", "serious", "dangerous"}
 TEXT_FIELDS = ["occurred_date", "occurred_time", "category", "description", "severity",
                "staff_involved", "reported_to", "outcome", "witnesses", "source", "source_id",
-               "formal_summary"]
+               "formal_summary", "helped_by"]
+HELPED_BY = ("mary", "sam")  # M18 piece 5: who helped fill in the form; set by the form, never by a tool
 SETTING_KEYS = {"resident_name", "room", "facility", "facility_address", "state",
                 "gemini_enabled", "gemini_model",  # M15d: the Gemini key isn't here, it lives in SECRETS
                 "companion", "voice_rate", "voice_volume", "andyflow_enabled",
@@ -106,6 +109,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     outcome TEXT NOT NULL DEFAULT '',
     witnesses TEXT NOT NULL DEFAULT '',
     formal_summary TEXT NOT NULL DEFAULT '',
+    helped_by TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'manual',
     source_id TEXT NOT NULL DEFAULT '',
     logged_at TEXT NOT NULL,
@@ -182,6 +186,8 @@ def init_db():
         conn.executescript(SCHEMA)
         if "formal_summary" not in {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}:
             conn.execute("ALTER TABLE incidents ADD COLUMN formal_summary TEXT NOT NULL DEFAULT ''")
+        if "helped_by" not in {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}:  # M18 piece 5
+            conn.execute("ALTER TABLE incidents ADD COLUMN helped_by TEXT NOT NULL DEFAULT ''")
         # The Andy Flow link is the resident's choice and starts off. A log that already holds entries
         # imported from Andy Flow was connected before this setting existed, so it keeps the link, once.
         if "andyflow_enabled" not in get_settings(conn) and conn.execute(
@@ -365,6 +371,7 @@ def clean_incident(data):
     if row["severity"] not in SEVERITIES:
         row["severity"] = "minor"
     row["source"] = row["source"] or "manual"
+    row["helped_by"] = row["helped_by"] if row["helped_by"] in HELPED_BY else ""
     try:  # "30", 30, "30.0" and 30.5 all mean 30; anything else is "not known"
         wait = int(float(str(data.get("wait_minutes")).strip()))
     except (ValueError, OverflowError):
@@ -649,7 +656,8 @@ def mary_voices():
 def mary_write_incident(incident):
     """The resident said yes to 'Would you like me to write that down?': log her guess. Returns the new id."""
     with closing(connect()) as conn:
-        new_id = insert_incident(conn, clean_incident({**incident, "source": "mary"}))
+        helped = "sam" if get_settings(conn).get("companion") == "him" else "mary"  # M18: she wrote this one, so it says so
+        new_id = insert_incident(conn, clean_incident({**incident, "source": "mary", "helped_by": helped}))
         conn.commit()
     backup_db()  # Mary's window stays open for days: her first save of a day makes that day's backup
     return new_id
@@ -724,6 +732,16 @@ def gate_heard(text, kind):  # M15c
     return {"send": {key: out.get(key) for key in ("say", "effects", "action")}} if out else {}
 
 
+def save_heard(text, kind):  # M18 piece 4
+    """True when this finished line is the resident's own plain "save it": no emergency, not garbled. A send answer from the
+    gate wins at the route. The page acts only with a form up, never over a skill's screen, so a look left waiting at the
+    gate can't quietly swallow it. The server saves nothing here: only the page can press Save."""
+    try:
+        return not kind and not mary.not_english(text) and send_gate.is_plain_save(text)
+    except Exception:  # noqa: BLE001 (a failure saves nothing)
+        return False
+
+
 def gate_her_words(text):  # M15c
     """Her finished Live turn at the send gate. A gate failure acts as no gate."""
     try:
@@ -762,6 +780,8 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
         error = "" if value else "That isn't a name. If it's a pet name they like, save it with remember_fact."
     else:
         value = " ".join(str(args.get("fact") or "").split())
+        if memory_core.only_address(memory_core.scrub_addresses(value)):  # M18
+            return {"response": {"ok": False, "note": ADDRESS_NOT_A_MEMORY}, "effects": [], "say": None}
         error = "" if value else "There was no fact to save."
     if error:
         return {"response": {"ok": False, "error": error}, "effects": [], "say": None}
@@ -779,6 +799,8 @@ def mary_live_memory_call(name, args, heard=""):  # M4a: Live's remember_fact an
     return {"response": {"ok": True}, "effects": [], "say": None}
 
 
+ADDRESS_NOT_A_MEMORY = ("An email address never goes in your memories. It goes in their contacts: use give_address, "  # M18
+                        "spell it back, and after their yes ask if they want it kept.")
 STORY_FAILED = {"error": "no_story",  # M4a
                 "note": "Tell a short story yourself instead, with a beginning, middle and end."}
 
@@ -804,6 +826,11 @@ def close_talk():  # M15a
             memory_store().close_talk()
         except (sqlite3.Error, OSError):
             pass
+    try:  # M18: an address still waiting on a yes goes with the talk
+        if _skill_host is not None:
+            _skill_host.talk_over()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def mary_open(when):
@@ -845,6 +872,7 @@ def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typ
             "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
             "offer": r["offer"], "logged": r["logged"], "error": r["error"], "needs_key": not s["key"],
             "bad_key": r["error"] == mary.BAD_KEY,
+            "save": save_heard(text, r["emergency"] or r["gemini_alert"]),  # M18 piece 4
             "first_words_s": r["first_words_s"], "total_s": r["total_s"]}
 
 
@@ -1064,7 +1092,7 @@ def wake_log(kind, **fields):
         parts = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), kind]
         for k, v in fields.items():
             if v is not None and v != "":
-                parts.append(f"{k}={json.dumps(v, ensure_ascii=False) if isinstance(v, str) else v}")
+                parts.append(f"{k}={json.dumps(memory_core.scrub_addresses(v), ensure_ascii=False) if isinstance(v, str) else v}")  # M18
         line = "  ".join(parts) + "\n"
         path = DATA / "wake.log"
         with _wake_log_lock:
@@ -1294,8 +1322,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Frame-Options", "DENY")  # no other website may show the log inside its own page
-        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")  # no other website may show the log inside its own page
+        self.send_header("Content-Security-Policy", "frame-ancestors 'self'")  # M18: only Mary's own page may
         super().end_headers()
 
     # Only answer this computer, and only our own page (custom header blocks other websites).
@@ -1447,7 +1475,8 @@ class Handler(SimpleHTTPRequestHandler):
             kind = mary.is_emergency(text) or ""
             say = ""
             # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
-            send = {} if body.get("note") else gate_heard(text, kind)
+            send = {} if body.get("note") else gate_heard(text, kind)  # M18: the only place past here with the raw line
+            save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "say": "", "garbled": True, **send})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
@@ -1467,7 +1496,7 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send})
+            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send, **save})
         if method == "POST" and path == "/api/mary/open":  # M4a: her hello, from the brain
             return self._send(mary_open(self._body().get("when")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
@@ -1481,7 +1510,8 @@ class Handler(SimpleHTTPRequestHandler):
                     memory = mary_memory()
                     last = memory.recent[-1] if memory.recent else {}
                     # M4a: the emergency words are saved by /heard; say() of the same words must not double them
-                    if last.get("role") != "model" or " ".join(last["text"].split()) != text[:mary.MAX_TURN_CHARS].strip():
+                    kept = memory_core.scrub_addresses(text)  # M18: add_turn keeps this, not what the gate had above
+                    if last.get("role") != "model" or " ".join(last["text"].split()) != kept[:mary.MAX_TURN_CHARS].strip():
                         memory.add_turn("model", text)
                         try:
                             memory.save()
@@ -1748,6 +1778,7 @@ class Handler(SimpleHTTPRequestHandler):
                 rows = list_incidents(conn, q("from"), q("to"))
                 for r in rows:
                     r["summary"] = reports.summary_for(r)  # same sentence the state report prints
+                    r["helped_note"] = reports.helped_note(r)  # M18 piece 5: same line as the report
                 return self._send(rows)
             if method == "GET" and path == "/api/settings":
                 return self._send(public_settings(conn))
@@ -1812,8 +1843,11 @@ class Handler(SimpleHTTPRequestHandler):
                     mark_seen(conn, data["inbox_kind"], data["inbox_id"], "added")
                 return self._send({"id": new_id}, 201)
             if method == "PUT" and m:
-                row = clean_incident(self._body())
+                body = self._body()
+                row = clean_incident(body)
                 row.pop("source"), row.pop("source_id")
+                if "helped_by" not in body:  # M18 piece 5: an edit that doesn't say keeps what's there
+                    row.pop("helped_by")
                 row["updated_at"] = now()
                 cur = conn.execute(f"UPDATE incidents SET {', '.join(k + ' = ?' for k in row)} "
                                    "WHERE id = ? AND deleted_at IS NULL", [*row.values(), int(m.group(1))])

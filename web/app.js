@@ -158,6 +158,84 @@ function fallbackSummary(i) {
 
 /* ---------- Routing ---------- */
 
+/* ---------- M18: inside Mary's page ---------- */
+
+// Mary opens these screens in a frame on her own page, so going deeper never ends a talk. Her page and this one talk by
+// postMessage, to this origin only and checked both ways. A message says what happened, never what was typed.
+const IN_MARY = document.documentElement.classList.contains('in-mary');
+
+function toMary(what, more) {
+  if (!IN_MARY) return;
+  try { window.parent.postMessage({ type: 'mary-deep', what, ...more }, location.origin); } catch { /* she goes on without it */ }
+}
+
+// Hands at work on a form aren't quiet: at most one word every 5 s, so her talk doesn't time out.
+let maryActAt = 0;
+function maryActivity() {
+  const now = Date.now();
+  if (now - maryActAt < 5000) return;
+  maryActAt = now;
+  toMary('activity');
+}
+
+// The computer has one recorder. While the form holds it she holds the wake word, which lets go of the mic.
+let micTold = false;
+function micOpen() { return mic.state === 'listening' || mic.state === 'working' || !!field.id || field.busy; }
+function tellMaryMic() {
+  const on = micOpen();
+  if (on === micTold) return;
+  micTold = on;
+  toMary('mic', { on });
+}
+
+// While a talk is open she has the microphone, so the form's Tap and talk buttons step aside.
+function maryTalking(on) {
+  document.documentElement.classList.toggle('mary-talking', on);
+  if (!on || !micOpen()) return;
+  teardownMic();
+  $('#detailStatus').textContent = '';
+  checkMic(); // puts the buttons right for when the talk ends
+}
+
+// Her page hid this frame with the mic running: stop the way tapping Stop does, so the words already said stay in the box.
+async function micLetGo() {
+  for (let n = 0; (mic.state === 'working' || field.busy) && n < 600; n++) await new Promise(r => setTimeout(r, 50));
+  if (mic.state === 'listening') await stopTalk();
+  else if (field.id) await talkInto(field.id);
+}
+
+if (IN_MARY) {
+  ['pointerdown', 'input'].forEach(t => document.addEventListener(t, maryActivity, true));
+  // Any link to her page closes this frame instead of loading her inside it.
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (a && a.pathname === '/mary.html') { e.preventDefault(); toMary('close'); }
+  }, true);
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin || e.source !== window.parent) return;
+    const d = e.data;
+    if (!d || d.type !== 'mary-deep') return;
+    if (d.what === 'talk') maryTalking(!!d.on);
+    else if (d.what === 'hide') micLetGo();
+    else if (d.what === 'save') maryAskedSave(); // piece 4
+  });
+}
+
+// Piece 4: her page asks only on the resident's own plain "save it". This presses Save the way a tap does, with the same
+// checks and the same Saved screen. A Save already going answers for itself.
+function maryAskedSave() {
+  if (cur.screen === 'add') {
+    if (add.busy) return;
+    const same = !add.inbox && add.cat === add.cleanCat && JSON.stringify(formNow()) === add.clean;
+    if (add.saved || same) return toMary('save_none', { why: 'nothing' });
+    $('#form').requestSubmit();
+  } else if (cur.screen === 'info') {
+    if ($('#infoSave').disabled) return;
+    if (!infoTouched) return toMary('save_none', { why: 'nothing' });
+    $('#infoForm').requestSubmit();
+  } else toMary('save_none', { why: 'no_form' });
+}
+
 const SCREENS = ['home', 'add', 'saved', 'list', 'inbox', 'report', 'info'];
 let cur = { screen: 'home' };
 let pendingInbox = null;
@@ -166,9 +244,11 @@ let lastSaved = null;
 function showScreen(id) {
   document.documentElement.classList.remove('routing'); // M17
   SCREENS.forEach(s => { $(`#${s}`).hidden = s !== id; });
+  $('#infoSaved').hidden = true; // M18
   window.scrollTo(0, 0);
   const h = $('h1', $(`#${id}`));
   if (h) h.focus({ preventScroll: true });
+  toMary('screen', { name: id }); // M18
 }
 
 function go(name, replace) {
@@ -177,7 +257,7 @@ function go(name, replace) {
 
 function route() {
   const [name, arg = ''] = location.hash.replace(/^#/, '').split('/');
-  if (cur.screen === 'add') teardownMic();
+  if (cur.screen === 'add') { keepDraft(); teardownMic(); } // M18
   switch (name) {
     case 'add': {
       const opts = arg === 'inbox' && pendingInbox ? { inboxItem: pendingInbox } : CAT[arg] ? { cat: arg } : {};
@@ -213,7 +293,7 @@ function route() {
       return showScreen('report');
     case 'info':
       cur = { screen: 'info' };
-      fillInfo();
+      if (IN_MARY && infoDirty) { loadSkills(); loadMemories(); loadMail(); } else fillInfo(); // M18: half-typed My info stays
       return showScreen('info');
     default:
       cur = { screen: 'home' };
@@ -318,9 +398,65 @@ const radioVal = name => { const r = $(`input[name="${name}"]:checked`); return 
 const setRadio = (name, value) => { $$(`input[name="${name}"]`).forEach(r => { r.checked = r.value === value; }); };
 const EXTRA_FIELDS = ['staff_involved', 'reported_to', 'outcome', 'witnesses'];
 
+/* ---------- M18: half-typed work ---------- */
+// Inside Mary's page a talk can move the resident around, and #add's one form is shared, so going away and coming back
+// used to wipe it. A form with changes is kept here by what it was for, in this page's memory only, until Save. Coming
+// back to the same category (or to none, by voice) or the same edit puts it back.
+const drafts = new Map();
+const formNow = () => ({
+  words: $('#words').value, when: radioVal('when'), day: $('#day').value, time: $('#time').value,
+  wait: radioVal('wait'), sev: radioVal('sev'), extra: EXTRA_FIELDS.map(k => $(`#${k}`).value),
+});
+const addKey = () => (add.editing ? `edit:${add.editing.id}` : add.inbox ? `inbox:${add.inbox.kind}:${add.inbox.source_id}` : `new:${add.cat || ''}`);
+
+// Piece 5: how many of her fills are in this form right now, so its record can say she helped. Counts, never a value.
+// web/mary/screens.js calls this directly (same origin). Each draft and each edit keeps its own count.
+let formNo = 0;
+var maryHelp = { // a var, so screens.js finds it on this window
+  form: () => add.formId,
+  step(by, who) {
+    add.helpFills = Math.max(0, (add.helpFills || 0) + by);
+    if (by > 0) add.helpWho = who;
+  },
+};
+const helpedBy = () => (add.helpFills ? add.helpWho : (add.editing && add.editing.helped_by) || '');
+
+function keepDraft() {
+  if (!IN_MARY || add.saved) return;
+  const form = formNow();
+  if (JSON.stringify(form) === add.clean) return;
+  const key = addKey();
+  drafts.delete(key); // the newest goes last
+  drafts.set(key, { form, cat: add.cat, formal: add.formal, formalFor: add.formalFor, whenTouched: add.whenTouched, customWait: add.customWait, formId: add.formId, helpFills: add.helpFills, helpWho: add.helpWho });
+}
+
+function takeDraft(key) {
+  const k = key === 'new:' ? [...drafts.keys()].filter(x => x.startsWith('new:')).pop() : key;
+  const d = drafts.get(k);
+  drafts.delete(k);
+  return d;
+}
+
+function putDraft(d) {
+  const f = d.form;
+  Object.assign(add, { formal: d.formal, formalFor: d.formalFor, whenTouched: d.whenTouched, customWait: d.customWait, formId: d.formId, helpFills: d.helpFills, helpWho: d.helpWho });
+  $('#words').value = f.words;
+  $('#day').value = f.day;
+  $('#time').value = f.time;
+  setRadio('when', f.when);
+  if (d.customWait) setWait(d.customWait);
+  setRadio('wait', f.wait);
+  setRadio('sev', f.sev);
+  EXTRA_FIELDS.forEach((k, i) => { $(`#${k}`).value = f.extra[i]; });
+  setType(d.cat);
+}
+
+// A save ends her light (web/mary/screens.js puts it on).
+function unlit() { $$('.m9-lit').forEach(el => el.classList.remove('m9-lit')); }
+
 function initAdd({ cat = null, incident = null, inboxItem = null } = {}) {
   const g = inboxItem ? inboxItem.guess || {} : null;
-  add = { editing: incident, inbox: inboxItem, cat: null, formal: '', formalFor: '', whenTouched: false, busy: false, customWait: 0 };
+  add = { editing: incident, inbox: inboxItem, cat: null, formal: '', formalFor: '', whenTouched: false, busy: false, customWait: 0, formId: ++formNo, helpFills: 0, helpWho: '' };
   $('#form').reset();
   $('#groupopts').hidden = true;
   $('#moreDetails').open = true; // names and who they told are the proof, so keep it in view
@@ -351,6 +487,10 @@ function initAdd({ cat = null, incident = null, inboxItem = null } = {}) {
     $('#addtitle').textContent = cat ? CAT[cat].tile : 'Just tell me what happened';
   }
   setType(incident ? incident.category : g && CAT[g.category] ? g.category : cat);
+  add.clean = JSON.stringify(formNow()); // M18: what counts as untouched, before anything kept comes back
+  add.cleanCat = add.cat; // piece 4: picking another group is a change too
+  const kept = takeDraft(addKey());
+  if (kept) putDraft(kept);
   updateWhenUI();
   setMic('checking');
   checkMic();
@@ -508,6 +648,7 @@ function teardownMic() {
   field.id = null;
   field.busy = false;
   mic.state = 'checking';
+  tellMaryMic(); // M18
 }
 
 $('#mic').addEventListener('click', () => {
@@ -565,6 +706,7 @@ function syncTalkButtons() {
   });
   if (field.id || field.busy) $('#mic').disabled = true;
   else $('#mic').disabled = mic.state === 'loading' || mic.state === 'working';
+  tellMaryMic(); // M18
 }
 
 async function talkInto(id) {
@@ -590,10 +732,14 @@ async function talkInto(id) {
   if (field.id || field.busy || mic.state !== 'idle') return;
   field.busy = true;
   syncTalkButtons();
+  const t = mic.token; // M18: a talk can open while this starts
   try {
     await post('/api/listen/start');
-    field.id = id;
-    note.textContent = "I'm listening. Tap Stop when you're done.";
+    if (t !== mic.token) api('/api/listen/stop?raw=1', { method: 'POST' }).catch(() => {}); // nobody is left to stop it
+    else {
+      field.id = id;
+      note.textContent = "I'm listening. Tap Stop when you're done.";
+    }
   } catch (err) { note.textContent = err.message; }
   field.busy = false;
   syncTalkButtons();
@@ -609,11 +755,13 @@ async function finishFieldTalk() {
 
 /* ---------- Save ---------- */
 
-function formFail(message, focusSel) {
+const FORM_MISSING = { '#words': 'what happened', '#day': 'which day it happened' }; // piece 4: plain labels, never a value
+function formFail(message, focusSel, label) {
   const e = $('#formError');
   e.textContent = message;
   e.hidden = false;
   if (focusSel) $(focusSel).focus(); else e.scrollIntoView({ block: 'center' });
+  toMary('saved_fail', { label: label || FORM_MISSING[focusSel] || '' }); // piece 4
 }
 
 $('#form').addEventListener('submit', async e => {
@@ -642,7 +790,7 @@ $('#form').addEventListener('submit', async e => {
         if (!formal && guessed.formal_summary) formal = guessed.formal_summary;
       } catch (err) { if (!cat) throw err; }
     }
-    if (!cat) throw new Error('Please choose which group this belongs to.');
+    if (!cat) throw Object.assign(new Error('Please choose which group this belongs to.'), { label: 'which group this belongs to' });
     // Anything the resident picked wins; otherwise keep what was heard in their words.
     const w = collectWait();
     const pickedWait = w.never || w.wait !== '';
@@ -652,6 +800,7 @@ $('#form').addEventListener('submit', async e => {
       wait_minutes: pickedWait ? w.wait : (guessed.wait_minutes ?? ''),
       never_came: pickedWait ? w.never : !!guessed.never_came,
       formal_summary: formal,
+      helped_by: helpedBy(), // piece 5
     };
     EXTRA_FIELDS.forEach(k => { payload[k] = $(`#${k}`).value.trim(); });
     const editing = add.editing;
@@ -665,6 +814,10 @@ $('#form').addEventListener('submit', async e => {
     pendingInbox = null;
     try { await load(); } catch { /* the saved screen can still show what was just written */ }
     add.busy = false;
+    add.saved = true; // M18: nothing here to keep
+    unlit();
+    toMary('saved'); // M18
+    toMary('saved_ok', { form: 'add' }); // piece 4
     go(`saved/${id}`);
   } catch (err) {
     add.busy = false;
@@ -675,7 +828,7 @@ $('#form').addEventListener('submit', async e => {
     }
     btn.disabled = false;
     btn.textContent = 'Save';
-    formFail(err.message);
+    formFail(err.message, undefined, err.label);
   }
 });
 
@@ -695,6 +848,8 @@ function renderSaved(id) {
   $('#rWhen').textContent = longDate(inc.occurred_date) + (inc.occurred_time ? `, ${fmtTime(inc.occurred_time)}` : ' (time not noted)');
   $('#rSum').textContent = inc.formal_summary || fallbackSummary(inc);
   $('#rWords').textContent = inc.description ? `“${inc.description}”` : '(No words written)';
+  $('#rHelped').textContent = inc.helped_note || ''; // piece 5: apart from their words
+  $('#rHelpedL').hidden = $('#rHelped').hidden = !inc.helped_note;
   return true;
 }
 
@@ -709,6 +864,7 @@ function entryHTML(i) {
     <b>${esc(c.tile)}</b>
     <span>${esc(meta)}</span>
     ${i.description ? `<span class="quote">“${esc(i.description)}”</span>` : ''}
+    ${i.helped_note ? `<span>${esc(i.helped_note)}</span>` : ''}
     <div class="entryacts">
       <button type="button" class="tinybtn" data-edit="${i.id}" aria-label="Edit note ${esc(no)}">Edit</button>
       <button type="button" class="tinybtn danger" data-del="${i.id}" aria-label="Remove note ${esc(no)}">Remove</button>
@@ -817,9 +973,16 @@ $('#xlsxBtn').addEventListener('click', e => {
 
 const INFO_FIELDS = ['resident_name', 'room', 'facility', 'facility_address', 'state', 'gemini_model'];
 const FROM_MARY = new URLSearchParams(location.search).get('from') === 'mary'; // Mary sent the resident here
-$('#backToMary').addEventListener('click', () => { location.href = '/mary.html'; }); // M17: the bar at the top of every screen
+$('#backToMary').addEventListener('click', () => { if (IN_MARY) toMary('close'); else location.href = '/mary.html'; }); // M17: the bar at the top of every screen
+
+let infoDirty = false; // M18: typed into My info since it was last filled, so coming back doesn't write over it
+let infoTouched = false; // piece 4: the same, for #infoForm alone: "save it" presses this form's Save, not the other boxes'
+$('#info').addEventListener('input', () => { infoDirty = true; });
+$('#info').addEventListener('change', () => { infoDirty = true; });
 
 function fillInfo() {
+  infoDirty = false;
+  infoTouched = false;
   const s = state.settings;
   INFO_FIELDS.forEach(k => { $(`#i-${k}`).value = s[k] || ''; });
   $('#i-gemini_enabled').checked = s.gemini_enabled === '1';
@@ -1112,7 +1275,9 @@ async function loadMemories() {
 // paste_text (desktop.py), or the browser's clipboard in a plain web browser.
 // The key is never shown; it goes into the hidden box and only Save sends it.
 async function readClipboard() {
-  const app = window.pywebview && window.pywebview.api;
+  let app = window.pywebview && window.pywebview.api;
+  // M18: in Mary's frame the app's bridge is on her page. The words come straight back here, never through a message.
+  if (!app) try { app = window.parent.pywebview && window.parent.pywebview.api; } catch { /* no app window */ }
   if (app && typeof app.paste_text === 'function') return ((await app.paste_text()) || '').trim();
   if (navigator.clipboard && navigator.clipboard.readText) return (await navigator.clipboard.readText()).trim();
   throw new Error('no clipboard');
@@ -1142,10 +1307,13 @@ function updateFlowState() { $('#flowState').textContent = $('#i-andyflow_enable
 $('#i-andyflow_enabled').addEventListener('change', updateFlowState);
 $('#infoForm').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
 
+$('#infoForm').addEventListener('input', () => { $('#infoSaved').hidden = true; infoTouched = true; }); // M18: a new change isn't saved yet
+$('#infoForm').addEventListener('change', () => { infoTouched = true; });
 $('#infoForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#infoSave');
   $('#infoError').hidden = true;
+  $('#infoSaved').hidden = true; // M18
   btn.disabled = true;
   const payload = Object.fromEntries(INFO_FIELDS.map(k => [k, $(`#i-${k}`).value.trim()]));
   payload.gemini_enabled = $('#i-gemini_enabled').checked ? '1' : '0';
@@ -1163,13 +1331,22 @@ $('#infoForm').addEventListener('submit', async e => {
     state.settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
     try { await load(); } catch { /* the banner says so */ } // so home shows or hides the Andy Flow parts
     fillInfo();
-    if (FROM_MARY) {
+    unlit(); // M18
+    $('#infoSaved').hidden = false; // M18: the plain check beside Save; the toast below only says the way back
+    toMary('saved'); // M18: a key saved here reaches her at once
+    toMary('saved_ok', { form: 'info' }); // piece 4
+    if (IN_MARY) {
+      // M18: the way back is her own band, still at the top, and a talk may be going on
+      const who = state.settings.companion === 'him' ? 'Sam' : 'Mary';
+      toast(`Saved. Tap "Back to ${who}" at the top when you're done.`);
+    } else if (FROM_MARY) {
       toast(`Saved. Tap "Back to ${$('#backName').textContent}" at the top to talk again.`);
       $('#backToMary').focus({ preventScroll: true }); // M17: the bar is always in view
-    } else toast('Saved.');
+    }
   } catch (err) {
     $('#infoError').textContent = err.message;
     $('#infoError').hidden = false;
+    toMary('saved_fail', {}); // piece 4
   } finally { btn.disabled = false; }
 });
 

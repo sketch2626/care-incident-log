@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "title": "Cards and messages",
   "summary": "Makes greeting cards and short letters in the resident's own words, ready to print and saved on their laptop.",
-  "instructions": "Their words, never yours. Help only if asked, in their voice, adding no feeling. Read it back. Changes by voice. Unclear who: ask aloud. Never describe the screen. Card: show_fronts, pick_front, set_words. Note: plain_message. send_it when they want it sent or seem done. Never say it went unless told. Silent during the count. Spell addresses, never read them. Never write anyone unasked.",
+  "instructions": "Their words, never yours. Help only if asked, in their voice, adding no feeling. Read it back. Changes by voice. Unclear who: ask aloud. Never describe the screen. Card: show_fronts, pick_front, set_words. Note: plain_message. send_it when they want it sent or seem done. Never say it went unless told. Silent during the count. Spell addresses. Say names, not addresses. Never write anyone unasked.",
   "screen": {"menu_label": "Make a card", "menu_icon": "card", "full_screen": true},
   "sees": true,
   "slow": true,
@@ -93,10 +93,11 @@
     },
     {
       "name": "give_address",
-      "description": "An email address they said aloud. Read spelled back letter by letter, ask if that's right, then call address_right.",
+      "description": "An email address they said aloud, for a send or just telling you. Read spelled back letter by letter, ask if that's right, then call address_right.",
       "inputSchema": {"type": "object", "properties": {
         "address": {"type": "string", "description": "As they said it, like mark dot hollis at gmail dot com", "maxLength": 400},
-        "person": {"type": "string", "description": "Whose address it is, if they said"}
+        "person": {"type": "string", "description": "Whose address it is, if they said"},
+        "relationship": {"type": "string", "description": "Like daughter, if they said"}
       }, "required": ["address"]},
       "annotations": {"readOnlyHint": false, "destructiveHint": false}
     },
@@ -130,6 +131,14 @@
     {
       "name": "find_contact",
       "description": "Whether you know this person: relationship, and whether an email is saved. Never the address itself.",
+      "inputSchema": {"type": "object", "properties": {
+        "name": {"type": "string", "description": "A name, first name or relationship"}
+      }, "required": ["name"]},
+      "annotations": {"readOnlyHint": true, "destructiveHint": false}
+    },
+    {
+      "name": "contact_address",
+      "description": "A saved email address, only when they ask to hear it or have it put in a box. A send never needs it: use the name.",
       "inputSchema": {"type": "object", "properties": {
         "name": {"type": "string", "description": "A name, first name or relationship"}
       }, "required": ["name"]},

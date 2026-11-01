@@ -142,7 +142,7 @@ class Ceiling(Base):
             live = len(host.gemini_tools()[0]["functionDeclarations"]) + len(mary.LIVE_CORE_TOOLS)
             counts[n] = (normal, live)
             self.assertLessEqual(normal, 12)
-            self.assertLessEqual(live, 12)
+            self.assertLessEqual(live, 13)   # M18: Live's one screen tool; normal stays 12
             names = [d["name"] for d in body["tools"][0]["functionDeclarations"]]
             self.assertFalse([x for x in names if "__" in x], names)
         self.assertEqual(counts[1], counts[10])

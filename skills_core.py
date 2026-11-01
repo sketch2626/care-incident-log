@@ -907,6 +907,8 @@ class SkillHost:
 
     def _log(self, event, **fields):
         """One JSON line in skills.log. Callers pass only names, codes and numbers: never resident text, keys or URLs."""
+        fields = {key: memory_core.scrub_addresses(value) if isinstance(value, str) else value  # M18: the wall behind that
+                  for key, value in fields.items()}
         line = json.dumps(dict({"time": datetime.now().isoformat(timespec="seconds"), "event": event}, **fields))
         with self._log_lock:
             try:
@@ -1426,10 +1428,25 @@ class SkillHost:
 
     # ----- the send gate (M15c) -----
 
+    def _resident_line(self, over=False):  # M18
+        """Tells each skill with an on_resident_line about one more line of theirs, or the end of the talk. Never raises."""
+        for name, skill in list(self.skills.items()):
+            handler = getattr(skill.module, "on_resident_line", None)
+            if callable(handler) and not skill.tripped:
+                try:
+                    ctx = self.context(name)
+                    self._guard(skill, "on_resident_line", lambda: handler(ctx, over))
+                except Exception:  # noqa: BLE001
+                    pass
+
+    def talk_over(self):  # M18
+        self._resident_line(over=True)
+
     def resident_said(self, text, garbled=False):
         """The resident's finished words at the gate. None when it has nothing to do with them, else {"action", "say",
         "effects", "skip_brain"}, after the skill's optional on_gate(ctx, action) in the guard. A failure in the gate or
         the skill acts as if there were no gate: nothing sends, she answers normally. Never raises."""
+        self._resident_line()  # M18
         gate = self.gate
         if gate is None:
             return None

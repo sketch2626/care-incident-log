@@ -115,7 +115,7 @@ class MaryPageTests(unittest.TestCase):
         self.assertIn("if (S.screen === 'emergency') { return 'emergency'; }", js)
         self.assertIn("if (S.firstRun) { return 'first run'; }", js)
         self.assertIn("if (S.micHeld) { return 'send count'; }", js)
-        self.assertIn("return 'talk open';", js)   # M21a: a greeted wake first lets a dictating talk hear again
+        self.assertIn("return 'talk open';", js)   # D18: a talk open declines, with no dictation check
         self.assertIn("if (S.phase !== 'idle') { return 'busy ' + S.phase; }", js)
         self.assertIn("wake_word: it.v ? '1' : '0'", js)
         self.assertIn("st.wake_ready", js)

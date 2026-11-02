@@ -127,14 +127,15 @@ class Lapse(unittest.TestCase):
 
 
 class HeardRoute(unittest.TestCase):
-    def test_note_remembers_nothing_but_an_emergency_still_answers(self):
+    def test_note_sends_and_saves_nothing_but_she_remembers_it(self):
         memory = server.mary_memory()
         before = list(memory.recent)
         status, body, _ = helpers.api("POST", "/api/mary/heard", {"text": "call me Zelda, I was born May 5", "note": True})
         self.assertEqual(status, 200)
         memory = server.mary_memory()
-        self.assertEqual(memory.recent, before)
-        self.assertNotEqual(memory.name, "Zelda")
+        # D18: she hears it, so the turn is remembered once (recent is capped, so look at the whole list)
+        self.assertFalse(any("Zelda" in str(t) for t in before))
+        self.assertEqual(sum("Zelda" in str(t) for t in memory.recent), 1)
         status, body, _ = helpers.api("POST", "/api/mary/heard", {"text": FELL, "note": True})
         self.assertTrue(body["emergency"])
         self.assertEqual(body["steps"], mary.emergency_text(body["kind"], server.mary_memory(), FELL))

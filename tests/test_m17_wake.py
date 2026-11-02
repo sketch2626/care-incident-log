@@ -73,7 +73,7 @@ var window = { MarySkills: null, MaryLive: {
   stalled: function () { return T.stalled; },
   setDeaf: function (on) { T.deaf = !!on; }
 } };
-var document = { hasFocus: function () { return T.focus !== false; }, activeElement: null };
+var document = { activeElement: null };
 function bookWin() { return null; }
 function log(e) { logs.push(String((e && e.message) || e)); }
 function api(method, path, body) {
@@ -131,8 +131,7 @@ function out(x) { console.log(JSON.stringify(x)); }
 
 def _page():
     app = read(APP)
-    consts = ["WAKE_TAIL_MS", "WAKE_STUCK_MS", "WAKE_READY_RETRY_MS", "LIVE_STUCK_S", "NOTE_BUSY_MS", "LIVE_FALSE_CUT_MS", "LIVE_PICK_UP",
-              "END_TALK_HELD"]
+    consts = ["WAKE_TAIL_MS", "WAKE_STUCK_MS", "WAKE_READY_RETRY_MS", "LIVE_STUCK_S", "NOTE_BUSY_MS", "LIVE_FALSE_CUT_MS", "LIVE_PICK_UP"]
     cuts = [
         ("function liveSpeaking() {", "// M15c: the send count's hooks"),
         ("function greetLive(text) {", "// M7a: true means a screen's line"),
@@ -409,19 +408,21 @@ console.log(JSON.stringify([r, resumes]));
 
 @unittest.skipUnless(NODE, "Node is not installed")
 class NoteBusy(unittest.TestCase):
-    def test_a_goodbye_during_a_note_does_not_end_the_talk(self):
+    def test_a_goodbye_during_a_note_ends_the_talk(self):
+        # D18: going to sleep is how you dictate
         got = node(r"""
 var c = talk(true);
 App.noteBusy(true);
 liveHeardPiece(c, 'go to sleep');
 tick(LIVE_BYE_QUIET_MS + 1);
-await liveHeard(c, 'go to sleep');
-await flush();
-var r = await liveToolCall(c, END_TALK);
-out({ ending: c.ending, open: S.convo === c, answers: r.functionResponses.length, id: r.functionResponses[0].id,
-      hushed: count('stopSpeaking'), mic: stops });
+var piece = c.ending;
+var d = talk(false);
+App.noteBusy(true);
+var r = await liveToolCall(d, END_TALK);
+liveTurnDone(d);
+out({ piece: piece, answers: r.functionResponses.length, ended: S.convo === null });
 """)
-        self.assertEqual(got, {"ending": False, "open": True, "answers": 1, "id": "e1", "hushed": 0, "mic": []})
+        self.assertEqual(got, {"piece": True, "answers": 0, "ended": True})
 
     def test_a_goodbye_she_has_already_begun_still_ends(self):
         got = node(r"""
@@ -444,37 +445,8 @@ out(count('emergency'));
 """)
         self.assertEqual(got, 1)
 
-    def test_an_expired_note_does_not_block_a_goodbye(self):
-        got = node(r"""
-var a = talk(false);
-App.noteBusy(true);
-tick(NOTE_BUSY_MS);
-liveHeardPiece(a, 'go to sleep');
-tick(LIVE_BYE_QUIET_MS + 1);
-var piece = a.ending;
-var b = talk(false);
-await liveHeard(b, 'goodbye');
-await flush();
-var heard = b.ending;
-var c = talk(false);
-var r = await liveToolCall(c, END_TALK);
-liveTurnDone(c);   // M21a: the turn that carries end_talk completes, and the talk closes
-out({ piece: piece, heard: heard, ended: S.convo === null, answers: r.functionResponses.length });
-""")
-        self.assertEqual(got, {"piece": True, "heard": True, "ended": True, "answers": 0})
-
-    def test_blur_clears_it(self):
-        got = node(r"""
-var c = talk(false);
-App.noteBusy(true); App.noteBusy(false);
-liveHeardPiece(c, 'go to sleep');
-tick(LIVE_BYE_QUIET_MS + 1);
-out(c.ending);
-""")
-        self.assertTrue(got)
-
-    def test_a_normal_talk_goodbye_is_gated_too(self):
-        self.assertIn("if (isGoodbye(text) && !dictating()) { return convoBye(c, text); }", read(APP))
+    def test_a_normal_talk_goodbye_is_not_gated(self):
+        self.assertIn("if (isGoodbye(text)) { return convoBye(c, text); }", read(APP))
 
     def test_the_drawer_reports_focus_and_redraws(self):
         js = read(os.path.join(ROOT, "tools", "testlist", "drawer.js"))
@@ -489,7 +461,7 @@ out(c.ending);
         # M21a: the one blur listener is the window's own (dictating away from her page); no text box's blur sets anything
         for name in ("talklive.js", "firstrun.js", "live.js"):
             self.assertNotIn("'blur'", read(os.path.join(ROOT, "web", "mary", name)))
-        self.assertEqual(read(os.path.join(ROOT, "web", "mary", "app.js")).count("'blur'"), 1)
+        self.assertEqual(read(os.path.join(ROOT, "web", "mary", "app.js")).count("'blur'"), 0)
 
 
 class ConfirmRule(unittest.TestCase):

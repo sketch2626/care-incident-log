@@ -1,6 +1,6 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folders at a scratch folder)
 
-"""M21a: "go to sleep" gets one goodnight and a quiet close, dictation never reaches her, and her own voice never wakes
+"""M21a: "go to sleep" gets one goodnight and a quiet close, and her own voice never wakes
 her. The page's real code runs in Node on a fake clock (the same page as test_m17_wake); the server rule runs directly."""
 import json
 import subprocess
@@ -20,12 +20,6 @@ function listenOnce() { return Promise.resolve('hello there'); }
 function talkTo(t) { talked.push(t); return Promise.resolve(); }
 function convoBye() { return Promise.resolve(); } function micMissGoesOn() { return false; }
 function liveSafetyText(w) { return w; } function showSteps() {}
-function mkBox(id) { return { tagName: 'TEXTAREA', id: id || 'note', closest: function () { return null; } }; }
-function mkDoc() {
-  var d = { h: {}, addEventListener: function (t, f) { (d.h[t] = d.h[t] || []).push(f); },
-    fire: function (t, ev) { (d.h[t] || []).forEach(function (f) { f(ev); }); } };
-  return d;
-}
 """
 
 
@@ -70,60 +64,50 @@ class OneGoodnight(unittest.TestCase):
 
 
 @unittest.skipUnless(NODE, "Node is not installed")
-class DictationNeverReachesHer(unittest.TestCase):
-    def test_a_clicked_box_counts_her_own_fill_and_the_typing_box_do_not(self):
-        got = run(r"""
-var d = mkDoc(); dictAttach(d); var box = mkBox();
-d.fire('focusin', { isTrusted: false, target: box });
-var synthetic = dictating();
-d.fire('focusin', { isTrusted: true, target: mkBox('typeText') });
-d.fire('pointerdown', { isTrusted: true });
-d.fire('focusin', { isTrusted: true, target: mkBox('typeText') });
-var typing = dictating();
-tick(900);
-d.fire('focusin', { isTrusted: true, target: box });
-var stale = dictating();
-d.fire('pointerdown', { isTrusted: true });
-d.fire('focusin', { isTrusted: true, target: box });
-var clicked = dictating();
-d.fire('focusout', { target: box });
-out({ synthetic: synthetic, typing: typing, stale: stale, clicked: clicked, after: dictating() });
-""")
-        self.assertEqual(got, {"synthetic": False, "typing": False, "stale": False, "clicked": True, "after": False})
-
-    def test_the_emergency_screen_is_never_deaf(self):
-        got = run("var c = talk(false); App.noteBusy(true); S.screen = 'emergency'; deafSync(); out({ d: dictating(), deaf: T.deaf });")
-        self.assertEqual(got, {"d": False, "deaf": False})
-
-    def test_a_lost_window_is_dictating_unless_the_talk_began_that_way(self):
-        got = run("var c = talk(false); T.focus = false; var away = dictating(); c.startedAway = true; out({ away: away, began: dictating() });")
-        self.assertEqual(got, {"away": True, "began": False})
-
-    def test_a_normal_line_heard_while_dictating_never_reaches_talkto(self):
-        got = run(r"""
-var c = talk(false); c.live = false; c.open = false; c.misses = 0; S.listenReason = '';
-App.noteBusy(true); convoListen(c); await flush();
-var dropped = talked.slice(), next = count('convoNext');
-App.noteBusy(false); convoListen(c); await flush();
-out({ dropped: dropped, next: next, after: talked });
-""")
-        self.assertEqual(got, {"dropped": [], "next": 1, "after": ["hello there"]})
+class AwakeSheHearsEveryBox(unittest.TestCase):
+    def test_the_emergency_screen_is_never_a_note(self):
+        got = run("var c = talk(false); App.noteBusy(true); S.screen = 'emergency'; out({ d: dictating() });")
+        self.assertEqual(got, {"d": False})
 
     def test_the_note_flag_reaches_heard(self):
         got = run("var c = talk(false); App.noteBusy(true); liveHeard(c, 'hello'); await flush(); out({ note: T.lastHeard.note });")
         self.assertEqual(got, {"note": True})
 
-    def test_a_bare_name_does_nothing_while_deaf_and_hey_mary_undeafens(self):
+    def test_a_normal_line_heard_during_a_note_reaches_her(self):
         got = run(r"""
-var c = talk(false); App.noteBusy(true); deafSync();
-var deafBefore = T.deaf, busy = wakeBusy();
-wake({ greeted: false }); await flush();
-var bare = { deaf: T.deaf, noteBusy: !!S.noteBusy };
-wake({ greeted: true }); await flush();
-out({ deafBefore: deafBefore, busy: busy, bare: bare, deaf: T.deaf, noteBusy: !!S.noteBusy, greets: greets.length, talks: T.talks });
+var c = talk(false); c.live = false; c.open = false; c.misses = 0; S.listenReason = '';
+App.noteBusy(true); convoListen(c); await flush();
+out({ talked: talked });
 """)
-        self.assertEqual(got, {"deafBefore": True, "busy": False, "bare": {"deaf": True, "noteBusy": True},
-                               "deaf": False, "noteBusy": False, "greets": 0, "talks": 0})
+        self.assertEqual(got, {"talked": ["hello there"]})
+
+    def test_a_wake_in_a_talk_changes_nothing(self):
+        got = run(r"""
+var c = talk(false); App.noteBusy(true);
+wake({ greeted: true }); await flush();
+out({ deaf: !!T.deaf, noteBusy: !!S.noteBusy, greets: greets.length, talks: T.talks, busy: wakeBusy() });
+""")
+        self.assertEqual(got, {"deaf": False, "noteBusy": True, "greets": 0, "talks": 0, "busy": True})
+
+    def test_d18_a_focused_box_on_a_deeper_screen_never_stops_her_hearing(self):
+        got = run(r"""
+var c = talk(false);
+var box = { tagName: 'INPUT', id: 'bf-phone' };
+els.deepFrame = { contentDocument: { activeElement: box } };
+document.activeElement = box;
+document.hasFocus = function () { return false; };
+wakeHoldCheck();
+await liveHeard(c, 'her cell is 919 555 0142'); await flush();
+var live = { deaf: !!T.deaf, note: T.lastHeard.note, open: S.convo === c, ending: !!c.ending };
+var n = talk(false); n.live = false; n.open = false; n.misses = 0; S.listenReason = '';
+convoListen(n, false); await flush();
+out({ live: live, talked: talked });
+""")
+        self.assertEqual(got, {"live": {"deaf": False, "note": False, "open": True, "ending": False},
+                               "talked": ["hello there"]})
+        app = read(APP)
+        for gone in ("focusin", "hasFocus", "startedAway", "activeElement.blur", "END_TALK_HELD"):
+            self.assertNotIn(gone, app, gone)
 
 
 @unittest.skipUnless(NODE, "Node is not installed")

@@ -66,7 +66,6 @@
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
   var LIVE_FALSE_CUT_MS = 2500;  // M17: cut off with nobody's words coming after this long: a noise cut her off
   var LIVE_PICK_UP = '(A noise cut you off. Pick up right where you left off, in your own words.)';   // M17
-  var END_TALK_HELD = { ok: false, note: 'Not ended. They are dictating a note, not talking to you. Say nothing and keep listening.' };   // M17
   // M21a: an instruction, not a script. The steps are on the screen in big letters; she says them in her own words.
   function liveSafetyText(steps) {
     return '(Safety first. The resident may be in an emergency. Their screen shows these steps in big letters: ' +
@@ -1119,58 +1118,9 @@
   function noteBusyNow() {
     return Date.now() - S.noteBusy < NOTE_BUSY_MS;
   }
-  // M21a: words meant for a note or a box, never for her. True when the emergency screen is NOT up and a note is being
-  // dictated, a box the resident chose has focus (S.noteBusy, set by dictFocusIn), or the window lost focus during a talk
-  // (unless the talk began that way: a wake word can).
-  function dictating() {
-    if (S.screen === 'emergency') { return false; }
-    if (S.noteBusy && noteBusyNow()) { return true; }
-    var c = S.convo;
-    try { return !!(c && !c.startedAway && !document.hasFocus()); } catch (e) { return false; }
-  }
-  var DICT = { lastIn: 0 };
-  function dictBox(el) {
-    if (!el || !el.tagName) { return false; }
-    var t = String(el.tagName).toLowerCase();
-    var ok = t === 'textarea' || el.isContentEditable ||
-      (t === 'input' && !/^(button|submit|reset|checkbox|radio|range|file|image|color)$/i.test(el.type || 'text'));
-    if (!ok) { return false; }
-    try { if (el.id === 'typeText' || (el.closest && el.closest('#typing'))) { return false; } } catch (e) { return false; }
-    return true;
-  }
-  function dictAttach(doc) {
-    if (!doc || doc.maryDict) { return; }
-    doc.maryDict = true;
-    var mark = function (ev) { if (ev.isTrusted) { DICT.lastIn = Date.now(); } };
-    doc.addEventListener('pointerdown', mark, true);
-    doc.addEventListener('keydown', mark, true);
-    doc.addEventListener('focusin', function (ev) {
-      if (ev.isTrusted && dictBox(ev.target) && Date.now() - DICT.lastIn <= 500) { S.noteBusy = Date.now(); deafSync(); }
-    }, true);
-    doc.addEventListener('input', function (ev) {
-      if (ev.isTrusted && dictBox(ev.target)) { S.noteBusy = Date.now(); }
-    }, true);
-    doc.addEventListener('focusout', function (ev) {
-      if (dictBox(ev.target)) { S.noteBusy = 0; deafSync(); }
-    }, true);
-  }
-  // M21a: Live hears only when nothing is being dictated. A dictating talk stays open, so its quiet timers are kept fresh.
-  function deafSync() {
-    var c = S.convo;
-    if (!c || !c.live || !c.open || c.ending) { return; }
-    var d = dictating();
-    try { window.MaryLive.setDeaf(d); } catch (e) { log(e); }
-    if (d) { c.lastAct = c.lastLife = Date.now(); }
-  }
-  // M21a: "Hey Mary" while dictating: the box lets go (or the window counts as theirs), she hears again, and says nothing.
-  function dictWake(c) {
-    S.noteBusy = 0;
-    try { if (document.activeElement && document.activeElement.blur) { document.activeElement.blur(); } } catch (e) { log(e); }
-    try { var fd = $('deepFrame').contentDocument; if (fd && fd.activeElement && fd.activeElement.blur) { fd.activeElement.blur(); } } catch (e2) { /* no frame */ }
-    try { if (!document.hasFocus()) { c.startedAway = true; } } catch (e3) { log(e3); }
-    c.lastAct = Date.now();
-    deafSync();
-  }
+  // M17: the test drawer's Note is being dictated. She still hears it all (D18); this only stops a dictated "send it" or "save it"
+  // and asks "Hey Mary" rather than her bare name while she sleeps.
+  function dictating() { return S.screen !== 'emergency' && !!(S.noteBusy && noteBusyNow()); }
   // M15c: the send count's hooks, for skills/messages/screen.js. In Normal the count holds the mic: a talk's own listen
   // waits until it lets go, so the words it hears go to /api/mary/heard and never start a reply. Her line isn't touched.
   function holdMic() {
@@ -1400,7 +1350,6 @@
       heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false, misses: 0,
       byeAudio: false, story: null, voice: null,   // M4a: voice = this talk's one voice, locked by lockTalkVoice()
       talked: mode !== 'live' };   // M15a: a Live talk has talked only once its line opened, or Normal took over
-    try { c.startedAway = !document.hasFocus(); } catch (e) { c.startedAway = false; }   // M21a: a wake word can start a talk unfocused
     S.convo = c;
     S.fallbackSaid = false;
     if (mode === 'live') { S.liveFailed = false; }   // M17: a new try at Live
@@ -1556,10 +1505,7 @@
     if (S.firstRun) { return 'first run'; }
     if (S.micHeld) { return 'send count'; }
     if (S.formMic) { return 'form mic'; }   // M18
-    if (S.convo) {
-      if (ev && ev.greeted && ev.type !== 'heard' && !S.convo.ending && dictating()) { dictWake(S.convo); }   // M21a: no words
-      return 'talk open';
-    }
+    if (S.convo) { return 'talk open'; }
     if (S.phase !== 'idle') { return 'busy ' + S.phase; }
     if (dictating() && !(ev && ev.greeted)) { return 'note'; }
     return '';
@@ -1601,8 +1547,6 @@
   function wakeBusy() {
     if (S.formMic) { return true; }   // M18
     var c = S.convo;
-    // M21a: a deaf Live talk with nobody speaking is not busy, so the wake listener runs and "Hey Mary" can undeafen it
-    if (c && c.live && c.open && !c.ending && dictating() && !liveSpeaking() && (S.phase === 'idle' || S.phase === 'listening')) { return false; }
     return !!c || S.phase !== 'idle';
   }
   // M21a: her own voice must not reach the wake check, so the hold stays on WAKE_TAIL_MS after she stops being busy.
@@ -1633,7 +1577,6 @@
     if (typeof W === 'undefined' || !W) { return; }
     var now = Date.now();
     wakeUnstick(now);
-    deafSync();   // M21a
     var busy = wakeHeld(now);
     if (!W.polling && !W.held) { return; }
     if (busy === W.held && !(busy && now - W.holdAt >= WAKE_HOLD_RENEW_MS)) { return; }
@@ -1917,7 +1860,7 @@
       if (j && j.book_open) { bookBirthday(j.book_open); }
       if (S.convo !== c || !c.live) { return; }
       if ((j && j.garbled) || notEnglish(tail)) { return; }   // M4a: a garbled line is never a goodbye
-      if (isGoodbye(tail) && !dictating()) { endConvo(c, 'bye'); }   // M17: not words for a note
+      if (isGoodbye(tail)) { endConvo(c, 'bye'); }
     });
     return p;
   }
@@ -2122,7 +2065,7 @@
     var tail = heardTail(c.heardTrack, t, Date.now());
     if (S.heardWatch) { try { S.heardWatch(tail); } catch (e) { log(e); } }   // M15c: the send count watches for a stop word
     if (notEnglish(t) || notEnglish(tail)) { return true; }
-    var bye = !c.ending && S.screen !== 'emergency' && !dictating() && isGoodbye(tail);   // M17: not words for a note
+    var bye = !c.ending && S.screen !== 'emergency' && isGoodbye(tail);
     var st = c.story;
     if (st && !st.paused && (bye || (!liveSpeaking() && !SILENCE_NOISE.test(tail)))) { st.paused = true; }
     clearTimeout(c.byeWait);
@@ -2175,10 +2118,7 @@
       // M4a: story_more and end_talk are the page's own; end_talk is never answered, so she says nothing more
       var own = [], rest = [], page = [];
       calls.forEach(function (fc) {
-        if (fc.name === 'end_talk' && dictating() && !c.ending) {   // M17: it heard a note, so the talk goes
-          own.push({ id: fc.id, name: fc.name, response: END_TALK_HELD });          // on, and Live waits for an answer
-        }
-        else if (fc.name === 'end_talk') { liveEndTalk(c); }
+        if (fc.name === 'end_talk') { liveEndTalk(c); }
         else if (fc.name === 'story_more') { own.push({ id: fc.id, name: fc.name, response: storyTake(c) }); }
         else if (window.MaryScreens && (fc.name === 'messages__add_to_book' || (fc.name === 'use_skill' && fc.args && fc.args.action === 'add_to_book'))) {
           page.push({ id: fc.id, name: 'open_screen', args: { name: 'book-form' }, asked: fc.name });   // M19 piece 6b: a blank form in Live
@@ -2256,8 +2196,7 @@
         return undefined;
       }
       c.misses = 0;
-      if (dictating()) { c.lastAct = Date.now(); convoNext(c); return undefined; }   // M21a: dictated words never reach her
-      if (isGoodbye(text) && !dictating()) { return convoBye(c, text); }   // M17: not words for a note
+      if (isGoodbye(text)) { return convoBye(c, text); }
       return talkTo(text).then(function () { convoNext(c); });
     }).catch(function (e) {
       if (S.convo !== c) { return undefined; }
@@ -2292,7 +2231,6 @@
     if (S.convo !== c || c.ending || c.live) { return; }
     if (S.screen === 'emergency') { c.paused = true; setPhase('idle'); updateTalkButton(); return; }   // no auto-listen there
     if ((S.screen !== 'everyday' && !skillScreen()) || menuOpen()) { closeConvo(c); return; }   // M4b: or the menu. M18: a panel ends no talk
-    if (dictating()) { c.lastAct = Date.now(); setTimeout(function () { convoNext(c); }, 1000); return; }   // M21a: no mic while dictating
     if (!$('typing').hidden) {
       if (!bandUp() || Date.now() - c.lastAct > CONVO_IDLE_S * 1000) { closeConvo(c); return; }
       setTimeout(function () { convoNext(c); }, 1000);   // M18: over the band the talk waits for the box, a while
@@ -2834,7 +2772,6 @@
     deepSaveEnd();   // piece 4: and no answer is coming
     Deep.screen = '';
     Deep.talk = null;
-    try { dictAttach($('deepFrame').contentDocument); } catch (e) { /* not our page */ }   // M21a: its boxes count too
     if (!deepOnLog()) { deepReady(true); }   // the printable report: no first-screen word comes from it
     deepMicOff();
     if (held && !S.convo && S.phase === 'idle') { api('POST', '/api/listen/stop?raw=1', {}).catch(log); }
@@ -3643,9 +3580,6 @@
     $('deepBack').addEventListener('click', bandBack);                       // M18
     $('smallMary').addEventListener('click', bandBack);                      // M18: the whole circle is the tap target
     $('deepFrame').addEventListener('load', onDeepLoad);                     // M18
-    dictAttach(D);                                                           // M21a: boxes the resident chooses, in her page
-    window.addEventListener('focus', function () { if (S.convo) { S.convo.startedAway = false; } deafSync(); wakeHoldCheck(); });   // M21a
-    window.addEventListener('blur', function () { deafSync(); });            // M21a
     window.addEventListener('message', onDeepMessage);                       // M18
     setInterval(deepTalkSync, 1000);                                         // M18: a talk opening or ending reaches the form within a second
     $('typeForm').addEventListener('submit', function (ev) { ev.preventDefault(); submitTyping(); });

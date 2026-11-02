@@ -490,7 +490,7 @@ class EmergencyGate(unittest.TestCase):
     def test_an_emergency_turn_refuses_every_screen_tool(self):
         js = read("mary/app.js")
         code = "globalThis.window = globalThis;\nconst assert = require('assert');\n" + r"""
-          var S = { screen: 'everyday' }, TOOL_REFUSED = { error: 'emergency' }, END_TALK_HELD = {}, ENV = {}, runs = [];
+          var S = { screen: 'everyday' }, TOOL_REFUSED = { error: 'emergency' }, ENV = {}, runs = [];
           function log() {} function noteBusyNow() { return false; } function dictating() { return false; } function liveEndTalk() {} function storyTake() { return {}; }
           function storyFromTool(c, r) { return r; } function refreshName() {} function screenEnv() { return ENV; }
           window.MaryScreens = { isTool(n) { return n !== 'recall'; }, run(n, a, e) { runs.push([n, a, e]); return Promise.resolve({ ok: true, n }); } };

@@ -9,9 +9,10 @@ You are a **worker** on Andy's second account, in your own folder (a git worktre
 
 ## How to work
 - Run the `token-saving` skill first and follow it as a **worker**. Read `CLAUDE.md`, then only the sections your brief names. Use targeted line ranges, never whole big files.
-- **Helpers, one at a time, from `.claude/agents/` (Andy, 2026-10-30: on this account, Opus writes the new code):**
-  - **All new code:** run `coder` with `model: "opus"`; add `effort: "xhigh"` for the tricky parts.
-  - Sonnet `coder` (the default model) only for small edits to existing code or extra tests.
+- **Helpers, one at a time, from `.claude/agents/` (Andy, 2026-11-01: Sonnet writes the code):**
+  - **All code, new or changed:** Sonnet `coder` (its default model). You, the Opus worker, plan the piece, write the exact brief, review the diff and test.
+  - **Opus `coder`** (`model: "opus"`, default effort, **never `xhigh`**) only for a piece your brief names as Opus, or one truly hard piece (encryption, a tricky concurrency fix) after Sonnet tried it and failed. Say why in your report.
+  - **Keep each helper small:** one piece per helper, a fresh helper for the next piece, and never resume a helper past about 150,000 tokens of context. A usage audit (2026-11-01) found Opus helpers at `xhigh` were two thirds of this account's week.
   - Haiku `quick-coder` only for text-only edits (wording, doc pages), **under 100,000 tokens of context**: exact line ranges, at most about 150 lines per read, at most about 8 reads.
   - Name the model in every report.
 - **Skills:** new abilities are built as **skills** (`docs/skills-design.md`, `docs/how-to-make-a-skill.md`, the example `skills/voice_comfort/`).

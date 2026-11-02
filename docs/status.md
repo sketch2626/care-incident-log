@@ -12,7 +12,12 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
     - lean, `mary/lean.md`, 11,926, git tag `lean-v1`;
     - leaner, `mary/leaner.md`, 7,123. Its tightened safety wording waits on Andy's approval (D5); the old-to-new map is in the M21d merge commit.
   - **The whole-talk bench** `tools/talk_bench.py`. Lean halved his name against full. Both brains still say "I was just thinking about".
-- **Next:** after the Gemini limit resets (3am), run the safety bench on leaner (`tools/brain_bench.py --brain leaner --mode normal`), then the talk bench, lean against leaner. Then Andy reads both and picks.
+- **Running at 12:50:** the safety bench on leaner (`tools/brain_bench.py --key-from-app --brain leaner --mode normal --judge-model gemini-3.1-flash-lite --delay 4`, about 208 requests).
+  - If Gemini's free daily cap stops it, finish after 3am.
+  - If it passes: `tools/talk_bench.py --key-from-app --brain lean,leaner --mode normal` (about 330), then the Live threat cases (`brain_bench.py --brain leaner --mode live`).
+  - Then Andy reads `mary/leaner.md` with the M21d safety map, approves the wording or not (D5), and picks a brain.
+- **Andy's account:** 84% of its week at 12:50 (resets Wed Nov 4, 9am). The hub was compacted then (522K context).
+- **Loose end:** the `.worktrees/M4h` folder is left over. A safety check blocked its removal while it was the session folder. Remove it by hand, or with the app's worktree cleanup.
 - **Repo:** now **Mary's Porch** (github.com/sketch2626/marys-porch), with a new front page. `main` is published after every merge (D17); commits use GitHub's no-reply address.
 - **Fundraising** is handed to Claude Cowork: `private/fundraising/handoff.md`.
 

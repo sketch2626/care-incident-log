@@ -1228,7 +1228,7 @@ LIVE_PAGE_TOOLS = [
      "parameters": {"type": "object", "properties": {
          "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents."},
          "name": {"type": "string", "description": "For open: the screen, one of " + ", ".join(LIVE_SCREEN_NAMES) + "."},
-         "who": {"type": "string", "description": "For open: who in the address book, by name or relationship."},
+         "who": {"type": "string", "description": "For open and fill: who in the address book, by name or relationship."},
          "field": {"type": "string", "description": "For explain, fill, put_back: the field from look."},
          "value": {"type": "string", "description": ("For fill: what goes in it, from what they said. A date as YYYY-MM-DD, "
                                                     "a time as HH:MM, a choice by its label.")},

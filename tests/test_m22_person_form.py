@@ -68,6 +68,14 @@ class PersonFormTests(unittest.TestCase):
           Object.keys(w.doc.byId).forEach(k => assert.ok(!(w.doc.byId[k].events || []).includes('click'), k));
         """)
 
+    def test_d12_a_card_id_with_who_still_reaches_the_form(self):
+        self.check(r"""
+          const w = world();
+          const got = await run('fill_field', { field: 'bc-phone', who: 'Sarah', value: '919-555-0142' }, w.env);
+          assert.strictEqual(got.ok, true);
+          assert.strictEqual(w.doc.byId['bf-phone'].value, '919-555-0142');
+        """)
+
     def test_phone_means_home_unless_only_the_cell_is_filled(self):
         self.check(r"""
           let w = world();
@@ -110,6 +118,84 @@ class PersonFormTests(unittest.TestCase):
           const no = await run('fill_field', { field: 'phone', value: '919-555-0142' }, w.env);
           assert.strictEqual(no.ok, false);
           assert.strictEqual(no.say, "That didn't open just now.");
+        """)
+
+    def test_d12_the_field_id_from_look_reaches_the_form(self):
+        self.check(r"""
+          const w = world();
+          const seen = await run('look_at_screen', {}, w.env);
+          const ids = seen.fields.map(f => f.field);
+          assert.ok(ids.includes('bc-phone'));
+          const got = await run('fill_field', { field: 'bc-phone', value: '919-555-0142' }, w.env);
+          assert.strictEqual(w.doc.byId['bf-phone'].value, '919-555-0142');
+          assert.strictEqual(got.ok, true);
+          assert.strictEqual(got.saved, false);
+          for (const id of ids) {   // every id look gave her lands somewhere
+            const x = await run('fill_field', { field: id, value: id === 'bc-email' ? 'a@b.com' : 'x' }, world().env);
+            assert.notStrictEqual(x.say, "That's not something I can do on this screen.", id);
+          }
+        """)
+
+    def test_every_label_and_new_word_lands_in_the_right_box(self):
+        self.check(r"""
+          const cases = [['Name', 'name'], ['Relationship', 'relationship'], ['Email', 'email'], ['Home phone', 'phone'],
+            ['Cell phone', 'cell'], ['Mailing address', 'address'], ['Facebook', 'facebook'], ['Birthday', 'birthday'],
+            ['Notes', 'notes'], ['telephone number', 'phone'], ['home number', 'phone'], ['home phone number', 'phone'],
+            ['landline', 'phone'], ['cell phone', 'cell'], ['cell phone number', 'cell'], ['cell number', 'cell'],
+            ['mobile number', 'cell'], ['address', 'address'], ['mailing', 'address'], ['street address', 'address'],
+            ['home address', 'address'], ['mail address', 'address'], ['e-mail', 'email'], ['email address', 'email'],
+            ['e-mail address', 'email'], ['date of birth', 'birthday'], ['birth date', 'birthday'], ['bday', 'birthday'],
+            ['facebook name', 'facebook'], ['note', 'notes'], ["Sarah's phone", 'phone'], ['her cell', 'cell']];
+          for (const c of cases) {
+            for (const on of ['card', 'form']) {
+              const w = world();
+              if (on === 'form') { await run('open_screen', { name: 'book-form', who: 'Sarah' }, w.env); }
+              const val = c[1] === 'email' ? 'a@b.com' : (c[1] === 'birthday' ? 'May 5' : 'v-' + c[1]);
+              const got = await run('fill_field', { field: c[0], value: val }, w.env);
+              assert.strictEqual(got.ok, true, c[0] + ' ' + on + ' ' + JSON.stringify(got));
+              assert.ok(w.doc.byId['bf-' + c[1]].value, c[0] + ' ' + on);
+              assert.strictEqual(got.saved, false);
+            }
+          }
+        """)
+
+    def test_fill_with_who_opens_their_form_from_your_own_screen(self):
+        self.check(r"""
+          const w = world();
+          w.doc.byId['book-card'].hidden = true;
+          w.doc.defaultView.location.hash = '';
+          const got = await run('fill_field', { field: "Sarah's phone", who: 'Sarah', value: '919-555-0142' }, w.env);
+          assert.deepStrictEqual(w.opened, ['#book-form/p1']);
+          assert.strictEqual(w.doc.byId['bf-phone'].value, '919-555-0142');
+          assert.strictEqual(got.ok, true);
+          assert.strictEqual(got.saved, false);
+          Object.keys(w.doc.byId).forEach(k => assert.ok(!(w.doc.byId[k].events || []).includes('click'), k));
+        """)
+
+    def test_two_people_found_fills_nothing_and_asks_which(self):
+        self.check(r"""
+          const w = world();
+          w.doc.byId['book-card'].hidden = true;
+          w.doc.byId['book-list'] = mk('book-list', { hidden: true });
+          w.env.findPeople = () => Promise.resolve({ state: 'open', people: [
+            { id: 'p1', name: 'Sarah Whitfield', relationship: 'daughter' }, { id: 'p2', name: 'Sarah Cole', relationship: 'friend' }] });
+          w.env.openDeep = h => { w.opened.push(h); w.doc.byId['book-list'].hidden = h.indexOf('#book-list') !== 0; return true; };
+          const got = await run('fill_field', { field: 'phone', who: 'Sarah', value: '919-555-0142' }, w.env);
+          assert.ok(!w.doc.byId['bf-phone'].value);
+          assert.ok(JSON.stringify(got).includes('Two Sarahs'), JSON.stringify(got));
+        """)
+
+    def test_a_detail_word_with_no_who_on_another_screen_asks_whose(self):
+        self.check(r"""
+          const w = world();
+          w.doc.byId['book-card'].hidden = true;
+          for (const word of ['phone', 'cell', 'address', 'birthday']) {
+            const got = await run('fill_field', { field: word, value: '1' }, w.env);
+            assert.strictEqual(got.ok, false);
+            assert.strictEqual(got.say, "Tell me whose it is and I'll open their form.", word);
+          }
+          const other = await run('fill_field', { field: 'banana', value: '1' }, w.env);
+          assert.strictEqual(other.say, "That's not something I can do on this screen.");
         """)
 
 

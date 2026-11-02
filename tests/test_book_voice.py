@@ -242,7 +242,8 @@ class LookAndFill(unittest.TestCase):
           assert.deepEqual(out.person, { name: 'Sarah Whitfield', relationship: 'daughter' });
           assert.equal(out.fields.filter(f => f.filled).map(f => f.label).join(), 'Email');
           assert.ok(!JSON.stringify(out).includes('example.com'));
-          assert.ok(out.fields.every(f => f.can_fill === false));
+          // D12, M22: a fill on a card goes to that person's form, so can_fill says yes
+          assert.ok(out.fields.every(f => f.can_fill === true));
         """)
 
     def test_she_fills_a_form_and_never_a_card(self):

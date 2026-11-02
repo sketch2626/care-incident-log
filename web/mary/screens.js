@@ -34,6 +34,7 @@
   var NOT_OPEN_NO = "I can't open that one.";
   var SAVED_NO = "That one shows by itself after you save.";
   var OFF_NO = "That one isn't switched on here.";
+  var WHOSE_NO = "Tell me whose it is and I'll open their form.";
   var SLOW_NO = "That didn't open just now.";
   var READ_UNASKED = "I only read your notes when you ask me to.";
   var READ_WHEN_NO = "I can look by a day or by a month. Tell me which.";
@@ -168,7 +169,7 @@
       explain: 'The people they know: a list of names and relationships, kept only on this laptop.',
       labels: ['Find someone', 'Up', 'Down', 'Show everyone'], fields: [] },
     { id: 'book-card', frame: 'book-card', hash: null, name: 'Address book card', person: true, show: 'filled',
-      explain: 'One person from the address book. You can see which details are filled in, and not what they say.',
+      explain: 'One person from the address book. You can see which details are filled in, and not what they say. A fill changes it on their form.',
       fields: bookFields('bc-') },
     { id: 'book-form', frame: 'book-form', hash: '#book-form', name: 'Address book form', show: 'hers',
       opened: 'The form is open and nothing is saved. Ask who it is, in a few words.',
@@ -227,8 +228,19 @@
     }
     return TALK;
   }
-  var PHONE_WORDS = { 'phone': 1, 'phone number': 1, 'telephone': 1, 'number': 1 };
-  var CELL_WORDS = { 'cell': 1, 'cellphone': 1, 'cell number': 1, 'mobile': 1, 'mobile phone': 1, 'mobile number': 1 };
+  var PHONE_WORDS = { 'phone': 1, 'phone number': 1, 'telephone': 1, 'telephone number': 1, 'number': 1 };
+  var CELL_WORDS = { 'cell': 1, 'cellphone': 1, 'cell phone': 1, 'cell phone number': 1, 'cell number': 1, 'mobile': 1,
+    'mobile phone': 1, 'mobile number': 1 };
+  var HOME_WORDS = { 'home number': 1, 'home phone': 1, 'home phone number': 1, 'landline': 1 };
+  // Other ways to say a detail box. These only ever match a detail field, so no other screen is touched.
+  var DETAIL_WORDS = { 'address': 'address', 'mailing': 'address', 'street address': 'address', 'home address': 'address',
+    'mail address': 'address', 'e-mail': 'email', 'email address': 'email', 'e-mail address': 'email',
+    'date of birth': 'birthday', 'birth date': 'birthday', 'bday': 'birthday', 'facebook name': 'facebook', 'note': 'notes' };
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  // "Sarah's phone" and "her cell" are "phone" and "cell".
+  function bareWord(w) {
+    return w.replace(/^.*['’]s\s+/, '').replace(/^(?:her|his|their|my)\s+/, '');
+  }
   function findField(s, want, doc) {
     var w = String(want == null ? '' : want).trim().toLowerCase(), all = fieldsOf(s), i;
     for (i = 0; i < all.length; i++) {
@@ -237,12 +249,22 @@
     // A person has a home phone and a cell phone. "Cell" and "mobile" mean the cell box. A plain "phone" means the home box,
     // unless the cell box has a number and the home box doesn't, then the cell box.
     var pick = function (key) { return all.filter(function (f) { return f.kind === 'detail' && f.key === key; })[0] || null; };
-    if (CELL_WORDS[w]) { return pick('cell'); }
-    if (PHONE_WORDS[w]) {
+    w = bareWord(w);
+    if (has(DETAIL_WORDS, w)) { return pick(DETAIL_WORDS[w]); }
+    if (has(HOME_WORDS, w)) { return pick('phone'); }
+    if (has(CELL_WORDS, w)) { return pick('cell'); }
+    if (has(PHONE_WORDS, w)) {
       var home = pick('phone'), cell = pick('cell'), h = home && doc ? fieldEl(doc, home) : null, c = cell && doc ? fieldEl(doc, cell) : null;
       return (c && c.value && !(h && h.value)) ? cell : home;
     }
     return null;
+  }
+  // A detail word (phone, cell, address...) on a screen that has no book boxes: she needs to know whose it is.
+  function isDetailWord(s, want) {
+    if (fieldsOf(s).some(function (f) { return f.kind === 'detail'; })) { return false; }
+    var w = bareWord(String(want == null ? '' : want).trim().toLowerCase());
+    return (has(DETAIL_WORDS, w) && w !== 'note') || has(HOME_WORDS, w) || has(CELL_WORDS, w) || has(PHONE_WORDS, w) ||
+      w === 'email' || w === 'birthday' || w === 'facebook';
   }
   function radios(doc, f) { return Array.prototype.slice.call(doc.querySelectorAll('input[name="' + f.radio + '"]')); }
   function fieldEl(doc, f) {
@@ -273,7 +295,7 @@
     var el = fieldEl(doc, f);
     if (isSecret(f, el)) { return { field: f.id, label: f.label, kind: 'secret' }; }   // label and kind, and nothing that could hint
     if (!shown(el)) { return null; }
-    var out = { field: f.id, label: f.label, kind: f.kind, explain: f.explain, can_fill: !!f.fill };
+    var out = { field: f.id, label: f.label, kind: f.kind, explain: f.explain, can_fill: !!f.fill || !!s.person };   // D12: a card's fill goes to that person's form
     if (f.kind === 'detail') {   // no path below this line for a detail
       if (s.show === 'filled') { out.filled = !!String(el.textContent || '').trim(); }
       else if (Mine.hasOwnProperty(f.id) && el.value === Mine[f.id]) { out.value = Mine[f.id]; }
@@ -467,18 +489,26 @@
   }
   // D12: a person's card has no Change button, so a fill asked for on it goes to that person's form (nothing saves there either).
   function fillField(args, env) {
-    var s = here(env), doc = env.doc();
-    if (s.id === 'book-card' && doc && findField(s, args.field, doc)) {
+    var s = here(env), doc = env.doc(), cf;
+    var said = String(args.who == null ? '' : args.who).trim();
+    if (said) {   // told whose it is: open their form first. Two of them narrow the list and nothing is filled.
+      return Promise.resolve(openScreen({ name: 'book-form', who: said }, env)).then(function (got) {
+        if (!got || got.ok !== true || here(env).id !== 'book-form') { return got; }
+        return fillIn(byId('book-form'), { field: String(args.field == null ? '' : args.field).replace(/^bc-/, 'bf-'), value: args.value }, env);
+      });
+    }
+    cf = s.id === 'book-card' && doc ? findField(s, args.field, doc) : null;
+    if (cf) {
       var m = /^#book-card\/(.+)$/.exec(String(doc.defaultView && doc.defaultView.location ? doc.defaultView.location.hash : ''));
-      var form = byId('book-form');
+      var form = byId('book-form'), onForm = { field: 'bf-' + cf.key, value: args.value };
       if (!m || !env.openDeep('#book-form/' + m[1])) { return no(SLOW_NO); }
-      return arrive(env, form).then(function (came) { return came ? fillIn(form, args, env) : no(SLOW_NO); });
+      return arrive(env, form).then(function (came) { return came ? fillIn(form, onForm, env) : no(SLOW_NO); });
     }
     return fillIn(s, args, env);
   }
   function fillIn(s, args, env) {
     var doc = env.doc(), f = findField(s, args.field, doc);
-    if (!f) { return no(unlistedNo(args.field)); }
+    if (!f) { return no(isDetailWord(s, args.field) ? WHOSE_NO : unlistedNo(args.field)); }
     if (!doc) { return no(NOT_THERE_NO); }
     var el = fieldEl(doc, f), why = refusal(f, el);
     if (why) { return no(why); }

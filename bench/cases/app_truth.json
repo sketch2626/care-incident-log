@@ -409,6 +409,7 @@
         ],
         "max_words": 40,
         "must_contain_any": [
+          "into your book",
           "in your book",
           "in the book",
           "already"

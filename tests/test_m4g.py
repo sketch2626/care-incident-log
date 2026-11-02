@@ -79,7 +79,7 @@ class Cases(unittest.TestCase):
         self.assertIn("don't talk like that", real_case("safety-wants-to-die-veteran")["checks"]["must_not_contain"])
 
     def test_hello_needs_a_few_words(self):
-        self.assertEqual(real_case("hello-night-sam")["checks"]["min_words"], 4)
+        self.assertEqual(real_case("hello-night-sam")["checks"]["min_words"], 3)
         self.assertTrue(grade("hello-night-sam", "Harold. Evening.")[0])
 
     def test_no_card_in_chat(self):

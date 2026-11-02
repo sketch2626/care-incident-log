@@ -1,4 +1,4 @@
-"""Talk bench: whole scripted talks, counted. Piece 1: load the talks and count what Mary or Sam said.
+"""Talk bench: whole scripted talks under either brain, counted, judged and set side by side for Andy to read.
 
 A talk is one file in bench/talks: ten to fifteen things a resident says in a row, for one companion. The counts below
 look at her replies only, never the resident's lines: how often she uses the name, praise, pet names, repeated
@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -519,6 +520,267 @@ def execute_talks(runs, key, model, judge_model, delay=1, max_runs=None, no_judg
             "quota_model": quota_model, "judge_stopped": gemini.judge_stopped}
 
 
+# ---- piece 3: saved results, the report, resuming
+
+MODES = ("normal", "live", "real_live")
+BRAIN_NAMES = {"full": "Current brain", "lean": "Lean brain"}
+MODE_NAMES = {"normal": "Normal talk", "live": "Live stand-in", "real_live": "Real Live"}
+COMPANION_NAMES = {"mary": "Mary", "sam": "Sam"}
+LIVE_NOTE = "This is Live's instructions on the text model, not real Live."
+RECORD_KEYS = ("id", "title", "companion", "resident", "also_called", "mode", "brain", "status", "turns", "replies",
+               "counts", "judge", "judge_note", "error", "notes", "not_run_why", "retried")
+
+
+def talk_record(run):
+    """What a results file keeps of one run. The case itself is not kept."""
+    case = run["case"]
+    rec = {k: run.get(k) for k in RECORD_KEYS}
+    rec.update(title=case["title"], resident=(case.get("memory") or {}).get("name") or "",
+               also_called=list(case.get("also_called", [])))
+    return rec
+
+
+def results_data(records, model, judge_model, live_model, today):
+    commit = bb.git_commit()
+    if isinstance(commit, bytes):
+        commit = commit.decode("utf-8", "replace")
+    return bb.scrub({"date": today, "model": model, "judge_model": judge_model, "live_model": live_model,
+                     "commit": commit, "talks": records})
+
+
+def save_talks(data, folder):
+    """Writes talks-<date>.md and .json with one stem; a stem with either file already gets -2, -3. Returns the .md path."""
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    stem, n = f"talks-{data['date']}", 1
+    while True:
+        name = stem if n == 1 else f"{stem}-{n}"
+        md, js = folder / f"{name}.md", folder / f"{name}.json"
+        if not md.exists() and not js.exists():
+            break
+        n += 1
+    with open(js, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(data, ensure_ascii=False, indent=2))
+    with open(md, "w", encoding="utf-8", newline="\n") as f:
+        f.write(render_report(data))
+    return md
+
+
+def _one_line(text):
+    return " ".join(str(text or "").split())
+
+
+def _average(values, digits):
+    return "-" if not values else (f"{sum(values) / len(values):.1f}" if digits else str(round(sum(values) / len(values))))
+
+
+def _table_rows(runs):
+    """The cells for one brain: runs are that brain's finished talks only. Only numbers."""
+    counts = [r["counts"] for r in runs if r.get("counts")]
+    if not counts:
+        return ["-"] * 11
+    total = lambda key: str(sum(c.get(key, 0) for c in counts))  # noqa: E731
+    scores = [r["judge"]["keep_talking"] for r in runs if r.get("judge")]
+    return [_average(scores, 1), total("name_uses"),
+            f"{sum(c.get('name_replies', 0) for c in counts)} of {sum(c.get('replies', 0) for c in counts)}",
+            total("praise_total"), total("pet_total"), total("repeat_total"), total("opener_total"),
+            total("stock_total"), total("made_up_total"),
+            _average([c.get("questions_avg", 0) for c in counts], 1), _average([c.get("words_avg", 0) for c in counts], 0)]
+
+
+ROW_LABELS = ["Would a grown adult keep talking? (out of 5)", "Times she used their name",
+              "Replies with their name in them", "Praise", "Pet names", "Sentences she repeated",
+              "Replies opened the same way", "Stock lines", "Made-up thoughts while apart", "Questions per reply",
+              "Words per reply"]
+
+
+def _table(runs, brains):
+    """A Markdown table, one column per brain. runs: the records to count (finished ones only are counted)."""
+    cols = [_table_rows([r for r in runs if r["brain"] == b and r["status"] == "finished"]) for b in brains]
+    lines = ["| | " + " | ".join(BRAIN_NAMES[b] for b in brains) + " |", "|---|" + "---|" * len(brains)]
+    for i, label in enumerate(ROW_LABELS):
+        lines.append(f"| {label} | " + " | ".join(col[i] for col in cols) + " |")
+    return lines
+
+
+def _extra_lines(runs, brains):
+    """The things that don't fit a table, for one talk in one mode. Only what there is to show."""
+    out = []
+    for b in brains:
+        for r in runs:
+            counts = r.get("counts")
+            if r["brain"] != b or r["status"] != "finished" or not counts:
+                continue
+            tag = f"{BRAIN_NAMES[b]}" if len(brains) > 1 else ""
+            for item in counts.get("repeats", []):
+                inside = f"{item['times']} times" + (f", {tag}" if tag else "")
+                out.append(f"Said more than once: \"{_one_line(item['sentence'])}\" ({inside})")
+            for label, key in (("Praise words", "praise"), ("Stock lines", "stock"), ("Made-up thoughts", "made_up"),
+                               ("Pet names", "pet_names")):
+                if counts.get(key):
+                    words = ", ".join(f"{_one_line(w)} {n}" for w, n in counts[key].items())
+                    out.append(f"{label}: {words}" + (f" ({tag})" if tag else ""))
+            if counts.get("openers"):
+                words = ", ".join(f"\"{_one_line(o['opener'])}\" {o['times']} times" for o in counts["openers"])
+                out.append(f"Replies that opened the same way: {words}" + (f" ({tag})" if tag else ""))
+    return out
+
+
+def _judge_line(rec):
+    judge = rec.get("judge")
+    if not judge:
+        why = _one_line(rec.get("judge_note", "")).removeprefix("not judged:").strip()
+        return f"Not judged: {why or 'the judge was not asked.'}"
+    parts = [f"Judge: {judge['keep_talking']} out of 5.", _one_line(judge.get("why", ""))]
+    for key, label in (("talking_down", "Talking down"), ("lecturing", "Lecturing"), ("repeating", "Repeating")):
+        item = judge.get(key) or {}
+        if item.get("found"):
+            parts.append(f"{label}: {_one_line(item.get('why', '')) or 'found'}.".replace("..", "."))
+    return " ".join(p for p in parts if p)
+
+
+def _transcript(rec):
+    resident = rec.get("resident") or "The resident"
+    who = COMPANION_NAMES.get(rec["companion"], str(rec["companion"]).title())
+    turns, replies = rec.get("turns") or [], rec.get("replies") or []
+    out = []
+    for i, line in enumerate(turns):
+        out.append(f"**{resident}:** {_one_line(line)}")
+        if i >= len(replies):
+            out.append("(The talk stopped here.)")
+            break
+        out.append(f"**{who}:** {_one_line(replies[i]) or '(said nothing)'}")
+    return out
+
+
+def _why_not_finished(rec):
+    why, err = rec.get("not_run_why") or "", rec.get("error") or ""
+    if why:
+        if why.startswith("left out by --max"):
+            return "It was left out because you asked for a limited number of talks."
+        if why == "needs a key":
+            return "There was no Gemini key."
+        if "key was refused" in why:
+            return "Gemini refused the key, so the rest stopped."
+        if "rate limit" in why:
+            return "Gemini's rate limit stopped the run."
+        if "daily limit" in why:
+            return "Gemini's daily limit had run out."
+        return _one_line(why)
+    if "daily limit" in err:
+        return "Gemini's daily limit ran out partway."
+    if "refused the key" in err:
+        return "Gemini refused the key."
+    if "429" in err:
+        return "Gemini's rate limit stopped it."
+    if err == bb.EMPTY_ANSWER:
+        return "Gemini gave an empty answer to every line."
+    return _one_line(err) or "It did not finish."
+
+
+def render_report(data):
+    """The report as Markdown, from the saved JSON shape, so a resumed run can rebuild it."""
+    recs = [r for r in data.get("talks", []) if isinstance(r, dict)]
+    brains = [b for b in BRAINS if any(r["brain"] == b for r in recs)]
+    modes = [m for m in MODES if any(r["mode"] == m for r in recs)]
+    ids = list(dict.fromkeys(r["id"] for r in recs))
+    names = list(dict.fromkeys(COMPANION_NAMES.get(r["companion"], str(r["companion"]).title()) for r in recs))
+    out = [f"# Whole talks, {data.get('date', '')}", ""]
+    intro = f"{' and '.join(names)} on the model {data.get('model', '')}."
+    if data.get("judge_model"):
+        intro += f" The judge was {data['judge_model']}."
+    if data.get("live_model") and "real_live" in modes:
+        intro += f" Real Live used the model {data['live_model']}."
+    brain_words = " and ".join(f"the {BRAIN_NAMES[b]}" for b in brains)
+    talks = "1 talk" if len(ids) == 1 else f"{len(ids)} talks"
+    under = "both brains: " + brain_words.replace("the ", "") if len(brains) > 1 else brain_words
+    intro += f" {talks}, each under {under}."
+    out += [intro,
+            "This shows how she talks across a whole talk. It does not test safety; the brain bench does that. "
+            "The judge is only a helper: Andy's read decides.", ""]
+    for mode in modes:
+        out += [f"## How the brains compare: {MODE_NAMES[mode]}", ""]
+        if mode == "live":
+            out += [LIVE_NOTE, ""]
+        out += _table([r for r in recs if r["mode"] == mode], brains) + [""]
+    for talk_id in ids:
+        mine = [r for r in recs if r["id"] == talk_id]
+        first = mine[0]
+        resident = first.get("resident") or "the resident"
+        who = COMPANION_NAMES.get(first["companion"], str(first["companion"]).title())
+        out += [f"## {first.get('title') or talk_id} ({who} and {resident})", ""]
+        for mode in modes:
+            in_mode = [r for r in mine if r["mode"] == mode]
+            if not in_mode:
+                continue
+            out += [f"### {MODE_NAMES[mode]}", ""] + _table(in_mode, brains) + [""]
+            extra = _extra_lines(in_mode, brains)
+            if extra:
+                out += [line + "  " for line in extra[:-1]] + [extra[-1], ""]
+            for brain in brains:
+                for rec in (r for r in in_mode if r["brain"] == brain):
+                    out += [f"#### {BRAIN_NAMES[brain]}", ""]
+                    if rec.get("retried"):
+                        out += ["This talk had to be run twice.", ""]
+                    if rec["status"] == "not_run":
+                        out += ["This talk did not run. See the end of this report.", ""]
+                        continue
+                    for line in _transcript(rec):
+                        out += [line, ""]
+                    if rec["status"] == "finished":
+                        out += [_judge_line(rec), ""]
+    missed = [r for r in recs if r["status"] != "finished"]
+    if missed:
+        out += ["## Didn't finish", ""]
+        for r in missed:
+            said = len(r.get("replies") or [])
+            where = ("It did not run." if r["status"] == "not_run"
+                     else f"It stopped after {said} of {len(r.get('turns') or [])} lines.")
+            out.append(f"- {r.get('title') or r['id']}, {MODE_NAMES.get(r['mode'], r['mode'])}, "
+                       f"{BRAIN_NAMES.get(r['brain'], r['brain'])}. {where} {_why_not_finished(r)}")
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def read_resume(path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise bb.BenchError(f"Can't read the saved run {path}: {e}")
+    if not isinstance(data, dict) or not isinstance(data.get("talks"), list):
+        raise bb.BenchError(f"{path} is not a saved whole-talks run: it has no list of talks.")
+    return data
+
+
+def keep_finished(data, talks):
+    """The saved talks worth keeping: finished, still in the talk folder, with the same lines."""
+    scripts = {t["id"]: t["turns"] for t in talks}
+    kept, said = {}, set()
+    for rec in data["talks"]:
+        if not isinstance(rec, dict) or rec.get("status") != "finished":
+            continue
+        if rec.get("mode") not in MODES or rec.get("brain") not in BRAINS or rec.get("id") not in scripts:
+            continue
+        if rec.get("turns") != scripts[rec["id"]]:
+            if rec["id"] not in said:
+                said.add(rec["id"])
+                bb.say(f"Not kept: {rec['id']}, because its lines changed since that run, so it can't be compared.")
+            continue
+        kept.setdefault((rec["id"], rec["mode"], rec["brain"]), rec)
+    return list(kept.values())
+
+
+def merge_records(kept, new, talks):
+    """Kept and new records together, in plan order: mode, then the talk file order, then brain."""
+    order = {t["id"]: i for i, t in enumerate(talks)}
+    return sorted(kept + new, key=lambda r: (MODES.index(r["mode"]), order[r["id"]], BRAINS.index(r["brain"])))
+
+
+def brain_average(records, brain):
+    scores = [r["judge"]["keep_talking"] for r in records if r["brain"] == brain and r.get("judge")]
+    return sum(scores) / len(scores) if scores else None
+
+
 # ---- command line
 
 def parse_args(argv=None):
@@ -537,6 +799,8 @@ def parse_args(argv=None):
     p.add_argument("--judge-model", default=DEFAULT_JUDGE, help=f"the judge's model (default {DEFAULT_JUDGE})")
     p.add_argument("--no-judge", action="store_true", help="counts only")
     p.add_argument("--no-save", action="store_true", help="don't write a results file")
+    p.add_argument("--results", default=None, help="the folder for the report (default bench/results)")
+    p.add_argument("--resume", metavar="FILE", help="keep the finished talks of an earlier results file, run the rest")
     p.add_argument("--list", action="store_true", help="show the plan and stop; needs no key")
     p.add_argument("-v", "--verbose", action="store_true", help="one line per talk")
     return p.parse_args(argv)
@@ -561,10 +825,18 @@ def bench_talks(args):
         return 2
     modes = ("real_live",) if args.real_live else (args.mode,) if args.mode else ("normal", "live")
     brains = BRAINS if args.brain == "both" else (args.brain,)
-    runs = plan_talks(load_talks(args.talks), args.only, args.companion, modes, brains)
+    talks = load_talks(args.talks)
+    runs = plan_talks(talks, args.only, args.companion, modes, brains)
     if not runs:
         bb.say("No talks match that.")
         return 2
+    saved, kept = None, []
+    if args.resume:
+        saved = read_resume(args.resume)
+        kept = keep_finished(saved, talks)
+        have = {(k["id"], k["mode"], k["brain"]) for k in kept}
+        runs = [r for r in runs if (r["id"], r["mode"], r["brain"]) not in have]
+        bb.say(f"Kept {len(kept)} finished talks from {args.resume}.")
     live_model = args.live_model if args.real_live else ""
     if args.real_live and args.max is None:
         args.max = bb.REAL_LIVE_MAX
@@ -585,17 +857,40 @@ def bench_talks(args):
         model = args.model or os.environ.get("GEMINI_MODEL") or saved  # never opens the database
         bb.say_preview(runs, args.max, args.no_judge, model, args.judge_model, live_model, args.delay)
         return 0
-    key, model = bb.pick_key_and_model(args.key_from_app, args.model)
-    if not key:
-        bb.say("No Gemini key, so nothing was run or spent. Set GEMINI_API_KEY or add --key-from-app.")
-        return 2
-    bb._secret = key
-    list_talks(runs, args.max)
-    bb.say_preview(runs, args.max, args.no_judge, model, args.judge_model, live_model, args.delay, key)
-    info = execute_talks(runs, key, model, args.judge_model, args.delay, args.max, args.no_judge, args.verbose)
-    for run in runs:
-        verdict = (run["judge"] or {}).get("keep_talking", "-")
-        bb.say(f"{run['id']} {run['mode']} {run['brain']} {run['status']} keep_talking={verdict}")
+    info = {"gemini_calls": 0, "live_calls": 0, "key_refused": False, "quota_model": "", "judge_stopped": False}
+    judge_model = "" if args.no_judge else args.judge_model
+    if runs:
+        key, model = bb.pick_key_and_model(args.key_from_app, args.model)
+        if not key:
+            bb.say("No Gemini key, so nothing was run or spent. Set GEMINI_API_KEY or add --key-from-app.")
+            return 2
+        bb._secret = key
+        if saved and saved.get("model") and saved["model"] != model:
+            bb.say(f"That saved run used the model {saved['model']}, and this run would use {model}. "
+                   "Talks from two models can't be compared, so nothing was run or spent. "
+                   f"Run again with --model {saved['model']}.")
+            return 2
+        list_talks(runs, args.max)
+        bb.say_preview(runs, args.max, args.no_judge, model, args.judge_model, live_model, args.delay, key)
+        info = execute_talks(runs, key, model, args.judge_model, args.delay, args.max, args.no_judge, args.verbose)
+    else:
+        model = args.model or saved.get("model") or ""
+        judge_model = judge_model and (saved.get("judge_model") or judge_model)
+        live_model = live_model or saved.get("live_model") or ""
+        bb.say("Nothing is left to run, so no key was needed.")
+    records = merge_records(kept, [talk_record(r) for r in runs], talks)
+    finished = sum(1 for r in records if r["status"] == "finished")
+    bb.say(f"{finished} of {len(records)} talks finished")
+    for brain in BRAINS:
+        if any(r["brain"] == brain for r in records):
+            avg = brain_average(records, brain)
+            bb.say(f"{BRAIN_NAMES[brain]}: " + (f"average score {avg:.1f} out of 5" if avg is not None else "no judged talks"))
+    if (info["gemini_calls"] or kept) and not args.no_save:
+        data = results_data(records, model, judge_model, live_model, datetime.now().strftime("%Y-%m-%d"))
+        try:
+            bb.say(f"Report: {save_talks(data, args.results or bb.RESULTS_DIR)}")
+        except OSError as e:
+            bb.say(f"Could not save the report: {e}")
     if info["key_refused"]:
         bb.say("Gemini refused the key, so the bench stopped. Check the key and run it again.")
     if any(r["not_run_why"] == bb.RATE_STOP for r in runs):
@@ -604,7 +899,7 @@ def bench_talks(args):
         bb.say(f"{info['quota_model']} hit its daily limit, so the rest were not run.")
     if info["judge_stopped"]:
         bb.say("The judge hit its daily limit, so some talks were not judged. Use a different --judge-model.")
-    return 0 if all(r["status"] == "finished" for r in runs) else 2
+    return 0 if all(r["status"] == "finished" for r in records) else 2
 
 
 def main(argv=None):

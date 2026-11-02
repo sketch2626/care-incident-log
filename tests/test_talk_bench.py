@@ -192,6 +192,9 @@ class BenchCase(unittest.TestCase):
             Path(tmp.name, f"{name}.json").write_text(json.dumps(talk(id=name, companion=who)), encoding="utf-8")
         self.folder = tmp.name
         self.talks = tb.load_talks(self.folder)
+        res = tempfile.TemporaryDirectory()
+        self.addCleanup(res.cleanup)
+        self.results = Path(res.name) / "out"
         patch = mock.patch.object(tb.bb, "pause", lambda s: None)
         patch.start()
         self.addCleanup(patch.stop)
@@ -228,7 +231,7 @@ class BenchCase(unittest.TestCase):
             env["GEMINI_API_KEY"] = key
         out = io.StringIO()
         with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(out):
-            code = tb.main(["--talks", self.folder, "--delay", "0", *argv])
+            code = tb.main(["--talks", self.folder, "--delay", "0", "--results", str(self.results), *argv])
         return code, out.getvalue()
 
 
@@ -471,8 +474,9 @@ class CommandLineTests(BenchCase):
         self.fake()
         code, out = self.main()
         self.assertEqual(code, 0, out)
-        self.assertIn("t1 normal full finished keep_talking=4", out)
-        self.assertIn("t2 live full finished keep_talking=4", out)
+        self.assertIn("4 of 4 talks finished", out)
+        self.assertIn("Current brain: average score 4.0 out of 5", out)
+        self.assertIn("Report: ", out)
         self.assertNotIn(KEY, out)
 
     def test_no_key_spends_nothing(self):
@@ -527,7 +531,284 @@ class CommandLineTests(BenchCase):
             code, out = self.main("--real-live")
         self.assertEqual((code, calls), (0, ["t1", "t2"]), out)
         self.assertEqual((len(fake.judged), fake.talk), (2, []))
-        self.assertIn("t1 real_live full finished", out)
+        self.assertIn("2 of 2 talks finished", out)
+
+
+def rec(brain="full", mode="normal", replies=None, status="finished", judge=True, **over):
+    """A saved-talk record built by hand."""
+    lines = turns()
+    if replies is None:
+        replies = (["Good night, Andrew. That is wonderful, Andrew."] * 10) if brain == "full" else ["Fine, then."] * 10
+    out = {"id": "t1", "title": "Andy comes back", "companion": "mary", "resident": "Andrew", "also_called": [],
+           "mode": mode, "brain": brain, "status": status, "turns": lines, "replies": replies,
+           "counts": tb.count_talk(replies, "Andrew"), "judge": None, "judge_note": "", "error": "", "notes": [],
+           "not_run_why": "", "retried": False}
+    if judge and status == "finished":
+        out["judge"] = {"keep_talking": 2 if brain == "full" else 4, "why": "Wore thin.",
+                        "talking_down": {"found": brain == "full", "why": "Too sweet."},
+                        "lecturing": {"found": False, "why": ""}, "repeating": {"found": False, "why": ""}}
+    out.update(over)
+    return out
+
+
+def data_of(*records):
+    return {"date": "2026-11-02", "model": "gemini-x", "judge_model": "gemini-y", "live_model": "", "commit": "abc",
+            "talks": list(records)}
+
+
+CODE_WORDS = ["normal", "real_live", "keep_talking", "None", "t1", "lean", "status", "not_run"]
+
+
+class ReportTests(BenchCase):
+    def assertPlain(self, text):
+        for word in CODE_WORDS:
+            self.assertNotRegex(text, r"(?<![\w-])" + word + r"(?![\w-])", word)
+        self.assertNotRegex(text, r"\bfull\b")
+
+    def test_two_brains(self):
+        text = tb.render_report(data_of(rec("full"), rec("lean"), rec("full", "live"), rec("lean", "live")))
+        for want in ("# Whole talks, 2026-11-02", "Mary on the model gemini-x. The judge was gemini-y. 1 talk,",
+                     "## How the brains compare: Normal talk", "## How the brains compare: Live stand-in",
+                     "| | Current brain | Lean brain |", "| Times she used their name | 20 | 0 |",
+                     "| Replies with their name in them | 10 of 10 | 0 of 10 |", "| Praise | 10 | 0 |",
+                     "## Andy comes back (Mary and Andrew)", "### Normal talk", "#### Current brain", "#### Lean brain",
+                     "**Andrew:** Line number 0.", "**Mary:** Fine, then.", "Judge: 2 out of 5. Wore thin. Talking down: Too sweet.",
+                     "Judge: 4 out of 5. Wore thin.", "Said more than once: \"Good night, Andrew.\" (10 times, Current brain)",
+                     "Praise words: wonderful 10 (Current brain)", tb.LIVE_NOTE):
+            self.assertIn(want, text)
+        self.assertEqual(text.count(tb.LIVE_NOTE), 1)
+        self.assertNotIn("Didn't finish", text)
+        self.assertPlain(text)
+
+    def test_one_brain_has_no_lean(self):
+        text = tb.render_report(data_of(rec("full", retried=True)))
+        self.assertNotIn("Lean brain", text)
+        self.assertIn("| | Current brain |", text)
+        self.assertIn("This talk had to be run twice.", text)
+        self.assertNotIn("Current brain)", text)
+
+    def test_odd_talks(self):
+        replies = ["Hello   there\n friend.", "", "Ok."]
+        cut = rec("full", replies=replies, status="error", error="Gemini's daily limit ran out partway")
+        notjudged = rec("full", mode="live", judge=False, judge_note="not judged: the judge's daily limit ran out")
+        never = rec("full", mode="live", status="not_run", replies=[], not_run_why="left out by --max 3", id="t2",
+                    title="Another")
+        text = tb.render_report(data_of(cut, notjudged, never))
+        self.assertIn("**Mary:** Hello there friend.", text)
+        self.assertIn("**Mary:** (said nothing)", text)
+        self.assertIn("(The talk stopped here.)", text)
+        self.assertIn("Not judged: the judge's daily limit ran out", text)
+        self.assertIn("## Didn't finish", text)
+        self.assertIn("- Andy comes back, Normal talk, Current brain. It stopped after 3 of 10 lines. Gemini's daily limit ran out partway.", text)
+        self.assertIn("It was left out because you asked for a limited number of talks.", text)
+        self.assertEqual(text.count("**Andrew:**"), 4 + 10)  # the cut talk shows the line it stopped on
+        self.assertPlain(text)
+
+    def test_pipe_never_reaches_a_table(self):
+        text = tb.render_report(data_of(rec("full", replies=["a | b | wonderful"] * 10)))
+        for line in text.splitlines():
+            if line.startswith("|"):
+                self.assertNotIn("wonderful", line)
+                self.assertEqual(line.count("|"), 3)
+
+    def test_unknown_resident_name(self):
+        text = tb.render_report(data_of(rec("full", resident="")))
+        self.assertIn("(Mary and the resident)", text)
+        self.assertIn("**The resident:** Line number 0.", text)
+
+
+class SavingTests(BenchCase):
+    def files(self):
+        return sorted(p.name for p in self.results.glob("*")) if self.results.is_dir() else []
+
+    def test_names_and_second_run(self):
+        self.fake()
+        code, out = self.main("--mode", "normal")
+        self.assertEqual(code, 0, out)
+        day = tb.datetime.now().strftime("%Y-%m-%d")
+        self.assertEqual(self.files(), [f"talks-{day}.json", f"talks-{day}.md"])
+        first = (self.results / f"talks-{day}.md").read_text(encoding="utf-8")
+        self.main("--mode", "normal")
+        self.assertEqual(len(self.files()), 4)
+        self.assertIn(f"talks-{day}-2.md", self.files())
+        self.assertEqual((self.results / f"talks-{day}.md").read_text(encoding="utf-8"), first)
+        code, out = self.main("--mode", "normal")
+        self.assertIn(f"Report: {self.results / f'talks-{day}-3.md'}", out)
+
+    def test_json_shape_no_key_no_case(self):
+        self.fake()
+        self.main("--mode", "normal")
+        js = next(self.results.glob("*.json"))
+        raw = js.read_text(encoding="utf-8")
+        self.assertNotIn(KEY, raw)
+        data = json.loads(raw)
+        self.assertEqual(set(data), {"date", "model", "judge_model", "live_model", "commit", "talks"})
+        self.assertEqual(set(data["talks"][0]), set(tb.RECORD_KEYS))
+        self.assertNotIn("case", data["talks"][0])
+        self.assertIsInstance(data["commit"], str)
+        self.assertNotIn(KEY, next(self.results.glob("*.md")).read_text(encoding="utf-8"))
+
+    def test_key_in_a_reply_is_scrubbed(self):
+        self.fake(hook=lambda f, b, m: f"My key is {KEY}.")
+        self.main("--mode", "normal", "--no-judge")
+        for p in self.results.glob("*"):
+            self.assertNotIn(KEY, p.read_text(encoding="utf-8"))
+
+    def test_no_save_and_no_spend(self):
+        self.fake()
+        self.main("--no-save")
+        self.assertEqual(self.files(), [])
+        self.main("--list", key="")
+        self.assertEqual(self.files(), [])
+
+    def test_nothing_lands_in_bench_results(self):
+        before = sorted(p.name for p in tb.bb.RESULTS_DIR.glob("talks-*")) if tb.bb.RESULTS_DIR.is_dir() else []
+        self.fake()
+        self.main("--mode", "normal")
+        after = sorted(p.name for p in tb.bb.RESULTS_DIR.glob("talks-*")) if tb.bb.RESULTS_DIR.is_dir() else []
+        self.assertEqual(before, after)
+
+    def test_write_failure_is_a_line_not_a_crash(self):
+        self.fake()
+        with mock.patch.object(tb, "save_talks", side_effect=OSError("disk full")):
+            code, out = self.main("--mode", "normal")
+        self.assertEqual(code, 0)
+        self.assertIn("Could not save the report: disk full", out)
+
+    def test_md_equals_render_of_json(self):
+        self.fake()
+        self.main()
+        js = next(self.results.glob("*.json"))
+        md = js.with_suffix(".md")
+        self.assertEqual(tb.render_report(json.loads(js.read_text(encoding="utf-8"))), md.read_text(encoding="utf-8"))
+
+
+class ResumeTests(BenchCase):
+    def first_day(self, *argv):
+        self.fake()
+        code, out = self.main("--mode", "normal", *argv)
+        self.assertEqual(code, 0, out)
+        return next(self.results.glob("*.json"))
+
+    def second(self, ext):
+        day = tb.datetime.now().strftime("%Y-%m-%d")
+        return self.results / f"talks-{day}-2.{ext}"
+
+    def edit(self, path, change):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        change(data)
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    def test_keeps_finished_and_reruns_the_rest(self):
+        js = self.first_day()
+        def spoil(d):
+            d["talks"][1].update(status="error", error="x")
+            d["talks"][1]["replies"] = d["talks"][1]["replies"][:3]
+        self.edit(js, spoil)
+        old = js.read_bytes()
+        fake = self.fake()
+        code, out = self.main("--mode", "normal", "--resume", str(js))
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"Kept 1 finished talks from {js}.", out)
+        self.assertIn("Gemini requests", out)
+        self.assertEqual(len(fake.talk), 10)  # only the one talk that was left
+        self.assertEqual(js.read_bytes(), old)
+        new = json.loads(self.second("json").read_text(encoding="utf-8"))
+        self.assertEqual([(t["id"], t["status"]) for t in new["talks"]], [("t1", "finished"), ("t2", "finished")])
+
+    def test_changed_script_is_dropped_with_a_line(self):
+        js = self.first_day()
+        self.edit(js, lambda d: d["talks"][0].update(turns=["Different."] * 10))
+        fake = self.fake()
+        code, out = self.main("--mode", "normal", "--resume", str(js))
+        self.assertIn("Not kept: t1, because its lines changed", out)
+        self.assertIn("Kept 1 finished talks", out)
+        self.assertEqual(len(fake.talk), 10)
+
+    def test_gone_talk_dropped_and_kept_not_judged_stays(self):
+        js = self.first_day("--no-judge")
+        self.edit(js, lambda d: d["talks"].append(dict(d["talks"][0], id="vanished")))
+        self.fake()
+        code, out = self.main("--mode", "normal", "--resume", str(js))
+        self.assertEqual(code, 0, out)
+        self.assertIn("Kept 2 finished talks", out)
+        new = json.loads(self.second("json").read_text(encoding="utf-8"))
+        self.assertEqual([t["id"] for t in new["talks"]], ["t1", "t2"])
+        self.assertTrue(all(t["judge"] is None for t in new["talks"]))
+
+    def test_nothing_left_needs_no_key(self):
+        js = self.first_day()
+        fake = self.fake()
+        code, out = self.main("--mode", "normal", "--resume", str(js), key="")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no key was needed", out)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+        self.assertEqual(len(list(self.results.glob("*.md"))), 2)
+
+    def test_list_shrinks(self):
+        js = self.first_day()
+        self.edit(js, lambda d: d["talks"][1].update(status="not_run"))
+        code, out = self.main("--mode", "normal", "--resume", str(js), "--list", key="")
+        self.assertIn("1 talks", out)
+        self.assertIn("Kept 1 finished", out)
+
+    def test_max_counts_only_what_is_left(self):
+        js = self.first_day()
+        self.edit(js, lambda d: d["talks"][1].update(status="not_run"))
+        fake = self.fake()
+        code, out = self.main("--mode", "normal", "--resume", str(js), "--max", "1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(fake.talk), 10)
+
+    def test_model_mismatch_stops(self):
+        js = self.first_day()
+        self.edit(js, lambda d: d["talks"][0].update(status="error") or d.update(model="other-model"))
+        fake = self.fake()
+        code, out = self.main("--mode", "normal", "--resume", str(js))
+        self.assertEqual(code, 2)
+        self.assertIn("other-model", out)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+
+    def test_missing_and_bad_files(self):
+        self.fake()
+        code, out = self.main("--resume", str(self.results / "nope.json"))
+        self.assertEqual(code, 2)
+        self.assertIn("Can't read the saved run", out)
+        bad = self.results
+        bad.mkdir(parents=True, exist_ok=True)
+        (bad / "bad.json").write_text("{nonsense", encoding="utf-8")
+        (bad / "odd.json").write_text("[1]", encoding="utf-8")
+        for name in ("bad.json", "odd.json"):
+            code, out = self.main("--resume", str(bad / name))
+            self.assertEqual(code, 2, name)
+            self.assertNotIn("Traceback", out)
+
+    def test_lean_added_beside_a_saved_full_run(self):
+        js = self.first_day()
+        self.with_fake_lean()
+        fake = self.fake()
+        code, out = self.main("--mode", "normal", "--brain", "lean", "--resume", str(js))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(fake.talk), 20)
+        md = self.second("md").read_text(encoding="utf-8")
+        self.assertIn("| | Current brain | Lean brain |", md)
+        self.assertIn("Lean brain: average score", out)
+        self.assertIn("Current brain: average score", out)
+
+
+class DecisionD4(BenchCase):
+    def test_d4_a_lean_run_never_silently_runs_full(self):
+        fake = self.fake()
+        code, out = self.main("--brain", "lean")
+        self.assertEqual(code, 2)
+        self.assertIn("lean brain not installed", out)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+        self.assertEqual(self.results.exists(), False)
+        self.with_fake_lean()
+        code, out = self.main("--brain", "lean", "--mode", "normal", "--no-judge")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(fake.talk), 20)
+        self.assertTrue(all("Be brief and plain." in system_of(b) for b in fake.talk))
 
 
 if __name__ == "__main__":

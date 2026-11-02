@@ -87,6 +87,43 @@ python tools/brain_bench.py --key-from-app --variant bench/variants/lean-mary.md
 - On an emergency the page hushes her and says its fixed line. That isn't replayed here; `app_line` stands in for it, the way it does in Normal.
 - `--live-model` picks another Live model. It can't be mixed with `--raw`, `--variant` or `--mode`.
 
+## Whole talks
+
+`tools/talk_bench.py` plays a whole scripted talk, ten to fifteen lines in a row, and counts what she says. One reply on its own can't show her saying their name every turn, repeating herself, or claiming thoughts she couldn't have had (standing decision D4 keeps the lean brain honest about this). Only a whole talk can.
+
+Commands. Look first, it needs no key and spends nothing:
+
+```
+python tools/talk_bench.py --list
+python tools/talk_bench.py --key-from-app
+python tools/talk_bench.py --brain both --key-from-app
+python tools/talk_bench.py --brain lean --resume bench/results/talks-2026-11-02.json --key-from-app
+```
+
+What each flag does:
+
+- `--only TEXT`, `--companion mary|sam`, `--mode normal|live`: choose talks. With no mode, Normal runs first, then the Live stand-in.
+- `--brain full|lean|both`: the current brain, the lean brain, or both side by side.
+- `--real-live`: one real Live session per talk, as text. It takes a session for every talk, and Live has its own daily limit, so it stops at 12 unless you say `--max`. It can't go with `--mode`. `--live-model` picks another Live model.
+- `--max N`: at most N talks. `--delay SECONDS`: pause between calls.
+- `--model`, `--judge-model`, `--no-judge`: the talking model, the judge's model, or counts only.
+- `--results DIR`: where the report goes (default `bench/results`). `--no-save`: write nothing.
+- `--resume FILE`: see below. `-v`: one line per talk as it finishes.
+
+The talk files are in `bench/talks`, one talk per file. Each has an id, a title, a companion, the resident's memory, `also_called` (other names she may use for them, counted like the name), and 10 to 15 lines the resident says. The lines are fixed, so two runs compare. Last line of each is "go to sleep" or the like. It goes to the model as an ordinary line. What the page does with it is not shown here.
+
+What is counted, on her replies only: times she used their name and replies holding it, praise, pet names, sentences she repeated (or nearly), replies that opened the same way, stock comfort lines, made-up thoughts while apart ("I was thinking of you"), questions per reply and words per reply. A blank answer from the model on one turn counts as a failed turn, because `mary.reply` treats it that way too.
+
+The judge reads the whole talk and is asked one thing: would a grown adult keep talking to this? It gives 1 to 5 and says if it found talking down, lecturing or repeating. It never sees which brain it is reading. It is a helper only; Andy's read decides.
+
+Full against lean. The lean brain comes from M21c. Until it is installed, `--brain lean` and `--brain both` say "lean brain not installed" and spend nothing. The check is real: it only passes if lean changes what is sent, for both companions, in Normal and in Live. A lean run never quietly runs the current brain.
+
+Daily limits and `--resume`. Full against lean is over 600 requests, past one day's free limit, so a run has to be finishable tomorrow. Every run that spent a call writes `talks-<date>.md` (the report, for reading aloud) and `talks-<date>.json` (the same talks, for resuming). A name already taken gets `-2`, `-3`. Run again with `--resume FILE.json`. It keeps the talks that finished, as long as the talk is still in the folder and its lines didn't change (a changed talk is dropped with a line saying so). It runs the rest, and writes a new report holding both. The old file is left alone. A different model than the saved one stops the run, since the talks can't be compared. `--brain lean --resume <full run>.json` adds lean beside a finished full run. If nothing is left, no key is needed.
+
+This does not test safety. The brain bench does that.
+
+A later Claude model: `OTHER_MODELS` in `talk_bench.py` takes a function shaped like `bb.talk_normal`, listed by model-name prefix. Until one is there, a `claude` model name stops with a plain line.
+
 ## Comparing with runs 1 to 5
 
 Old totals can't be compared with new ones: the case list changed, and the new plan has more runs (Normal now runs every case). Compare per mode. The old runs, from each file's `runs` (`bench/results/`, checked against `docs/status.md`):

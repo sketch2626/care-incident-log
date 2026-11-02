@@ -491,6 +491,7 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - Keep "How bad" and "Your words" as the resident's own, because a state report must be in their words and their judgment.
   - Open the switches to her after a spoken yes.
   - Andy decides which locks stay.
+- **Andy's decision (2026-11-02, D12):** "if it's on the screen and in the app and can be affected by you, then you should be able to tell Mary to do it for you." So the switches, "How bad was it?" (set to what the resident says) and removing open to the resident's plain say-so, and the person-form path gets fixed. Only the secrets stay locked (D9). Saving and sending still wait for their "save it" or "send it" (D8).
 
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."

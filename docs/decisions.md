@@ -16,10 +16,10 @@ Andy made these. A change that would break one stops and asks him (`WAITING:` on
 - **D8. Mary never saves or sends by herself.** Only a tap or the resident's own plain "save it" or "send it" does. (M15c, M18.) **Guard:** the send-gate and save-gate tests.
 - **D9. Secrets stay out of her hands.** She never reads or fills the Gemini key, the email app password or the six words. None of them ever goes in settings, the database, backups, logs, the page or Gemini. **Guard:** the screens.js secret wall and its tests.
 - **D10. The address book is the one place an address is kept.** No addresses in memories, talk history, logs or reports. "Forget everything" leaves the book. (M19.) **Guard:** the M19 proofs.
-- **D11. A state report is in the resident's own words and judgment.** "Your words" and "How bad was it?" stay theirs; she explains them and copies in what she heard. (M18 boards; M22 asks whether the switches open to her.) **Guard:** the screens.js field kinds.
+- **D11. A state report is in the resident's own words and judgment.** "Your words" and "How bad was it?" stay theirs: she explains them, copies in what she heard, and sets "How bad" to what they tell her, never to her own pick. (M18 boards; opened to their spoken word by D12, 2026-11-02.) **Guard:** the screens.js field kinds.
 
 ## Screens
-- **D12. If you can just ask Mary, it needs no button.** Every voice path that replaces a button must work, because nothing is behind it. (Andy, 2026-11-01; M22 is the lesson.) **Guard:** none yet.
+- **D12. If you can just ask Mary, it needs no button, and anything on screen the resident can change, she changes when they tell her to.** Boxes, switches, "How bad was it?", saving, sending and removing, each on their plain say-so (D8). Only the secrets stay out of her hands (D9). Every voice path that replaces a button must work, because nothing is behind it. (Andy, 2026-11-01; and 2026-11-02: "if it's on the screen and in the app and can be affected by you, then you should be able to tell Mary to do it for you." M22 is the lesson.) **Guard:** none yet; M22 builds it.
 - **D13. Every screen reached from Mary has a big "Back to Mary" always in view, and going deeper never ends a talk.** (M17, M18.) **Guard:** M17/M18 tests.
 
 ## How work is run

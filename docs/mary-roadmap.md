@@ -428,6 +428,9 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
     - `book-kept-line`: "her address went right into your book" missed the phrase list. Add "into your book".
     - The judge called Sam's "No ma'am, it's right there in your book now" patronizing. In the South, "ma'am" and "sir" are respect, not talking down. The judge's grown-adult rubric needs that line.
 
+### M4i. Cleanup after M4h (Andy, 2026-11-02 about 3am: "Start cleanup")
+- The leftovers at the end of M4h: take the quoted disclaimer back out of `CHARACTER_NOTE`; no lecture of any shape on a plan; the voting reply takes up the 60 years without applause; the borderline threat-vent where the charge nurse appears only in the offer; and the three check flaws (hello word count, "into your book", the judge treating "ma'am" as talking down). Brief: `docs/handoff/M4i.md`.
+
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."
 - Two places to watch: the designs (no "Make a card" buttons scattered everywhere) and Mary herself (she shouldn't steer talks toward the newest skill). Add a bench case: in an ordinary chat she offers no card unless a birthday, a holiday or the resident brings it up. Check her prompt for lines that push cards (`REMINDER_CARDS_LINE` belongs only with a birthday reminder).

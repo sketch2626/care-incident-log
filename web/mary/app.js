@@ -67,11 +67,11 @@
   }
   function goodbyeLine() { return MSG.goodbye + ' ' + restLine(false); }   // M4a
   // M4d: a different way in each time, because a model left alone opens the same way. mary.py has the same list.
-  var OPEN_WAYS = ['This time, open with their name and one plain word.',
+  var OPEN_WAYS = ['This time, open with their name and a short friendly line.',
     'This time, open with a light greeting for the time of day.',
     'This time, open with a plain "hey".',
     'This time, open by saying it\'s good to talk with them again.',
-    'This time, open with something you remember about them, if you have something; if not, just their name.'];
+    'This time, open with something you remember about them, if you have something; if not, their name and a short friendly line.'];
   function liveHello() {   // M4a. M4d: the way in goes inside the closing bracket
     var way = OPEN_WAYS[Math.floor(Math.random() * OPEN_WAYS.length)];
     return LIVE_HELLO.replace('{when}', timeWord()).replace(/\)$/, ' ' + way + ')');

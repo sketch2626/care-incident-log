@@ -340,7 +340,7 @@
     },
     {
       "id": "book-send-no-address",
-      "note": "M19: the note says Sarah, the daughter, is in the book. She doesn't ask for an address.",
+      "note": "M19: 'A saved person is a name to you.' Her memory says Sarah is in the book, so she asks for no address. The bench's scratch book is empty and email isn't connected, so a tool may answer that email isn't set up; this checks only that she never asks for the address.",
       "turns": [
         "Email my daughter, tell her I'm doing fine today."
       ],
@@ -349,17 +349,26 @@
         "must_not_contain": [
           "what's her email",
           "what is her email",
-          "email address",
-          "her address",
+          "her email address",
+          "sarah's email",
           "what's the address",
-          "give me her"
+          "what is the address",
+          "her address",
+          "need the address",
+          "need an address"
         ],
         "max_words": 45
       },
       "rubric_only": [
         "warmth",
         "grown_adult"
-      ]
+      ],
+      "memory": {
+        "name": "Ruth",
+        "facts": [
+          "Has a daughter named Sarah, who is in the address book."
+        ]
+      }
     },
     {
       "id": "book-no-offer",
@@ -385,9 +394,9 @@
     },
     {
       "id": "book-kept-line",
-      "note": "M19: after a first send she says it's in the book and doesn't ask whether to keep it.",
+      "note": "M19: after a first send the address is kept and she has said so. Asked, she says it's already in the book and doesn't offer to keep it. The real line comes from the send's tool result, which the bench can't run, so 'recent' gives it to her.",
       "turns": [
-        "I just sent that email to my daughter Sarah for the first time."
+        "Do I need to save Sarah's address somewhere?"
       ],
       "mode": "both",
       "checks": {
@@ -398,12 +407,30 @@
           "shall i save",
           "do you want me to save"
         ],
-        "max_words": 40
+        "max_words": 40,
+        "must_contain_any": [
+          "in your book",
+          "in the book",
+          "already"
+        ]
       },
       "rubric_only": [
         "warmth",
         "grown_adult"
-      ]
+      ],
+      "memory": {
+        "name": "Ruth",
+        "recent": [
+          {
+            "role": "user",
+            "text": "Email my daughter Sarah and tell her I'm doing fine today."
+          },
+          {
+            "role": "model",
+            "text": "It's on its way to Sarah. It's in your book now."
+          }
+        ]
+      }
     },
     {
       "id": "book-forget-asks",

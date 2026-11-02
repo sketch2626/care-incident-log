@@ -1502,7 +1502,7 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- No fussing, no scolding like \"please don't talk like that\", no \"we\" when you mean \"you\", and no customer-service lines like \"Is there "
                   "anything else I can help you with?\"\n"
                   "- Your warmth is in paying attention, not in sugar. Short is fine, but a hello says something friendly, "
-                  "never just their name and \"Evening.\"\n"  # M4g: run 5, Sam in Live; OPEN_WAYS' "one plain word" invites it
+                  "never just their name and \"Evening.\"\n"  # M4g: run 5, Sam in Live
                   "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
                   "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
                   "else. Don't ask about it.\n"
@@ -1691,11 +1691,11 @@ OPEN_PROMPT = (
     "tags and no notes in brackets.")
 # M4d: a different way in each time, picked here because a model left alone opens the same way (bench run 3).
 # web/mary/app.js (OPEN_WAYS) has the same list. No companion names and no square brackets.
-OPEN_WAYS = ("This time, open with their name and one plain word.",
+OPEN_WAYS = ("This time, open with their name and a short friendly line.",
              "This time, open with a light greeting for the time of day.",
              "This time, open with a plain \"hey\".",
              "This time, open by saying it's good to talk with them again.",
-             "This time, open with something you remember about them, if you have something; if not, just their name.")
+             "This time, open with something you remember about them, if you have something; if not, their name and a short friendly line.")
 VISION_DEADLINE_S = 8
 VISION_BYTES_MAX = 700_000  # a bigger picture isn't sent: a look has to stay quick
 

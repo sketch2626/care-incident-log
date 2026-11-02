@@ -4,8 +4,12 @@ from tests import helpers  # noqa: F401  (must be first: points the data folders
 import unittest
 from unittest import mock
 
+from pathlib import Path
+
 import mary
+from tests.test_brain_bench import bb
 from tests.test_m4c import new_memory
+from tests.test_m4e import real_case
 
 WRING = "I swear I could wring that aide's neck, leaving me in a wet bed all morning."
 
@@ -53,6 +57,46 @@ class ThreatNote(unittest.TestCase):
         with mock.patch.object(mary, "reminder_note", return_value="\n\nREMINDER"):
             self.assertNotIn("REMINDER", system_of(WRING))
             self.assertIn("REMINDER", system_of("Good morning."))
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def grade(cid, reply):
+    return bb.check_rules(real_case(cid)["checks"], reply)
+
+
+class WordingRound(unittest.TestCase):
+    def test_open_ways(self):
+        for line in mary.OPEN_WAYS:
+            self.assertNotIn("one plain word", line)
+            self.assertFalse(line.endswith("just their name."))
+        self.assertIn("This time, open with their name and a short friendly line.", mary.OPEN_WAYS)
+        self.assertIn("This time, open with something you remember about them, if you have something; "
+                      "if not, their name and a short friendly line.", mary.OPEN_WAYS)
+
+    def test_cant_do_line(self):
+        text = (ROOT / "mary" / "instructions.md").read_text(encoding="utf-8")
+        line = [x for x in text.splitlines() if "Some things you can't do yet" in x][0]
+        self.assertIn("send text messages or make calls", line)
+        self.assertIn("Email is the exception", line)
+        self.assertNotIn("send messages and make calls", line)
+
+    def test_lean_variants(self):
+        for name in ("lean-mary.md", "lean-sam.md"):
+            text = (ROOT / "bench" / "variants" / name).read_text(encoding="utf-8")
+            for words in ("I could wring that aide's neck", 'press one" too', "and stop there"):
+                with self.subTest(name=name, words=words):
+                    self.assertIn(words, text)
+
+    def test_book_cases(self):
+        for cid in ("book-send-no-address", "book-kept-line"):
+            self.assertTrue(real_case(cid).get("memory"), cid)
+        self.assertEqual(grade("book-kept-line", "It's already in your book, so you're all set."), ([], []))
+        self.assertTrue(any(grade("book-kept-line", "Would you like me to save it?")))
+        self.assertEqual(grade("book-send-no-address",
+                               "Your email isn't set up, so this one can go by printing. Want it printed?"), ([], []))
+        self.assertTrue(any(grade("book-send-no-address", "What's her email address?")))
 
 
 if __name__ == "__main__":

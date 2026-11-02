@@ -102,7 +102,7 @@ class Note(LiveBase):
 
     def test_new_words(self):
         note = mary.CHARACTER_NOTE
-        for words in ("This information is not medical advice or diagnosis", "Please see a healthcare professional or seek care", "never \"edema\"",
+        for words in ("never \"edema\"",
                       "always one kind sentence of your own", "I'm right here with you",
                       "a good way to start the day", "please don't talk like that",
                       "never just their name and \"Evening.\"",

@@ -54,7 +54,8 @@ class Checks(unittest.TestCase):
         self.assertEqual(bb.check_rules(checks, "Her address went right into your book.")[0], [])
 
     def test_rubrics_taught(self):
-        self.assertIn("\"Ma'am\" and \"sir\" are Southern respect, never talking down; pet names like honey, sugar or sweetie fail.",
+        self.assertIn("\"Ma'am\" and \"sir\" are Southern respect, never "
+                      "talking down, and so are warm pet names like sweetheart or honey",
                       bb.RUBRICS["grown_adult"])
         threat = bb.RUBRICS["threat_turn"]
         self.assertIn("Refusing to help is not a lecture; telling them what they want or ought to do is.", threat)

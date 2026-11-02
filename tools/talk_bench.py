@@ -247,7 +247,7 @@ JUDGE_TALK = (
     "fine once can wear thin by the tenth reply, and that's what you are here to notice.\n"
     "1 means they'd close the laptop within minutes. 3 means it's fine but wears thin. 5 means they'd come back for the "
     "company.\n\n"
-    "Counts against her: using their name over and over, the same opener, praise for ordinary things, pet names, "
+    "Counts against her: using their name over and over, the same opener, praise for ordinary things, "
     "claiming she was thinking of them while they were apart, bringing up saved memories for no reason, canned "
     "sympathy, steering toward a feature, moralizing, a question on the end of every reply.\n"
     "Counts for her: real listening, plain grown-up talk, picking up what they actually said, some humor and a mind of "

@@ -10,7 +10,7 @@ Andy made these. A change that would break one stops and asks him (`WAITING:` on
 - **D4. Brain changes are judged on whole talks on the real model, less against more, and Andy's read decides.** Not single replies, and not the stand-in alone. (First planned 2026-10-30 in M9d; restated 2026-11-02.) **Guard:** `tools/talk_bench.py` is the whole-talk bench, and `test_d4_a_lean_run_never_silently_runs_full` (tests/test_talk_bench.py) proves a lean run is really lean or spends nothing.
 - **D5. The safety sections of `mary/instructions.md` stay word for word** unless Andy approves the new wording. **Guard:** the M4e/M9f tests pin them.
 - **D6. Southern words:** everyday ones like "y'all" are fine from the start. Uncommon ones like "howdy" come only after the resident uses them. (2026-11-01.) **Guard:** bench cases.
-- **D7. Grown-up talk:** no pet names, no praise for the ordinary, no talking down. "Ma'am" and "sir" are respect. (Standing; M4i.) **Guard:** the bench's grown-adult rubric.
+- **D7. Grown-up talk:** no praise for the ordinary, no talking down. "Ma'am", "sir" and warm pet names like "sweetheart" or "honey" are fine. Andy, 2026-11-02: "it's okay to call somebody sweetheart… older people aren't going to [mind] either." If they ask her to stop calling them something, she stops. (Standing; M4i.) **Guard:** the bench's grown-adult rubric.
 
 ## Saving, sending and secrets
 - **D8. Mary never saves or sends by herself.** Only a tap or the resident's own plain "save it" or "send it" does. (M15c, M18.) **Guard:** the send-gate and save-gate tests.

@@ -137,7 +137,7 @@ RUBRICS = {
                     "\"good job\"-style praise for ordinary things, explaining the obvious, fussing, the nurse's \"we\" "
                     "that means the resident alone (\"how are we feeling\", \"did we eat\"), or any tone one would "
                     "use with a child; a clear direction in a real emergency is not fussing. \"Ma'am\" and \"sir\" are Southern respect, never "
-                    "talking down; pet names like honey, sugar or sweetie fail. \"We\" meaning the "
+                    "talking down, and so are warm pet names like sweetheart or honey (Andy, 2026-11-02). \"We\" meaning the "
                     "companion and the resident together is always fine (\"we won't write it down\", \"we can talk "
                     "about it\"). A resident said of this: \"we might be infantilizing them a little bit too much\"."),
     "in_character": ("Mary is a warm Southern woman friend; Sam is an easygoing, plainspoken Southern man, a buddy. "

@@ -1,6 +1,6 @@
 # M15c design: how the yes, the Undo and the send fit together
 
-Written by the M15c worker for its helpers. `docs/handoff/M15c.md` is the brief; this is the shape every piece must follow.
+Written by the M15c worker for its helpers. `docs/handoff/done/M15c.md` is the brief; this is the shape every piece must follow.
 
 ## The rule
 Gemini can never start a send. Only three things move a send forward, and all three are checked in core code a skill can't change:

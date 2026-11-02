@@ -2,7 +2,7 @@
 
 Read `docs/handoff/_common.md` first (it sends you to `docs/mission.md`). Then read:
 - the **M19** section of `docs/mary-roadmap.md`: Andy's words, his board changes and his five answers;
-- `docs/handoff/M19-design.md`, the design you build from;
+- `docs/handoff/done/M19-design.md`, the design you build from;
 - `mockups/mary/round10/README.md`, and the boards as needed;
 - the M18 merge's report (`git log --grep "DONE: M18" -1 --format=%B`): how screens open inside Mary's page, the `use_screen` tool, the save gate and `memory_core.scrub_addresses`.
 

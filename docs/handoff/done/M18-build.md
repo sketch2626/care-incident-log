@@ -2,7 +2,7 @@
 
 Read `docs/handoff/_common.md` first (it sends you to `docs/mission.md`). Then read:
 - the **M18** section of `docs/mary-roadmap.md` (Andy's words);
-- `docs/handoff/M18-design.md` (the design you build from);
+- `docs/handoff/done/M18-design.md` (the design you build from);
 - `mockups/mary/round9/README.md`, and the boards in `mockups/mary/round9/` as needed;
 - the merge commit message of the boards (`git log -1 --format=%B 001b026`).
 

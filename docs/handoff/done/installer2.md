@@ -13,8 +13,8 @@ M8's frozen build was never checked. Before the pilot, the installed app has to 
 
 **Do this:**
 1. **No downloads.** Your worktree has no `models/` (it's gitignored).
-   - Copy the three models from the main checkout: `C:\Users\Andyb\Operation Save Grandma\models\` (a local copy, not a download).
-   - Use the main checkout's existing build venv: `C:\Users\Andyb\Operation Save Grandma\packaging\.venv\Scripts\python.exe`. Run `packaging\build.py` with it from your worktree.
+   - Copy the three models from the main checkout: `<main checkout>\models\` (a local copy, not a download).
+   - Use the main checkout's existing build venv: `<main checkout>\packaging\.venv\Scripts\python.exe`. Run `packaging\build.py` with it from your worktree.
    - If anything would need downloading or a `pip install`, stop and commit `WAITING:` with what and why.
 2. **Bump the version** in `version.py` to the next minor (0.4.0), and build. Note the installer, zip and installed sizes.
 3. **Check the frozen app without touching real data.**

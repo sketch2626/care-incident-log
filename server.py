@@ -502,6 +502,23 @@ _mary_lock = threading.Lock()
 # talking after a real delete, and what she says then could carry the very thing just forgotten.
 LIVE_FORGOT_QUIET_S = 30
 _live_forgot_at = None
+HER_VOICE_S = 12
+_her_said = ("", 0.0)  # M21a: her last spoken words and when, in memory only, so her own voice never wakes her
+
+
+def note_her_words(text):
+    global _her_said
+    _her_said = (str(text or ""), time.monotonic())
+
+
+def is_her_own_voice(confirm_text):
+    """True when a wake's words sit inside what she said in the last HER_VOICE_S seconds."""
+    said, at = _her_said
+    if not said or time.monotonic() - at > HER_VOICE_S:
+        return False
+    norm = lambda t: " ".join(re.sub(r"[^\w\s]", " ", str(t or "").lower()).split())
+    heard, hers = norm(confirm_text), norm(said)
+    return bool(heard) and (len(heard.split()) >= 2 or heard == hers) and (" " + heard + " ") in (" " + hers + " ")
 TALK_NO_TEXT = "I didn't catch anything. Could you say that again?"
 
 
@@ -1156,6 +1173,7 @@ def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typ
         r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
                        companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident,
                        skills=skills, screen=screen, on_effect=on_effect, typed=typed)  # --- skills hook (M13) --- M9c: typed
+    note_her_words(r["text"])  # M21a
     return {"text": r["text"], "notice": r["notice"], "steps": r["steps"], "mood": r["mood"],
             "effects": r["effects"],  # effects: M13
             "emergency": bool(r["emergency"] or r["gemini_alert"]),
@@ -1542,6 +1560,10 @@ class WakeLink:
         self._cond.notify_all()
 
     def _on_wake(self, ev):  # wakeword's worker thread, no wakeword lock held
+        if is_her_own_voice(ev.get("confirm_text")):  # M21a: her own voice in the room is not the resident
+            wake_log("ignored", why="her own voice")
+            self.hold(False)
+            return
         with self._cond:
             self._woke_until = time.monotonic() + WAKE_WOKE_S
             wakeword.pause("woke")  # she must not wake on her own greeting
@@ -1795,6 +1817,7 @@ class Handler(SimpleHTTPRequestHandler):
             text = " ".join(str(self._body().get("text") or "").split())[:2000]
             text = mary.fix_numbers(text)  # M4d: what's remembered has the number right, whatever her voice said
             if text:  # M15c: the page's rememberSaid lands here too, so this covers all of her Live words
+                note_her_words(text)  # M21a
                 gate_her_words(text)
                 birthday_she_asked(text)  # M19 piece 6b
             quiet = _live_forgot_at is not None and time.monotonic() - _live_forgot_at < LIVE_FORGOT_QUIET_S  # M9c

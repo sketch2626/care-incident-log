@@ -159,9 +159,9 @@ var S = { convo: null, screen: 'everyday', talkOrder: ['live', 'normal', 'offlin
 var Sp = { sess: null };
 var MSG = { emergency: 'HELP WORDS' };
 var LIVE_SAFETY = '(SAFETY ';
-var greets = [], stops = 0, finished = 0, speaking = false, said = [];
+var greets = [], stops = 0, finished = 0, speaking = false, said = [], deaf = false;
 var window = {
-  MaryLive: { stopSpeaking: function () { stops++; } },
+  MaryLive: { stopSpeaking: function () { stops++; }, setDeaf: function (on) { deaf = !!on; } },
   MarySkills: { handleLiveToolCall: function (tc) {
     return Promise.resolve({ functionResponses: tc.functionCalls.map(function (fc) {
       return { id: fc.id, name: fc.name, response: fc.name === 'tell_story' ? { story: STORY } : { ok: true } };
@@ -172,7 +172,7 @@ function greetLive(t) { greets.push(t); return true; }
 function spokenNumbers(t) { return t; }
 function liveSpeaking() { return speaking; }
 function finishLive() { finished++; S.convo = null; }
-function liveBye() { return 'BYE LINE'; }
+function dictating() { return false; }
 function liveByeCap(c) { finishLive(c); }
 function setPhase() {}
 function applyMood() {}
@@ -212,8 +212,9 @@ LIVE_CHECKS = r"""
   assert.strictEqual(timers.size, 1);
   tick();
   assert.strictEqual(c.ending, true);
-  assert.deepStrictEqual(greets, ['BYE LINE']);
-  assert.strictEqual(stops, 1);
+  assert.deepStrictEqual(greets, []);   // M21a: her model says the goodbye itself; the page asks for none
+  assert.strictEqual(deaf, true);
+  assert.strictEqual(stops, 0);          // and never cuts her off
   assert.strictEqual(finished, 0);
   // the turn she was cut off from finishes first: that is not her goodbye
   liveTurnDone(c);
@@ -260,7 +261,7 @@ LIVE_CHECKS = r"""
   assert.strictEqual(timers.size, 1);
   tick();
   assert.strictEqual(c.story, null);
-  assert.deepStrictEqual(greets, ['BYE LINE']);
+  assert.deepStrictEqual(greets, []);
 
   // a garbled line is hidden, is no goodbye and no cut-in
   c = newTalk();
@@ -327,6 +328,8 @@ LIVE_CHECKS = r"""
   c = newTalk();
   r = await liveToolCall(c, { functionCalls: [{ id: '6', name: 'end_talk' }] });
   assert.deepStrictEqual(r.functionResponses, []);
+  assert.strictEqual(finished, 0);      // M21a: the turn that carries the call completes first
+  liveTurnDone(c);
   assert.strictEqual(finished, 1);
   c = newTalk();
   c.story = { parts: ['a', 'b'], next: 1, paused: false, sounded: true, askedAt: clock };
@@ -336,6 +339,8 @@ LIVE_CHECKS = r"""
   assert.strictEqual(finished, 0);
   assert.strictEqual(c.ending, true);
   assert.strictEqual(c.story, null);
+  liveTurnDone(c);                      // M21a: her turn is complete; the sound is still coming out
+  assert.strictEqual(finished, 0);
   speaking = false;
   liveSpeakingChanged(c, false);
   assert.strictEqual(finished, 1);
@@ -355,7 +360,7 @@ LIVE_CHECKS = r"""
   c = newTalk();
   liveByeNow(c);
   liveByeNow(c);
-  assert.strictEqual(greets.length, 1);
+  assert.strictEqual(greets.length, 0);
 
   // the emergency gate comes first, for the page's own tools too
   c = newTalk();

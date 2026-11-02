@@ -350,7 +350,7 @@ var S = { convo: null, phase: 'idle', screen: 'everyday' }, Sp = { sess: null },
 var typingHidden = true, menu = false, band = false, closed = 0, listens = 0, panelsClosed = 0, menusClosed = 0, pending = [];
 function $() { return { hidden: typingHidden }; }
 function skillScreen() { return undefined; }
-function menuOpen() { return menu; }
+function menuOpen() { return menu; } function dictating() { return false; }
 function bandUp() { return band; }
 function closeConvo() { closed++; }
 function convoListen() { listens++; }

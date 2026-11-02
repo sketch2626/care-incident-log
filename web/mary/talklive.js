@@ -132,7 +132,7 @@
 
   function sendPcm(s) {
     var n = s.pcm.length;
-    if (!n || !s.ws || s.ws.readyState !== 1) {
+    if (!n || s.deaf || !s.ws || s.ws.readyState !== 1) {   // M21a: deaf = the mic is not sent
       s.pcm = [];
       return;
     }
@@ -809,6 +809,21 @@
     }
   }
 
+  // M21a: deaf = the mic is not sent (a goodbye, or words meant for a note). Turning it on ends the audio stream once, so
+  // her reply to what was already said comes at once. A new session starts hearing again (s.deaf is per session).
+  function setDeaf(on) {
+    var s = S;
+    if (!s || s.ended) return;
+    on = !!on;
+    if (on === !!s.deaf) return;
+    s.deaf = on;
+    if (!on) return;
+    s.pcm = [];
+    try {
+      if (s.ws && s.ws.readyState === 1 && s.ready) s.ws.send(JSON.stringify({realtimeInput: {audioStreamEnd: true}}));
+    } catch (e) { /* the close event will tell us */ }
+  }
+
   // M7a: true while the resident's words are coming in.
   function isHearing() {
     return !!(S && !S.ended && S.heardState === 'open');
@@ -878,6 +893,7 @@
     start: start,
     greet: greet,
     note: note,                // M7a
+    setDeaf: setDeaf,          // M21a
     isHearing: isHearing,      // M7a
     stop: stop,
     stopSpeaking: stopSpeaking,

@@ -959,4 +959,4 @@ class OneTalk(unittest.TestCase):
     def test_the_page_says_when_a_talk_ends(self):
         js = server.Path(server.__file__).parent.joinpath("web", "mary", "app.js").read_text(encoding="utf-8")
         self.assertIn("/api/mary/talk/end", js)
-        self.assertIn("c.talked && !c.endSent", js)
+        self.assertIn("(c.talked || forgetAsking) && !c.endSent", js)

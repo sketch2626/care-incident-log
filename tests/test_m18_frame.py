@@ -346,7 +346,7 @@ PARENT_CHECKS = r"""
 WAKE_CHECKS = r"""
 const assert = require('assert');
 var S = { screen: 'everyday', firstRun: false, micHeld: false, convo: null, phase: 'idle', noteBusy: 0, formMic: false };
-function noteBusyNow() { return false; }
+function noteBusyNow() { return false; } function dictating() { return false; }
 assert.strictEqual(wakeWhyNot({}), '');
 assert.strictEqual(wakeBusy(), false);
 S.formMic = true;

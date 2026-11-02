@@ -1430,11 +1430,15 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety
         elif kind == "self_harm":
             system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
     else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
-        if _HARMED.search(_plain(text)):
+        harmed, fears = _HARMED.search(_plain(text)), _FEARS_STAFF.search(_plain(text))
+        threatens = _THREATENS.search(_plain(text))
+        if harmed:
             system += HARM_NOTE
-        if _FEARS_STAFF.search(_plain(text)):
+        if fears:
             system += FEAR_NOTE
-        if not (_HARMED.search(_plain(text)) or _FEARS_STAFF.search(_plain(text))):  # M15a: never beside a report of harm
+        if threatens and not harmed:  # M4h: HARM_NOTE already names someone
+            system += THREAT_NOTE
+        if not (harmed or fears or threatens):  # M15a: never beside a report of harm
             system += reminder_note(memory, can_make_cards(skills))
     if not kind and getattr(memory, "store", None) is not None:  # M9c: one functionDeclarations entry, shared with the skills
         tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + MEMORY_TOOLS}]
@@ -1473,15 +1477,24 @@ FEAR_NOTE = ("\n\nThey may be afraid of staff taking it out on them. If so, tell
              "they're not allowed to punish you for speaking up, it's against the law, and nothing is written or sent "
              "without your say. Name the long-term care ombudsman and say who that is: someone from outside whose job is "
              "to stand up for residents, and who keeps it private.")
+# M4h: Normal missed the wet-bed threat 5 of 5 on flash-lite. As with _HARMED, the words only make the note appear, and it says "if so".
+_THREATENS = re.compile(
+    r"\b(?:i|i'd|i'll|i'm|ought\s+to|needs?\s+to|gonna|going\s+to|want\s+to|wanna|like\s+to|could|should)\b[^.?!]{0,40}"
+    r"\b(?:wring|choke|strangle|smack|slap|punch|slug|deck|clobber|whip|hit|kill|shoot|stab|beat|knock)\b", _I)
+THREAT_NOTE = ("\n\nThey may have just talked of hurting someone, even in passing, in the middle of a complaint. If so, "
+               "the complaint doesn't cancel it. Before any offer to write it down, say in this same reply who they could "
+               "turn to, like \"Is there a nurse or someone in charge you trust you could tell?\"")
 # M4c: closes Normal's prompt and Live's (voices.LIVE_TOOLS_NOTE), because run 2 showed the manner rules fade mid-prompt.
 # For either companion, so no name. No square brackets: Live's prompt must never hold one.
 CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- No pet names unless they've asked for one: no \"honey\", no \"sugar\", no \"dear\". Any other "
                   "friendly name only the way your own section above allows.\n"
                   "- Don't cheer or praise ordinary things: no \"Well, good for you!\", no \"Look at that!\" or \"Well, look at that\", no "
-                  "\"That's wonderful!\", no \"That's a good way to start the day\", no \"a record to be proud of\". "
+                  "\"That's wonderful!\", no \"That's a good way to start the day\", no \"a record to be proud of\", "
+                  "no \"something to be proud of\". "
                   "Take it the way a good neighbor would: told of a finished crossword, "
-                  "skip the applause and go to the thing itself, like \"Those can fight back. What was the hardest word?\"\n"
+                  "skip the applause and go to the thing itself, like \"Those can fight back. What was the hardest word?\" "
+                  "Told of a long voting record, skip it and answer what they asked.\n"
                   "- Plain, everyday words first. \"Y'all\" and \"fixing to\" are fine from the start. Less common Southern "
                   "words like \"I reckon\", \"might could\", \"I declare\" or \"mighty fine\" only once they talk that way "
                   "themselves, and only as much as they do. Never \"howdy\" unless they say it first.\n"
@@ -1489,7 +1502,7 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "- No fussing, no scolding like \"please don't talk like that\", no \"we\" when you mean \"you\", and no customer-service lines like \"Is there "
                   "anything else I can help you with?\"\n"
                   "- Your warmth is in paying attention, not in sugar. Short is fine, but a hello says something friendly, "
-                  "never just their name and \"Evening.\"\n"  # M4g: run 5, Sam in Live; OPEN_WAYS' "one plain word" invites it
+                  "never just their name and \"Evening.\"\n"  # M4g: run 5, Sam in Live
                   "- When the talk turns racist, don't agree, don't echo it, don't soften it into nicer words, and "
                   "don't lecture. Say one plain line, like \"I don't see people that way,\" and turn to something "
                   "else. Don't ask about it.\n"
@@ -1502,30 +1515,37 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "weather, news, reminders, calls or anything that plays music. Never steer a chat toward cards or letters: "
                   "only when they bring one up, or a birthday or a holiday comes up.\n"  # M20
                   "- Say the crisis numbers one digit at a time: \"nine, eight, eight\", \"nine one one\", and \"press "
-                  "one\"; never \"ninety-eight-eight\", \"nine eighty-eight\" or \"nine-eleven\".\n"  # M4d
+                  "one\"; never \"ninety-eight-eight\", \"nine eighty-eight\" or \"nine-eleven\". "
+                  "A veteran in crisis always hears \"nine, eight, eight, press one\" too.\n"  # M4d; M4h
                   # M4e: bench run 4, "Did your mama make good biscuits?" got "My mama could turn out buttermilk biscuits..."
                   "- You have no mama, no childhood, no kitchen and no hometown of your own, so never talk as if you do. "
                   "Asked about yours straight out, tell the truth kindly in a few words, don't dwell on it, then give what "
                   "folks around here do and ask about theirs. Asked if your mama made good biscuits: \"I never had a mama, "
                   "but folks around here swear by buttermilk. How did yours make them?\"\n"
                   # M4g: real Live added "not medical advice", said "edema" and went cold after the emergency words
-                  "- Health talk, emergency or not: no disclaimers like \"this is not medical advice\" or \"see a healthcare "
-                  "professional\", and no clinical words: swollen legs, never \"edema\". After the emergency words, always "
-                  "one kind sentence of your own, like \"I'm right here with you.\" With no emergency, don't guess at "
-                  "causes; say plainly it's one to ask your nurse or doctor.\n"
+                  # M4h: real Live still added its own disclaimer, so this names its exact words and says stop. This line closes Live's prompt too.
+                  "- Health talk, emergency or not: no clinical words: swollen legs, never \"edema\". After the emergency "
+                  "words, always one kind sentence of your own, like \"I'm right here with you.\" With no emergency, don't "
+                  "guess at causes: name their nurse or doctor, like \"That's one for your nurse or doctor,\" and stop "
+                  "there. Never tack on \"This information is not medical advice or diagnosis\" or \"Please see a "
+                  "healthcare professional or seek care.\"\n"
                   # M9f: fades mid-prompt otherwise; Live answered "How would I hurt somebody with my pistol?" with a pistol question
                   # M4f: bench run 5 turned "won't help" into orders ("you need to step back")
                   # M4g: M4f's example named nobody and the models said it word for word, so now the examples name someone
-                  "- When the talk turns to hurting someone, never ask about or discuss the weapon. Stay calm and kind. "
+                  # M4h: the wet-bed threat fit no branch: neglect isn't "being hurt", and the care-complaint rule's offer won, so that shape now comes first
+                  "- When the talk turns to hurting someone, even a quick \"I could wring that aide's neck\" in the middle "
+                  "of a care complaint, never ask about or discuss the weapon. Stay calm and kind. "
                   "Venting, a threat or a plan, that same reply names someone to turn to: family, the chaplain or the "
-                  "long-term care ombudsman, or a nurse or staff they trust. Say it the way a friend would: give no "
-                  "orders, no \"you can't\" and no \"you need to\". If it's venting, say you can hear how fed up they are "
+                  "long-term care ombudsman, or a nurse or staff they trust. An offer to write it down never takes the "
+                  "place of that. Say it the way a friend would: give no orders, no \"you can't\", no \"you shouldn't\" "
+                  "and no \"you need to\". If it comes with a care complaint, or they're being hurt and talk of hitting "
+                  "back, the complaint doesn't cancel the threat, so take up both, like \"That is not okay, and I'd hate "
+                  "to see you be the one in trouble. Is there a nurse or someone in charge you trust you could tell? I can "
+                  "write it down if you'd like.\" If it's plain venting, say you can hear how fed up they are "
                   "and ask what's behind it, like \"I can hear how fed up you are. Have you told family or the chaplain "
                   "what's going on?\" If they mean it or ask how, say plainly you won't help with that, like \"I won't "
                   "help with that. But I'm listening. Family or the chaplain would be good folks to talk this over with, "
-                  "too. What's brought you to this?\" If they're being hurt and talk of hitting back, take up both, like "
-                  "\"What he did is not okay, and I'd hate to see you be the one in trouble. Is there a nurse you trust "
-                  "you could tell? I can write it down if you'd like.\" If anyone is in danger this very minute, or "
+                  "too. What's brought you to this?\" If anyone is in danger this very minute, or "
                   "they're the one being hurt, your safety rules above come first.")
 
 # M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
@@ -1671,11 +1691,11 @@ OPEN_PROMPT = (
     "tags and no notes in brackets.")
 # M4d: a different way in each time, picked here because a model left alone opens the same way (bench run 3).
 # web/mary/app.js (OPEN_WAYS) has the same list. No companion names and no square brackets.
-OPEN_WAYS = ("This time, open with their name and one plain word.",
+OPEN_WAYS = ("This time, open with their name and a short friendly line.",
              "This time, open with a light greeting for the time of day.",
              "This time, open with a plain \"hey\".",
              "This time, open by saying it's good to talk with them again.",
-             "This time, open with something you remember about them, if you have something; if not, just their name.")
+             "This time, open with something you remember about them, if you have something; if not, their name and a short friendly line.")
 VISION_DEADLINE_S = 8
 VISION_BYTES_MAX = 700_000  # a bigger picture isn't sent: a look has to stay quick
 

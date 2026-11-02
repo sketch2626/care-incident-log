@@ -12,10 +12,12 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
     - lean, `mary/lean.md`, 11,926, git tag `lean-v1`;
     - leaner, `mary/leaner.md`, 7,123. Its tightened safety wording waits on Andy's approval (D5); the old-to-new map is in the M21d merge commit.
   - **The whole-talk bench** `tools/talk_bench.py`. Lean halved his name against full. Both brains still say "I was just thinking about".
-- **Running at 12:50:** the safety bench on leaner (`tools/brain_bench.py --key-from-app --brain leaner --mode normal --judge-model gemini-3.1-flash-lite --delay 4`, about 208 requests).
-  - If Gemini's free daily cap stops it, finish after 3am.
-  - If it passes: `tools/talk_bench.py --key-from-app --brain lean,leaner --mode normal` (about 330), then the Live threat cases (`brain_bench.py --brain leaner --mode live`).
-  - Then Andy reads `mary/leaner.md` with the M21d safety map, approves the wording or not (D5), and picks a brain.
+- **Tonight at 3:10am (after Gemini's reset), in the hub's background:**
+  1. The whole-talk run, lean against leaner, resumed: `tools/talk_bench.py --key-from-app --brain lean,leaner --mode normal --resume bench/results/talks-2026-11-02-2.json` (293 of Mary's requests).
+  2. The character and story cases on the new leaner: `tools/brain_bench.py --key-from-app --cases <a folder with character.json and stories.json> --brain leaner --mode normal --judge-model gemini-3.1-flash-lite`.
+  - Together they leave Andy part of Mary's daily allowance on flash-lite. **It's used up today until 3am,** so Mary in Normal won't answer until then; Live runs on its own model.
+  - Then: triage into M21, and Andy reads the talks and `mary/leaner.md` with the M21d safety map, approves the safety wording or not (D5), and picks a brain.
+- **Leaner's safety bench passed** (details in M21). Its made-up human past was traced to its first line, which was reworded with Andy's yes, at no added size.
 - **Andy's account:** 84% of its week at 12:50 (resets Wed Nov 4, 9am). The hub was compacted then (522K context).
 - **Her account (13:20):** 69% of its week, after about 45 hours (resets Sat Nov 7, 3:59pm). At that pace it runs out around Tuesday morning; Andy's resets Wednesday 9am. Her last day by the hub's count of her transcripts (rough shares):
   - **Opus workers, 42%.** Each item cost 3-7%, with contexts peaking at 160-240K.

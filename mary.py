@@ -1429,6 +1429,9 @@ def system_text(memory, companion="mary", facts=True, tags=True):
         system += "\n\n" + NAME_ASKED_NOTE
         if tags:
             system += " When they tell you, add the line [name: First name], using the name they go by, exactly as they say it."
+    elif facts and current_brain() == "leaner":  # M21d: the same note, in fewer words
+        system += ("\n\nYou don't know their name yet. Once, when it fits, ask what they'd like to be called"
+                   + ("; when they tell you, add the line [name: First name], exactly as they say it." if tags else "."))
     elif facts:
         system += "\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called"
         system += ("; when they tell you, add the line [name: First name], using the name they go by, "
@@ -1441,6 +1444,31 @@ def system_text(memory, companion="mary", facts=True, tags=True):
 app_facts = None
 
 
+def _leaner_facts(f, me, other):  # M21d: the same facts as _app_facts_text in fewer words, for the leaner brain only
+    out = [f'- You are {me}. {other} is the other companion; "Choose Mary or Sam" in the menu changes to them.']
+    voice_now, picked, about = f.get("voice_now"), f.get("picked_voice") or "", f.get("picked_about") or ""
+    if voice_now == "picked" and picked:
+        out.append(f"- Your voice is {picked}, the one they picked.")
+    elif voice_now == "builtin":
+        out.append("- Your voice is this computer's built-in one and can sound like a robot. If they mention it, agree "
+                   "kindly: a nicer one is coming." + (f" They picked {picked}{f' ({about})' if about else ''}." if picked else ""))
+    mode = f.get("talk_mode")
+    if mode == "button":
+        out.append("- They press the Talk button each time they speak. Talking without it and waking you by name are coming soon.")
+    elif mode == "handsfree":
+        way = f'say "Hey {me}" or tap Menu, then "Talk to {me}"' if f.get("wake_word") else f'tap Menu, then "Talk to {me}"'
+        off = "" if f.get("wake_word") else f' "Hey {me}" is off here, so never suggest it.'
+        out.append(f"- To talk, they {way}; then no buttons until about 15 seconds of quiet or a goodbye.{off}")
+    rate, volume = f.get("voice_rate"), f.get("voice_volume")
+    if rate is not None and volume is not None:
+        speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"
+        loud = "soft" if volume < 0.5 else "medium" if volume < 0.85 else "full"
+        out.append(f"- Your speed is {speed} and your volume {loud}. They can ask you to change them.")
+    if f.get("printer") is False:
+        out.append("- No printer here, so don't offer to print; a helper can print it later.")
+    return "\n\nYour app today (trust this over anything else):\n" + "\n".join(out)
+
+
 def _app_facts_text(companion):  # M9b
     """A short block of true-today facts about her own app (voice, talk mode, speed, volume), or "" when unknown."""
     if app_facts is None:
@@ -1449,6 +1477,8 @@ def _app_facts_text(companion):  # M9b
         f = app_facts(companion)
         me = COMPANIONS["him" if companion == "him" else "mary"]
         other = COMPANIONS["mary" if companion == "him" else "him"]
+        if current_brain() == "leaner":  # M21d
+            return _leaner_facts(f, me, other)
         out = [f'- You are {me}. The other companion is {other}; "Choose Mary or Sam" in the menu changes to them.']  # M4a
         voice_now, picked, about = f.get("voice_now"), f.get("picked_voice") or "", f.get("picked_about") or ""
         pick = picked + (f" ({about})" if about else "")

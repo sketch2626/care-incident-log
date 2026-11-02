@@ -18,6 +18,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - Watchers wait for `WAITING:`/`DONE:` on `other/M22` and `other/M4j`; a 20-minute check reads their tabs.
 - **Testing plan (Andy, 2026-11-02 evening): Live first, by his ear, focused on what she can do.** "We're just trying to find a good enough personality… to test this. What we're really mainly worried about is functionality, what she's able to do, opening things and sending things and manipulating the environment." The full testing, safety first, waits for the new model, because only Andy uses this one. The 3:10am bench was cancelled.
   - **Morning:** launch Mary and switch her to **lean** through the app's settings (nothing is saved, so she opens on full). Andy talks to her for a minute. If she's still wonky, switch to **leaner**.
+  - **After Andy picks (D19):** that brain is built in, and the My info switch and the other brains come out. The switch exists only for this testing.
   - Making lean the code default broke 120 tests that read full's text through the default, so it was undone. Switching by setting is enough for now.
 - **Leaner's safety bench passed** (details in M21). Its made-up human past was traced to its first line, which was reworded with Andy's yes, at no added size.
 - **Andy's account:** 84% of its week at 12:50 (resets Wed Nov 4, 9am). The hub was compacted then (522K context).

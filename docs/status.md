@@ -17,7 +17,14 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
   - If it passes: `tools/talk_bench.py --key-from-app --brain lean,leaner --mode normal` (about 330), then the Live threat cases (`brain_bench.py --brain leaner --mode live`).
   - Then Andy reads `mary/leaner.md` with the M21d safety map, approves the wording or not (D5), and picks a brain.
 - **Andy's account:** 84% of its week at 12:50 (resets Wed Nov 4, 9am). The hub was compacted then (522K context).
-- **Loose end:** the `.worktrees/M4h` folder is left over. A safety check blocked its removal while it was the session folder. Remove it by hand, or with the app's worktree cleanup.
+- **Her account (13:20):** 69% of its week, after about 45 hours (resets Sat Nov 7, 3:59pm). At that pace it runs out around Tuesday morning; Andy's resets Wednesday 9am. Her last day by the hub's count of her transcripts (rough shares):
+  - **Opus workers, 42%.** Each item cost 3-7%, with contexts peaking at 160-240K.
+  - **Sonnet helpers, 34%.** The largest was M21a's coder, at 17% (209K output, 147K context).
+  - **Opus helpers, 24%.** All of this was M19-build on Nov 1, before the Sonnet-coder rule, so it's already fixed.
+  - Her /usage tip "give coder a cheaper model" counts those Opus helpers; coder is Sonnet now, and Haiku is only for text edits.
+- **Loose ends:** nine finished worker folders were removed at 13:20 (M4a, M4b, M4h, M6, M7a, M8, M9c, M9d, speakup; all merged, nothing unsaved). Two remain:
+  - `installer2`, which is merged and clean. Its tab is still open: Andy closes it, then `git worktree remove .worktrees/installer2`.
+  - `.worktrees/M9d3`, a plain leftover folder that isn't a worktree.
 - **Repo:** now **Mary's Porch** (github.com/sketch2626/marys-porch), with a new front page. `main` is published after every merge (D17); commits use GitHub's no-reply address.
 - **Fundraising** is handed to Claude Cowork: `private/fundraising/handoff.md`.
 

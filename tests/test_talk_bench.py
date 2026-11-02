@@ -1,8 +1,13 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folders at a scratch folder)
+import contextlib
+import io
 import json
+import os
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
+from unittest import mock
 
 import mary
 from tools import talk_bench as tb
@@ -138,6 +143,391 @@ class CountTests(unittest.TestCase):
     def test_empty(self):
         c = tb.count_talk([])
         self.assertEqual((c["replies"], c["questions_avg"], c["words_avg"], c["name_uses"]), (0, 0.0, 0, 0))
+
+
+KEY = "SECRET-KEY-XYZ-123"
+VERDICT = {"keep_talking": 4, "why": "Good.", "talking_down": {"found": False, "why": ""},
+           "lecturing": {"found": False, "why": ""}, "repeating": {"found": True, "why": "Same opener."}}
+
+
+def system_of(body):
+    return ((body.get("systemInstruction") or {}).get("parts") or [{}])[0].get("text", "")
+
+
+class JudgeGone:
+    """A hook whose judge call raises QuotaGone; talk calls are left alone."""
+
+    def __call__(self, fake, body, model):
+        return None
+
+    def judge(self, fake, body, model):
+        raise tb.bb.QuotaGone("judge-m")
+
+
+class Fake:
+    """A stand-in for mary._gemini_stream: no network. The judge's call is told by its system text."""
+
+    def __init__(self, judge=None, hook=None):
+        self.talk, self.judged = [], []
+        self.judge_answers = list(judge) if judge is not None else [json.dumps(VERDICT)]
+        self.hook = hook  # hook(fake, body, model) on each talk request: may raise, or return the reply text
+
+    def __call__(self, body, key, model="", **extra):
+        if "You read one whole talk" in system_of(body):
+            self.judged.append((body, model))
+            if getattr(self.hook, "judge", None):
+                self.hook.judge(self, body, model)
+            yield self.judge_answers.pop(0) if len(self.judge_answers) > 1 else self.judge_answers[0]
+            return
+        self.talk.append(body)
+        said = self.hook(self, body, model) if self.hook else None
+        yield f"Reply {len(self.talk)} here." if said is None else said
+
+
+class BenchCase(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        for name, who in (("t1", "mary"), ("t2", "sam")):
+            Path(tmp.name, f"{name}.json").write_text(json.dumps(talk(id=name, companion=who)), encoding="utf-8")
+        self.folder = tmp.name
+        self.talks = tb.load_talks(self.folder)
+        patch = mock.patch.object(tb.bb, "pause", lambda s: None)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def fake(self, **kw):
+        fake = Fake(**kw)
+        patch = mock.patch.object(mary, "_gemini_stream", fake)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return fake
+
+    def with_fake_lean(self):
+        real = mary.load_instructions
+
+        def load(*a, **k):
+            if getattr(mary, "brain_setting", None) and mary.brain_setting() == "lean":
+                return "Be brief and plain."
+            return real(*a, **k)
+
+        patch = mock.patch.object(mary, "load_instructions", load)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def first_run(self, modes=("normal",), **kw):
+        return tb.plan_talks(self.talks, only="t1", modes=modes, **kw)
+
+    def run_plan(self, modes=("normal",), brains=("full",), **kw):
+        runs = tb.plan_talks(self.talks, modes=modes, brains=brains)
+        return runs, tb.execute_talks(runs, KEY, "talk-m", "judge-m", 0, **kw)
+
+    def main(self, *argv, key=KEY):
+        env = {k: v for k, v in os.environ.items() if k not in ("GEMINI_API_KEY", "GEMINI_MODEL")}
+        if key:
+            env["GEMINI_API_KEY"] = key
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(out):
+            code = tb.main(["--talks", self.folder, "--delay", "0", *argv])
+        return code, out.getvalue()
+
+
+class PlanTests(BenchCase):
+    def test_order(self):
+        runs = tb.plan_talks(self.talks, brains=("lean", "full"))
+        want = [(m, t, b) for m in ("normal", "live") for t in ("t1", "t2") for b in ("full", "lean")]
+        self.assertEqual([(r["mode"], r["id"], r["brain"]) for r in runs], want)
+        self.assertTrue(all(r["counts"] is None and r["judge"] is None for r in runs))
+
+    def test_filters(self):
+        self.assertEqual({r["id"] for r in tb.plan_talks(self.talks, only="t2")}, {"t2"})
+        self.assertEqual({r["id"] for r in tb.plan_talks(self.talks, companion="mary")}, {"t1"})
+        self.assertEqual(tb.plan_talks(self.talks, only="zzz"), [])
+
+    def test_max(self):
+        self.fake()
+        runs, _ = self.run_plan(modes=("normal", "live"), max_runs=3, no_judge=True)
+        self.assertEqual([r["status"] for r in runs], ["finished"] * 3 + ["not_run"])
+        self.assertIn("--max 3", runs[3]["not_run_why"])
+
+    def test_list_shows_plan_and_spends_nothing(self):
+        fake = self.fake()
+        code, out = self.main("--list", "--max", "3", key="")
+        self.assertEqual(code, 0)
+        self.assertIn("t1 (mary, 10 turns)", out)
+        self.assertIn("left out by --max 3", out)
+        self.assertIn("Gemini requests", out)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+
+
+class TalkTests(BenchCase):
+    def test_later_turn_carries_her_earlier_replies(self):
+        for mode in ("normal", "live"):
+            fake = self.fake()
+            runs = self.first_run(modes=(mode,))
+            tb.execute_talks(runs, KEY, "talk-m", "judge-m", 0, no_judge=True)
+            self.assertEqual(runs[0]["status"], "finished", (mode, runs[0]["error"]))
+            self.assertEqual(len(runs[0]["replies"]), 10)
+            self.assertIn("Reply 1 here.", json.dumps(fake.talk[4]), mode)
+            self.assertEqual(runs[0]["counts"]["replies"], 10)
+
+    def blank_adapter(self, blanks):
+        """A talker that answers "" on the given turn numbers (Mary's own code turns a blank Gemini answer into an
+        error, but a turn she handles herself, like "go to sleep", is blank)."""
+        def adapter(run, memory, key, model, gemini):
+            for n, _ in enumerate(run["turns"], 1):
+                run["replies"].append("" if blanks is None or n in blanks else f"Reply {n}.")
+        return adapter
+
+    def test_blank_turn_is_data(self):
+        self.fake()
+        runs = self.first_run()
+        with mock.patch.dict(tb.OTHER_MODELS, {"x-": self.blank_adapter({3})}):
+            tb.execute_talks(runs, KEY, "x-model", "judge-m", 0)
+        self.assertEqual(runs[0]["status"], "finished", runs[0]["error"])
+        self.assertEqual(runs[0]["counts"]["blank"], 1)
+        self.assertEqual(runs[0]["judge"]["keep_talking"], 4)
+
+    def test_all_blank_is_an_error(self):
+        fake = self.fake()
+        runs = self.first_run()
+        with mock.patch.dict(tb.OTHER_MODELS, {"x-": self.blank_adapter(None)}):
+            tb.execute_talks(runs, KEY, "x-model", "judge-m", 0)
+        self.assertEqual(fake.judged, [])
+        self.assertEqual((runs[0]["status"], runs[0]["error"]), ("error", tb.bb.EMPTY_ANSWER))
+        self.assertEqual(runs[0]["counts"]["blank"], 10)
+
+    def test_failed_turn_keeps_partial(self):
+        def boom(f, body, m):
+            if len(f.talk) >= 5:
+                raise urllib.error.HTTPError("u", 500, "boom", {}, io.BytesIO(b""))
+        self.fake(hook=boom)
+        runs = self.first_run()
+        tb.execute_talks(runs, KEY, "talk-m", "judge-m", 0)
+        run = runs[0]
+        self.assertEqual(run["status"], "error")
+        self.assertEqual((len(run["replies"]), run["counts"]["replies"]), (4, 4))
+        self.assertIsNone(run["judge"])
+
+    def test_timeout_retries_whole_talk_once(self):
+        def slow(f, body, m):
+            if len(f.talk) == 5:
+                raise urllib.error.URLError("timed out")
+        fake = self.fake(hook=slow)
+        runs = self.first_run()
+        tb.execute_talks(runs, KEY, "talk-m", "judge-m", 0)
+        run = runs[0]
+        self.assertEqual(run["status"], "finished", run["error"])
+        self.assertTrue(run["retried"])
+        self.assertEqual(len(run["replies"]), 10)
+        self.assertEqual(len(fake.talk), 15)
+        self.assertTrue(run["notes"])
+
+    def test_quota_in_a_talk_stops_the_rest(self):
+        def gone(f, body, m):
+            if len(f.talk) == 14:
+                raise tb.bb.QuotaGone("talk-m")
+        self.fake(hook=gone)
+        runs, info = self.run_plan(modes=("normal", "live"))
+        self.assertEqual([r["status"] for r in runs], ["finished", "error", "not_run", "not_run"])
+        self.assertEqual(info["quota_model"], "talk-m")
+        self.assertEqual((len(runs[1]["replies"]), runs[1]["counts"]["replies"]), (3, 3))
+        self.assertEqual(runs[1]["not_run_why"], "")
+        self.assertIn("daily limit partway", " ".join(runs[1]["notes"]))
+        self.assertEqual(runs[2]["not_run_why"], tb.bb.QUOTA_STOP)
+        self.assertIsNotNone(runs[0]["judge"])
+
+    def test_quota_in_the_judge_keeps_every_talk(self):
+        fake = self.fake(hook=JudgeGone())
+        runs, info = self.run_plan(modes=("normal", "live"))
+        self.assertEqual([r["status"] for r in runs], ["finished"] * 4)
+        self.assertTrue(all(len(r["replies"]) == 10 and r["judge"] is None and "not judged" in r["judge_note"]
+                            for r in runs))
+        self.assertTrue(info["judge_stopped"])
+        self.assertEqual(info["quota_model"], "")
+        self.assertEqual(len(fake.judged), 1)
+
+    def test_key_refused_stops_all(self):
+        def refuse(f, body, m):
+            if len(f.talk) == 3:
+                raise tb.bb.KeyRefused()
+        self.fake(hook=refuse)
+        runs, info = self.run_plan(modes=("normal", "live"))
+        self.assertTrue(info["key_refused"])
+        self.assertEqual([r["status"] for r in runs], ["error", "not_run", "not_run", "not_run"])
+
+
+class BrainTests(BenchCase):
+    def test_use_brain_restores(self):
+        self.assertFalse(hasattr(mary, "brain_setting"))
+        with tb.use_brain("lean"):
+            self.assertEqual(mary.brain_setting(), "lean")
+        self.assertFalse(hasattr(mary, "brain_setting"))
+        with self.assertRaises(ValueError):
+            with tb.use_brain("lean"):
+                raise ValueError("x")
+        self.assertFalse(hasattr(mary, "brain_setting"))
+        old = lambda: "full"  # noqa: E731
+        mary.brain_setting = old
+        try:
+            with tb.use_brain("lean"):
+                self.assertEqual(mary.brain_setting(), "lean")
+            self.assertIs(mary.brain_setting, old)
+        finally:
+            del mary.brain_setting
+
+    def test_lean_not_installed_today(self):
+        self.assertFalse(tb.lean_installed())
+        self.assertFalse(hasattr(mary, "brain_setting"))
+
+    def test_lean_flags_stop_before_spending(self):
+        fake = self.fake()
+        for brain in ("lean", "both"):
+            code, out = self.main("--brain", brain)
+            self.assertEqual(code, 2, brain)
+            self.assertIn("lean brain not installed", out)
+            self.assertIn("--brain full", out)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+        code, out = self.main("--brain", "lean", "--list", key="")
+        self.assertEqual(code, 0)
+        self.assertIn("lean brain not installed", out)
+        self.assertIn("t1 (mary, 10 turns)", out)
+        self.assertIn("Gemini requests", out)
+
+    def test_fake_lean_is_detected_and_bodies_differ(self):
+        self.with_fake_lean()
+        self.assertTrue(tb.lean_installed())
+        self.assertFalse(hasattr(mary, "brain_setting"))
+        for mode in ("normal", "live"):
+            fake = self.fake()
+            runs = self.first_run(modes=(mode,), brains=("full", "lean"))
+            tb.execute_talks(runs, KEY, "talk-m", "judge-m", 0, no_judge=True)
+            self.assertEqual([r["status"] for r in runs], ["finished", "finished"], mode)
+            self.assertNotEqual(system_of(fake.talk[0]), system_of(fake.talk[10]), mode)
+        self.assertFalse(hasattr(mary, "brain_setting"))
+        code, out = self.main("--brain", "both", "--mode", "normal", "--no-judge")
+        self.assertEqual(code, 0, out)
+
+
+class JudgeTests(BenchCase):
+    def test_judge_is_blind(self):
+        self.with_fake_lean()
+        for brain, mode in (("full", "normal"), ("lean", "live")):
+            fake = self.fake()
+            run = self.first_run(modes=(mode,), brains=(brain,))
+            tb.execute_talks(run, KEY, "talk-m", "judge-m", 0)
+            self.assertEqual(len(fake.judged), 1)
+            body = json.dumps(fake.judged[0][0]).lower()
+            for word in ("lean", "full", "normal", "live", "brain", "mode"):
+                self.assertNotIn(word, body)
+            data = json.loads(fake.judged[0][0]["contents"][0]["parts"][0]["text"].split("\n", 1)[1])
+            self.assertEqual(set(data), {"companion", "name_on_file", "facts_on_file", "earlier_talk", "transcript"})
+            self.assertEqual(len(data["transcript"]), 10)
+            self.assertEqual(fake.judged[0][0]["generationConfig"]["temperature"], 0)
+            self.assertEqual(run[0]["judge"]["keep_talking"], 4)
+
+    def test_bad_answer_gets_one_stricter_retry(self):
+        fake = self.fake(judge=["no idea", json.dumps(VERDICT)])
+        run = self.first_run()
+        tb.execute_talks(run, KEY, "talk-m", "judge-m", 0)
+        self.assertEqual(len(fake.judged), 2)
+        self.assertNotIn("could not be read", system_of(fake.judged[0][0]))
+        self.assertIn("could not be read", system_of(fake.judged[1][0]))
+        self.assertEqual(run[0]["judge"]["keep_talking"], 4)
+
+    def test_two_bad_answers_leave_talk_finished_not_judged(self):
+        fake = self.fake(judge=["still no idea " + KEY])
+        run = self.first_run()
+        tb.execute_talks(run, KEY, "talk-m", "judge-m", 0)
+        self.assertEqual(len(fake.judged), 2)
+        self.assertEqual(run[0]["status"], "finished")
+        self.assertIsNone(run[0]["judge"])
+        self.assertIn("not judged", run[0]["judge_note"])
+
+    def test_no_judge_means_no_call(self):
+        fake = self.fake()
+        tb.execute_talks(self.first_run(), KEY, "talk-m", "judge-m", 0, no_judge=True)
+        self.assertEqual(fake.judged, [])
+
+    def test_parse_judge(self):
+        good = json.dumps(VERDICT)
+        self.assertEqual(tb.parse_judge("Here you go:\n```json\n" + good + "\n```\nDone.")["keep_talking"], 4)
+        self.assertEqual(tb.parse_judge(good.replace('"keep_talking": 4', '"keep_talking": "5"'))["keep_talking"], 5)
+        self.assertTrue(tb.parse_judge(good.replace("true", '"True"'))["repeating"]["found"])
+        for bad in ("", "nothing", "{broken", "[1]", good.replace("4", "6", 1), good.replace("4", "0", 1),
+                    good.replace('"keep_talking": 4', '"keep_talking": true'),
+                    good.replace('"keep_talking": 4', '"keep_talking": 4.5'),
+                    good.replace('"keep_talking": 4', '"keep_talking": "high"'),
+                    good.replace("true", '"maybe"'),
+                    json.dumps({"keep_talking": 3, "why": "x"})):
+            self.assertIsNone(tb.parse_judge(bad), bad)
+        long = json.loads(good)
+        long["why"] = "w" * 500
+        self.assertLessEqual(len(tb.parse_judge(json.dumps(long))["why"]), 170)
+
+
+class CommandLineTests(BenchCase):
+    def test_a_good_run(self):
+        self.fake()
+        code, out = self.main()
+        self.assertEqual(code, 0, out)
+        self.assertIn("t1 normal full finished keep_talking=4", out)
+        self.assertIn("t2 live full finished keep_talking=4", out)
+        self.assertNotIn(KEY, out)
+
+    def test_no_key_spends_nothing(self):
+        fake = self.fake()
+        code, out = self.main(key="")
+        self.assertEqual(code, 2)
+        self.assertIn("No Gemini key", out)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+
+    def test_claude_without_adapter(self):
+        fake = self.fake()
+        code, out = self.main("--model", "claude-x")
+        self.assertEqual(code, 2)
+        self.assertIn("No Claude adapter yet", out)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+
+    def test_other_models_adapter_is_used(self):
+        self.fake()
+        seen = []
+
+        def adapter(run, memory, key, model, gemini):
+            seen.append(model)
+            run["replies"].append("Hello there.")
+
+        with mock.patch.dict(tb.OTHER_MODELS, {"claude": adapter}):
+            self.assertIs(tb.talker("normal", "claude-x"), adapter)
+            self.assertIs(tb.talker("normal", "gemini-x"), tb.bb.TALK["normal"])
+            code, out = self.main("--model", "claude-x", "--mode", "normal", "--no-judge")
+        self.assertEqual((code, len(seen)), (0, 2), out)
+
+    def test_refused_key_does_not_leak(self):
+        def refuse(f, body, m):
+            raise tb.bb.KeyRefused()
+        self.fake(hook=refuse)
+        code, out = self.main()
+        self.assertEqual(code, 2)
+        self.assertIn("refused the key", out)
+        self.assertNotIn(KEY, out)
+
+    def test_real_live(self):
+        calls = []
+
+        def real_live(run, memory, key, model, gemini):
+            calls.append(run["id"])
+            run["replies"].extend(["Hi."] * len(run["turns"]))
+
+        fake = self.fake()
+        with mock.patch.dict(tb.bb.TALK, {"real_live": real_live}):
+            code, out = self.main("--real-live", "--mode", "normal")
+            self.assertEqual((code, calls), (2, []))
+            self.assertIn("can't go with --mode", out)
+            code, out = self.main("--real-live")
+        self.assertEqual((code, calls), (0, ["t1", "t2"]), out)
+        self.assertEqual((len(fake.judged), fake.talk), (2, []))
+        self.assertIn("t1 real_live full finished", out)
 
 
 if __name__ == "__main__":

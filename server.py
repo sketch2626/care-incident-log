@@ -94,6 +94,7 @@ TALK_MODES = ("live", "normal", "offline")
 VOICE_LIMITS["listen_wait"] = (1.5, 6.0, 2.5)  # M4a: clamped like the other voice settings
 SETTING_KEYS |= {"talk_mode", "listen_wait"}  # M4a
 SETTING_KEYS |= {"talk_on_open"}  # M4a: '1' (default) = she says hello and listens when her screen opens; '0' = she waits
+SETTING_KEYS |= {"mary_brain"}  # M21c: 'full' (default) or 'lean' instructions for Mary; Andy's switch in My info
 SETTING_KEYS |= {"wake_word"}  # M6: '1' (default) = "Hey Mary" / "Hey Sam" wakes her while her screen is open; '0' = off
 NO_SPEECH = "Talking isn't set up on this computer yet. You can type instead."
 
@@ -826,6 +827,8 @@ def mary_settings():
         out[k] = float(got) if got is not None else default
     mode = str(s.get("talk_mode") or "").strip().lower()  # M4a: the saved talk mode, Live when none is saved
     out["talk_mode"] = mode if mode in TALK_MODES else "live"
+    brain = str(s.get("mary_brain") or "").strip().lower()  # M21c: full unless lean is saved
+    out["mary_brain"] = brain if brain in mary.BRAINS else "full"
     out["talk_on_open"] = str(s.get("talk_on_open", "1")).strip() != "0"  # M4a: on unless turned off
     out["wake_word"] = str(s.get("wake_word", "1")).strip() != "0"  # M6: on unless turned off
     return out
@@ -913,6 +916,16 @@ def mary_app_facts(companion):
 
 
 mary.app_facts = mary_app_facts  # M9b: Mary's live facts about her own app
+
+
+def mary_brain_saved():  # M21c: which instructions she gets. Read on every prompt build, so only this one row, never her key
+    with closing(connect()) as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'mary_brain'").fetchone()
+    brain = str(row["value"] if row else "").strip().lower()
+    return brain if brain in mary.BRAINS else "full"
+
+
+mary.brain_setting = mary_brain_saved
 
 
 # The voice audition page (/mary/voices.html).
@@ -2277,6 +2290,10 @@ class Handler(SimpleHTTPRequestHandler):
                     if k == "talk_mode":  # M4a: live, normal or offline; anything else is ignored
                         v = str(v).strip().lower()
                         if v not in TALK_MODES:
+                            continue
+                    if k == "mary_brain":  # M21c: full or lean; anything else is ignored
+                        v = str(v).strip().lower()
+                        if v not in mary.BRAINS:
                             continue
                     if k in ("talk_on_open", "wake_word"):  # M4a, M6: '1' or '0'; anything else is ignored
                         v = str(v).strip().lower()

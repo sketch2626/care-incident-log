@@ -248,6 +248,14 @@
         <!-- M6 --><label class="opt"><input type="checkbox" id="i-wake_word" checked><span class="box row"><span class="t">Listen for "Hey Mary" (or "Hey Sam")</span><span class="hint">Say her name and she starts talking. Nothing leaves the laptop until she hears it.</span></span></label>
       </div>
     </fieldset>
+    <!-- M21c: which set of instructions Mary is told -->
+    <fieldset class="talkmode">
+      <legend class="smarth">How much Mary is told</legend>
+      <div class="opts three">
+        <label class="opt"><input type="radio" name="mary_brain" value="full" checked><span class="box"><span class="t">Full instructions</span><span class="hint">The long set of rules she has today.</span></span></label>
+        <label class="opt"><input type="radio" name="mary_brain" value="lean"><span class="box"><span class="t">Lean instructions</span><span class="hint">A short set: safety first, and she uses her own judgment.</span></span></label>
+      </div>
+    </fieldset>
     <h2 class="smarth">Smart helper (optional)</h2>
     <p class="warn"><b>When this is on, what you say is sent to Google to tidy it up. Leave it off to keep everything on this computer.</b></p>
     <div class="opts three">

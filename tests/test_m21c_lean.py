@@ -162,5 +162,44 @@ class Lean(Base):
             self.assertIn("They: I slept badly", lv)
 
 
+class BrainSettingTests(unittest.TestCase):
+    def setUp(self):
+        import server
+        self.server = server
+        self.saved = mary.brain_setting
+        helpers.reset_db()
+        mary.brain_setting = lambda: server.mary_settings()["mary_brain"]  # the hook server sets on import
+
+    def tearDown(self):
+        helpers.reset_db()
+        mary.brain_setting = self.saved
+
+    def test_default_is_full(self):
+        self.assertEqual(self.server.mary_settings()["mary_brain"], "full")
+        self.assertEqual(mary.current_brain(), "full")
+
+    def test_server_import_sets_the_hook(self):
+        self.assertIsNotNone(self.saved)
+
+    def test_lean_saves_and_reads_back(self):
+        st, _, _ = helpers.api("PUT", "/api/settings", {"mary_brain": " Lean "})
+        self.assertEqual(st, 200)
+        self.assertEqual(self.server.mary_settings()["mary_brain"], "lean")
+        self.assertEqual(mary.current_brain(), "lean")
+        _, j, _ = helpers.api("GET", "/api/settings")
+        self.assertEqual(j["mary_brain"], "lean")
+
+    def test_nonsense_is_ignored(self):
+        helpers.api("PUT", "/api/settings", {"mary_brain": "lean"})
+        helpers.api("PUT", "/api/settings", {"mary_brain": "nonsense"})
+        self.assertEqual(mary.current_brain(), "lean")
+
+    def test_page_has_the_two_radios(self):
+        html = (Path(__file__).resolve().parent.parent / "web" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('name="mary_brain" value="full" checked', html)
+        self.assertIn('name="mary_brain" value="lean"', html)
+        self.assertIn("How much Mary is told", html)
+
+
 if __name__ == "__main__":
     unittest.main()

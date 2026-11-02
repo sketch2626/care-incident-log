@@ -915,6 +915,7 @@ class PackagingTests(unittest.TestCase):
         # Without them every reply in the installed app is "I'm having trouble thinking right now".
         build = (Path(__file__).resolve().parent.parent / "packaging" / "build.py").read_text(encoding="utf-8")
         self.assertIn("'instructions.md'", build)
+        self.assertIn("'lean.md'", build)  # M21c
         self.assertEqual(mary.INSTRUCTIONS.relative_to(mary.ROOT).as_posix(), "mary/instructions.md")
 
     def test_build_list_names_every_mary_piece(self):

@@ -34,6 +34,10 @@ LIVE_CAP = 37285
 INSTRUCTIONS_CAP = 28600
 CHARACTER_NOTE_CAP = 4641
 LIVE_EXTRA_CAP = 1050
+# M21c: the lean brain (mary/lean.md), Sam's size, the larger, with these same FACTS. Mary is 11,588 and 12,040. The full
+# caps above stay until Andy approves lean as the default.
+LEAN_NORMAL_CAP = 11698
+LEAN_LIVE_CAP = 12150
 
 
 # The app's own facts block is machine-dependent (printer, wake word), so the caps are measured with these fixed facts,
@@ -71,6 +75,16 @@ class PromptCap(unittest.TestCase):
         self.assertLessEqual(size, LIVE_CAP, _too_big("her Live prompt", size, LIVE_CAP))
         n = len(voices.LIVE_EXTRA)
         self.assertLessEqual(n, LIVE_EXTRA_CAP, _too_big("LIVE_EXTRA", n, LIVE_EXTRA_CAP))
+
+    def test_d2_lean_prompt_cap(self):  # M21c: the lean brain's own caps, for both companions, safety sections included
+        self.addCleanup(setattr, mary, "brain_setting", mary.brain_setting)
+        mary.brain_setting = lambda: "lean"
+        for who in ("mary", "him"):
+            body = mary._body("hello", _empty_memory(), None, who)
+            size = len(body["systemInstruction"]["parts"][0]["text"])
+            self.assertLessEqual(size, LEAN_NORMAL_CAP, _too_big(f"the lean Normal prompt ({who})", size, LEAN_NORMAL_CAP))
+            size = len(voices.live_system(who, memory=_empty_memory()))
+            self.assertLessEqual(size, LEAN_LIVE_CAP, _too_big(f"the lean Live prompt ({who})", size, LEAN_LIVE_CAP))
 
 
 # ---------------------------------------------------------------- D1: the page

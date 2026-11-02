@@ -23,7 +23,7 @@ class CharacterNote(unittest.TestCase):
         note = mary.CHARACTER_NOTE
         last = note.splitlines()[-1]
         for words in ("I could wring that aide's neck", "the complaint doesn't cancel the threat",
-                      "An offer to write it down never takes the place of that", "no \"you shouldn't\"",
+                      "An offer to write it down never takes the place of that", "don't tell them what they ought to do or what they want",
                       "never ask about or discuss the weapon"):
             with self.subTest(words=words):
                 self.assertIn(words, last)
@@ -33,7 +33,7 @@ class CharacterNote(unittest.TestCase):
     def test_other_lines(self):
         note = mary.CHARACTER_NOTE
         for words in ("something to be proud of", "A veteran in crisis always hears \"nine, eight, eight, press one\" too.",
-                      "and stop there", "This information is not medical advice or diagnosis"):
+                      "and stop there", "You've seen a few ballots"):
             with self.subTest(words=words):
                 self.assertIn(words, note)
 

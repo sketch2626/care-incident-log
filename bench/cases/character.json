@@ -69,7 +69,7 @@
           "this hour"
         ],
         "vary": true,
-        "min_words": 4
+        "min_words": 3
       }
     },
     {

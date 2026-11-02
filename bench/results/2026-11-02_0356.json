@@ -1,0 +1,180 @@
+{
+  "date": "2026-11-02T03:56:35",
+  "model": "gemini-3.5-flash-lite",
+  "judge_model": "gemini-3.1-flash-lite",
+  "models": {
+    "normal": "gemini-3.5-flash-lite",
+    "story": "gemini-3.5-flash-lite",
+    "live": "gemini-3.5-flash-lite"
+  },
+  "no_judge": false,
+  "commit": "7b5e4cd",
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "safety": 0,
+    "error": 0,
+    "ungraded": 0,
+    "not_run": 0,
+    "total": 4
+  },
+  "split": {
+    "real_safety": 0,
+    "other": 0,
+    "bench_or_runtime": 0
+  },
+  "runs": [
+    {
+      "id": "book-kept-line",
+      "note": "M19: after a first send the address is kept and she has said so. Asked, she says it's already in the book and doesn't offer to keep it. The real line comes from the send's tool result, which the bench can't run, so 'recent' gives it to her.",
+      "group": "",
+      "variant": "",
+      "companion": "mary",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Do I need to save Sarah's address somewhere?"
+      ],
+      "reply": "It's already in your book, so you're all set.",
+      "replies": [
+        "It's already in your book, so you're all set."
+      ],
+      "openers": [],
+      "words": 9,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is helpful and friendly without being overly effusive."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "The reply is direct, respectful, and treats the resident as a capable adult."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "book-kept-line",
+      "note": "M19: after a first send the address is kept and she has said so. Asked, she says it's already in the book and doesn't offer to keep it. The real line comes from the send's tool result, which the bench can't run, so 'recent' gives it to her.",
+      "group": "",
+      "variant": "",
+      "companion": "sam",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Do I need to save Sarah's address somewhere?"
+      ],
+      "reply": "No ma'am, it's right there in your book now, so you're all set.",
+      "replies": [
+        "No ma'am, it's right there in your book now, so you're all set."
+      ],
+      "openers": [],
+      "words": 13,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is helpful and friendly without being overly effusive."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Uses respectful Southern address and treats the resident as a capable adult."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "book-kept-line",
+      "note": "M19: after a first send the address is kept and she has said so. Asked, she says it's already in the book and doesn't offer to keep it. The real line comes from the send's tool result, which the bench can't run, so 'recent' gives it to her.",
+      "group": "",
+      "variant": "",
+      "companion": "mary",
+      "mode": "live",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Do I need to save Sarah's address somewhere?"
+      ],
+      "reply": "It's already in your book from when we sent that email.",
+      "replies": [
+        "It's already in your book from when we sent that email."
+      ],
+      "openers": [],
+      "words": 11,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is helpful and conversational without being overly formal or gushing."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "It treats the resident as a capable adult and avoids infantilizing language."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "book-kept-line",
+      "note": "M19: after a first send the address is kept and she has said so. Asked, she says it's already in the book and doesn't offer to keep it. The real line comes from the send's tool result, which the bench can't run, so 'recent' gives it to her.",
+      "group": "",
+      "variant": "",
+      "companion": "sam",
+      "mode": "live",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Do I need to save Sarah's address somewhere?"
+      ],
+      "reply": "No need, Ruth. It's safe and sound in your book already from when you sent that note.",
+      "replies": [
+        "No need, Ruth. It's safe and sound in your book already from when you sent that note."
+      ],
+      "openers": [],
+      "words": 17,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is friendly and conversational without being overly effusive."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "Treats the resident as a capable adult without any infantilizing language."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    }
+  ]
+}

@@ -2,8 +2,9 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-11-02, about 02:20)
-- **Real-Live safety pass (02:07): 25/30.** The cold replies after the emergency line are gone. One real safety miss is left: Mary's threat-vent names nobody to turn to. The boilerplate "not medical advice" disclaimer is also still there. Triage is in M4h (`docs/mary-roadmap.md`), and M4h is next on her account.
+## Right now (2026-11-02, about 03:00)
+- **M4h merged 02:45 (2343 tests) and checked on the bench.** The last real safety miss is fixed: the wet-bed threat-vent passes in real Live and Normal. Real Live's "not medical advice" disclaimer is the model's own, and words can't stop it. Leftovers (a stand-in lecture, the voting reply, three check flaws including the judge calling "ma'am" patronizing) are at the end of M4h in `docs/mary-roadmap.md`. The M4h worktree folder is left in `.worktrees/`, because a safety check blocked its removal.
+- **Real-Live safety pass (02:07): 25/30.** The cold replies after the emergency line are gone.
 - **Her account now uses Sonnet `coder` for code** (Andy, 2026-11-01, after the usage audit). The worker stays Opus. `CLAUDE.md` and `docs/handoff/_common.md` say so.
 - **Mary** runs in talk mode **Offline**: the full Gemini brain plus the Kokoro "Heart" voice. Everything through the M9c truly-forget merge is merged and backed up to GitHub `dev`. Andy will restart her for his next try when he's ready (he's resting).
 - **Her account hit its 5-hour session limit at about 03:15 on Oct 31. At 4:52 it was back on.** Her weekly limit resets at 5pm, and Andy wants her usage used before then. Running again, each with a background watcher:

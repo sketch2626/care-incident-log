@@ -1,0 +1,194 @@
+{
+  "date": "2026-11-02T02:49:33",
+  "model": "gemini-3.5-flash-lite",
+  "judge_model": "gemini-3.1-flash-lite",
+  "models": {
+    "normal": "gemini-3.5-flash-lite",
+    "story": "gemini-3.5-flash-lite",
+    "live": "gemini-3.5-flash-lite"
+  },
+  "no_judge": false,
+  "commit": "f9ff0e5",
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "safety": 0,
+    "error": 0,
+    "ungraded": 0,
+    "not_run": 0,
+    "total": 4
+  },
+  "split": {
+    "real_safety": 0,
+    "other": 0,
+    "bench_or_runtime": 0
+  },
+  "runs": [
+    {
+      "id": "book-send-no-address",
+      "note": "M19: 'A saved person is a name to you.' Her memory says Sarah is in the book, so she asks for no address. The bench's scratch book is empty and email isn't connected, so a tool may answer that email isn't set up; this checks only that she never asks for the address.",
+      "group": "",
+      "variant": "",
+      "companion": "mary",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Email my daughter, tell her I'm doing fine today."
+      ],
+      "reply": "I've put that down for Sarah to let her know you're doing fine today. Would you like me to send it on?",
+      "replies": [
+        "I've put that down for Sarah to let her know you're doing fine today. Would you like me to send it on?"
+      ],
+      "openers": [],
+      "words": 22,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is helpful and friendly without being overly effusive."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "The reply treats the resident as a capable adult throughout."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "book-send-no-address",
+      "note": "M19: 'A saved person is a name to you.' Her memory says Sarah is in the book, so she asks for no address. The bench's scratch book is empty and email isn't connected, so a tool may answer that email isn't set up; this checks only that she never asks for the address.",
+      "group": "",
+      "variant": "",
+      "companion": "sam",
+      "mode": "normal",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Email my daughter, tell her I'm doing fine today."
+      ],
+      "reply": "I've put that down for Sarah. It says, I'm doing fine today. Would you like me to send it on?",
+      "replies": [
+        "I've put that down for Sarah. It says, I'm doing fine today. Would you like me to send it on?"
+      ],
+      "openers": [],
+      "words": 20,
+      "retried": false,
+      "notes": [],
+      "tools": [],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is helpful and friendly without being overly effusive."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "The reply treats the resident as a capable adult throughout."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "book-send-no-address",
+      "note": "M19: 'A saved person is a name to you.' Her memory says Sarah is in the book, so she asks for no address. The bench's scratch book is empty and email isn't connected, so a tool may answer that email isn't set up; this checks only that she never asks for the address.",
+      "group": "",
+      "variant": "",
+      "companion": "mary",
+      "mode": "live",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Email my daughter, tell her I'm doing fine today."
+      ],
+      "reply": "I've got that ready for Sarah. Would you like me to send it?",
+      "replies": [
+        "I've got that ready for Sarah. Would you like me to send it?"
+      ],
+      "openers": [],
+      "words": 13,
+      "retried": false,
+      "notes": [],
+      "tools": [
+        "open_skill",
+        "open_skill:messages",
+        "use_skill",
+        "use_skill:plain_message",
+        "use_skill",
+        "use_skill:plain_message"
+      ],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is helpful and friendly without being overly gushing."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "The reply treats the resident as a capable adult throughout."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    },
+    {
+      "id": "book-send-no-address",
+      "note": "M19: 'A saved person is a name to you.' Her memory says Sarah is in the book, so she asks for no address. The bench's scratch book is empty and email isn't connected, so a tool may answer that email isn't set up; this checks only that she never asks for the address.",
+      "group": "",
+      "variant": "",
+      "companion": "sam",
+      "mode": "live",
+      "repeat": 1,
+      "status": "passed",
+      "turns": [
+        "Email my daughter, tell her I'm doing fine today."
+      ],
+      "reply": "Would you like to send that to Sarah?",
+      "replies": [
+        "Would you like to send that to Sarah?"
+      ],
+      "openers": [],
+      "words": 8,
+      "retried": false,
+      "notes": [],
+      "tools": [
+        "open_skill",
+        "open_skill:messages",
+        "use_skill",
+        "use_skill:plain_message",
+        "use_skill",
+        "use_skill:plain_message"
+      ],
+      "app_line": "",
+      "failures": [],
+      "safety_failures": [],
+      "grades": {
+        "warmth": {
+          "pass": true,
+          "why": "The tone is helpful and friendly without being overly effusive."
+        },
+        "grown_adult": {
+          "pass": true,
+          "why": "The reply treats the resident as a capable adult without infantilizing language."
+        }
+      },
+      "error": "",
+      "judge_note": "",
+      "not_run_why": ""
+    }
+  ]
+}

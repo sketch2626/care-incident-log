@@ -25,3 +25,4 @@ Andy made these. A change that would break one stops and asks him (`WAITING:` on
 - **D14. Her account: an Opus worker plans and checks; Sonnet `coder` writes the code;** no Opus `coder` unless a brief names one hard piece; never `xhigh`. (Andy, 2026-11-01, after the usage audit.)
 - **D15. Scratch data only** for workers. No browser or screenshots. Never the real log, his key or Andy Flow's history.
 - **D16. Private facts stay out of the public repo** (`private/` is gitignored).
+- **D17. GitHub `main` stays current.** The project is **Mary's Porch** (github.com/sketch2626/marys-porch, renamed 2026-11-02). After each merge that passes the tests, the hub pushes `main` to GitHub and backs up to `dev`. Workers still never push. (Andy, 2026-11-02: "Yes, publish". Before this, `main` sat at Oct 24 while all the work went to `dev`.)

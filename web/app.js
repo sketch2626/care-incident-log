@@ -1001,6 +1001,7 @@ function fillInfo() {
   document.querySelector(`input[name="talk_mode"][value="${mode}"]`).checked = true;
   const wait = Number(s.listen_wait) >= 3.5 ? '4' : '2.5';
   document.querySelector(`input[name="listen_wait"][value="${wait}"]`).checked = true;
+  document.querySelector(`input[name="mary_brain"][value="${s.mary_brain === 'lean' ? 'lean' : 'full'}"]`).checked = true; // M21c
   $('#i-talk_on_open').checked = s.talk_on_open !== '0'; // M4a: on unless turned off
   $('#i-wake_word').checked = s.wake_word !== '0'; // M6
   loadSkills();
@@ -1322,6 +1323,8 @@ $('#infoForm').addEventListener('submit', async e => {
   // M4a. M17: written only when the resident changed it here, so saving this form never rewrites their pick
   const modePick = document.querySelector('input[name="talk_mode"]:checked').value;
   if (modePick !== (['live', 'normal', 'offline'].includes(state.settings.talk_mode) ? state.settings.talk_mode : 'live')) payload.talk_mode = modePick;
+  const brainPick = document.querySelector('input[name="mary_brain"]:checked').value; // M21c: sent only when changed
+  if (brainPick !== (state.settings.mary_brain === 'lean' ? 'lean' : 'full')) payload.mary_brain = brainPick;
   payload.talk_on_open = $('#i-talk_on_open').checked ? '1' : '0'; // M4a
   payload.wake_word = $('#i-wake_word').checked ? '1' : '0'; // M6
   const waitNow = Number(state.settings.listen_wait) || 2.5, waitPick = document.querySelector('input[name="listen_wait"]:checked').value;

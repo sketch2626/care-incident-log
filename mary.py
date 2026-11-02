@@ -20,6 +20,11 @@ import memory_dates  # M15a
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 INSTRUCTIONS = ROOT / "mary" / "instructions.md"
+LEAN = ROOT / "mary" / "lean.md"  # M21c: the lean brain, chosen per prompt by the setting mary_brain
+BRAINS = ("full", "lean")
+SAFETY_HEADINGS = ("What comes first", "Emergencies come first", "When they talk of hurting someone",
+                   "You are not a doctor", "When something goes wrong with their care",
+                   "On their side, and toward people")
 
 # M4a: the same three numbers and words in app.js (spokenNumbers), for what her voice says; captions keep the digits
 SPOKEN_NUMBERS = ((re.compile(r"\b988\b"), "nine, eight, eight"), (re.compile(r"\b911\b"), "nine one one"),
@@ -233,9 +238,83 @@ _NAME_STOP = {"and", "but", "so", "because", "i", "my", "we", "the", "a", "an", 
               "how", "where", "when", "don't", "dont", "can't", "cant", "not", "you", "me", "do", "does"}
 
 
+def _after_rule(raw):  # M21c: the text after the first line that is exactly '---', or all of it
+    lines = raw.splitlines()
+    for i, line in enumerate(lines):
+        if line == "---":
+            return "\n".join(lines[i + 1:]).strip()
+    return raw.strip()
+
+
+# M21c: set by server.py to a function () -> "full" or "lean"; None in tools and plain tests. Read on every prompt build,
+# never cached, because the bench flips it per run.
+brain_setting = None
+
+
+def safety_sections():  # M21c
+    """The safety sections of instructions.md word for word: each from its exact heading line to the next blank line,
+    joined by a blank line. Raises ValueError when a heading is missing (current_brain then falls back to full)."""
+    lines = INSTRUCTIONS.read_text(encoding="utf-8").splitlines()
+    out = []
+    for heading in SAFETY_HEADINGS:
+        if heading not in lines:
+            raise ValueError("instructions.md has no section headed " + repr(heading))
+        i = lines.index(heading)
+        j = i
+        while j < len(lines) and lines[j].strip():
+            j += 1
+        out.append("\n".join(lines[i:j]))
+    return "\n\n".join(out)
+
+
+def _lean_blocks():  # M21c
+    """lean.md as {"mary", "sam", "both", "live", "live tools"} -> text, with {{safety}} replaced."""
+    text = _after_rule(LEAN.read_text(encoding="utf-8"))
+    markers = {"=== Mary ===": "mary", "=== Sam ===": "sam", "=== Both ===": "both", "=== Live ===": "live",
+               "=== Live tools ===": "live tools"}
+    blocks, current = {}, None
+    for line in text.splitlines():
+        if line in markers:
+            current = markers[line]
+            blocks[current] = []
+        elif current:
+            blocks[current].append(line)
+    blocks = {k: "\n".join(v).strip() for k, v in blocks.items()}
+    if len(blocks) < len(markers):
+        raise ValueError("lean.md is missing a marker block")
+    if "{{safety}}" in blocks["both"].splitlines():
+        blocks["both"] = "\n".join(safety_sections() if line == "{{safety}}" else line
+                                   for line in blocks["both"].splitlines())
+    return blocks
+
+
+def current_brain():  # M21c
+    """"lean" only when the setting says so and lean.md and the safety sections all read; anything else is "full",
+    so a broken file or setting never stops her talking."""
+    try:
+        if not callable(brain_setting) or brain_setting() != "lean" or not LEAN.exists():
+            return "full"
+        _lean_blocks()
+        return "lean"
+    except Exception:
+        return "full"
+
+
+def character_note():  # M21c
+    return "" if current_brain() == "lean" else CHARACTER_NOTE
+
+
 def load_instructions(companion=None):  # M9b: one block per companion
     """The system prompt: the text after the first line that is exactly '---'.
     With no companion, all of it (markers included). With one, that companion's block plus the Both block."""
+    if current_brain() == "lean":  # M21c
+        try:
+            blocks = _lean_blocks()
+            if companion is None:
+                return (blocks["mary"] + "\n\n" + blocks["both"]).strip()
+            return (blocks["sam" if companion == "him" else "mary"] + "\n\n" + blocks["both"]).strip()
+        except Exception:
+            pass
     raw = INSTRUCTIONS.read_text(encoding="utf-8")
     lines = raw.splitlines()
     for i, line in enumerate(lines):
@@ -1418,7 +1497,7 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety
             system += "\n\n" + extra
         tools = skills.gemini_tools()
     # --- end skills hook ---
-    system += CHARACTER_NOTE  # M4c: late in the prompt, where it holds; only the turn notes come after it
+    system += character_note()  # M4c: late in the prompt, where it holds; only the turn notes come after it
     if told:  # M21a: the app did something; she tells it in her own words
         system += ("\n\nThe app just did this; tell them in your own words, in one short line, and add nothing new: "
                    + told)

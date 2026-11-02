@@ -730,6 +730,18 @@ def kokoro_sample(voice, data=None):
 
 # ---------------------------------------------------------------- Live chat token
 
+def live_extra():  # M21c
+    if mary.current_brain() == "lean":
+        return mary._lean_blocks()["live"]
+    return LIVE_EXTRA
+
+
+def live_tools_note():  # M21c
+    if mary.current_brain() == "lean":
+        return mary._lean_blocks()["live tools"]
+    return LIVE_TOOLS_NOTE
+
+
 def live_system(companion="mary", memory_name="", *, skills=None, memory=None, rate=None):
     """The Live system text (pure, no network): what live_token sends as the locked systemInstruction."""
     if memory is not None:  # M4a: Mary's own screen
@@ -745,12 +757,12 @@ def live_system(companion="mary", memory_name="", *, skills=None, memory=None, r
                                   facts=False, tags=False)
     if skills and skills.get("instruction"):  # M4a: before LIVE_EXTRA
         system += "\n\n" + skills["instruction"]
-    system += "\n\n" + LIVE_EXTRA
+    system += "\n\n" + live_extra()
     if memory is not None:  # M4a: her memory tools
-        system += " " + LIVE_TOOLS_NOTE
+        system += " " + live_tools_note()
         system += mary.reminder_note(memory, cards=bool(skills and skills.get("cards")))  # M15a
     else:  # M4c: the voice tryout has no tools note, so the character note goes here
-        system += mary.CHARACTER_NOTE
+        system += mary.character_note()
     try:  # M4a: Live can't take a speed setting, so the saved speed is asked for in words
         r = float(rate) if rate is not None else None
     except (TypeError, ValueError):

@@ -2127,8 +2127,10 @@
         else { rest.push(fc); }
       });
       // M18: the screen tools, one at a time in the order she called them, so a fill can't land on a screen still opening
+      var env = page.length ? screenEnv(c) : null;
+      if (env) { env.order = (j && j.order) || null; }   // D12: the server's ruling on this line, never her say-so
       return page.reduce(function (done, fc) {
-        return done.then(function () { return window.MaryScreens.run(fc.name, fc.args, screenEnv(c)); }).then(function (res) {
+        return done.then(function () { return window.MaryScreens.run(fc.name, fc.args, env); }).then(function (res) {
           own.push({ id: fc.id, name: fc.asked || fc.name, response: res });
         });
       }, Promise.resolve()).then(function () {

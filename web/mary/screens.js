@@ -11,13 +11,16 @@
    env is the page's: doc() the log's document when it's in view, else null; panel() the open panel's id, else null;
    openDeep(hash); openPanel(id); back(); turns, the turns heard in this talk; incidents() the saved log; companion() 'mary'
    or 'sam'.
+   D12: a switch turns on or off only on env.order, the server's ruling on the resident's own words this turn (send_gate
+   plain_order, through /api/mary/heard). That is the save gate's way: the page acts on the server's word only, never on
+   what the model says or on args.value. The line must name the switch or point at the lit one, and acts once per switch.
    No value here is ever logged or sent to the server. A tool's answer goes to Live and nowhere else. */
 (function () {
   'use strict';
 
   // Her plain answers when she can't do something. D1 is the board's own line.
   var SECRET_NO = "I won't read or fill that one. It's a password, so it stays out of my hands. A helper can type it in.";
-  var SWITCH_NO = "That switch is yours to turn on or off. I can tell you what it does.";
+  var SWITCH_NO = "Tell me plainly to turn it on or off, and I will.";
   var WORDS_NO = "Your words stay what you said. I can copy in what I heard you say, but I don't write them for you.";
   var SEVERITY_NO = "That one's your call. I can tell you what each one means, and you pick.";
   var REMOVE_NO = "Deleting or removing anything is yours to do by hand. I won't touch it.";
@@ -139,14 +142,28 @@
         { id: 'i-facility', label: 'Name of the care home', kind: 'text', fill: true, explain: 'The name of the home they live in.' },
         { id: 'i-facility_address', label: 'Address of the care home', kind: 'text', fill: true, explain: 'The address of the home they live in.' },
         { id: 'i-state', label: 'State', kind: 'text', fill: true, explain: 'The state the home is in.' },
-        { id: 'i-andyflow_enabled', label: 'Connect Andy Flow', kind: 'switch', fill: false,
+        { id: 'talk_mode', radio: 'talk_mode', label: 'How Mary talks', kind: 'choice', fill: true,
+          choices: [{ value: 'live', label: 'Live (best)' }, { value: 'normal', label: 'Normal' }, { value: 'offline', label: 'Offline' }],
+          explain: 'Live is her natural voice, back and forth. Normal turns their words to text first. Offline makes her voice on this computer.' },
+        { id: 'listen_wait', radio: 'listen_wait', label: 'How long she waits', kind: 'choice', fill: true,
+          choices: [{ value: '2.5', label: 'Usual' }, { value: '4', label: 'More time' }],
+          explain: 'How long she waits in quiet before she answers: about 2 and a half seconds, or about 4.' },
+        { id: 'mary_brain', radio: 'mary_brain', label: 'How much Mary is told', kind: 'choice', fill: true,
+          choices: [{ value: 'full', label: 'Full instructions' }, { value: 'lean', label: 'Lean instructions' },
+            { value: 'leaner', label: 'Leaner instructions' }],
+          explain: 'How long the set of instructions is that she is given. Safety comes first in all of them.' },
+        { id: 'i-andyflow_enabled', label: 'Connect Andy Flow', kind: 'switch', fill: true, say: ['andy flow'],
           explain: 'Lets notes from Andy Flow that start with Incident show up here. Nothing leaves the computer.' },
-        { id: 'i-talk_on_open', label: 'Start talking when you open', kind: 'switch', fill: false,
+        { id: 'i-talk_on_open', label: 'Start talking when you open', kind: 'switch', fill: true,
+          say: ['start talking', 'talking when', 'when you open', 'when mary opens', 'when sam opens'],
           explain: 'When it is on, you listen as soon as your screen opens.' },
-        { id: 'i-wake_word', label: 'Listen for your name', kind: 'switch', fill: false,
+        { id: 'i-wake_word', label: 'Listen for your name', kind: 'switch', fill: true,
+          say: ['wake word', 'hey mary', 'hey sam', 'your name', 'listen for', 'listening for'],
           explain: 'When it is on, saying hey and your name starts a talk. Nothing leaves the laptop until you hear it.' },
-        { id: 'i-gemini_enabled', label: 'Use the smart helper', kind: 'switch', fill: false,
+        { id: 'i-gemini_enabled', label: 'Use the smart helper', kind: 'switch', fill: true, say: ['smart helper', 'helper'],
           explain: 'When it is on, what they say is sent to Google to tidy it up. Off keeps everything on this computer.' },
+        { id: 'i-gemini_model', label: 'Smart helper model', kind: 'text', fill: true,
+          explain: 'Which model the smart helper uses. They can leave it empty.' },
         { id: 'i-gemini_key', label: 'Smart helper key', kind: 'secret', fill: false,
           explain: 'A key from Google that lets the smart helper and you work. A helper types or pastes it in.' },
         { id: 'copyWords', label: 'The six words', kind: 'secret', fill: false,
@@ -161,8 +178,8 @@
           explain: 'Which company their email is with.' },
         { id: 'mailPass', label: 'App password', kind: 'secret', fill: false,
           explain: 'A special password the email company makes for this app. A helper types or pastes it in.' },
-        { id: 'mailConnect', label: 'Connect email', kind: 'switch', fill: false,
-          explain: 'Connects their email once the boxes above are filled. The tap is theirs.' }
+        { id: 'mailConnect', label: 'Connect email', kind: 'switch', fill: true, say: ['email', 'e-mail', 'my mail'],
+          explain: 'Connects their email once the boxes above are filled. Only turning it on works, on their plain word.' }
       ] },
     { id: 'book-list', frame: 'book-list', hash: '#book-list', name: 'Address book', people: true,
       opened: 'Ask "Who are you after?" and nothing more.',
@@ -200,7 +217,7 @@
   var READ_MOST = 10;                                          // piece 5: notes read in one go
   var ASK_WORDS = /\b(?:read|reading|hear|tell|what did|saved|wrote|write|written|incidents?|notes?|last|lists?|happened)\b/i;
 
-  var Lit = { el: null };
+  var Lit = { el: null, f: null };
   var Typing = { finish: null };
   var Undo = {};   // per field, what was there before each of her fills. Held here only, never logged
   var Mine = {};   // M19: per detail field, what she filled herself. The only detail value look can ever send
@@ -245,6 +262,7 @@
     var w = String(want == null ? '' : want).trim().toLowerCase(), all = fieldsOf(s), i;
     for (i = 0; i < all.length; i++) {
       if (all[i].id.toLowerCase() === w || all[i].label.toLowerCase() === w) { return all[i]; }
+      if ((all[i].say || []).indexOf(w) >= 0) { return all[i]; }   // D12: a plain name for a switch
     }
     // A person has a home phone and a cell phone. "Cell" and "mobile" mean the cell box. A plain "phone" means the home box,
     // unless the cell box has a number and the home box doesn't, then the cell box.
@@ -363,6 +381,7 @@
   function unlight() {
     if (Lit.el) { Lit.el.classList.remove('m9-lit'); }
     Lit.el = null;
+    Lit.f = null;
   }
   // The light stays until the next field or a save (web/app.js clears it on Save).
   function light(doc, f, el) {
@@ -372,6 +391,7 @@
     unlight();
     t.classList.add('m9-lit');
     Lit.el = t;
+    Lit.f = f;
     scrollClear(doc, t);
   }
   function finishTyping() { if (Typing.finish) { Typing.finish(); } }
@@ -428,7 +448,6 @@
   }
   function refusal(f, el) {
     if (isSecret(f, el)) { return SECRET_NO; }
-    if (f.kind === 'switch') { return SWITCH_NO; }
     if (f.kind === 'words') { return WORDS_NO; }
     return f.fill ? '' : (f.no || UNLISTED_NO);
   }
@@ -466,6 +485,9 @@
       var low = raw.toLowerCase();
       var ch = f.choices.filter(function (c) { return c.value === low || c.label.toLowerCase() === low; })[0];
       if (ch) { return { v: ch.value, show: ch.label }; }
+      var part = low.replace(/[^\w']+/g, ' ').trim();   // "live" finds "Live (best)", when only one choice has that word
+      var near = part ? f.choices.filter(function (c) { return (' ' + c.label.toLowerCase().replace(/[^\w']+/g, ' ').trim() + ' ').indexOf(' ' + part + ' ') >= 0; }) : [];
+      if (near.length === 1) { return { v: near[0].value, show: near[0].label }; }
       return { no: "That isn't one of the choices. They are: " + f.choices.map(function (c) { return c.label; }).join(', ') + '.' };
     }
     if (f.address && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {   // M18: what goes in the box is the written address
@@ -504,7 +526,49 @@
       if (!m || !env.openDeep('#book-form/' + m[1])) { return no(SLOW_NO); }
       return arrive(env, form).then(function (came) { return came ? fillIn(form, onForm, env) : no(SLOW_NO); });
     }
+    // D12: not on this screen, but on My info or Connect email: open My info and fill it there (a secret still gets its no)
+    var info = byId('info'), there = !findField(s, args.field, doc) && doc ? findField(info, args.field, doc) : null;
+    if (there && !isSecret(there, null) && s.id !== 'info') {
+      return Promise.resolve(openScreen({ name: 'info' }, env)).then(function (got) {
+        if (!got || got.ok !== true || here(env).id !== 'info') { return got; }
+        return fillIn(info, args, env);
+      });
+    }
     return fillIn(s, args, env);
+  }
+  // D12: true only when the server ruled this line a plain order for this act, and the words name this switch or point at
+  // the lit one ("turn it off"). One line acts once per switch. Nothing she says can pass this.
+  function ordered(env, act, f) {
+    var o = env && env.order;
+    if (!o || !Array.isArray(o.acts) || o.acts.indexOf(act) < 0) { return false; }
+    o.used = o.used || {};
+    if (o.used[f.id]) { return false; }
+    var plain = function (t) { return ' ' + String(t).toLowerCase().replace(/[^\w']+/g, ' ').trim() + ' '; };
+    var words = plain(o.words || '');
+    var named = (f.say || []).concat([f.label]).some(function (n) { return words.indexOf(plain(n)) >= 0; });
+    var points = /\s(?:it|that|this|one)\s/.test(words) && Lit.f === f;
+    if (!named && !points) { return false; }
+    o.used[f.id] = true;
+    return true;
+  }
+  function fillSwitch(f, el, env) {
+    var act = env.order && Array.isArray(env.order.acts) && env.order.acts.length === 1 ? env.order.acts[0] : '';
+    var box = el.type === 'checkbox';
+    if ((act !== 'on' && act !== 'off') || (!box && act !== 'on') || !ordered(env, act, f)) { return no(SWITCH_NO); }
+    var doc = env.doc(), win = doc.defaultView;
+    finishTyping();
+    light(doc, f, el);
+    if (!box) {   // a button (Connect email): the page's own handler runs, with what a helper typed. She never sees it.
+      el.click();
+      return { ok: true, label: f.label, saved: false, next: 'Connecting now. The screen says how it went.' };
+    }
+    var was = el.checked;
+    remember(f, was, was !== (act === 'on'), env);
+    el.checked = act === 'on';
+    fire(win, el, 'input');
+    fire(win, el, 'change');
+    return { ok: true, label: f.label, value: act, saved: false,
+      next: "Say it's " + act + " now, in a few words. It takes hold when they say save it." };
   }
   function fillIn(s, args, env) {
     var doc = env.doc(), f = findField(s, args.field, doc);
@@ -514,6 +578,7 @@
     if (why) { return no(why); }
     if (!el) { return no(UNLISTED_NO); }
     if (!shown(el)) { return no(f.hiddenNo || HIDDEN_NO); }
+    if (f.kind === 'switch') { return fillSwitch(f, el, env); }   // D12: the direction is the order's, never args.value
     var c = cleanValue(f, args.value);
     if (c.no) { return no(c.no); }
     finishTyping();
@@ -565,7 +630,11 @@
     if (help && last.counted) { help.step(-1); }
     light(doc, f, el);
     if (f.radio) { setChoice(doc, f, old); }
-    else {
+    else if (el.type === 'checkbox') {   // D12: a switch goes back to its old state, not a value
+      el.checked = !!old;
+      fire(win, el, 'input');
+      fire(win, el, 'change');
+    } else {
       setVal(win, el, old);
       fire(win, el, 'input');
       fire(win, el, 'change');
@@ -809,6 +878,7 @@
       Mine = {};
       Months.after = null;
       Lit.el = null;
+      Lit.f = null;
     }
   };
 })();

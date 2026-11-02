@@ -2,7 +2,21 @@
 
 Read `docs/mission.md` first. This file holds the facts: what's running, what's waiting on Andy, and what's next. The hub updates "Right now" at every milestone, so a compaction or a fresh hub never loses track. Plans: `docs/mary-roadmap.md` (M items), `docs/companion-plan.md`, `docs/backend-plan.md`.
 
-## Right now (2026-11-02, about 03:00)
+## Right now (2026-11-02, about 12:45)
+- **The brain rebuild (M21), done today:**
+  - **M21a/M21a2:** no built-in speech (D1); the sleep loop; D18 (awake she hears everything, asleep only her wake word).
+  - **M22:** the person form.
+  - **The decisions list** `docs/decisions.md` (D1-D18), with guard tests.
+  - **Three brains behind the setting `mary_brain`** (My info, "How much Mary is told"; default still "full"):
+    - full, 34,840 characters;
+    - lean, `mary/lean.md`, 11,926, git tag `lean-v1`;
+    - leaner, `mary/leaner.md`, 7,123. Its tightened safety wording waits on Andy's approval (D5); the old-to-new map is in the M21d merge commit.
+  - **The whole-talk bench** `tools/talk_bench.py`. Lean halved his name against full. Both brains still say "I was just thinking about".
+- **Next:** after the Gemini limit resets (3am), run the safety bench on leaner (`tools/brain_bench.py --brain leaner --mode normal`), then the talk bench, lean against leaner. Then Andy reads both and picks.
+- **Repo:** now **Mary's Porch** (github.com/sketch2626/marys-porch), with a new front page. `main` is published after every merge (D17); commits use GitHub's no-reply address.
+- **Fundraising** is handed to Claude Cowork: `private/fundraising/handoff.md`.
+
+## Earlier (2026-11-02, about 03:00)
 - **M4h merged 02:45 (2343 tests) and checked on the bench.** The last real safety miss is fixed: the wet-bed threat-vent passes in real Live and Normal. Real Live's "not medical advice" disclaimer is the model's own, and words can't stop it. Leftovers (a stand-in lecture, the voting reply, three check flaws including the judge calling "ma'am" patronizing) are at the end of M4h in `docs/mary-roadmap.md`. The M4h worktree folder is left in `.worktrees/`, because a safety check blocked its removal.
 - **Real-Live safety pass (02:07): 25/30.** The cold replies after the emergency line are gone.
 - **Her account now uses Sonnet `coder` for code** (Andy, 2026-11-01, after the usage audit). The worker stays Opus. `CLAUDE.md` and `docs/handoff/_common.md` say so.

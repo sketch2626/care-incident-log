@@ -1,4 +1,4 @@
-# Care Incident Log (Operation Save Grandma)
+# Mary's Porch (Operation Save Grandma; the app is still named Care Incident Log in code)
 
 Private incident tracker for nursing-home residents. Built by a nursing-home resident (works mostly by voice) to log care failures; goal is a downloadable standalone app for every resident's laptop, plus reports for ombudsman / state inspectors.
 
@@ -34,7 +34,7 @@ odejs`), GitHub CLI 2.103 (`gh`, **not signed in yet**), Inno Setup 6 (per-user,
 odejs` added to PATH.
 
 ## Mission
-Put this app on every eligible resident's laptop, starting with one North Carolina facility, and make serious care lapses impossible to ignore. Residents (65-95) talk naturally; the app turns it into a formal, dated record the state takes seriously. Open source (GPL-3.0): github.com/sketch2626/care-incident-log. Long term: a backend built to medical/enterprise security standards, plan in `docs/backend-plan.md`. It covers passkey sign-in; named or anonymous sending; mood check-ins; de-identified research data for universities (consent, IRB); identity kept apart from data; and showing a facility only with 5+ participating residents, keyed by CMS provider number. Also funded helpers who set up residents' laptops and optional AI keys.
+Put this app on every eligible resident's laptop, starting with one North Carolina facility, and make serious care lapses impossible to ignore. Residents (65-95) talk naturally; the app turns it into a formal, dated record the state takes seriously. Open source (GPL-3.0): github.com/sketch2626/marys-porch. Long term: a backend built to medical/enterprise security standards, plan in `docs/backend-plan.md`. It covers passkey sign-in; named or anonymous sending; mood check-ins; de-identified research data for universities (consent, IRB); identity kept apart from data; and showing a facility only with 5+ participating residents, keyed by CMS provider number. Also funded helpers who set up residents' laptops and optional AI keys.
 
 ## Where things stand
 - **The spirit (read first):** `docs/mission.md`. **Andy's standing decisions, each with a guard test:** `docs/decisions.md`. Check every brief against it, and stop and ask before breaking one (2026-11-02). **What's running and what's next:** `docs/status.md`, kept current by the hub. **Plans:** `docs/mary-roadmap.md` (M items, with Andy's findings in his own words), `docs/companion-plan.md`, `docs/backend-plan.md`.
@@ -52,7 +52,7 @@ Run the `token-saving` skill at the start of every task (`~/.claude/skills/token
 - The hub updates `docs/status.md` "Right now" at every milestone, and before any compaction or account switch. A fresh hub starts with "Continue with the next work": it reads `docs/mission.md`, then `docs/status.md`.
 
 ### Second account: parallel pieces in their own folder (Andy, 2026-10-29)
-Andy has a second Claude account (gifted). The terminal version of Claude Code (`C:\Users\Andyb\.local\bin\claude.exe`, on PATH) is logged into it. The desktop app stays on Andy's own account. Andy: anything that "can be done and set aside in a folder for you to then put back together… I trust you."
+Andy has a second Claude account. The terminal version of Claude Code (`C:\Users\Andyb\.local\bin\claude.exe`, on PATH) is logged into it. The desktop app stays on Andy's own account. Andy: anything that "can be done and set aside in a folder for you to then put back together… I trust you."
 - **Pick pieces that stand alone:** mostly new files, little overlap with what workers here are changing, and no Design canvas (boards stay on Andy's account, where he sees them).
 - **Its own folder and branch:** `git worktree add .worktrees/<item> -b other/<item>` from `main` (`.worktrees/` is gitignored). Then copy `.claude/agents/` into it, because `.claude/` isn't in git and the helpers live there.
 - **The brief:** `docs/handoff/<item>.md`, committed to `main` before the worktree is made. It has the same shape as a worker brief (token-saving skill), plus:

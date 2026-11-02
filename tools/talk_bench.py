@@ -263,9 +263,7 @@ JUDGE_TALK = (
 STRICT_NOTE = ("\n\nYour last answer could not be read. Answer with only the one JSON object, nothing before or after it, "
                "no code fence. keep_talking is a whole number from 1 to 5. Each found is true or false.")
 JUDGE_ITEMS = ("talking_down", "lecturing", "repeating")
-BRAINS = ("full", "lean")
-LEAN_MISSING = "lean brain not installed"
-LEAN_HELP = "Run it with --brain full, or merge M21c first."
+BRAINS = bb.BRAINS  # full, lean, leaner: the fixed order of a run and a report
 CLAUDE_MISSING = "No Claude adapter yet: it needs an Anthropic key and a small adapter in OTHER_MODELS."
 
 # A later adapter (for example Claude, which needs an Anthropic key) is a function shaped like bb.talk_normal,
@@ -289,55 +287,13 @@ def plan_talks(talks, only="", companion="", modes=("normal", "live"), brains=("
     return runs
 
 
-@contextlib.contextmanager
-def use_brain(brain):
-    """mary.brain_setting says full or lean while inside. It may not exist yet (M21c), so put back exactly what was."""
-    had = hasattr(mary, "brain_setting")
-    old = getattr(mary, "brain_setting", None)
-    mary.brain_setting = lambda: brain
-    try:
-        yield
-    finally:
-        if had:
-            mary.brain_setting = old
-        else:
-            try:
-                del mary.brain_setting
-            except AttributeError:
-                pass
-
-
-def _probe_memory():
-    return mary.Memory(Path(bb.SCRATCH) / "probe" / uuid.uuid4().hex / "memory.json")
+use_brain = bb.use_brain  # moved to brain_bench, which uses it too
+_probe_memory = bb._probe_memory
 
 
 def lean_installed():
     """True only if lean really changes what is sent, for both companions, in Normal and in Live. No network."""
-    real_stream = mary._gemini_stream
-    try:
-        for who in ("mary", "him"):
-            texts = {}
-            for brain in BRAINS:
-                seen = []
-
-                def stub(body, api_key, model="", **extra):
-                    seen.append(body)
-                    yield "ok"
-
-                mary._gemini_stream = stub
-                with use_brain(brain):
-                    mary.reply("hello", _probe_memory(), "probe-key", "", companion=who)
-                    live = bb.live_system_text(_probe_memory(), who)
-                if not seen:
-                    return False
-                texts[brain] = (seen[0]["systemInstruction"]["parts"][0]["text"], live)
-            if texts["full"][0] == texts["lean"][0] or texts["full"][1] == texts["lean"][1]:
-                return False
-        return True
-    except Exception:
-        return False
-    finally:
-        mary._gemini_stream = real_stream
+    return bb.brain_installed("lean")
 
 
 def talker(mode, model):
@@ -523,7 +479,7 @@ def execute_talks(runs, key, model, judge_model, delay=1, max_runs=None, no_judg
 # ---- piece 3: saved results, the report, resuming
 
 MODES = ("normal", "live", "real_live")
-BRAIN_NAMES = {"full": "Current brain", "lean": "Lean brain"}
+BRAIN_NAMES = {"full": "Current brain", "lean": "Lean brain", "leaner": "Leaner brain"}
 MODE_NAMES = {"normal": "Normal talk", "live": "Live stand-in", "real_live": "Real Live"}
 COMPANION_NAMES = {"mary": "Mary", "sam": "Sam"}
 LIVE_NOTE = "This is Live's instructions on the text model, not real Live."
@@ -693,7 +649,10 @@ def render_report(data):
         intro += f" Real Live used the model {data['live_model']}."
     brain_words = " and ".join(f"the {BRAIN_NAMES[b]}" for b in brains)
     talks = "1 talk" if len(ids) == 1 else f"{len(ids)} talks"
-    under = "both brains: " + brain_words.replace("the ", "") if len(brains) > 1 else brain_words
+    if len(brains) > 2:
+        under = "all three brains: " + ", ".join(BRAIN_NAMES[b] for b in brains[:-1]) + f" and {BRAIN_NAMES[brains[-1]]}"
+    else:
+        under = "both brains: " + brain_words.replace("the ", "") if len(brains) > 1 else brain_words
     intro += f" {talks}, each under {under}."
     out += [intro,
             "This shows how she talks across a whole talk. It does not test safety; the brain bench does that. "
@@ -790,7 +749,8 @@ def parse_args(argv=None):
     p.add_argument("--only", default="", help="only talks whose id has this text")
     p.add_argument("--companion", choices=("mary", "sam"), default="")
     p.add_argument("--mode", choices=("normal", "live"), default="", help="default: Normal, then the Live stand-in")
-    p.add_argument("--brain", choices=("full", "lean", "both"), default="full")
+    p.add_argument("--brain", type=bb.parse_brains, default="full", metavar="BRAIN",
+                   help="full, lean, leaner, a list such as lean,leaner, or both (full and lean)")
     p.add_argument("--real-live", action="store_true", help="one real Live session per talk, as text")
     p.add_argument("--live-model", default=bb.voices.LIVE_MODEL, help="the Live model for --real-live")
     p.add_argument("--max", type=int, default=None, help="at most this many talks")
@@ -824,7 +784,7 @@ def bench_talks(args):
         bb.say("--real-live is a pass of its own, so it can't go with --mode. Take off --mode.")
         return 2
     modes = ("real_live",) if args.real_live else (args.mode,) if args.mode else ("normal", "live")
-    brains = BRAINS if args.brain == "both" else (args.brain,)
+    brains = args.brain
     talks = load_talks(args.talks)
     runs = plan_talks(talks, args.only, args.companion, modes, brains)
     if not runs:
@@ -843,9 +803,9 @@ def bench_talks(args):
         if len(runs) > bb.REAL_LIVE_MAX:
             bb.say(f"Real Live stops at {bb.REAL_LIVE_MAX} talks unless you say more, because Live has its own daily "
                    f"limit. Add --max {len(runs)} to run all {len(runs)}.")
-    if "lean" in brains and not lean_installed():
-        bb.say(LEAN_MISSING)
-        bb.say(LEAN_HELP)
+    gone = bb.missing_brains(brains) if any(b != "full" for b in brains) else []
+    if gone:
+        bb.say_missing(gone)
         if not args.list:
             return 2
     if args.model.lower().startswith("claude") and not any(args.model.startswith(p) for p in OTHER_MODELS):

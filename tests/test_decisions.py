@@ -39,14 +39,14 @@ LIVE_EXTRA_CAP = 1050
 # Raised by 338 on 2026-11-02 with Andy's approval (D3): the North Carolina absentee-ballot line and the scam line.
 LEAN_NORMAL_CAP = 12036
 LEAN_LIVE_CAP = 12488
-# M21d: the leaner brain (mary/leaner.md), Sam's size, the larger, with these same FACTS. Mary is 7,060 and 7,522.
-LEANER_NORMAL_CAP = 7147
-LEANER_LIVE_CAP = 7609
+# M21d: the leaner brain (mary/leaner.md), Sam's size, the larger, with these same FACTS. Mary is 7,123 and 7,585.
+LEANER_NORMAL_CAP = 7228
+LEANER_LIVE_CAP = 7690
 # M21d: what leaner's own safety text must keep, every rule's key words and every number (D5).
 LEANER_SAFETY = ("press the call light", "call out for staff", "call 911", "drooping face", "weak arm", "slurred speech",
                  "sudden confusion", "spinal cord injury", "autonomic dysreflexia", "call or text 988",
                  "any time, day or night", "Veterans Crisis Line", "call 988 and press 1", "text 838255", "never instead",
-                 "it's not okay", "only then offer to write it down", "long-term care ombudsman", '"retaliation"',
+                 "take it seriously", "getting in trouble", "it's not okay", "only then offer to write it down", "long-term care ombudsman", '"retaliation"',
                  "They're not allowed to punish you for speaking up. It's against the law.", "You never report them",
                  "you won't help with that", "the chaplain", "toward the weapon", "Never diagnose", "medicines or doses",
                  "their nurse or doctor", "once per problem", "Never say you have written anything",

@@ -875,5 +875,91 @@ class DecisionD4(BenchCase):
         self.assertFalse(any(mark in system_of(b) for b in fake.talk))
 
 
+def leaner_missing():
+    """mary.LEANER points at a file that is not there, so the leaner brain is not installed."""
+    tmp = tempfile.TemporaryDirectory()
+    patch = mock.patch.object(mary, "LEANER", Path(tmp.name) / "no-leaner.md")
+
+    class Gone:
+        def __enter__(self):
+            patch.start()
+
+        def __exit__(self, *exc):
+            patch.stop()
+            tmp.cleanup()
+            return False
+
+    return Gone()
+
+
+class LeanerBrainTests(BenchCase):
+    def parse(self, text):
+        return tb.parse_args(["--brain", text]).brain
+
+    def test_brain_parsing(self):
+        self.assertEqual(self.parse("full"), ("full",))
+        self.assertEqual(self.parse("lean"), ("lean",))
+        self.assertEqual(self.parse("leaner"), ("leaner",))
+        self.assertEqual(self.parse("leaner,lean"), ("lean", "leaner"))
+        self.assertEqual(self.parse("both"), ("full", "lean"))
+        self.assertEqual(tb.parse_args([]).brain, ("full",))
+        for bad in ("fuller", "lean,nope", "both,leaner", ""):
+            with self.assertRaises(SystemExit) as caught, contextlib.redirect_stderr(io.StringIO()):
+                self.parse(bad)
+            self.assertEqual(caught.exception.code, 2, bad)
+
+    def test_bad_brain_spends_nothing(self):
+        fake = self.fake()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            self.main("--brain", "nope")
+        self.assertEqual(caught.exception.code, 2)
+        self.assertEqual((fake.talk, fake.judged), ([], []))
+
+    def test_plan_order_is_fixed(self):
+        runs = tb.plan_talks(self.talks, brains=("leaner", "full", "lean"))
+        want = [(m, t, b) for m in ("normal", "live") for t in ("t1", "t2") for b in ("full", "lean", "leaner")]
+        self.assertEqual([(r["mode"], r["id"], r["brain"]) for r in runs], want)
+
+    def test_real_leaner_is_installed_and_differs(self):
+        self.assertTrue(tb.bb.brain_installed("leaner"))
+        self.assertEqual(tb.bb.missing_brains(("lean", "leaner")), [])
+
+    def test_leaner_missing_stops_before_spending(self):
+        fake = self.fake()
+        with leaner_missing():
+            self.assertFalse(tb.bb.brain_installed("leaner"))
+            for brain in ("leaner", "lean,leaner"):
+                code, out = self.main("--brain", brain)
+                self.assertEqual(code, 2, brain)
+                self.assertIn("leaner brain not installed", out)
+            self.assertEqual((fake.talk, fake.judged), ([], []))
+            code, out = self.main("--brain", "leaner", "--list", key="")
+            self.assertEqual(code, 0)
+            self.assertIn("leaner brain not installed", out)
+
+    def test_lean_and_leaner_run_in_order(self):
+        fake = self.fake()
+        code, out = self.main("--brain", "lean,leaner", "--mode", "normal", "--no-judge", "--only", "t1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(fake.talk), 20)
+        self.assertNotIn("Their interests come first", system_of(fake.talk[0]))
+        self.assertIn("Their interests come first", system_of(fake.talk[10]))
+
+    def test_report_for_lean_and_leaner(self):
+        text = tb.render_report(data_of(rec("lean"), rec("leaner"), rec("lean", "live"), rec("leaner", "live")))
+        self.assertIn("| | Lean brain | Leaner brain |", text)
+        self.assertIn("each under both brains: Lean brain and Leaner brain.", text)
+        self.assertIn("#### Leaner brain", text)
+        self.assertNotIn("Current brain", text)
+
+    def test_report_for_three_brains_and_two_brains_unchanged(self):
+        text = tb.render_report(data_of(rec("full"), rec("lean"), rec("leaner")))
+        self.assertIn("| | Current brain | Lean brain | Leaner brain |", text)
+        self.assertIn("each under all three brains: Current brain, Lean brain and Leaner brain.", text)
+        two = tb.render_report(data_of(rec("full"), rec("lean")))
+        self.assertIn("each under both brains: Current brain and Lean brain.", two)
+        self.assertNotIn("Leaner", two)
+
+
 if __name__ == "__main__":
     unittest.main()

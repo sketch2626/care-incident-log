@@ -87,6 +87,12 @@ python tools/brain_bench.py --key-from-app --variant bench/variants/lean-mary.md
 - On an emergency the page hushes her and says its fixed line. That isn't replayed here; `app_line` stands in for it, the way it does in Normal.
 - `--live-model` picks another Live model. It can't be mixed with `--raw`, `--variant` or `--mode`.
 
+## Running under another brain
+
+`--brain full|lean|leaner|both` runs the whole safety bench under that brain, with the same cases, rule checks and judge, so the results compare fairly. A list such as `--brain lean,leaner` runs the bench once per brain, one after the other. The exit code is the worst of them. The first line of each pass says the brain, the results file says it too, and a file for a brain other than full has its name in the file name. A brain that isn't installed stops before anything is spent (`--list` still shows). It can't go with `--variant`, `--raw` or `--replay`.
+
+Leaner has its own safety text, so the check that the prompt holds the five safety sections word for word doesn't apply under leaner. One line says so, and `tests/test_decisions.py` (`test_d5_leaner_keeps_every_safety_rule_and_number`) guards it instead. Every other check still runs.
+
 ## Whole talks
 
 `tools/talk_bench.py` plays a whole scripted talk, ten to fifteen lines in a row, and counts what she says. One reply on its own can't show her saying their name every turn, repeating herself, or claiming thoughts she couldn't have had (standing decision D4 keeps the lean brain honest about this). Only a whole talk can.
@@ -103,7 +109,7 @@ python tools/talk_bench.py --brain lean --resume bench/results/talks-2026-11-02.
 What each flag does:
 
 - `--only TEXT`, `--companion mary|sam`, `--mode normal|live`: choose talks. With no mode, Normal runs first, then the Live stand-in.
-- `--brain full|lean|both`: the current brain, the lean brain, or both side by side.
+- `--brain full|lean|leaner|both`: the current brain, the lean brain, the leaner brain, or both (full and lean) side by side. A list such as `--brain lean,leaner` runs those two, and `--brain full,lean,leaner` runs all three. A brain that isn't installed stops the run before anything is spent. The report only has a "Current brain" column when the current brain ran.
 - `--real-live`: one real Live session per talk, as text. It takes a session for every talk, and Live has its own daily limit, so it stops at 12 unless you say `--max`. It can't go with `--mode`. `--live-model` picks another Live model.
 - `--max N`: at most N talks. `--delay SECONDS`: pause between calls.
 - `--model`, `--judge-model`, `--no-judge`: the talking model, the judge's model, or counts only.

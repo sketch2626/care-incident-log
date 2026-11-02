@@ -18,7 +18,7 @@ Read `docs/handoff/_common.md` first (it sends you to `docs/mission.md`). Then r
 5. Tapping small Mary, or "Back to Mary": she grows back to full size, and the talk is still going.
 Note on the boards: where her captions sit when she's small, how big she is (Andy's laptop is 1280 wide), and that nothing important is ever covered.
 
-**Piece 3, the design note:** `docs/handoff/M18-design.md`, under about 120 lines. Cover:
+**Piece 3, the design note:** `docs/handoff/done/M18-design.md`, under about 120 lines. Cover:
 - **How the talk survives:** for example, the deeper screens open inside Mary's page, so Live never drops. Check how today's screens load (`web/`, `web/mary/`) and pick what fits.
 - **What Gemini sees of a screen:** labels and the resident's own values. Never secrets, never another resident's data.
 - **The tools she'd use:** fill a field, explain one. What stays the resident's to do.

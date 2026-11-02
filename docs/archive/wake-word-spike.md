@@ -1,3 +1,5 @@
+> **Archived 2026-11-02:** the measurements behind the M6 wake-word choice. The choice is made and built (`wakeword.py`), so this is the record of why.
+
 # M6 wake word spike (2026-10-30, second account)
 
 Measured on Andy's laptop (Ryzen 5 7520U, 8 threads, 5.7 GB RAM; only about 0.5 GB free during the runs, so the Whisper timings are on the slow side).

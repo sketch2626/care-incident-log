@@ -2,7 +2,7 @@
 
 Read `docs/handoff/_common.md` first (it sends you to `docs/mission.md`). Then read:
 - the **M19** section of `docs/mary-roadmap.md` (Andy's words);
-- the **M18** section of `docs/mary-roadmap.md`, `mockups/mary/round9/README.md` and `docs/handoff/M18-design.md`: Mary comes along, small in the corner, and fills things in;
+- the **M18** section of `docs/mary-roadmap.md`, `mockups/mary/round9/README.md` and `docs/handoff/done/M18-design.md`: Mary comes along, small in the corner, and fills things in;
 - `docs/messaging-plan.md` sections 5 (Contacts) and 6 (Privacy);
 - the contacts parts of `skills/messages/skill.py` (around lines 820 and 1220-1500);
 - `secret_store.py`;
@@ -12,7 +12,7 @@ Read only what you need. Make the boards the same way as round 9 (`mockups/mary/
 
 **Why:** Mary can now send emails and cards, but there's no address book. Andy: "She obviously needs a secure address book… for everybody that she can think of… That's probably one of the more important things to this."
 
-**Another worker (M18 build) is changing `web/`, `server.py`, `mary.py`, `skills/` and the tests right now.** You make boards and a design note only. Touch nothing outside `mockups/mary/round10/`, `mockups/mary/round10-src/` and `docs/handoff/M19-design.md`.
+**Another worker (M18 build) is changing `web/`, `server.py`, `mary.py`, `skills/` and the tests right now.** You make boards and a design note only. Touch nothing outside `mockups/mary/round10/`, `mockups/mary/round10-src/` and `docs/handoff/done/M19-design.md`.
 
 **Boards** in `mockups/mary/round10/`, with `canvas.json` and a README. Use made-up names only. Mary is small in the top-left corner on these screens, as M18 approved. Show:
 1. **The address book:** a big, easy list of people, each with name and relationship. Find someone by voice ("show me Sarah") or by scrolling.
@@ -22,7 +22,7 @@ Read only what you need. Make the boards the same way as round 9 (`mockups/mary/
 5. **Changing and removing:** "Sarah's new number is…". "Forget Sarah" asks once, then really removes her, her address and her birthday reminders.
 6. **A helper adding several people by typing,** with Mary there to help.
 
-**Design note,** `docs/handoff/M19-design.md`, under about 120 lines. Cover:
+**Design note,** `docs/handoff/done/M19-design.md`, under about 120 lines. Cover:
 - **Security:** how the address book is stored securely on the laptop.
   - Weigh encrypting it with a key kept in Windows Credential Manager (`secret_store.py`) against plain storage.
   - Say what daily backups would then hold, and what happens on a new laptop or after a restore (a helper's export and import?).

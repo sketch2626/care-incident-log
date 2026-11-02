@@ -13,7 +13,7 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
     - leaner, `mary/leaner.md`, 7,123. Its tightened safety wording waits on Andy's approval (D5); the old-to-new map is in the M21d merge commit.
   - **The whole-talk bench** `tools/talk_bench.py`. Lean halved his name against full. Both brains still say "I was just thinking about".
 - **Workers on her account (started 2026-11-02 evening; Andy: "You can also do the cleanup on the other account too"):**
-  - **M22** (`docs/handoff/M22.md`, tab "M22 her acct"): Mary does what's on screen when told (D12): the person-form path, switches, How bad and removing on the resident's own words; secrets stay locked. It rewords one line in full and lean, so **merge it only after tonight's bench finishes.**
+  - **M22** (`docs/handoff/M22.md`, tab "M22 her acct"): Mary does what's on screen when told (D12): the person-form path, switches, How bad and removing on the resident's own words; secrets stay locked. It rewords one line in full and lean, so **merge it only after tonight's bench finishes** (M4j too: it changes the talk judge).
   - **M4j** (`docs/handoff/M4j.md`, tab "M4j her acct"): `LIVE_SWITCHED` drops the name clause; wider write-down checks; a fairer `honest_ai` rubric; a stricter talk judge.
   - Watchers wait for `WAITING:`/`DONE:` on `other/M22` and `other/M4j`; a 20-minute check reads their tabs.
 - **Tonight at 3:10am (after Gemini's reset), in the hub's background:**

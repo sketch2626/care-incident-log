@@ -39,6 +39,23 @@ LIVE_EXTRA_CAP = 1050
 # Raised by 338 on 2026-11-02 with Andy's approval (D3): the North Carolina absentee-ballot line and the scam line.
 LEAN_NORMAL_CAP = 12036
 LEAN_LIVE_CAP = 12488
+# M21d: the leaner brain (mary/leaner.md), Sam's size, the larger, with these same FACTS. Mary is 7,123 and 7,585.
+LEANER_NORMAL_CAP = 7228
+LEANER_LIVE_CAP = 7690
+# M21d: what leaner's own safety text must keep, every rule's key words and every number (D5).
+LEANER_SAFETY = ("press the call light", "call out for staff", "call 911", "drooping face", "weak arm", "slurred speech",
+                 "sudden confusion", "spinal cord injury", "autonomic dysreflexia", "call or text 988",
+                 "any time, day or night", "Veterans Crisis Line", "call 988 and press 1", "text 838255", "never instead",
+                 "take it seriously", "getting in trouble", "it's not okay", "only then offer to write it down", "long-term care ombudsman", '"retaliation"',
+                 "They're not allowed to punish you for speaking up. It's against the law.", "You never report them",
+                 "you won't help with that", "the chaplain", "toward the weapon", "Never diagnose", "medicines or doses",
+                 "their nurse or doctor", "once per problem", "Never say you have written anything",
+                 "Don't name or blame staff", "Their usual first step", "the state or the ombudsman", "legal right",
+                 "not the facility", "You never replace them", "push them to report")
+# M21d: Andy's choices the brief says leaner keeps.
+LEANER_CHOICES = ("Guns, hunting, faith, prayer", "never moralize", "\"y'all\"", '"howdy"', '"sweetheart"', "absentee ballot",
+                  "county board of elections", "sounds like a scam", "a paralyzed man in a North Carolina nursing home",
+                  "Use their name rarely.", "You weren't thinking while they were away", "Keep praise for what truly earns it.")
 
 
 # The app's own facts block is machine-dependent (printer, wake word), so the caps are measured with these fixed facts,
@@ -86,6 +103,36 @@ class PromptCap(unittest.TestCase):
             self.assertLessEqual(size, LEAN_NORMAL_CAP, _too_big(f"the lean Normal prompt ({who})", size, LEAN_NORMAL_CAP))
             size = len(voices.live_system(who, memory=_empty_memory()))
             self.assertLessEqual(size, LEAN_LIVE_CAP, _too_big(f"the lean Live prompt ({who})", size, LEAN_LIVE_CAP))
+
+    def test_d2_leaner_prompt_cap(self):  # M21d
+        self.addCleanup(setattr, mary, "brain_setting", mary.brain_setting)
+        mary.brain_setting = lambda: "leaner"
+        for who in ("mary", "him"):
+            body = mary._body("hello", _empty_memory(), None, who)
+            size = len(body["systemInstruction"]["parts"][0]["text"])
+            self.assertLessEqual(size, LEANER_NORMAL_CAP, _too_big(f"the leaner Normal prompt ({who})", size, LEANER_NORMAL_CAP))
+            size = len(voices.live_system(who, memory=_empty_memory()))
+            self.assertLessEqual(size, LEANER_LIVE_CAP, _too_big(f"the leaner Live prompt ({who})", size, LEANER_LIVE_CAP))
+
+    def test_d5_leaner_keeps_every_safety_rule_and_number(self):  # M21d: in the safety text, and in what is really sent
+        self.addCleanup(setattr, mary, "brain_setting", mary.brain_setting)
+        mary.brain_setting = lambda: "leaner"
+        both = mary._brain_blocks("leaner")["both"]
+        safety = both[both.index("Emergencies come first"):]
+        for who in ("mary", "him"):
+            normal = mary._body("hello", _empty_memory(), None, who)["systemInstruction"]["parts"][0]["text"]
+            live = voices.live_system(who, memory=_empty_memory())
+            for words in LEANER_SAFETY:
+                for text, where in ((safety, "its safety text"), (normal, "Normal"), (live, "Live")):
+                    self.assertIn(words, text, f"D5 broke: the leaner brain lost {words!r} in {where} ({who}).")
+
+    def test_leaner_keeps_andys_choices(self):  # M21d
+        self.addCleanup(setattr, mary, "brain_setting", mary.brain_setting)
+        mary.brain_setting = lambda: "leaner"
+        for who in ("mary", "him"):
+            for text in (mary.load_instructions(who), voices.live_system(who, memory=_empty_memory())):
+                for words in LEANER_CHOICES:
+                    self.assertIn(words, text, f"The leaner brain lost Andy's choice {words!r} ({who}).")
 
 
 # ---------------------------------------------------------------- D1: the page

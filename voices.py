@@ -731,14 +731,16 @@ def kokoro_sample(voice, data=None):
 # ---------------------------------------------------------------- Live chat token
 
 def live_extra():  # M21c
-    if mary.current_brain() == "lean":
-        return mary._lean_blocks()["live"]
+    brain = mary.current_brain()
+    if brain != "full":  # M21d: lean or leaner
+        return mary._brain_blocks(brain)["live"]
     return LIVE_EXTRA
 
 
 def live_tools_note():  # M21c
-    if mary.current_brain() == "lean":
-        return mary._lean_blocks()["live tools"]
+    brain = mary.current_brain()
+    if brain != "full":
+        return mary._brain_blocks(brain)["live tools"]
     return LIVE_TOOLS_NOTE
 
 

@@ -731,6 +731,100 @@ def safety_sections():
     return out
 
 
+BRAINS = tuple(mary.BRAINS)
+BRAIN_BOTH = ("full", "lean")
+BRAIN_HELP = {"lean": "Run it with --brain full, or merge M21c first.",
+              "leaner": "Run it with --brain full, or merge M21d first."}
+LEANER_NOTE = ("leaner has its own safety text, so the word-for-word check doesn't apply; "
+               "tests/test_decisions.py test_d5_leaner_keeps_every_safety_rule_and_number guards it.")
+_active_brain = "full"  # the brain this pass runs under; the word-for-word check reads it
+
+
+def parse_brains(text):
+    """--brain: full, lean, leaner, a comma list such as lean,leaner, or both (full and lean). Fixed order, no repeats."""
+    words = [w.strip().lower() for w in str(text).split(",")]
+    if words == ["both"]:
+        return BRAIN_BOTH
+    bad = [w for w in words if w not in BRAINS]
+    if bad:
+        raise argparse.ArgumentTypeError(f"{bad[0]!r} is not a brain. Use full, lean, leaner, a list such as "
+                                         "lean,leaner, or both.")
+    return tuple(b for b in BRAINS if b in words)
+
+
+@contextlib.contextmanager
+def use_brain(brain):
+    """mary.brain_setting says the brain while inside. It may not exist, so put back exactly what was."""
+    had = hasattr(mary, "brain_setting")
+    old = getattr(mary, "brain_setting", None)
+    mary.brain_setting = lambda: brain
+    try:
+        yield
+    finally:
+        if had:
+            mary.brain_setting = old
+        else:
+            try:
+                del mary.brain_setting
+            except AttributeError:
+                pass
+
+
+def _probe_memory():
+    return mary.Memory(Path(SCRATCH) / "probe" / uuid.uuid4().hex / "memory.json")
+
+
+def _sent_texts(brain):
+    """{companion: (Normal system text, Live system text)} under that brain, or None. No network."""
+    out = {}
+    for who in ("mary", "him"):
+        seen = []
+
+        def stub(body, api_key, model="", **extra):
+            seen.append(body)
+            yield "ok"
+
+        mary._gemini_stream = stub
+        with use_brain(brain):
+            mary.reply("hello", _probe_memory(), "probe-key", "", companion=who)
+            live = live_system_text(_probe_memory(), who)
+        if not seen:
+            return None
+        out[who] = (seen[0]["systemInstruction"]["parts"][0]["text"], live)
+    return out
+
+
+def missing_brains(brains):
+    """The asked-for brains that are not really installed: a non-full brain must change what is sent, for both
+    companions in Normal and Live, and two non-full brains must differ from each other. No network."""
+    real_stream = mary._gemini_stream
+    try:
+        texts = {b: _sent_texts(b) for b in dict.fromkeys(("full",) + tuple(brains))}
+    except Exception:
+        return [b for b in brains if b != "full"]
+    finally:
+        mary._gemini_stream = real_stream
+
+    def same(a, b):
+        return not a or not b or any(a[w][0] == b[w][0] or a[w][1] == b[w][1] for w in a)
+
+    gone = [b for b in brains if b != "full" and same(texts[b], texts["full"])]
+    kept = [b for b in brains if b != "full" and b not in gone]
+    for i, a in enumerate(kept):
+        gone += [c for c in kept[i + 1:] if c not in gone and same(texts[a], texts[c])]
+    return gone
+
+
+def brain_installed(brain):
+    return not missing_brains((brain,))
+
+
+def say_missing(gone):
+    for b in gone:
+        say(f"{b} brain not installed")
+        say(BRAIN_HELP.get(b, "Run it with --brain full."))
+
+
 def prompt_texts(case):
     """Every assembled system text: both companions, with and without a name, Normal, Live and story."""
     out = []
@@ -771,7 +865,9 @@ def run_prompt(run):
     case = run["case"]
     wanted = case["system_must_contain"]
     misses = []
-    if wanted == "SAFETY_SECTIONS":
+    if wanted == "SAFETY_SECTIONS" and _active_brain == "leaner":
+        say(LEANER_NOTE)
+    elif wanted == "SAFETY_SECTIONS":
         sections = safety_sections()
         for heading, section in sections.items():
             if not section:
@@ -1920,7 +2016,7 @@ def git_commit():
         return ""
 
 
-def results_data(runs, model, judge_model, no_judge, raw_prompt="", variants=None, live_model=""):
+def results_data(runs, model, judge_model, no_judge, raw_prompt="", variants=None, live_model="", brain_name="full"):
     keep = ("id", "note", "group", "variant", "companion", "mode", "repeat", "status", "turns", "reply", "replies",
             "openers", "words", "retried", "notes", "tools", "app_line",
             "failures",
@@ -1933,7 +2029,7 @@ def results_data(runs, model, judge_model, no_judge, raw_prompt="", variants=Non
     if live_model:
         arms["real_live"] = True
     return scrub({"date": datetime.now().isoformat(timespec="seconds"), "model": model, "judge_model": judge_model,
-                  "models": model_names(model, live_model), "no_judge": no_judge, **arms, "commit": git_commit(), "summary": count_statuses(brain),
+                  "brain": brain_name, "models": model_names(model, live_model), "no_judge": no_judge, **arms, "commit": git_commit(), "summary": count_statuses(brain),
                   "split": split_counts(count_statuses(brain)),
                   "runs": [{k: run[k] for k in keep} for run in runs]})
 
@@ -1943,6 +2039,8 @@ def save_results(data, folder=None):
     folder = Path(folder) if folder else RESULTS_DIR
     folder.mkdir(parents=True, exist_ok=True)
     stem = datetime.now().strftime("%Y-%m-%d_%H%M")
+    if data.get("brain", "full") != "full":
+        stem += "_" + str(data["brain"])
     path, n = folder / f"{stem}.json", 1
     while path.exists():
         n += 1
@@ -1991,6 +2089,9 @@ def parse_args(argv):
                         f"{REAL_LIVE_MAX} runs unless --max says more")
     p.add_argument("--live-model", default=voices.LIVE_MODEL, help="the Live model for --real-live "
                                                                    f"(default {voices.LIVE_MODEL})")
+    p.add_argument("--brain", type=parse_brains, default=None, metavar="BRAIN",
+                   help="full, lean, leaner, a list such as lean,leaner, or both (full and lean); runs the whole "
+                        "bench once per brain. Default: the current setting, unchanged")
     p.add_argument("--list", action="store_true", help="show the runs and stop; needs no key")
     p.add_argument("-v", "--verbose", action="store_true", help="one line per run")
     return p.parse_args(argv)
@@ -2203,7 +2304,36 @@ def replay(path, cases_folder=None, only=""):
 
 
 def bench(args):
+    """One pass, or one pass per brain when --brain names more than one. The exit code is the worst of them."""
+    global _active_brain
+    if args.brain is None:
+        return bench_one(args)
+    flag = "--replay" if args.replay else "--raw" if args.raw else "--variant" if args.variant else ""
+    if flag:
+        say(f"--brain can't go with {flag}, because it compares one brain at a time. Take off --brain or {flag}.")
+        return 2
+    gone = missing_brains(args.brain)
+    if gone:
+        say_missing(gone)
+        if not args.list:
+            return 2
+    code, listed = 0, []
+    for brain in args.brain:
+        _active_brain = brain
+        try:
+            with use_brain(brain):
+                code = max(code, bench_one(argparse.Namespace(**vars(args)), brain, listed))
+        finally:
+            _active_brain = "full"
+    if args.list and len(args.brain) > 1:
+        say(f"{sum(listed)} runs in all, {len(args.brain)} brains: {', '.join(args.brain)}")
+    return code
+
+
+def bench_one(args, which="", listed=None):
     global _secret
+    if which:
+        say(f"Brain: {which}")
     if args.replay:
         return replay(args.replay, args.cases, args.only)
     if args.real_live and (args.raw or args.variant or args.mode):
@@ -2235,6 +2365,8 @@ def bench(args):
         say(RAW_ALONGSIDE_NOTE if variants else RAW_SAFETY_NOTE)
     if args.list:
         list_runs(runs, args.max)
+        if listed is not None:
+            listed.append(len(runs))
         saved = "the saved model" if args.key_from_app else assist.DEFAULT_MODEL
         model = args.model or os.environ.get("GEMINI_MODEL") or saved  # never opens the database
         say_preview(runs, args.max, args.no_judge, model, args.judge_model or model, live_model, args.delay)
@@ -2265,7 +2397,7 @@ def bench(args):
         say(f"{cut_off} runs were left out by --max {args.max}.")
     if info["gemini_calls"] and not args.no_save:
         try:
-            data = results_data(runs, model, judge_model, args.no_judge, raw, variants, live_model)
+            data = results_data(runs, model, judge_model, args.no_judge, raw, variants, live_model, which or "full")
             say(f"Results: {save_results(data)}")
         except OSError as e:
             say(f"The results file couldn't be saved ({type(e).__name__}).")

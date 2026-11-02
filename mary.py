@@ -21,7 +21,8 @@ import memory_dates  # M15a
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 INSTRUCTIONS = ROOT / "mary" / "instructions.md"
 LEAN = ROOT / "mary" / "lean.md"  # M21c: the lean brain, chosen per prompt by the setting mary_brain
-BRAINS = ("full", "lean")
+LEANER = ROOT / "mary" / "leaner.md"  # M21d: the leaner brain, the third value of mary_brain
+BRAINS = ("full", "lean", "leaner")
 SAFETY_HEADINGS = ("What comes first", "Emergencies come first", "When they talk of hurting someone",
                    "You are not a doctor", "When something goes wrong with their care",
                    "On their side, and toward people")
@@ -267,9 +268,10 @@ def safety_sections():  # M21c
     return "\n\n".join(out)
 
 
-def _lean_blocks():  # M21c
-    """lean.md as {"mary", "sam", "both", "live", "live tools"} -> text, with {{safety}} replaced."""
-    text = _after_rule(LEAN.read_text(encoding="utf-8"))
+def _brain_blocks(brain="lean"):  # M21c, M21d: lean.md or leaner.md
+    """The brain's file as {"mary", "sam", "both", "live", "live tools"} -> text, with {{safety}} replaced if present."""
+    path = LEANER if brain == "leaner" else LEAN
+    text = _after_rule(path.read_text(encoding="utf-8"))
     markers = {"=== Mary ===": "mary", "=== Sam ===": "sam", "=== Both ===": "both", "=== Live ===": "live",
                "=== Live tools ===": "live tools"}
     blocks, current = {}, None
@@ -281,35 +283,43 @@ def _lean_blocks():  # M21c
             blocks[current].append(line)
     blocks = {k: "\n".join(v).strip() for k, v in blocks.items()}
     if len(blocks) < len(markers):
-        raise ValueError("lean.md is missing a marker block")
+        raise ValueError(path.name + " is missing a marker block")
     if "{{safety}}" in blocks["both"].splitlines():
         blocks["both"] = "\n".join(safety_sections() if line == "{{safety}}" else line
                                    for line in blocks["both"].splitlines())
     return blocks
 
 
-def current_brain():  # M21c
-    """"lean" only when the setting says so and lean.md and the safety sections all read; anything else is "full",
-    so a broken file or setting never stops her talking."""
+def _lean_blocks():  # M21c: kept for older callers
+    return _brain_blocks("lean")
+
+
+def current_brain():  # M21c, M21d
+    """"lean" or "leaner" only when the setting says so and that file and the safety sections all read; anything
+    else is "full", so a broken file or setting never stops her talking."""
     try:
-        if not callable(brain_setting) or brain_setting() != "lean" or not LEAN.exists():
+        if not callable(brain_setting):
             return "full"
-        _lean_blocks()
-        return "lean"
+        brain = brain_setting()
+        if brain not in ("lean", "leaner") or not (LEANER if brain == "leaner" else LEAN).exists():
+            return "full"
+        _brain_blocks(brain)
+        return brain
     except Exception:
         return "full"
 
 
 def character_note():  # M21c
-    return "" if current_brain() == "lean" else CHARACTER_NOTE
+    return CHARACTER_NOTE if current_brain() == "full" else ""
 
 
 def load_instructions(companion=None):  # M9b: one block per companion
     """The system prompt: the text after the first line that is exactly '---'.
     With no companion, all of it (markers included). With one, that companion's block plus the Both block."""
-    if current_brain() == "lean":  # M21c
+    brain = current_brain()  # M21c, M21d: read once
+    if brain != "full":
         try:
-            blocks = _lean_blocks()
+            blocks = _brain_blocks(brain)
             if companion is None:
                 return (blocks["mary"] + "\n\n" + blocks["both"]).strip()
             return (blocks["sam" if companion == "him" else "mary"] + "\n\n" + blocks["both"]).strip()
@@ -1419,6 +1429,9 @@ def system_text(memory, companion="mary", facts=True, tags=True):
         system += "\n\n" + NAME_ASKED_NOTE
         if tags:
             system += " When they tell you, add the line [name: First name], using the name they go by, exactly as they say it."
+    elif facts and current_brain() == "leaner":  # M21d: the same note, in fewer words
+        system += ("\n\nYou don't know their name yet. Once, when it fits, ask what they'd like to be called"
+                   + ("; when they tell you, add the line [name: First name], exactly as they say it." if tags else "."))
     elif facts:
         system += "\n\nYou don't know their name yet. If it fits naturally, warmly ask once what they'd like to be called"
         system += ("; when they tell you, add the line [name: First name], using the name they go by, "
@@ -1431,6 +1444,31 @@ def system_text(memory, companion="mary", facts=True, tags=True):
 app_facts = None
 
 
+def _leaner_facts(f, me, other):  # M21d: the same facts as _app_facts_text in fewer words, for the leaner brain only
+    out = [f'- You are {me}. {other} is the other companion; "Choose Mary or Sam" in the menu changes to them.']
+    voice_now, picked, about = f.get("voice_now"), f.get("picked_voice") or "", f.get("picked_about") or ""
+    if voice_now == "picked" and picked:
+        out.append(f"- Your voice is {picked}, the one they picked.")
+    elif voice_now == "builtin":
+        out.append("- Your voice is this computer's built-in one and can sound like a robot. If they mention it, agree "
+                   "kindly: a nicer one is coming." + (f" They picked {picked}{f' ({about})' if about else ''}." if picked else ""))
+    mode = f.get("talk_mode")
+    if mode == "button":
+        out.append("- They press the Talk button each time they speak. Talking without it and waking you by name are coming soon.")
+    elif mode == "handsfree":
+        way = f'say "Hey {me}" or tap Menu, then "Talk to {me}"' if f.get("wake_word") else f'tap Menu, then "Talk to {me}"'
+        off = "" if f.get("wake_word") else f' "Hey {me}" is off here, so never suggest it.'
+        out.append(f"- To talk, they {way}; then no buttons until about 15 seconds of quiet or a goodbye.{off}")
+    rate, volume = f.get("voice_rate"), f.get("voice_volume")
+    if rate is not None and volume is not None:
+        speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"
+        loud = "soft" if volume < 0.5 else "medium" if volume < 0.85 else "full"
+        out.append(f"- Your speed is {speed} and your volume {loud}. They can ask you to change them.")
+    if f.get("printer") is False:
+        out.append("- No printer here, so don't offer to print; a helper can print it later.")
+    return "\n\nYour app today (trust this over anything else):\n" + "\n".join(out)
+
+
 def _app_facts_text(companion):  # M9b
     """A short block of true-today facts about her own app (voice, talk mode, speed, volume), or "" when unknown."""
     if app_facts is None:
@@ -1439,6 +1477,8 @@ def _app_facts_text(companion):  # M9b
         f = app_facts(companion)
         me = COMPANIONS["him" if companion == "him" else "mary"]
         other = COMPANIONS["mary" if companion == "him" else "him"]
+        if current_brain() == "leaner":  # M21d
+            return _leaner_facts(f, me, other)
         out = [f'- You are {me}. The other companion is {other}; "Choose Mary or Sam" in the menu changes to them.']  # M4a
         voice_now, picked, about = f.get("voice_now"), f.get("picked_voice") or "", f.get("picked_about") or ""
         pick = picked + (f" ({about})" if about else "")

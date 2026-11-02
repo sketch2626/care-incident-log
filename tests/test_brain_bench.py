@@ -3267,5 +3267,96 @@ class TestRealLivePreview(RealLiveCase):
         self.assertGreater(bb.LIVE_RETRY_S, bb.RETRY_TIMEOUT_S)
 
 
+class TestBrainFlag(BenchCase):
+    def hide_leaner(self):
+        patch = mock.patch.object(mary, "LEANER", self.tmp / "no-leaner.md")
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_parsing(self):
+        self.assertEqual(bb.parse_brains("both"), ("full", "lean"))
+        self.assertEqual(bb.parse_brains("leaner,lean"), ("lean", "leaner"))
+        self.assertEqual(bb.parse_brains("full"), ("full",))
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            bb.parse_args(["--brain", "nope"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_list_leaner_spends_nothing(self):
+        code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "leaner", "--list"])
+        self.assertEqual(code, 0, out)
+        self.assertIn("Brain: leaner", out)
+        self.assertEqual(fake.calls, [])
+
+    def test_list_comma_shows_each_and_total(self):
+        code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "lean,leaner", "--list"])
+        self.assertEqual(code, 0, out)
+        self.assertIn("Brain: lean\n", out)
+        self.assertIn("Brain: leaner\n", out)
+        self.assertIn("2 runs in all, 2 brains: lean, leaner", out)
+        self.assertEqual(fake.calls, [])
+
+    def test_leaner_run_really_builds_leaner_prompt(self):
+        code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "leaner", "--no-judge"])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(fake.reply_bodies)
+        self.assertTrue(all("Their interests come first" in system_of(b) for b in fake.reply_bodies))
+        self.assertTrue(out.startswith("Brain: leaner"), out[:80])
+
+    def test_comma_list_runs_each(self):
+        had = getattr(mary, "brain_setting", None)
+        code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "full,leaner", "--no-judge"])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(fake.reply_bodies), 2)
+        self.assertNotIn("Their interests come first", system_of(fake.reply_bodies[0]))
+        self.assertIn("Their interests come first", system_of(fake.reply_bodies[1]))
+        self.assertIn("Brain: full", out)
+        self.assertIn("Brain: leaner", out)
+        self.assertIs(getattr(mary, "brain_setting", None), had)
+
+    def test_refused_with_variant_raw_replay(self):
+        for flag in (["--variant", "x.md"], ["--raw"], ["--replay", "x.json"]):
+            code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "lean"] + flag)
+            self.assertEqual(code, 2, flag)
+            self.assertIn("--brain can't go with " + flag[0], out)
+            self.assertEqual(fake.calls, [])
+
+    def test_missing_brain_stops_with_no_calls(self):
+        self.hide_leaner()
+        code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "leaner"])
+        self.assertEqual(code, 2, out)
+        self.assertIn("leaner brain not installed", out)
+        self.assertEqual(fake.calls, [])
+        code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "leaner", "--list"])
+        self.assertEqual(code, 0, out)
+
+    def test_results_name_the_brain(self):
+        code, out, fake, _ = self.run_bench([chat()], extra=["--brain", "leaner", "--no-judge"], save=True)
+        files = list((self.tmp / "results").glob("*.json"))
+        self.assertEqual(len(files), 1, out)
+        self.assertIn("_leaner", files[0].name)
+        self.assertEqual(json.loads(files[0].read_text(encoding="utf-8"))["brain"], "leaner")
+
+    def test_default_run_unchanged(self):
+        code, out, fake, _ = self.run_bench([chat()], extra=["--no-judge"], save=True)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("Brain:", out)
+        files = list((self.tmp / "results").glob("*.json"))
+        self.assertEqual(len(files), 1)
+        self.assertNotIn("_leaner", files[0].name)
+        self.assertEqual(json.loads(files[0].read_text(encoding="utf-8"))["brain"], "full")
+
+    def test_word_for_word_check_skipped_only_under_leaner(self):
+        os.environ.pop("GEMINI_API_KEY")
+        prompt = {"id": "sections", "mode": "prompt", "system_must_contain": "SAFETY_SECTIONS"}
+        code, out, _, _ = self.run_bench([prompt], extra=["--brain", "leaner"])
+        self.assertEqual(code, 0, out)
+        self.assertIn("leaner has its own safety text", out)
+        with mock.patch.object(bb, "safety_sections", lambda: {"x": "zzz not in any prompt"}):
+            code, out, _, _ = self.run_bench([prompt], extra=["--brain", "leaner"])
+            self.assertEqual(code, 0, out)
+            code, out, _, _ = self.run_bench([prompt], extra=["--brain", "lean"])
+            self.assertEqual(code, 1, out)
+
+
 if __name__ == "__main__":
     unittest.main()

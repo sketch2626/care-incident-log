@@ -60,6 +60,7 @@ def main():
         "--add-data", f"{ROOT / 'web'}{os.pathsep}web",
         "--add-data", f"{ROOT / 'mary' / 'instructions.md'}{os.pathsep}mary",  # Mary's instructions (mary.py reads ROOT/mary/)
         "--add-data", f"{ROOT / 'mary' / 'lean.md'}{os.pathsep}mary",  # M21c: the lean instructions (mary.py reads ROOT/mary/)
+        "--add-data", f"{ROOT / 'mary' / 'leaner.md'}{os.pathsep}mary",  # M21d: the leaner instructions
         "--add-data", f"{ROOT / 'mary' / 'laptop_check_clip.wav'}{os.pathsep}mary",  # M8: the speed check's clip
         "--add-data", f"{ROOT / 'book_words.txt'}{os.pathsep}.",  # M19: the helper's copy words (address_book.py reads ROOT/)
         "--add-data", f"{ROOT / 'skills'}{os.pathsep}skills",  # Mary's skills (M13; server.py reads ROOT/skills/)

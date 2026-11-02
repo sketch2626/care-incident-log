@@ -283,7 +283,7 @@ class Reading(unittest.TestCase):
     def test_an_emergency_turn_stops_it_at_the_gate(self):
         js = read("web/mary/app.js")
         got = self.go(r"""
-          const S = { screen: 'everyday' }, TOOL_REFUSED = { ok: false, refused: true }, END_TALK_HELD = {};
+          const S = { screen: 'everyday' }, TOOL_REFUSED = { ok: false, refused: true };
           const ENV = reader([row(1)], said('read my notes'));
           function screenEnv() { return ENV; } function storyTake() { return {}; } function storyFromTool(c, r) { return r; }
           function liveEndTalk() {} function noteBusyNow() { return false; } function dictating() { return false; } function refreshName() {} function log() {}

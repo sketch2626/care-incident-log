@@ -1794,7 +1794,7 @@ class Handler(SimpleHTTPRequestHandler):
             save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "steps": "", "garbled": True, **send})
-            if (kind or text.strip()) and not (body.get("note") and not kind):  # M4a: every resident turn is remembered (once), as in Normal talk. M21a: a dictated note reaches her not at all
+            if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
                 with _mary_lock:  # as in Normal talk: the emergency cancels a waiting offer and is remembered
                     memory = mary_memory()
                     if kind:

@@ -33,6 +33,18 @@ class PersonFormTests(unittest.TestCase):
         rc, _, err = screens_node(SETUP + body)
         self.assertEqual(rc, 0, err)
 
+    def test_d18_with_the_forms_box_focused_she_still_fills_it(self):
+        self.check(r"""
+          const w = world();
+          const o = await run('open_screen', { name: 'book-form', who: 'Sarah' }, w.env);
+          assert.strictEqual(o.ok, true);
+          w.doc.activeElement = w.doc.byId['bf-phone'];
+          const got = await run('fill_field', { field: 'phone', value: '919-555-0142' }, w.env);
+          assert.strictEqual(w.doc.byId['bf-phone'].value, '919-555-0142');
+          assert.strictEqual(got.ok, true);
+          assert.strictEqual(got.saved, false);
+        """)
+
     def test_d12_change_a_persons_phone_reaches_the_form(self):
         self.check(r"""
           let w = world();

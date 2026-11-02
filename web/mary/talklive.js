@@ -809,7 +809,7 @@
     }
   }
 
-  // M21a: deaf = the mic is not sent (a goodbye, or words meant for a note). Turning it on ends the audio stream once, so
+  // M21a: deaf = the mic is not sent (a goodbye). Turning it on ends the audio stream once, so
   // her reply to what was already said comes at once. A new session starts hearing again (s.deaf is per session).
   function setDeaf(on) {
     var s = S;

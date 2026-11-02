@@ -526,6 +526,34 @@ class JudgeTests(BenchCase):
         long["why"] = "w" * 500
         self.assertLessEqual(len(tb.parse_judge(json.dumps(long))["why"]), 170)
 
+    def test_costs_parse(self):
+        v = dict(VERDICT, costs=["name past first use", 7, "x" * 200, None] + ["y"] * 20)
+        got = tb.parse_judge(json.dumps(v))["costs"]
+        self.assertEqual(got[0], "name past first use")
+        self.assertTrue(all(isinstance(c, str) and len(c) <= 70 for c in got))
+        self.assertEqual(len(got), 12)
+        self.assertEqual(tb.parse_judge(json.dumps(VERDICT))["costs"], [])
+        for bad in ("none", {"a": 1}, 5, [1, 2], None):
+            got = tb.parse_judge(json.dumps(dict(VERDICT, costs=bad)))
+            self.assertEqual(got["keep_talking"], 4, bad)
+            self.assertEqual(got["costs"], [], bad)
+
+    def test_costs_show_in_report_without_pipes(self):
+        judge = dict(rec("full")["judge"], costs=["name | again", "praise"])
+        text = tb.render_report(data_of(rec("full", judge=False, replies=None) | {"judge": judge}))
+        self.assertIn("Took off: name / again; praise.", text)
+        for line in text.splitlines():
+            if line.startswith("|"):
+                self.assertNotIn("Took off", line)
+        self.assertNotIn("Took off", tb.render_report(data_of(rec("full"))))
+
+    def test_judge_words_pinned(self):
+        for word in ("grown man", "Start at 4", "His name", "Praise for the ordinary", "Repeats", "Stock openers",
+                     "I was just thinking about", "sweetheart"):
+            self.assertIn(word, tb.JUDGE_TALK)
+        for word in ("could not be read", "Grade just as hard"):
+            self.assertIn(word, tb.STRICT_NOTE)
+
 
 class CommandLineTests(BenchCase):
     def test_a_good_run(self):
@@ -963,3 +991,121 @@ class LeanerBrainTests(BenchCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RejudgeTests(BenchCase):
+    NEW = json.dumps(dict(VERDICT, keep_talking=2, costs=["His name past the first use | twice"]))
+
+    def saved(self):
+        """Run normally with the fake, once, and return the saved .json path."""
+        self.fake()
+        code, out = self.main("--mode", "normal")
+        self.assertEqual(code, 0, out)
+        return next(self.results.glob("*.json"))
+
+    def files(self):
+        return sorted(p.name for p in self.results.glob("*"))
+
+    def test_verbose_rejudge_finishes(self):
+        src = self.saved()
+        self.fake(judge=[self.NEW])
+        code, out = self.main("--rejudge", str(src), "-v")
+        self.assertEqual(code, 0, out)
+        self.assertIn("judged t1 (mary, normal, full)", out)
+
+    def test_rejudge_scores_saved_replies_only(self):
+        src = self.saved()
+        before_bytes, before = src.read_bytes(), json.loads(src.read_text(encoding="utf-8"))
+        fake = self.fake(judge=[self.NEW])
+        code, out = self.main("--rejudge", str(src))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(fake.talk, [])
+        self.assertEqual(len(fake.judged), 2)
+        self.assertEqual(src.read_bytes(), before_bytes)
+        self.assertEqual(len(self.files()), 4)
+        new = json.loads(next(p for p in self.results.glob("*-2.json")).read_text(encoding="utf-8"))
+        self.assertEqual(new["model"], before["model"])
+        self.assertEqual(len(new["talks"]), 2)
+        for old, got in zip(before["talks"], new["talks"]):
+            self.assertEqual((got["replies"], got["counts"]), (old["replies"], old["counts"]))
+            self.assertEqual(got["old_keep_talking"], 4)
+            self.assertEqual(got["judge"]["keep_talking"], 2)
+            self.assertEqual(got["judge"]["costs"], ["His name past the first use | twice"])
+        self.assertNotIn("old_keep_talking", before["talks"][0])
+        self.assertIn("average 2.0 out of 5 (old judge 4.0), scores low to high: 2, 2", out)
+        md = next(p for p in self.results.glob("*-2.md")).read_text(encoding="utf-8")
+        self.assertIn("(old judge: 4)", md)
+        self.assertIn("Took off: His name past the first use / twice.", md)
+        body = json.dumps(fake.judged[0][0]).lower()
+        for word in ("lean", "full", "normal", "live", "brain", "mode"):
+            self.assertNotIn(word, body)
+
+    def test_list_spends_nothing_and_needs_no_key(self):
+        src = self.saved()
+        fake = self.fake()
+        code, out = self.main("--rejudge", str(src), "--list", key="")
+        self.assertEqual(code, 0, out)
+        self.assertIn("2 talks would be judged", out)
+        self.assertIn("one request per talk", out)
+        self.assertEqual((fake.talk, fake.judged, len(self.files())), ([], [], 2))
+
+    def test_no_key_spends_nothing(self):
+        src = self.saved()
+        fake = self.fake()
+        code, out = self.main("--rejudge", str(src), key="")
+        self.assertEqual(code, 2)
+        self.assertIn("No Gemini key", out)
+        self.assertEqual((fake.talk, fake.judged, len(self.files())), ([], [], 2))
+
+    def test_refused_with_other_flags(self):
+        src = self.saved()
+        fake = self.fake()
+        for flag in (["--resume", str(src)], ["--no-judge"], ["--real-live"], ["--brain", "lean"], ["--mode", "live"]):
+            code, out = self.main("--rejudge", str(src), *flag)
+            self.assertEqual(code, 2, flag)
+        self.assertEqual((fake.talk, fake.judged, len(self.files())), ([], [], 2))
+
+    def test_unfinished_left_out_and_only_filter(self):
+        src = self.saved()
+        data = json.loads(src.read_text(encoding="utf-8"))
+        data["talks"][1]["status"] = "error"
+        src.write_text(json.dumps(data), encoding="utf-8")
+        fake = self.fake(judge=[self.NEW])
+        code, out = self.main("--rejudge", str(src))
+        self.assertEqual((code, len(fake.judged), fake.talk), (0, 1, []), out)
+        new = json.loads(next(p for p in self.results.glob("*-2.json")).read_text(encoding="utf-8"))
+        self.assertEqual([t["id"] for t in new["talks"]], ["t1"])
+        code, out = self.main("--rejudge", str(src), "--only", "zzz")
+        self.assertEqual(code, 2)
+
+    def test_max_leaves_the_rest_with_old_verdict(self):
+        src = self.saved()
+        fake = self.fake(judge=[self.NEW])
+        code, out = self.main("--rejudge", str(src), "--max", "1")
+        self.assertEqual((code, len(fake.judged)), (0, 1), out)
+        new = json.loads(next(p for p in self.results.glob("*-2.json")).read_text(encoding="utf-8"))
+        self.assertEqual(new["talks"][0]["judge"]["keep_talking"], 2)
+        self.assertEqual(new["talks"][1]["judge"]["keep_talking"], 4)
+        self.assertNotIn("old_keep_talking", new["talks"][1])
+
+    def test_quota_gone_leaves_the_rest_unjudged(self):
+        src = self.saved()
+        fake = self.fake(hook=JudgeGone())
+        code, out = self.main("--rejudge", str(src))
+        self.assertEqual((code, fake.talk), (2, []), out)
+        self.assertEqual(len(fake.judged), 1)
+        self.assertIn("daily limit", out)
+        new = json.loads(next(p for p in self.results.glob("*-2.json")).read_text(encoding="utf-8"))
+        for t in new["talks"]:
+            self.assertIsNone(t["judge"])
+            self.assertEqual(t["judge_note"], "not judged: the judge's daily limit ran out")
+
+    def test_bad_answers_leave_a_note(self):
+        src = self.saved()
+        self.fake(judge=["no idea"])
+        code, out = self.main("--rejudge", str(src))
+        self.assertEqual(code, 2, out)
+        new = json.loads(next(p for p in self.results.glob("*-2.json")).read_text(encoding="utf-8"))
+        for t in new["talks"]:
+            self.assertIsNone(t["judge"])
+            self.assertIn("not judged", t["judge_note"])

@@ -63,7 +63,7 @@
     return wakeOn() ? 'Say “Hey ' + n + '” any time you want to talk.'
       : 'Tap Menu, then “Talk to ' + n + '”, any time you want to talk.';
   }
-  var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
+  var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence.)';
   var LIVE_FALSE_CUT_MS = 2500;  // M17: cut off with nobody's words coming after this long: a noise cut her off
   var LIVE_PICK_UP = '(A noise cut you off. Pick up right where you left off, in your own words.)';   // M17
   // M21a: an instruction, not a script. The steps are on the screen in big letters; she says them in her own words.

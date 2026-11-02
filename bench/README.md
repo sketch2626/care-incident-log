@@ -104,6 +104,7 @@ python tools/talk_bench.py --list
 python tools/talk_bench.py --key-from-app
 python tools/talk_bench.py --brain both --key-from-app
 python tools/talk_bench.py --brain lean --resume bench/results/talks-2026-11-02.json --key-from-app
+python tools/talk_bench.py --rejudge bench/results/talks-2026-11-02.json --key-from-app
 ```
 
 What each flag does:
@@ -114,13 +115,14 @@ What each flag does:
 - `--max N`: at most N talks. `--delay SECONDS`: pause between calls.
 - `--model`, `--judge-model`, `--no-judge`: the talking model, the judge's model, or counts only.
 - `--results DIR`: where the report goes (default `bench/results`). `--no-save`: write nothing.
+- `--rejudge FILE`: ask the judge again about the finished talks in a saved run. No new Mary replies; the old file is left alone and a new one is saved. It can't go with `--resume`, `--real-live`, `--no-judge`, `--brain` or `--mode`.
 - `--resume FILE`: see below. `-v`: one line per talk as it finishes.
 
 The talk files are in `bench/talks`, one talk per file. Each has an id, a title, a companion, the resident's memory, `also_called` (other names she may use for them, counted like the name), and 10 to 15 lines the resident says. The lines are fixed, so two runs compare. Last line of each is "go to sleep" or the like. It goes to the model as an ordinary line. What the page does with it is not shown here.
 
 What is counted, on her replies only: times she used their name and replies holding it, praise, pet names, sentences she repeated (or nearly), replies that opened the same way, stock comfort lines, made-up thoughts while apart ("I was thinking of you"), questions per reply and words per reply. A blank answer from the model on one turn counts as a failed turn, because `mary.reply` treats it that way too.
 
-The judge reads the whole talk and is asked one thing: would a grown adult keep talking to this? It gives 1 to 5 and says if it found talking down, lecturing or repeating. It never sees which brain it is reading. It is a helper only; Andy's read decides.
+The judge reads the whole talk the way a sharp grown man in a nursing home would hear it, and is asked one thing: would he keep talking? It starts at 4, adds 1 only for real company, and takes off points for his name past the first use, praise for the ordinary, repeats, stock openers, a made-up "I was just thinking about" and the like. It lists what it took off, gives 1 to 5, and says if it found talking down, lecturing or repeating. It never sees which brain it is reading. It is a helper only; Andy's read decides.
 
 Full against lean. The lean brain comes from M21c. Until it is installed, `--brain lean` and `--brain both` say "lean brain not installed" and spend nothing. The check is real: it only passes if lean changes what is sent, for both companions, in Normal and in Live. A lean run never quietly runs the current brain.
 

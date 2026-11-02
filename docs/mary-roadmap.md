@@ -457,6 +457,23 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   2. **Rebuild the brain from a short character sheet in Andy's own words,** with Andy approving it before anything is built. The safety sections stay word for word. Few example lines, and none with a name. Her name for him at most once a talk. No "I was just thinking about", no praise for the ordinary, no canned lines.
   3. **A new bench of whole talks,** judged on whether a grown man would keep talking: counts of his name, praise, repeats and canned lines across 10+ turns, with tonight's exchanges as cases. The current brain and the rebuilt one run the same talks, and Andy reads them side by side and picks. His verdict decides, not the score.
 
+### M22. Mary is locked out of the forms (Andy, 2026-11-02 about 5am)
+- **Andy's words:** "she's locked out of most of the forms. Like, I can't add phone numbers or nothing like that. That's got to be fixed." His test note on "Change [name]'s phone": "The part of the form is locked… you can't add phone numbers at all because that part of the form is locked out. I'd have to add it in manually, which is ridiculous." (The hub had logged it in M21 but never raised it with him. That's the same kind of slip M21 is about.)
+- **What the hub found in `web/mary/screens.js`:**
+  - **Likely a bug:** a person's card (`bc-` fields) is view-only by design, and changes happen on that person's form (`bf-`, which she can fill). Andy took the Change button off the card ("you're just going to ask"), so the only way to that form is her opening it by voice. That way looks missing or broken, so on the card she says "That's not something I can do on this screen."
+  - **Locked on purpose (M18 boards, 2026-11-01):**
+    - passwords, the Gemini key and the six words: secrets she never reads or fills;
+    - the on/off switches ("That switch is yours to turn on or off");
+    - "How bad was it?" on an incident (she explains it, and the resident picks);
+    - "Your words" (she copies in what she heard, but doesn't write them);
+    - deleting or removing anything.
+- **The hub's recommendation:**
+  - Fix the person-form path, so "change Sarah's phone" opens her form, fills it, and the resident says "save it".
+  - Keep the secrets locked.
+  - Keep "How bad" and "Your words" as the resident's own, because a state report must be in their words and their judgment.
+  - Open the switches to her after a spoken yes.
+  - Andy decides which locks stay.
+
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."
 - Two places to watch: the designs (no "Make a card" buttons scattered everywhere) and Mary herself (she shouldn't steer talks toward the newest skill). Add a bench case: in an ordinary chat she offers no card unless a birthday, a holiday or the resident brings it up. Check her prompt for lines that push cards (`REMINDER_CARDS_LINE` belongs only with a birthday reminder).

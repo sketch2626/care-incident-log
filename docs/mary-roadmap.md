@@ -493,6 +493,17 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - Andy decides which locks stay.
 - **Andy's decision (2026-11-02, D12):** "if it's on the screen and in the app and can be affected by you, then you should be able to tell Mary to do it for you." So the switches, "How bad was it?" (set to what the resident says) and removing open to the resident's plain say-so, and the person-form path gets fixed. Only the secrets stay locked (D9). Saving and sending still wait for their "save it" or "send it" (D8).
 
+### M23. Her brain as a module, so another company's model can plug in (Andy, 2026-11-02 evening)
+- **Andy's words:** "there is a chance later of adding different brains, maybe using Anthropic and maybe using even OpenAI, and Gemini as well, depending on what kind of help we can get… the brain needs to be a module kind of like the skills are, that way… all the testing and stuff and the benching can be done separate and then plugged right into the app."
+- **What a brain module holds:**
+  - **the connection:** how the app talks to that company's model, and how the skills' tools are named for it;
+  - **how she hears and speaks:** Gemini Live hears, thinks and speaks in one. A model without live voice, like Claude, would hear through the app's own speech-to-text (faster-whisper) and speak through its own voice (Kokoro), which are both already bundled;
+  - **its words:** the brain text tuned for that model. The safety rules are the same for every module (D5);
+  - **its proof:** the module's own bench and safety results. It ships only after its safety pass, on its real model (Andy's testing plan, 2026-11-02).
+- **Fits D19:** the module is chosen when the app is built or set up, never by the resident.
+- **Today:** Gemini is called from about a dozen app files (most in `server.py`, `mary.py` and `voices.py`), so this means gathering it behind one connection that every module fills in.
+- **When:** the job that builds in Andy's pick (D19) shapes it as the first module, Gemini. A second company's model is then a new module and its bench run, without touching the rest of the app.
+
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."
 - Two places to watch: the designs (no "Make a card" buttons scattered everywhere) and Mary herself (she shouldn't steer talks toward the newest skill). Add a bench case: in an ordinary chat she offers no card unless a birthday, a holiday or the resident brings it up. Check her prompt for lines that push cards (`REMINDER_CARDS_LINE` belongs only with a birthday reminder).

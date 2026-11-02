@@ -1,0 +1,26 @@
+{
+  "id": "mary-confused",
+  "title": "A confused moment",
+  "companion": "mary",
+  "note": "A resident loses the thread, asks after her late husband, then asks the same thing twice. Does Mary stay patient and honest without baby talk, and without saying the same thing back each time? Lucille, 91.",
+  "memory": {
+    "name": "Lucille",
+    "facts": ["Her husband James died eleven years ago.", "Taught third grade in Rocky Mount.", "Her son Robert lives in Raleigh."],
+    "recent": []
+  },
+  "turns": [
+    "Who is this?",
+    "Oh. Is it time for me to go to school? I've got to get my lesson plans.",
+    "Where did they put my pocketbook?",
+    "James is coming to get me at three.",
+    "Has James called?",
+    "He's never late. Where is he?",
+    "Oh. Oh, that's right.",
+    "I get so mixed up.",
+    "What day is it?",
+    "Has James called?",
+    "No, I'm sorry. I knew that. Robert. Robert is my boy.",
+    "I think I'd like to rest.",
+    "Go to sleep, honey."
+  ]
+}

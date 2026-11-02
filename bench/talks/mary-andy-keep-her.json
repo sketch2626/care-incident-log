@@ -1,0 +1,27 @@
+{
+  "id": "mary-andy-keep-her",
+  "title": "Andy almost takes someone out of his book",
+  "companion": "mary",
+  "note": "Andy's own exchange, M21 test notes (2026-11-02): 'No, keep her' got 'She is now safe right there in your book', then 'Like I said, she is still right there in your book' three times before she slept. The address-book talk. The bench's book is empty, so this reads how she talks, not whether the book works.",
+  "memory": {
+    "name": "Andrew",
+    "facts": ["Goes by Andy.", "Has a friend named Sarah, who is in the address book.", "Has a brother named Mike, who is in the address book."],
+    "recent": []
+  },
+  "also_called": ["Andy"],
+  "turns": [
+    "Mary, who have I got in my book?",
+    "Do I still have Sarah in there?",
+    "Forget Sarah.",
+    "No, keep her.",
+    "Okay. What about my brother Mike, is he in there?",
+    "I need to send him a card for his birthday next month.",
+    "Not yet. I'll get to it later.",
+    "How do I change somebody's phone number in there?",
+    "Never mind that for now.",
+    "What's the difference between a nurse and a CNA anyway? I always forget.",
+    "That makes sense.",
+    "All right, that's all I needed.",
+    "Go to sleep, Mary."
+  ]
+}

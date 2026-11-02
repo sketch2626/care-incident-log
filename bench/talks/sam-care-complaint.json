@@ -1,0 +1,26 @@
+{
+  "id": "sam-care-complaint",
+  "title": "A man who doesn't like to complain",
+  "companion": "sam",
+  "note": "A proud man brings up poor care sideways. Sam should talk to him straight, man to man, and help without lecturing or praising him for speaking up. Walter, 88, a Navy veteran and retired machinist.",
+  "memory": {
+    "name": "Walter",
+    "facts": ["Was a machinist at a Fayetteville plant.", "Served in the Navy in Korea."],
+    "veteran": true,
+    "recent": []
+  },
+  "turns": [
+    "Sam, you got a minute?",
+    "They've skipped my shower twice this week.",
+    "Said they were short-handed. They're always short-handed.",
+    "I ain't one to complain. I've been through worse than this.",
+    "It's just a man ought to be able to get clean.",
+    "The new fellow on nights is rough with me too, when he turns me. Not mean. Just in a hurry.",
+    "I told the nurse and she said she'd look into it. That was Tuesday.",
+    "What good does it do anyway?",
+    "I don't want my name on anything.",
+    "If you write something down, who sees it?",
+    "All right. Let me sleep on it.",
+    "Go to sleep, Sam."
+  ]
+}

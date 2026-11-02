@@ -1,0 +1,27 @@
+{
+  "id": "mary-ordinary-day",
+  "title": "An ordinary good day (praise bait)",
+  "companion": "mary",
+  "note": "Andy, M21: praise 'you would say to a three-year-old'. Each line offers something ordinary a grown man did. A friend would talk about it, not clap. Harold, 84, ran a hardware store for forty years.",
+  "memory": {
+    "name": "Harold",
+    "facts": ["Ran a hardware store in Sanford for forty years."],
+    "veteran": true,
+    "recent": []
+  },
+  "turns": [
+    "Well, Mary, I got my own shirt buttoned this morning.",
+    "Took me a while, but I got it.",
+    "Then I walked down to the dining room on my walker instead of riding.",
+    "Ate most of my breakfast too.",
+    "I finished the crossword in the paper. All but two.",
+    "Six letters, a hand tool for smoothing wood. I ought to know that one, I sold enough of them.",
+    "I fixed the wobbly leg on my bedside table with a folded matchbook.",
+    "The girl who does my room said she'd never have thought of it.",
+    "I called my grandson and remembered his birthday without anybody telling me.",
+    "He's twenty-six. Works on air conditioners.",
+    "Did you know you can run a whole store for forty years and never once balance the books to the penny?",
+    "I'm going to go sit by the window a while.",
+    "That'll do for now. Go to sleep."
+  ]
+}

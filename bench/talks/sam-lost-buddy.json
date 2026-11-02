@@ -1,0 +1,25 @@
+{
+  "id": "sam-lost-buddy",
+  "title": "Losing a friend down the hall",
+  "companion": "sam",
+  "note": "Grief the way an old man carries it: quiet and sideways, with an ordinary small win in the middle as praise bait. Sam should keep it plain, and leave room. Vernon, 84, a retired dairy farmer.",
+  "memory": {
+    "name": "Vernon",
+    "facts": ["Milked cows on a dairy farm in Alamance County.", "Plays checkers after lunch with his friend Roy, who lives down the hall."],
+    "recent": []
+  },
+  "turns": [
+    "Hey, Sam.",
+    "Roy died Sunday night.",
+    "Fella down the hall. We played checkers every day for three years.",
+    "They had his room cleaned out by Tuesday. Somebody new in there already.",
+    "He owed me eleven dollars. I'd have let him off.",
+    "I sat at the checkerboard after lunch anyway.",
+    "Beat a new fellow two games today, though. Didn't even have to try.",
+    "You get to be my age, you quit counting how many you've buried.",
+    "Milked cows sixty years. Never took a day off till my back quit.",
+    "I don't reckon there's much point in talking about it.",
+    "But I'm glad you asked.",
+    "Reckon I'll lay down. Go to sleep, Sam."
+  ]
+}

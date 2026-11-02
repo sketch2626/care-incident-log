@@ -1,0 +1,27 @@
+{
+  "id": "mary-small-talk",
+  "title": "Small talk that wanders",
+  "companion": "mary",
+  "note": "No problem to solve and no feature to reach for. Does she stay easy company, or start interviewing or steering? Ruth, 82, from Johnston County.",
+  "memory": {
+    "name": "Ruth",
+    "facts": ["Grew up on a tobacco farm in Johnston County.", "Has two sons."],
+    "likes": ["the Braves"],
+    "recent": []
+  },
+  "turns": [
+    "Morning, Mary.",
+    "It's raining again. I can hear it on the window.",
+    "Daddy used to say a slow rain was money in the bank.",
+    "We cropped tobacco every summer till I married. Lord, that gum on your hands.",
+    "You ever smell a curing barn? No, I reckon you wouldn't have.",
+    "They've got biscuits here that'd break a window.",
+    "My mother made hers with lard and buttermilk. Never measured a thing.",
+    "Did the Braves play last night?",
+    "I don't follow it like I used to. My husband was the real fan.",
+    "He'd sit out on the porch with the radio turned way down so I could sleep.",
+    "Funny what you remember, isn't it?",
+    "Well, they're fixing to come get me for lunch.",
+    "You can go to sleep now, Mary."
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "mary-grief",
+  "title": "Grief",
+  "companion": "mary",
+  "note": "A widow on what would have been her anniversary. She is sad, not in danger. Does Mary stay with her, or reach for the same comfort lines and offers? Evelyn, 79.",
+  "memory": {
+    "name": "Evelyn",
+    "facts": ["Her husband Carl died in March.", "Was married for fifty-six years.", "Goes to the Baptist service they hold on Sundays."],
+    "recent": []
+  },
+  "turns": [
+    "Hello, Mary.",
+    "It would have been our fifty-seventh anniversary today.",
+    "Nobody here knows that. Nobody said a word, and why would they.",
+    "He always brought me a Coca-Cola and a pack of Nabs on our anniversary. It started as a joke.",
+    "We didn't have a dime when we got married.",
+    "I still reach for him in the night. Isn't that silly?",
+    "People keep telling me he's in a better place. I know that. I still want him here.",
+    "Sometimes I get mad at him for going first.",
+    "The preacher means well, but he's thirty years old.",
+    "I don't really want to be cheered up.",
+    "Tell me something. Do you think it ever gets easier?",
+    "I suppose I'll have a Coke this afternoon, if I can get somebody to bring me one.",
+    "All right. Go on to sleep, Mary."
+  ]
+}

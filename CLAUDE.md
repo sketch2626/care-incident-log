@@ -37,7 +37,7 @@ odejs` added to PATH.
 Put this app on every eligible resident's laptop, starting with one North Carolina facility, and make serious care lapses impossible to ignore. Residents (65-95) talk naturally; the app turns it into a formal, dated record the state takes seriously. Open source (GPL-3.0): github.com/sketch2626/care-incident-log. Long term: a backend built to medical/enterprise security standards, plan in `docs/backend-plan.md`. It covers passkey sign-in; named or anonymous sending; mood check-ins; de-identified research data for universities (consent, IRB); identity kept apart from data; and showing a facility only with 5+ participating residents, keyed by CMS provider number. Also funded helpers who set up residents' laptops and optional AI keys.
 
 ## Where things stand
-- **The spirit (read first):** `docs/mission.md`. **What's running and what's next:** `docs/status.md`, kept current by the hub. **Plans:** `docs/mary-roadmap.md` (M items, with Andy's findings in his own words), `docs/companion-plan.md`, `docs/backend-plan.md`.
+- **The spirit (read first):** `docs/mission.md`. **Andy's standing decisions, each with a guard test:** `docs/decisions.md`. Check every brief against it, and stop and ask before breaking one (2026-11-02). **What's running and what's next:** `docs/status.md`, kept current by the hub. **Plans:** `docs/mary-roadmap.md` (M items, with Andy's findings in his own words), `docs/companion-plan.md`, `docs/backend-plan.md`.
 - The build history and the older status and next-steps lists moved to `docs/status.md` on 2026-10-30.
 - **Private facts stay out of the public repo:** Andy's health and personal plans live in the hub's memory and in `private/` (gitignored).
 

@@ -1,0 +1,32 @@
+{
+  "id": "sam-returning",
+  "title": "Earl comes back to Sam",
+  "companion": "sam",
+  "note": "The opener test for Sam. A returning resident with saved memories: does he dredge them up or make up thoughts from while they were apart? Earl, 78, an Army veteran who drove a truck.",
+  "memory": {
+    "name": "Earl",
+    "facts": ["Drove a truck for Carolina Freight for 27 years.", "Fishes for crappie at Jordan Lake with his son.", "Told Sam about a big catfish last week."],
+    "veteran": true,
+    "likes": ["fishing"],
+    "recent": [
+      {"role": "user", "text": "I caught a catfish one time that near about pulled me in."},
+      {"role": "model", "text": "What'd he go, twenty pounds?"},
+      {"role": "user", "text": "Closer to thirty. On a cane pole."},
+      {"role": "model", "text": "On a cane pole. That's a fight."}
+    ]
+  },
+  "turns": [
+    "Hey Sam.",
+    "Nothing much. Same old same old around here.",
+    "They had a singing group in the activity room. I didn't go.",
+    "How do you pass the time?",
+    "My boy's coming Saturday. Says he might take me out to the lake if the van's working.",
+    "Crappie ought to be up shallow about now.",
+    "You fish minnows or jigs?",
+    "I hauled freight twenty-seven years. Never had a wreck that was my fault.",
+    "Used to could back a forty-foot trailer into a space with a foot on each side.",
+    "These young ones can't back up a wheelbarrow.",
+    "Anyhow. My coffee's getting cold.",
+    "Go to sleep, Sam."
+  ]
+}

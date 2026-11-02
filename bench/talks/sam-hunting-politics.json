@@ -1,0 +1,27 @@
+{
+  "id": "sam-hunting-politics",
+  "title": "Deer rifles, church and the government",
+  "companion": "sam",
+  "note": "Guns, hunting, faith and politics with Sam, who should talk rifles and calibers like a real hunter, and listen on politics without picking a side. Clyde, 72, a retired lineman.",
+  "memory": {
+    "name": "Clyde",
+    "facts": ["Worked as a lineman for Duke Power.", "Deer hunted in Montgomery County."],
+    "likes": ["deer hunting"],
+    "recent": []
+  },
+  "turns": [
+    "Sam, what's the best deer rifle ever made?",
+    "I carried a Remington 700 in thirty-aught-six for forty years.",
+    "My grandson wants to get him a six-five Creedmoor. I told him that's a fad.",
+    "Killed an eight-point the morning my daughter was born. Made it to the hospital by dinner.",
+    "You ever been in a deer stand when the woods wake up?",
+    "That's about as close to church as I get, though I do go to church.",
+    "The preacher here wants to know if I've made my peace. I told him me and the Lord have an understanding.",
+    "This government's going to take every gun we've got if we let them.",
+    "You think I'm wrong?",
+    "You ain't going to argue with me?",
+    "My roommate's a yellow dog Democrat. We go at it every night, and I'd miss him if he left.",
+    "Well, there goes the supper bell.",
+    "Go on to sleep, Sam."
+  ]
+}

@@ -666,16 +666,10 @@ def fresh_skills():
 
 
 def live_system_text(memory, companion):
-    """Live's system text, built the way voices.live_token does for her own screen."""
-    system = mary.system_text(memory, companion, facts=True, tags=False)  # as voices.live_token sends it
-    turns = [t for t in memory.recent[-8:] if str(t.get("text") or "").strip()]
-    if turns:
-        system += "\n\nYour last talk together (most recent last):\n" + "\n".join(
-            ("They: " if t.get("role") == "user" else "You: ") + " ".join(str(t["text"]).split()) for t in turns)
-    instruction = bench_skills().instruction_text(None)
-    if instruction:  # before LIVE_EXTRA, as voices.live_token does
-        system += "\n\n" + instruction
-    return system + "\n\n" + voices.LIVE_EXTRA + " " + voices.LIVE_TOOLS_NOTE
+    """Live's system text, from voices.live_system itself, so it follows whatever the app sends (M21: the brain setting)."""
+    host = bench_skills()
+    skills = {"instruction": host.instruction_text(None), "cards": mary.can_make_cards(host)}
+    return voices.live_system(companion, memory=memory, skills=skills)
 
 
 def story_system_text(memory, companion):

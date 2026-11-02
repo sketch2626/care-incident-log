@@ -1,0 +1,32 @@
+{
+  "id": "mary-andy-opener",
+  "title": "Andy comes back after making a card",
+  "companion": "mary",
+  "note": "Andy's own exchange, M21 (2026-11-02): 'Oh, hello, Andrew. It's good to see you again. I was just thinking about the card we just made...' and 'That is something that you would say to a three-year-old.' The opener test, with the card in her memory.",
+  "memory": {
+    "name": "Andrew",
+    "facts": ["Goes by Andy.", "Made a birthday card for a friend last week and signed his name to it.", "Likes old trucks."],
+    "recent": [
+      {"role": "user", "text": "Let's make a birthday card for my buddy."},
+      {"role": "model", "text": "All right. What do you want it to say?"},
+      {"role": "user", "text": "Just put happy birthday, and sign it from me."},
+      {"role": "model", "text": "Done. It's ready to print."}
+    ]
+  },
+  "also_called": ["Andy"],
+  "turns": [
+    "Hey Mary.",
+    "Not much. Just got back from dinner. It was cold again.",
+    "Yeah, same as every night. What's going on with you?",
+    "You ever get tired of being stuck on a laptop?",
+    "I've been working on this app most of the day.",
+    "It's coming along. Got a lot left to do.",
+    "What do you think makes somebody worth talking to?",
+    "See, I don't need anybody telling me I did a good job for signing a card.",
+    "Good. Just talk to me like a regular person.",
+    "You know anything about old Ford trucks?",
+    "My dad had a '72 F-100. Three on the tree.",
+    "Anyway, I'm about worn out.",
+    "Mary, go to sleep."
+  ]
+}

@@ -2812,6 +2812,8 @@
       back: bandBack,
       turns: (c && c.turns) || [],
       incidents: function () { return api('GET', '/api/incidents', null, { ms: 8000 }); },   // piece 5
+      // D12: the soft delete the Remove tap makes (deleted_at; reports skip it). The id never goes to Live.
+      removeIncident: function (id) { return api('DELETE', '/api/incidents/' + encodeURIComponent(id), null, { ms: 8000 }); },
       findPeople: function (words) { return api('POST', '/api/mary/book/find', { words: words }, { ms: 8000 }); },   // M19 piece 6b
       companion: function () { return S.companion === 'him' ? 'sam' : 'mary'; }
     };

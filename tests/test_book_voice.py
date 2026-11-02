@@ -412,7 +412,8 @@ class Saving(Book):
     def test_no_tool_can_press_save(self):
         rc, out, err = run_node(HARNESS + read("mary/screens.js") + "\nconsole.log(JSON.stringify(Object.keys(MaryScreens.ACTIONS)));")
         self.assertEqual(rc, 0, err)
-        self.assertEqual(sorted(json.loads(out)), sorted(["look", "explain", "fill", "put_back", "open", "go_back", "their_words", "read_incidents"]))
+        # D12, M22: remove clears a box or a note on their plain word. It can never press Save (the save gate stays).
+        self.assertEqual(sorted(json.loads(out)), sorted(["look", "explain", "fill", "put_back", "open", "go_back", "their_words", "read_incidents", "remove"]))
         text = read("mary/screens.js")
         for word in ("bookSave", "bookAskedSave", "requestSubmit", "/api/book"):
             self.assertNotIn(word, text)

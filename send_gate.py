@@ -160,7 +160,30 @@ _ORDER_ASK_RE = re.compile(r"\b(?:how|what|does)\b")
 _ORDER_FILLERS = r"(?:(?:mary|sam|hey|please|okay|ok|yes|yeah|alright|now|then|and|just)[\s,]+)*"
 
 
+_ORDER_REMOVE_RE = re.compile(r"\b(?:remove|delete|erase|clear|wipe|get rid of|cross out|disconnect)\b|\btake\b.*\b(?:off|out)\b")
+_SEV_WORDS = ("minor", "serious", "dangerous")
+# How bad was it: an ordinary answer passes ("It was serious when he dropped me"), so only a negative or a question refuses.
+_SEV_REFUSE_RE = re.compile(rf"\b(?:{_alternatives(STOP_WORDS)}|do not|never|nope|nah|dont|cant|wont)\b|\w+n't\b")
+
+
 def plain_order(text):  # D12
+    """A plain order on the resident's own words, or None: on, off or remove (strict, below), or else how bad it was."""
+    got = _plain_act_order(text)
+    if got is not None:
+        return got
+    lower = _lower(text)
+    words = _words(lower)
+    if not words or len(words) > ORDER_WORDS_MAX or "?" in lower or _SEV_REFUSE_RE.search(lower):
+        return None
+    named = [w for w in _SEV_WORDS if re.search(rf"\b{w}\b", lower)]
+    if len(named) != 1:
+        return None
+    if sum(1 for flag in (_ORDER_OFF_RE, _ORDER_ON_RE, _ORDER_REMOVE_RE) if flag.search(lower)):
+        return None  # a strict order word in the line that the strict rules turned down: no order at all
+    return {"acts": ["sev"], "sev": named[0], "words": " ".join(words)}
+
+
+def _plain_act_order(text):
     """The resident's own plain order to turn a switch on or off, or None. Built like is_plain_save: any negative or delay
     anywhere refuses the whole line, as do how/what/does and a question that is not a plain ask of her ("Can you turn it
     off?"; Live adds the mark by itself). Both directions in one line, or neither, is no order. Returns the acts and the
@@ -177,6 +200,8 @@ def plain_order(text):  # D12
         acts.append("off")
     if _ORDER_ON_RE.search(lower):
         acts.append("on")
+    if _ORDER_REMOVE_RE.search(lower):
+        acts.append("remove")
     return {"acts": acts, "words": " ".join(words)} if len(acts) == 1 else None
 
 

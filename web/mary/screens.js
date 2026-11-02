@@ -22,8 +22,11 @@
   var SECRET_NO = "I won't read or fill that one. It's a password, so it stays out of my hands. A helper can type it in.";
   var SWITCH_NO = "Tell me plainly to turn it on or off, and I will.";
   var WORDS_NO = "Your words stay what you said. I can copy in what I heard you say, but I don't write them for you.";
-  var SEVERITY_NO = "That one's your call. I can tell you what each one means, and you pick.";
-  var REMOVE_NO = "Deleting or removing anything is yours to do by hand. I won't touch it.";
+  var SEVERITY_NO = "Tell me which it was, Minor, Serious or Dangerous, and I'll mark it.";   // D11: only ever what they say
+  var REMOVE_NO = "Tell me plainly what to remove, and I'll do it and say what went.";   // D12
+  var SWITCH_REMOVE_NO = "A switch isn't removed. Tell me plainly to turn it off.";
+  var WHICH_NOTE_NO = "Tell me which note: the day or the kind of problem.";
+  var DID_NOT_WORK_NO = "That didn't work just now.";
   var UNLISTED_NO = "That's not something I can do on this screen.";
   var NOT_THERE_NO = "There's nothing for me to fill on this screen.";
   var HIDDEN_NO = "That box isn't showing right now.";
@@ -109,9 +112,9 @@
           choices: [{ value: '15', label: '15 min' }, { value: '30', label: '30 min' }, { value: '60', label: '1 hour' },
             { value: '120', label: '2+ hours' }, { value: 'never', label: 'No one ever came' }],
           explain: 'How long they waited for someone to come.' },
-        { id: 'sev', radio: 'sev', label: 'How bad was it?', kind: 'choice', fill: false, no: SEVERITY_NO,
+        { id: 'sev', radio: 'sev', label: 'How bad was it?', kind: 'choice', fill: true,
           choices: [{ value: 'minor', label: 'Minor' }, { value: 'serious', label: 'Serious' }, { value: 'dangerous', label: 'Dangerous' }],
-          explain: 'Their own judgment. Minor means it bothered them but they are okay. Serious means it hurt them or really upset them. Dangerous means they could have been badly hurt.' },
+          explain: 'Their own judgment. You set it only to the word they say, never your own pick. Minor means it bothered them but they are okay. Serious means it hurt them or really upset them. Dangerous means they could have been badly hurt.' },
         { id: 'staff_involved', label: 'Which staff member was involved?', kind: 'text', fill: true,
           explain: 'A name, or what the person looked like and which shift it was.' },
         { id: 'reported_to', label: 'Who did you tell?', kind: 'text', fill: true,
@@ -179,7 +182,10 @@
         { id: 'mailPass', label: 'App password', kind: 'secret', fill: false,
           explain: 'A special password the email company makes for this app. A helper types or pastes it in.' },
         { id: 'mailConnect', label: 'Connect email', kind: 'switch', fill: true, say: ['email', 'e-mail', 'my mail'],
-          explain: 'Connects their email once the boxes above are filled. Only turning it on works, on their plain word.' }
+          explain: 'Connects their email once the boxes above are filled. Only turning it on works, on their plain word.' },
+        { id: 'mailDisconnect', label: 'Disconnect', kind: 'remove', fill: false, say: ['email', 'e-mail', 'my mail', 'disconnect'],
+          hiddenNo: "That isn't connected.",
+          explain: 'Disconnects their email, so no email goes out until it is connected again. Only on their plain word.' }
       ] },
     { id: 'book-list', frame: 'book-list', hash: '#book-list', name: 'Address book', people: true,
       opened: 'Ask "Who are you after?" and nothing more.',
@@ -209,7 +215,7 @@
       fields: [] }
   ];
 
-  var TOOL_NAMES = ['look_at_screen', 'explain_field', 'fill_field', 'put_back', 'open_screen', 'go_back', 'their_words'];
+  var TOOL_NAMES = ['look_at_screen', 'explain_field', 'fill_field', 'put_back', 'open_screen', 'go_back', 'their_words', 'remove_thing'];
   var TYPE_MS = 110, TYPE_MIN_MS = 25, TYPE_TOTAL_MS = 1800;   // 2, 21, 214; a long address never drags
   var ROOM_PX = 24;                                            // clear space around a lit field
   var ARRIVE_MS = 4000, ARRIVE_POLL_MS = 60;                   // DEEP_READY_MS in app.js
@@ -307,6 +313,7 @@
       return ch ? ch.label : on.value;
     }
     if (f.kind === 'switch') { return el.type === 'checkbox' ? (el.checked ? 'on' : 'off') : undefined; }
+    if (f.kind === 'remove') { return undefined; }
     return el.value;
   }
   function cardField(doc, f, s) {
@@ -510,13 +517,15 @@
     return out;
   }
   // D12: a person's card has no Change button, so a fill asked for on it goes to that person's form (nothing saves there either).
-  function fillField(args, env) {
+  function fillField(args, env) { return reach(args, env, fillIn); }
+  // Gets to the field first (a card to its form, a named person, My info), then does act(screen, args, env) there.
+  function reach(args, env, act) {
     var s = here(env), doc = env.doc(), cf;
     var said = String(args.who == null ? '' : args.who).trim();
     if (said) {   // told whose it is: open their form first. Two of them narrow the list and nothing is filled.
       return Promise.resolve(openScreen({ name: 'book-form', who: said }, env)).then(function (got) {
         if (!got || got.ok !== true || here(env).id !== 'book-form') { return got; }
-        return fillIn(byId('book-form'), { field: String(args.field == null ? '' : args.field).replace(/^bc-/, 'bf-'), value: args.value }, env);
+        return act(byId('book-form'), { field: String(args.field == null ? '' : args.field).replace(/^bc-/, 'bf-'), value: args.value }, env);
       });
     }
     cf = s.id === 'book-card' && doc ? findField(s, args.field, doc) : null;
@@ -524,17 +533,17 @@
       var m = /^#book-card\/(.+)$/.exec(String(doc.defaultView && doc.defaultView.location ? doc.defaultView.location.hash : ''));
       var form = byId('book-form'), onForm = { field: 'bf-' + cf.key, value: args.value };
       if (!m || !env.openDeep('#book-form/' + m[1])) { return no(SLOW_NO); }
-      return arrive(env, form).then(function (came) { return came ? fillIn(form, onForm, env) : no(SLOW_NO); });
+      return arrive(env, form).then(function (came) { return came ? act(form, onForm, env) : no(SLOW_NO); });
     }
     // D12: not on this screen, but on My info or Connect email: open My info and fill it there (a secret still gets its no)
     var info = byId('info'), there = !findField(s, args.field, doc) && doc ? findField(info, args.field, doc) : null;
     if (there && !isSecret(there, null) && s.id !== 'info') {
       return Promise.resolve(openScreen({ name: 'info' }, env)).then(function (got) {
         if (!got || got.ok !== true || here(env).id !== 'info') { return got; }
-        return fillIn(info, args, env);
+        return act(info, args, env);
       });
     }
-    return fillIn(s, args, env);
+    return act(s, args, env);
   }
   // D12: true only when the server ruled this line a plain order for this act, and the words name this switch or point at
   // the lit one ("turn it off"). One line acts once per switch. Nothing she says can pass this.
@@ -545,7 +554,8 @@
     if (o.used[f.id]) { return false; }
     var plain = function (t) { return ' ' + String(t).toLowerCase().replace(/[^\w']+/g, ' ').trim() + ' '; };
     var words = plain(o.words || '');
-    var named = (f.say || []).concat([f.label]).some(function (n) { return words.indexOf(plain(n)) >= 0; });
+    var names = (f.say || []).concat([f.label, String(f.label).replace(/^your /i, '')], f.key ? [f.key] : []);
+    var named = names.some(function (n) { return words.indexOf(plain(n)) >= 0; });
     var points = /\s(?:it|that|this|one)\s/.test(words) && Lit.f === f;
     if (!named && !points) { return false; }
     o.used[f.id] = true;
@@ -574,12 +584,21 @@
     var doc = env.doc(), f = findField(s, args.field, doc);
     if (!f) { return no(isDetailWord(s, args.field) ? WHOSE_NO : unlistedNo(args.field)); }
     if (!doc) { return no(NOT_THERE_NO); }
+    if (f.kind === 'remove') { return removeIn(s, args, env); }   // D12: a fill of a remove button is a remove, on an order
     var el = fieldEl(doc, f), why = refusal(f, el);
     if (why) { return no(why); }
     if (!el) { return no(UNLISTED_NO); }
     if (!shown(el)) { return no(f.hiddenNo || HIDDEN_NO); }
     if (f.kind === 'switch') { return fillSwitch(f, el, env); }   // D12: the direction is the order's, never args.value
-    var c = cleanValue(f, args.value);
+    var asked = args.value;
+    if (f.id === 'sev') {   // D11: only the word the resident said, from the server's ruling. A model value is never used.
+      var o = env.order, said = o && Array.isArray(o.acts) && o.acts.indexOf('sev') >= 0 ? String(o.sev || '').toLowerCase() : '';
+      if (!said || (o.used && o.used.sev)) { return no(SEVERITY_NO); }
+      o.used = o.used || {};
+      o.used.sev = true;
+      asked = said;
+    }
+    var c = cleanValue(f, asked);
     if (c.no) { return no(c.no); }
     finishTyping();
     var win = doc.defaultView, done = function () {
@@ -613,6 +632,46 @@
       return done();
     }
     return typeIn(win, el, c.v).then(done);
+  }
+  // D12: clears a box on the resident's plain word, or presses Disconnect. Never a switch or a secret. Put back undoes a box.
+  function removeIn(s, args, env) {
+    var doc = env.doc(), f = findField(s, args.field, doc);
+    if (!f) { return no(isDetailWord(s, args.field) ? WHOSE_NO : unlistedNo(args.field)); }
+    if (!doc) { return no(NOT_THERE_NO); }
+    var el = fieldEl(doc, f);
+    if (isSecret(f, el)) { return no(SECRET_NO); }
+    if (f.kind === 'switch') { return no(SWITCH_REMOVE_NO); }
+    if (!ordered(env, 'remove', f)) { return no(REMOVE_NO); }
+    if (!el) { return no(UNLISTED_NO); }
+    if (!shown(el)) { return no(f.hiddenNo || HIDDEN_NO); }
+    var win = doc.defaultView;
+    finishTyping();
+    light(doc, f, el);
+    if (f.kind === 'remove') {   // the page's own work, without its confirm: the resident's order stands for it
+      var acts = win.maryActs;
+      if (!acts || typeof acts.disconnectMail !== 'function') { return no(SLOW_NO); }
+      return Promise.resolve(acts.disconnectMail()).then(function (st) {
+        if (!st || st.connected) { return no(DID_NOT_WORK_NO); }
+        return { ok: true, label: f.label, removed: true, saved: false, note: 'Say their email is disconnected.' };
+      }, function () { return no(DID_NOT_WORK_NO); });
+    }
+    if (f.radio) {
+      var was = radios(doc, f).filter(function (r) { return r.checked; })[0];
+      remember(f, was ? was.value : '', !!was, env);
+      setChoice(doc, f, '');
+    } else {
+      remember(f, el.value, el.value !== '', env);
+      if (f.kind === 'detail') {
+        delete Mine[f.id];
+        var book = bookOf(doc);
+        if (book && book.filled) { book.filled(f.key); }
+      }
+      setVal(win, el, '');
+      fire(win, el, 'input');
+      fire(win, el, 'change');
+    }
+    return { ok: true, label: f.label, removed: true, saved: false,
+      next: 'Say you cleared ' + f.label + '. Nothing is saved until they say save it.' };
   }
   function putBack(args, env) {
     var s = here(env), doc = env.doc(), f = findField(s, args.field, doc);
@@ -719,6 +778,9 @@
     var hit = findOpen(args.name), s = hit && hit.s;
     if (!s) { return no(NOT_OPEN_NO); }
     if (s.id === 'saved') { return no(SAVED_NO); }
+    if (s.id === 'write' && !hit.group && (String(args.when == null ? '' : args.when).trim() || String(args.category == null ? '' : args.category).trim())) {
+      return editNote(args, env);
+    }
     var said = String(args.who == null ? '' : args.who).trim();
     var who = said.replace(/^(?:my|the)\s+/i, '').replace(/['\u2019]s$/i, '');
     if (who && (s.people || s.person || s.id === 'book-form')) {
@@ -799,22 +861,84 @@
     });
     return out.slice(0, 12);
   }
+  // The day or month and the kind of problem, checked once for reading, removing and opening a note.
+  function noteFilter(args) {
+    var when = String(args.when == null ? '' : args.when).trim().toLowerCase();
+    var cat = String(args.category == null ? '' : args.category).trim();
+    var group = cat ? findGroup(cat) : null;
+    if (cat && !group) { return { no: READ_GROUP_NO }; }
+    if (when && when !== 'latest' && !/^\d{4}-\d{2}(?:-\d{2})?$/.test(when)) { return { no: READ_WHEN_NO }; }
+    return { when: when, group: group };
+  }
+  function noteRows(rows, q) {
+    var hit = (Array.isArray(rows) ? rows : []).filter(function (r) {
+      if (r.deleted_at || (q.group && r.category !== q.group.key)) { return false; }
+      return !q.when || q.when === 'latest' || String(r.occurred_date || '').indexOf(q.when) === 0;
+    });
+    return q.when === 'latest' ? hit.slice(0, 1) : hit;
+  }
+  function manyNotes(n) { return 'There are ' + n + ' for that. Tell me the day or the kind of problem.'; }
+  // D12: true only on a server-ruled remove order that talks about a note. It buys one removal.
+  function noteOrdered(env) {
+    var o = env && env.order;
+    if (!o || !Array.isArray(o.acts) || o.acts.indexOf('remove') < 0) { return false; }
+    o.used = o.used || {};
+    if (o.used.note || !/\b(?:note|notes|incident|report|entry|record|complaint|one|that|it)\b/.test(String(o.words || ''))) { return false; }
+    o.used.note = true;
+    return true;
+  }
+  function removeNote(args, env) {
+    var q = noteFilter(args);
+    if (q.no) { return no(q.no); }
+    if (!q.when && !q.group) { return no(WHICH_NOTE_NO); }
+    if (!noteOrdered(env)) { return no(REMOVE_NO); }
+    return Promise.resolve().then(env.incidents).then(function (rows) {
+      var hit = noteRows(rows, q);
+      if (!hit.length) { return no(READ_NONE); }
+      if (hit.length > 1) { return no(manyNotes(hit.length)); }
+      var row = readRow(hit[0]);
+      return Promise.resolve(env.removeIncident(hit[0].id)).then(function () {
+        var d = env.doc(), acts = d && d.defaultView ? d.defaultView.maryActs : null;
+        return acts && acts.notesChanged ? Promise.resolve(acts.notesChanged()).catch(function () {}) : null;
+      }).then(function () {
+        return { ok: true, removed: { date: row.date, category: row.category, words: row.words },
+          note: 'Say plainly which note went, by its day and kind. It is gone from their list.' };
+      });
+    }).catch(function () { return no(DID_NOT_WORK_NO); });
+  }
+  // The list's Edit button, on their word: the saved note opens on the add screen. It only opens, so no order is needed.
+  function editNote(args, env) {
+    var q = noteFilter(args);
+    if (q.no) { return no(q.no); }
+    return Promise.resolve().then(env.incidents).then(function (rows) {
+      var hit = noteRows(rows, q);
+      if (!hit.length) { return no(READ_NONE); }
+      if (hit.length > 1) { return no(manyNotes(hit.length)); }
+      var write = byId('write'), list = byId('list');
+      var up = env.doc() ? Promise.resolve(true) : (env.openDeep(list.hash) ? arrive(env, list) : Promise.resolve(false));
+      return up.then(function (came) {
+        var d = came ? env.doc() : null, acts = d && d.defaultView ? d.defaultView.maryActs : null;
+        if (!acts || !acts.editNote || !acts.editNote(hit[0].id)) { return no(SLOW_NO); }
+        return arrive(env, write).then(function (there) {
+          return there ? { ok: true, screen: write.name,
+            note: 'Their saved note is open. Fill what they tell you. Nothing changes until they say save it.' } : no(SLOW_NO);
+        });
+      });
+    }).catch(function () { return no(READ_FAIL_NO); });
+  }
+  // One tool for taking something away: a box (field), or a saved note (when or category).
+  function removeThing(args, env) {
+    return String(args.field == null ? '' : args.field).trim() ? reach(args, env, removeIn) : removeNote(args, env);
+  }
   // The rows come newest first from the server. What she gets goes to Live and nowhere else.
   function readIncidents(args, env) {
     if (!askedToRead(env)) { return no(READ_UNASKED); }
     var t = env.turns, heard = t[t.length - 1];
-    var when = String(args.when == null ? '' : args.when).trim().toLowerCase();
-    var cat = String(args.category == null ? '' : args.category).trim();
-    var group = cat ? findGroup(cat) : null;
-    if (cat && !group) { return no(READ_GROUP_NO); }
-    if (when && when !== 'latest' && !/^\d{4}-\d{2}(?:-\d{2})?$/.test(when)) { return no(READ_WHEN_NO); }
+    var q = noteFilter(args);
+    if (q.no) { return no(q.no); }
     Months.after = null;
     return Promise.resolve().then(env.incidents).then(function (rows) {
-      var hit = (Array.isArray(rows) ? rows : []).filter(function (r) {
-        if (r.deleted_at || (group && r.category !== group.key)) { return false; }
-        return !when || when === 'latest' || String(r.occurred_date || '').indexOf(when) === 0;
-      });
-      if (when === 'latest') { hit = hit.slice(0, 1); }
+      var hit = noteRows(rows, q);
       if (!hit.length) { return { ok: true, count: 0, incidents: [], say: READ_NONE }; }
       var out = { ok: true, count: hit.length, incidents: hit.slice(0, READ_MOST).map(readRow),
         note: "Read what's there and add nothing to it. It stays out of your memories." };
@@ -835,13 +959,14 @@
     open_screen: openScreen,
     go_back: goBack,
     their_words: theirWords,
-    read_incidents: readIncidents
+    read_incidents: readIncidents,
+    remove_thing: removeThing
   };
 
   // M18: Live gets ONE declared tool, use_screen, with an action. It goes to the same functions, in order.
   var USE_NAME = 'use_screen';
   var ACTIONS = { look: 'look_at_screen', explain: 'explain_field', fill: 'fill_field', put_back: 'put_back',
-                  open: 'open_screen', go_back: 'go_back', their_words: 'their_words', read_incidents: 'read_incidents' };
+                  open: 'open_screen', go_back: 'go_back', their_words: 'their_words', read_incidents: 'read_incidents', remove: 'remove_thing' };
   function useScreen(args, env) {
     var a = args || {}, tool = ACTIONS.hasOwnProperty(String(a.action)) ? ACTIONS[a.action] : null;
     if (!tool) { return no(UNLISTED_NO); }

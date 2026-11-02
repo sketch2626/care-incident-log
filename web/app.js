@@ -1194,8 +1194,8 @@ $('#mailTest').addEventListener('click', async () => {
   }
 });
 
-$('#mailDisconnect').addEventListener('click', async () => {
-  if (!(await askConfirm("Disconnect this email? Mary won't be able to send email until it's connected again."))) return;
+// The work of disconnecting. The tap asks first; Mary's voice path (D12) comes here on the resident's plain word, no confirm.
+async function disconnectMail() {
   const btn = $('#mailDisconnect'), say = $('#mailTestMsg');
   btn.disabled = true;
   say.textContent = '';
@@ -1203,9 +1203,16 @@ $('#mailDisconnect').addEventListener('click', async () => {
     const st = await post('/api/mail/disconnect');
     drawMail(st);
     if (!st.connected && st.available) $('#mailAddress').focus(); // the button they tapped has just gone
+    return st;
   } catch (err) {
     say.textContent = err.message;
+    return null;
   } finally { btn.disabled = false; }
+}
+
+$('#mailDisconnect').addEventListener('click', async () => {
+  if (!(await askConfirm("Disconnect this email? Mary won't be able to send email until it's connected again."))) return;
+  await disconnectMail();
 });
 
 /* ---------- What Mary remembers (M9c) ---------- */
@@ -1373,3 +1380,16 @@ copyInit(); // M19 piece 7
   $('#backName').textContent = state.settings.companion === 'him' ? 'Sam' : 'Mary'; // M17
   try { route(); } finally { document.documentElement.classList.remove('routing'); } // M17: never left blank
 })();
+
+// D12: what Mary's screen tools may do here, only after the server ruled the line a plain order (screens.js checks that).
+window.maryActs = {
+  disconnectMail,
+  // a note was removed from outside the list: fetch the list again and redraw it
+  notesChanged: async () => { try { await load(); renderList(); } catch { /* the list stays as it was */ } },
+  // the Edit button's own click: open that saved note on the add screen. False when the page doesn't hold it.
+  editNote: id => {
+    if (!state.incidents.some(i => i.id === Number(id))) return false;
+    go(`edit/${id}`);
+    return true;
+  }
+};

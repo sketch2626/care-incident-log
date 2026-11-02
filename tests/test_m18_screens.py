@@ -101,11 +101,15 @@ class Listed(unittest.TestCase):
         ids = [f["id"] for f in self.fields]
         self.assertIn("i-gemini_model", ids)  # D12: a plain text fill now
         for f in self.fields:
+            if f["id"] == "mailDisconnect":  # D12: the one remove button, pressed only on the resident's plain order
+                self.assertEqual((f["kind"], f["fill"]), ("remove", False))
+                continue
             self.assertNotRegex(f["id"], r"(?i)delete|remove|disconnect|clear")
 
     def test_only_what_the_brief_allows_can_be_filled(self):
         self.assertEqual({f["id"] for f in self.fields if f["fill"]}, {
             "when", "day", "time", "wait", "staff_involved", "reported_to", "outcome", "witnesses", "repFrom", "repTo",
+            "sev",  # D11: set only to the resident's own word, from the server's ruling (tests/test_m22_orders.py)
             "i-resident_name", "i-room", "i-facility", "i-facility_address", "i-state", "mailAddress", "mail_provider",
             "talk_mode", "listen_wait", "mary_brain", "i-gemini_model",  # D12: plain choices and a text box on My info
             "i-gemini_enabled", "i-andyflow_enabled", "i-wake_word", "i-talk_on_open", "mailConnect",  # D12: switches, on the resident's plain order only
@@ -233,11 +237,12 @@ class Fill(unittest.TestCase):
         rc, _, err = node(r"""
           const add = pageOn('add'), info = pageOn('info');
           const cases = [
-            [add, 'sev', 'serious', "That one's your call"], [add, 'words', 'she said', 'Your words stay'],
+            [add, 'sev', 'serious', 'Tell me which it was'],  // D11: only the resident's own word sets it, so a model value alone is refused
+            [add, 'words', 'she said', 'Your words stay'],
             [info, 'i-gemini_key', 'x', "I won't read or fill that one."], [info, 'mailPass', 'x', "I won't read or fill that one."],
             [info, 'App password', 'x', "I won't read or fill that one."], [info, 'i-gemini_enabled', 'on', 'Tell me plainly'],
             [info, 'mailConnect', 'on', 'Tell me plainly'], [info, 'i-wake_word', 'off', 'Tell me plainly'],  // D12: a switch needs the resident's plain order
-            [info, 'memory remove', 'x', 'Deleting or removing'], [info, 'mailDisconnect', 'x', 'Deleting or removing']];
+            [info, 'memory remove', 'x', 'Tell me plainly what to remove'], [info, 'mailDisconnect', 'x', 'Tell me plainly what to remove']];  // D12: removing needs the resident's plain order
           // D12: i-gemini_model is a plain text fill now, so it left this list
           for (const [page, field, value, start] of cases) {
             const r = await run('fill_field', { field, value }, envOn(page));

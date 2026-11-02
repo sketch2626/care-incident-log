@@ -1003,6 +1003,8 @@ def gate_heard(text, kind):  # M15c
         out = skill_host().resident_said(text, garbled=mary.not_english(text))
     except Exception:  # noqa: BLE001
         return {}
+    if out and out.get("say"):
+        gate_her_words(str(out["say"]))  # M21a: she rewords it now, so the gate still learns the line went out
     return {"send": {key: out.get(key) for key in ("say", "effects", "action")}} if out else {}
 
 

@@ -69,8 +69,8 @@
       for (var i = 0; i < effects.length; i++) {
         if (window.MarySkills && window.MarySkills.apply) { window.MarySkills.apply(effects[i]); }
       }
-      if (res && res.say && app() && app().say) {
-        try { app().say(res.say); } catch (e) { log(e); }
+      if (res && res.say && app() && app().tell) {
+        try { app().tell('The app just did this: ' + res.say, res.say); } catch (e) { log(e); }
       }
       return res;
     }).catch(function (e) { log(e); return null; });

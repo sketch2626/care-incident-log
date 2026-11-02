@@ -141,7 +141,7 @@
         { id: 'i-andyflow_enabled', label: 'Connect Andy Flow', kind: 'switch', fill: false,
           explain: 'Lets notes from Andy Flow that start with Incident show up here. Nothing leaves the computer.' },
         { id: 'i-talk_on_open', label: 'Start talking when you open', kind: 'switch', fill: false,
-          explain: 'When it is on, you say hello and listen as soon as your screen opens.' },
+          explain: 'When it is on, you listen as soon as your screen opens.' },
         { id: 'i-wake_word', label: 'Listen for your name', kind: 'switch', fill: false,
           explain: 'When it is on, saying hey and your name starts a talk. Nothing leaves the laptop until you hear it.' },
         { id: 'i-gemini_enabled', label: 'Use the smart helper', kind: 'switch', fill: false,

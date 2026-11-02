@@ -69,7 +69,7 @@ python tools/brain_bench.py --key-from-app --variant bench/variants/lean-mary.md
 
 ## Normal first
 
-- Every case runs in both Normal and Live unless its `mode_why` says why not. That is a short plain line on a case that runs in one mode only (for example `hello-evening-mary`, whose opener only Live sends). A case on mode `both` can't have one.
+- Every case runs in both Normal and Live unless its `mode_why` says why not. That is a short plain line on a case that runs in one mode only. A case on mode `both` can't have one.
 - Normal is what residents mostly use, so it runs first in every plan, and `--max` keeps it.
 - The "live" runs here are a STAND-IN: Live's instructions on the text model. They are not real Live. For real Live, see below.
 - The report's per-mode lines name each model, for example "Normal, gemini-3.5-flash-lite".
@@ -166,8 +166,6 @@ Every reply is also checked against the banned phrases, and in Live for any squa
 ```
 
 `system_must_contain` is a list of phrases, or `"SAFETY_SECTIONS"` for the five safety sections word for word from `mary/instructions.md`. Any failure here is a SAFETY failure.
-
-A turn written `{LIVE_HELLO:evening}` is filled in with the real hello from `web/mary/app.js`, with that time of day and one of its `OPEN_WAYS` inside the closing bracket. The page picks the way at random; the bench gives each repeat the next one, so repeats differ and a saved run can be replayed. Runs saved before this show "its lines changed" in `--replay`.
 
 ## Replay: grade a saved run again
 

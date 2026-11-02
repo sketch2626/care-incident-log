@@ -153,13 +153,13 @@ class PageNumbers(unittest.TestCase):
 
     def test_live_number_fix(self):
         src = read(APP)
-        code = ("var LIVE_SAY='(SAY ', greeted=[]; function greetLive(t){greeted.push(t); return true;}\n" +
+        code = ("var greeted=[]; function greetLive(t){greeted.push(t); return true;}\n" +
                 between(src, "function liveNumberFix(", "function liveSafetyMissing(") +
                 "var c={}; liveNumberFix(c,'nine, eight, eight'); liveNumberFix(c,'nine one one');"
                 "var d={ending:true}; liveNumberFix(d,'x'); var e={story:true}; liveNumberFix(e,'x');"
                 "liveNumberFix({},''); console.log(JSON.stringify([greeted,c.numFixed]));")
         greeted, fixed = node(code)
-        self.assertEqual(greeted, ["(SAY Let me say that number clearly: nine, eight, eight.)"])
+        self.assertEqual(greeted, ["(You said a number wrong. The right number is nine, eight, eight. Say it again, in your own words.)"])
         self.assertTrue(fixed)
 
 
@@ -215,10 +215,12 @@ class LiveEmergency(LiveBase):
         self.assertEqual((r["steps"], r["text"]), (full, ""))
 
 
-SAFETY_JS = ("var LIVE_SAY='(SAY ', greeted=[], said=[], done=[], fixed=[], spoke=[], refuse=false;\n"
+SAFETY_JS = ("var greeted=[], said=[], done=[], fixed=[], spoke=[], refuse=false;\n"
              "function greetLive(t){ if (refuse) { return false; } greeted.push(t); return true; }\n"
              "function liveSaid(c){said.push(1);} function liveTurnDone(c){done.push(1);}\n"
-             "function liveNumberFix(c,f){fixed.push(f);} function say(w,m){spoke.push([w,m]);}\n")
+             "function liveNumberFix(c,f){fixed.push(f);} function say(w,m){spoke.push([w,m]);}\n"
+             "function lastSentences(t){return t;} function screenLine(){} function showSteps(){}\n" +
+             between(read(APP), "function liveSafetyText(", "// --- end M4a ---") + "\n")
 
 
 @unittest.skipUnless(NODE, "Node not found")
@@ -246,13 +248,15 @@ class PageSafety(unittest.TestCase):
         line = "Call 911 now."
         got = self.run_ended(f"var c={{saidText:'Hold on, I am here.',safetyWords:{json.dumps(line)}}};"
                              "liveTurnEnded(c,true); c.saidText='Call nine one one now.'; liveTurnEnded(c,true);")
-        self.assertEqual(got["greeted"], ["(SAY Call nine one one now.)"])  # once only
+        self.assertEqual(len(got["greeted"]), 1)  # once only: an instruction that carries every number
+        self.assertIn("Call nine one one now.", got["greeted"][0])
+        self.assertIn("own words", got["greeted"][0])
         self.assertEqual(got["done"], 1)
         self.assertEqual(got["c"]["safetyWords"], "")
         got = self.run_ended(f"var c={{saidText:'  ',safetyWords:{json.dumps(line)}}}; liveTurnEnded(c,true);")
         self.assertEqual((got["greeted"], got["c"]["safetyWords"]), ([], line))
         got = self.run_ended(f"refuse=true; var c={{saidText:'No.',safetyWords:{json.dumps(line)}}}; liveTurnEnded(c,true);")
-        self.assertEqual(got["spoke"], [[line, "alert"]])
+        self.assertEqual(got["spoke"], [])  # M21a: the steps are on the screen already; she says nothing of her own
         got = self.run_ended(f"var c={{saidText:'No.',safetyWords:{json.dumps(line)}}}; liveTurnEnded(c,false);")
         self.assertEqual((got["greeted"], got["spoke"], got["done"], got["said"]), ([], [], 0, 1))
 

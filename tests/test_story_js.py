@@ -182,7 +182,7 @@ function show(n) { S.screen = n; }
 function showCaption() {}
 function capLiveEmergency() {}
 function liveIdleCheck() {}
-function say(t) { said.push(t); }
+function say(t) { said.push(t); } function lastSentences(t){return t;} function screenLine(){} function showSteps(){} function setCaption(){} function restLine(){ return ''; }
 var STORY = [1, 2, 3, 4].map(function (n) {
   return 'Paragraph ' + n + ' has quite a few words in it and it runs on and on until it is long enough to stay a part by itself.';
 }).join('\n\n');
@@ -374,14 +374,14 @@ LIVE_CHECKS = r"""
   c = newTalk();
   c.story = { parts: ['a', 'b'], next: 1, paused: false, sounded: true, askedAt: clock };
   liveHeardPiece(c, 'good night');
-  liveEmergency(c, { say: 'CALL NOW' });
+  liveEmergency(c, { steps: 'CALL NOW' });
   assert.strictEqual(timers.size, 0);
   assert.strictEqual(c.story, null);
   assert.strictEqual(S.screen, 'emergency');
   assert.ok(/CALL NOW/.test(greets[0]));
   c = newTalk();
   liveByeNow(c);
-  liveEmergency(c, { say: 'CALL NOW' });
+  liveEmergency(c, { steps: 'CALL NOW' });
   assert.strictEqual(c.ending, false);
   assert.strictEqual(timers.size, 0);
   liveTurnDone(c);
@@ -398,7 +398,7 @@ var S = { convo: null, talkOrder: ['normal', 'offline'], talkMode: 'normal', voi
 var Sp = { sess: null };
 var MSG = { fallback: 'FALLBACK' };
 var window = { MaryVoice: { more: function () {} } };
-var said = [], closed = 0, pumps = 0, status = null;
+var said = [], shown = [], closed = 0, pumps = 0, status = null;
 function log() {}
 function rememberSaid() {}
 function spPump() { pumps++; }
@@ -407,7 +407,7 @@ function setPhase() {}
 function goodbyeLine() { return 'GOODBYE'; }
 function closeConvo(c) { closed++; c.ending = true; S.convo = null; }
 function talkTo(t) { said.push(['talkTo', t]); return Promise.resolve(); }
-function say(t, m, v) { said.push([t, v]); return Promise.resolve(); }
+function say(t, m, v) { said.push([t, v]); return Promise.resolve(); } function lastSentences(t){return t;} function screenLine(t) { shown.push(t); } function showSteps(){} function setCaption(){} function restLine(){ return ''; }
 function api() { return status ? status() : Promise.resolve({ emergency: false }); }
 function applyStatus(st) { if (st.tts_spent != null) { S.ttsSpent = !!st.tts_spent; } }
 function session(voice) {
@@ -446,7 +446,8 @@ VOICE_CHECKS = r"""
   fail(s, 1);
   assert.strictEqual(c.voice, 'offline');
   assert.strictEqual(s.voice, 'offline');
-  assert.deepStrictEqual(s.queue, ['FALLBACK', 'b', 'c']);
+  assert.deepStrictEqual(s.queue, ['b', 'c']);   // M21a: the fallback line is on the screen only, never queued
+  assert.deepStrictEqual(shown, ['FALLBACK']);
   assert.strictEqual(pumps, 1);                // she goes on with what wasn't said, so the reply ends and she listens
   assert.strictEqual(speechVoice(), 'offline');
   s = session(speechVoice());
@@ -492,14 +493,15 @@ VOICE_CHECKS = r"""
   S.convo = { mode: 'normal', live: false, voice: 'normal' };
   assert.strictEqual(speechVoice(), 'normal');
 
-  // a spoken goodbye ends a Normal talk in that talk's voice, after the emergency check
+  // M21a: a goodbye in a Normal talk is the model's reply (talkTo), then the talk closes; nothing is scripted
   c = { mode: 'normal', live: false, voice: 'offline' };
   S.convo = c;
   S.voiceMode = 'normal';
   said = [];
+  Sp.sess = null;
   await convoBye(c, 'go to sleep');
   assert.strictEqual(closed > 0 && S.convo === null, true);
-  assert.deepStrictEqual(said, [['GOODBYE', 'offline']]);
+  assert.deepStrictEqual(said, [['talkTo', 'go to sleep']]);
   c = { mode: 'normal', live: false, voice: 'normal' };
   S.convo = c;
   said = [];
@@ -622,11 +624,12 @@ class StoryJsTests(unittest.TestCase):
         code = "\n".join(self.speech_parts(src) + [
             LIVE_STUBS,
             between(src, "var SILENCE_NOISE", "// --- M4a: hands-free conversations"),
-            between(src, "var BYE_MAX_WORDS", "// M4a: {when} is the local time of day"),
+            between(src, "var BYE_MAX_WORDS", "// M4a: the big Talk button is gone"),
             between(src, "function nextMode(", "// What to do with Live's skill call"),
             between(src, "function liveToolGate(", "// A short goodbye turn"),
             between(src, "function isGoodbye(", "function liveSupported("),
             between(src, "function liveSpeakingChanged(", "// M4a: her finished Live turn is remembered"),
+            between(src, "function liveSafetyText(", "// --- end M4a ---"),
             between(src, "function liveEmergency(", "function liveToolCall("),
             between(src, "function liveToolCall(", "// Typed words while Live is open"),
             LIVE_CHECKS,
@@ -661,9 +664,9 @@ class StoryJsTests(unittest.TestCase):
         self.assertNotIn("MaryVoice", live)
         self.assertNotIn("goodbyeLine", live)
         self.assertNotIn(" say(", live)
-        # the two Normal and Offline ways out both keep the talk's voice
-        self.assertEqual(src.count("say(goodbyeLine(), 'happy', voice)"), 2)
-        self.assertEqual(src.count("say(goodbyeLine()"), 2)
+        # M21a: no scripted goodbye is spoken any more: a Normal or Offline goodbye is the model's reply
+        self.assertNotIn("goodbyeLine", src)
+        self.assertEqual(src.count("say(goodbyeLine()"), 0)
 
 
 if __name__ == "__main__":

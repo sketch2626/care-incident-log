@@ -84,7 +84,7 @@ function spCancel() { calls.push('spCancel'); }
 function refreshStatus() { calls.push('refresh'); }
 function updateTalkButton() {} function capCut() {} function capListening() {} function capLivePiece() {}
 function capLiveAudio() {} function capLiveDone() {} function setCaption() {} function restLine() { return ''; }
-function liveFirst() { return true; } function say() { return Promise.resolve(); } function goodbyeLine() { return 'bye'; }
+function liveFirst() { return true; } function say() { return Promise.resolve(); } function lastSentences(t){return t;} function screenLine(){} function showSteps(){}  function goodbyeLine() { return 'bye'; }
 function liveBye() { return '(bye)'; } function menuOpen() { return false; } function closeMenu() {} function closePanel() {}
 function faceAct() {} function closeTyping() { els.typing.hidden = true; calls.push('closeTyping'); }
 function skillScreen() { return undefined; } function asideSkill() {} function showCaption() {}

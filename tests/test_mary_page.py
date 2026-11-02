@@ -109,7 +109,9 @@ class MaryPageTests(unittest.TestCase):
         self.assertEqual(js.count("wakeHoldCheck();   // M6"), 3)   # setPhase, startTalk, closeConvo
         self.assertIn("face.setActivity('listening')", js)
         self.assertIn("var WAKE_HEARD_MS = 4000;", js)
-        self.assertIn("startTalk({ say: WAKE_SAY, mood: 'happy', hello: WAKE_HELLO })", js)
+        self.assertIn("startTalk({ mood: 'happy' })", js)   # M21a: a wake starts with no words
+        self.assertNotIn("WAKE_SAY", js)
+        self.assertNotIn("WAKE_HELLO", js)
         self.assertIn("if (S.screen === 'emergency') { return 'emergency'; }", js)
         self.assertIn("if (S.firstRun) { return 'first run'; }", js)
         self.assertIn("if (S.micHeld) { return 'send count'; }", js)

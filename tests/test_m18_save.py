@@ -60,6 +60,7 @@ function world(over) {
   function bandUp() { return true; }
   function greetLive(t) { told.push(t); return live; }
   function say(t) { said.push(t); return Promise.resolve(); }
+  function tell(n, shown) { said.push(shown); return Promise.resolve(); } function lastSentences(t){return t;} function screenLine(){} function showSteps(){} 
   function screenNote(t) { notes.push(t); }
   function deepPost(m) { posted.push(m.what); }
   eval(BLOCK);

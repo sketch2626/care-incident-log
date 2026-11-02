@@ -1,7 +1,7 @@
 from tests import helpers  # noqa: F401  (must be first: points the data folder at a scratch dir)
 
 """M4a: everything she says is in the talk history. The brain-made hello (mary.open_line, POST /api/mary/open), the
-/api/mary/live/said dedupe and mary.see_image, with Gemini faked; the page side (say, openingLine, startTalk) with Node."""
+/api/mary/live/said dedupe and mary.see_image, with Gemini faked; the page side (speakModel, tell, startTalk) with Node."""
 import copy
 import subprocess
 import unittest
@@ -250,39 +250,39 @@ class SeeImageTest(BrainCase):
 
 
 STUBS = r"""
-var posted = [], events = [];
-var S = { screen: 'everyday', hasKey: true, phase: 'idle', talkOrder: [] }, CapS = {};
-var Live = { open: false, takes: true }, Net = { open: '' }, Mode = { v: 'normal' };
-var LIVE_SAY = '(';
+var posted = [], events = [], caps = [];
+var S = { screen: 'everyday', hasKey: true, phase: 'idle', talkOrder: [], turn: 0 }, CapS = {};
+var Live = { open: false, takes: true }, Net = { tell: '' }, Mode = { v: 'normal' };
 var window = { MaryLive: { stopSpeaking: function () {} } };
 var App = { onActivity: function () {} };
 function log() {}
 function sayForcedOnce() { return Promise.resolve(); }
 function api(method, url, body) {
-  posted.push(url + ' ' + (body.text || body.when || ''));
-  if (url !== '/api/mary/open') { return Promise.resolve({}); }
-  return Net.open instanceof Error ? Promise.reject(Net.open) : Promise.resolve({ text: Net.open });
+  posted.push(url + ' ' + (body.text || body.note || ''));
+  if (url !== '/api/mary/tell') { return Promise.resolve({}); }
+  return Net.tell instanceof Error ? Promise.reject(Net.tell) : Promise.resolve({ text: Net.tell });
 }
 function liveOn() { return Live.open; }
-function greetLive() { return Live.takes; }
+function greetLive(note) { events.push('greetLive'); return Live.takes; }
 function spStart() { events.push('speak'); S.phase = 'speaking'; return {}; }
 function waitSess() { S.phase = 'idle'; return Promise.resolve(); }
 function setMood() {}
+function setCaption(t) { caps.push(t); }
 function showCaption() {}
+function restPhase() { return 'idle'; }
+function capListening() {}
 function capLiveEmergency() {}
 function quietWhole() {}
 function splitSentences() { return { sentences: [] }; }
 function spAdd() {}
 function spEnd() {}
 function setPhase(p) { S.phase = p; }
-function timeWord() { return 'morning'; }
 function nextMode() { return Mode.v; }
 function liveSupported() { return true; }
 function speechModeFor() { return ''; }
 function updateTalkButton() {}
 function wakeHoldCheck() {}
 function lockTalkVoice() { return Promise.resolve(); }
-function liveHello() { return 'live hello'; }
 function startLive(c, hello) { events.push('live:' + hello); }
 function convoListen() { events.push('listen'); }
 function openTyping() { events.push('typing'); }
@@ -293,44 +293,50 @@ function tick() { return new Promise(function (r) { setTimeout(r, 5); }); }
 """
 
 CHECKS = r"""
-var SAID = '/api/mary/live/said ', OPEN = '/api/mary/open morning';
+var SAID = '/api/mary/live/said ', TELL = '/api/mary/tell ';
 (async function () {
-  await say('Hello there.', 'happy');
-  eq(posted, [SAID + 'Hello there.'], 'say posts once');
+  await speakModel('Hello there.', 'happy');
+  eq(posted, [SAID + 'Hello there.'], 'speakModel posts once');
   posted.length = 0;
-  await say('Saved already.', 'happy', undefined, true);
-  await say('   ');
+  await speakModel('Saved already.', 'happy', undefined, true);
+  await speakModel('   ');
   eq(posted, [], 'a saved or empty line posts nothing');
   Live.open = true;
-  await say('Through Live.');
-  eq(posted, [], 'Live saves its own');
-  Live.takes = false;
-  await say('Live refused.');
-  eq(posted, [SAID + 'Live refused.'], 'a line Live refused goes the usual way');
-  Live.open = false; Live.takes = true; posted.length = 0;
+  await speakModel('Through Live.');
+  eq(posted, [SAID + 'Through Live.'], 'M21a: a model line the page speaks is saved by the page');
+  Live.open = false; posted.length = 0;
 
-  Net.open = 'Hi, Andy.';
-  var waiting = openingLine('Scripted.');
+  // tell(): the model words it; with no model the screen shows `shown` and nothing is spoken
+  Net.tell = 'Hi, Andy.';
+  var waiting = tell('Say hello.', 'Hello.', 'happy');
   eq(S.phase, 'thinking', 'thinking while it comes');
-  eq(await waiting, { text: 'Hi, Andy.', saved: true }, 'the brain hello');
-  eq(posted, [OPEN], 'asked with the time of day');
-  Net.open = new Error('down');
-  eq(await openingLine('Scripted.'), { text: 'Scripted.', saved: false }, 'a failure uses the script');
-  Net.open = '';
-  eq(await openingLine('Scripted.'), { text: 'Scripted.', saved: false }, 'an empty answer uses the script');
-  S.hasKey = false; posted.length = 0; S.phase = 'idle';
-  eq(await openingLine('Scripted.'), { text: 'Scripted.', saved: false }, 'no key');
+  await waiting;
+  eq(posted, [TELL + 'Say hello.'], 'asked; the server saves her answer, so the page does not');
+  eq(caps, [], 'no screen line when the model answers');
+  posted.length = 0; events.length = 0;
+  Net.tell = new Error('down');
+  await tell('Say hello.', 'Hello.', 'happy');
+  eq(caps, ['Hello.'], 'a failure shows the screen line');
+  eq(events, [], 'a failure speaks nothing');
+  Net.tell = ''; caps.length = 0;
+  await tell('Say hello.', 'Hello.');
+  eq(caps, ['Hello.'], 'an empty answer shows the screen line');
+  S.hasKey = false; posted.length = 0; caps.length = 0; S.phase = 'idle';
+  await tell('Say hello.', 'Hello.');
   eq(posted, [], 'no key, no call');
+  eq(caps, ['Hello.'], 'no key: the screen line');
   eq(S.phase, 'idle', 'no key, no thinking');
-  S.hasKey = true;
-  Net.open = 'Hi.';
-  waiting = openingLine('Scripted.');
-  S.screen = 'emergency'; S.phase = 'speaking';
-  eq(await waiting, { text: '', saved: false }, 'an emergency while it comes: she says nothing');
-  S.screen = 'pictures'; S.phase = 'idle';
-  waiting = openingLine('Scripted.');
-  eq(await waiting, { text: '', saved: false }, 'another screen too');
-  eq(S.phase, 'idle', 'and she does not stay thinking');
+  S.hasKey = true; caps.length = 0; posted.length = 0; events.length = 0;
+  Live.open = true;
+  await tell('Say hello.', 'Hello.');
+  eq(events, ['greetLive'], 'Live is asked to say it');
+  eq(posted, [], 'and the page posts nothing');
+  Live.open = false;
+  Net.tell = 'Hi.';
+  waiting = tell('Say hello.', 'Hello.');
+  S.screen = 'emergency';
+  await waiting;
+  eq(events.indexOf('speak'), -1, 'an emergency while it comes: she says nothing');
   S.screen = 'everyday';
 
   async function talk(opts) {
@@ -339,20 +345,16 @@ var SAID = '/api/mary/live/said ', OPEN = '/api/mary/open morning';
     await tick();
     return posted.slice();
   }
-  eq(await talk({ say: 'Tell me about yourself.' }), [SAID + 'Tell me about yourself.'], 'a plain line is saved once');
-  eq(events, ['speak', 'listen'], 'said, then she listens');
-  Net.open = 'Morning, Andy.';
-  eq(await talk({ say: 'Scripted.', brainHello: true }), [OPEN], 'the brain hello is not saved again');
-  eq(events, ['speak', 'listen'], 'the brain hello, then she listens');
-  Net.open = new Error('down');
-  eq(await talk({ say: 'Scripted.', brainHello: true }), [OPEN, SAID + 'Scripted.'], 'the fallback is saved');
+  eq(await talk({ say: 'Tell me about yourself.' }), [], 'M21a: a talk starts with no words, even when one is given');
+  eq(events, ['listen'], 'she listens at once');
   Mode.v = 'live';
-  eq(await talk({ say: 'Scripted.', brainHello: true }), [], 'Live keeps its own hello');
-  eq(events, ['live:live hello'], 'liveHello');
-  Mode.v = 'normal'; S.typingOnly = true; Net.open = 'Morning.';
-  eq(await talk({ say: 'Scripted.', brainHello: true }), [OPEN], 'no mic: the brain hello too');
-  eq(events, ['speak'], 'no mic: only said');
-  eq(await talk({ say: 'Scripted.' }), [SAID + 'Scripted.'], 'no mic, plain line');
+  eq(await talk({}), [], 'Live: no hello unless one is given');
+  eq(events, ['live:'], 'Live starts with no hello');
+  eq(await talk({ hello: '(first meeting)' }), [], 'Live: a hello is the one given');
+  eq(events, ['live:(first meeting)'], 'Live is given it');
+  Mode.v = 'normal'; S.typingOnly = true;
+  eq(await talk({}), [], 'no mic: nothing posted');
+  eq(events, ['typing'], 'no mic: the typing box');
   console.log('OK hello');
 })().catch(function (e) { console.error(e && e.stack || e); process.exit(1); });
 """
@@ -364,9 +366,8 @@ class PageTest(unittest.TestCase):
         src = read(APP)
         code = "\n".join([
             STUBS,
-            between(src, "function say(text, mood, voice, saved)", "// ---------------------------------------------------------------- screens"),
+            between(src, "function lastSentences(", "// M21a: the steps block"),
             between(src, "function rememberSaid(", "// M4a: her finished Live turn"),
-            between(src, "function openingLine(", "// --- end M4a ---"),
             between(src, "function startTalk(opts)", "// M4a: decides c.voice"),
             CHECKS,
         ])
@@ -379,9 +380,22 @@ class PageTest(unittest.TestCase):
     def test_firstrun_has_no_saving_of_its_own(self):
         src = read(APP.replace("app.js", "firstrun.js"))
         self.assertNotIn("rememberSaid", src)
-        self.assertIn("brainHello: true", between(src, "function talkOnOpen()", "// M4a: after the first hello"))
-        self.assertIn("A.openingLine(", between(src, "function greet()", 'function talkOnOpen()'))
-        self.assertNotIn("brainHello", between(src, "await askName();", "// ====="))
+        self.assertNotIn("brainHello", src)
+        self.assertNotIn("A.say(", src)
+        self.assertNotIn("openingLine", src)
+
+    def test_firstrun_opening_speaks_nothing(self):
+        """D1: when the screen opens she says nothing of her own. With talk_on_open off, nothing at all; with it on,
+        a silent talk start. No greeting table, no scripted wake line."""
+        src = read(APP.replace("app.js", "firstrun.js"))
+        opening = between(src, "A.enterMain = function", "A.startFirstRun")
+        for spoke in ("A.tell(", "A.say(", "A.screenLine(", "speakModel", "greet(", "greetingText"):
+            self.assertNotIn(spoke, opening)
+        self.assertIn("if (S.talkOnOpen) { A.startTalk({ mood: 'happy' })", opening)
+        self.assertNotIn("say:", opening)
+        for gone in ("GREET", "greetingText", "slotFor", "Oh! Hello again", "FIRST_TALK ="):
+            self.assertNotIn(gone, src)
+        self.assertNotIn("openingLine", read(APP))
 
 
 if __name__ == "__main__":

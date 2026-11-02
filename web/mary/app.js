@@ -12,7 +12,9 @@
 
    For the first-run and greeting code (task T4b), all on window.MaryApp:
      MaryApp.talkTo(text)        send text through the talk pipeline (never shows his words; streams, speaks); resolves when she is done
-     MaryApp.say(text, mood)     show a caption, set the mood, speak it; resolves when she is done (or was interrupted)
+     MaryApp.tell(note, shown, mood)   the app gets her to speak about something that happened (her own words)
+     MaryApp.screenLine(text, mood)    a caption on the screen only, no voice
+     MaryApp.say(text, mood)           (alias of the model-words speaker, until firstrun.js moves over)
      MaryApp.listenOnce()        listen with the Talk button UI; resolves with the heard text ('' = nothing);
                                  MaryApp.state.listenReason is 'quiet' | 'tap' | 'silence' | 'cap'; rejects with Error
                                  (err.stage 'start' | 'stop', err.cancelled true if interrupted)
@@ -53,29 +55,6 @@
   // M4a: words that don't count toward a goodbye's length: "Okay Mary, you can go to sleep now" is still short
   var BYE_FILLER = /^(?:ok(?:ay)?|alright|all|right|well|now|so|oh|honey|dear|darling|mary|sam|then|please|thanks|thank|you)$/i;
   var LIVE_BYE_MAX_MS = 6000;    // after the goodbye is asked for, Live closes once her turn ends, or after this
-  // M4a: {when} is the local time of day (morning, afternoon, evening or night), filled in by liveHello()
-  var LIVE_HELLO = '(The resident is ready to talk with you, and it is {when} where they are. Greet them in one or ' +
-    'two short, warm sentences, like a friend who is glad to see them: use their name if you know it and, when it ' +
-    'fits, something you remember about them or from your last talk. Talk as one grown-up to another: plain and ' +
-    'easy, no gushing and no fuss over them. Use different words every time and never open the way your last ' +
-    'hello did; "Well, hey there" is only one way among many, so most days use another. A light ' +
-    '"good morning", "good afternoon" or "good evening" is fine, but never "good night", never comment on the hour ' +
-    'or how late it is, and never say you are still here or waiting for them. Never list what you can do.)';
-  function timeWord() {   // M4a: the same slots as the scripted greetings in firstrun.js
-    var h = new Date().getHours();
-    return (h >= 22 || h < 5) ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-  }
-  function goodbyeLine() { return MSG.goodbye + ' ' + restLine(false); }   // M4a
-  // M4d: a different way in each time, because a model left alone opens the same way. mary.py has the same list.
-  var OPEN_WAYS = ['This time, open with their name and a short friendly line.',
-    'This time, open with a light greeting for the time of day.',
-    'This time, open with a plain "hey".',
-    'This time, open by saying it\'s good to talk with them again.',
-    'This time, open with something you remember about them, if you have something; if not, their name and a short friendly line.'];
-  function liveHello() {   // M4a. M4d: the way in goes inside the closing bracket
-    var way = OPEN_WAYS[Math.floor(Math.random() * OPEN_WAYS.length)];
-    return LIVE_HELLO.replace('{when}', timeWord()).replace(/\)$/, ' ' + way + ')');
-  }
   // M4a: the big Talk button is gone (M4b). The way back in is her name (M6), when it can run here, or Menu.
   function wakeOn() { return !!S.wakeWord && !!S.wakeReady; }
   function restLine(typing) {   // the resting caption and the end of her goodbye: only ways that really work now
@@ -91,17 +70,17 @@
         : 'they can tap Menu, then "Talk to ' + n + '", any time to talk again.)');
   }
   var LIVE_SWITCHED = '(The resident just switched to you. Say a short, warm hello in one sentence, using their name if you know it.)';
-  var LIVE_SAY = '(Say this out loud, word for word, and nothing else: ';   // M4a: say() while Live is open
   var LIVE_FALSE_CUT_MS = 2500;  // M17: cut off with nobody's words coming after this long: a noise cut her off
-  var LIVE_PICK_UP = '(A noise cut you off. Pick up right where you left off, in your own words.)';   // M17: not LIVE_SAY, or she would read this out
+  var LIVE_PICK_UP = '(A noise cut you off. Pick up right where you left off, in your own words.)';   // M17
   var END_TALK_HELD = { ok: false, note: 'Not ended. They are dictating a note, not talking to you. Say nothing and keep listening.' };   // M17
-  // M4d: her exact words, because Live says the line itself and could drop the number (saidSafety checks it)
-  var LIVE_SAFETY = '(Safety first. The resident may be in an emergency. Say these exact words first, word for word, then add at most one short, calm line of your own to stay with them: ';
+  // M21a: an instruction, not a script. The steps are on the screen in big letters; she says them in her own words.
+  function liveSafetyText(steps) {
+    return '(Safety first. The resident may be in an emergency. Their screen shows these steps in big letters: ' +
+      spokenNumbers(steps) + ' Tell them now in your own words, short and calm, with every number, then stay with them.)';
+  }
   // --- end M4a ---
 
   var MSG = {
-    listening: "I'm listening…",
-    silence: "I didn't hear anything. I'm here whenever you're ready.",   // M4a: no Talk button any more
     notCaught: "I didn't quite catch that. Could you say it again?",
     waking: "I'm still waking up my ears. Please try again in a moment.",
     sorry: "I'm sorry, something went wrong. Let's try again.",
@@ -110,10 +89,8 @@
     light: "Good. Help is on the way. I'll stay right here with you.",
     helpAsk: "Has someone come to help you yet?",
     okNow: "I'm so glad. I'm right here if you need me.",
-    better: "Is this better?",
     loading: "I'm getting ready. Just a moment.",
-    fallback: "My best voice isn't working right now, so I'll keep talking with you the usual way.",   // M4a
-    goodbye: "It was so nice talking with you."   // M4a: goodbyeLine() adds the way back in
+    fallback: "My best voice isn't working right now, so I'll keep talking with you the usual way."   // M4a: screen only
   };
 
   // ---------------------------------------------------------------- state
@@ -231,7 +208,7 @@
     capCall(function () { if (text) { cap.plain(text, kind); } else { cap.clear(); } });
   }
 
-  // M4a: her own words (Live captions, her replies, say()). M4b: those now show word by word as she says them
+  // M4a: her own words (Live captions, her replies, speakModel()). M4b: those now show word by word as she says them
   // (capSay in the speech paths, capLivePiece in Live, whole() on the emergency screen), so this does nothing.
   function showCaption(text) { /* M4b */ }
 
@@ -287,7 +264,7 @@
     CapS.plain = '';
     capOwn(s);
     if (S.screen !== 'emergency') { return capCall(function () { return cap.sentence(text, o); }); }
-    if (s.capPre) {                       // say() put the words up already: now the spoken word lifts with her voice
+    if (s.capPre) {                       // say() put the words up already (speakModel): now the spoken word lifts with her voice
       if (!s.capTimed) { s.capTimed = true; quietWhole(s.capPre, wholeTiming(s.capPre, o), ''); }
       return 0;
     }
@@ -747,7 +724,7 @@
     var c = S.convo;   // M4a: a talk moves once and stays there, never back, whatever sound came first
     if (c && !c.live && c.voice === from) { c.voice = s.voice; S.voiceMode = s.voice; }
     else if (at === 0 && S.voiceMode === from) { S.voiceMode = s.voice; }
-    if (!S.fallbackSaid) { S.fallbackSaid = true; rest.unshift(MSG.fallback); rememberSaid(MSG.fallback); }   // M4a: this line skips say()
+    if (!S.fallbackSaid) { S.fallbackSaid = true; screenLine(MSG.fallback); }   // M21a: on the screen only, never spoken
     s.mvSent = [];
     s.mvEnded = false;
     s.queue = rest.concat(s.queue);
@@ -848,22 +825,21 @@
     });
   }
 
-  // Shows the text as her caption, sets the mood, speaks it. Resolves when she is done (or was interrupted).
-  // M4a: voice: this line's voice when the talk it ends has just closed; saved: the history has this line already
-  function say(text, mood, voice, saved) {
+  // M21a: the model's words only. Shows them as her caption, sets the mood, speaks them. Resolves when she is done (or
+  // was interrupted). voice: this line's voice when the talk it ends has just closed; saved: the history has it already.
+  // In Live her words come from Live, so this is only given text when the talk's line has closed.
+  function lastSentences(text) {   // M21a: the last sentence or two, for "say that again"
+    var m = String(text || '').trim().match(/[^.!?]+[.!?]*/g) || [];
+    return m.slice(-2).map(function (x) { return x.trim(); }).join(' ');
+  }
+  function speakModel(text, mood, voice, saved) {
     text = String(text == null ? '' : text).trim();
     if (liveOn()) {
       try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); }   // M4a: never two voices at once
-      // M4a: in Live, Live speaks everything. If the line won't take it, the usual path below still says it.
-      if (text && greetLive(LIVE_SAY + text + ')')) {
-        if (mood) { setMood(mood); }
-        showCaption(text);
-        if (S.screen === 'emergency') { capLiveEmergency(text); }
-        return Promise.resolve();
-      }
     }
-    // M4a: every line she speaks goes into the talk history, here and only here. A line Live says is saved from Live's
-    // own transcript (liveSaid) and never gets this far; brain replies never come through say(): mary.reply saves them.
+    if (text) { S.lastWords = lastSentences(text); }
+    // M4a: a model line goes into the talk history here unless saved. A line Live says is saved from Live's own
+    // transcript (liveSaid); brain replies never come through here: mary.reply saves them.
     if (text && !saved) { rememberSaid(text); }
     var s = spStart(voice);
     var p = waitSess(s);
@@ -879,6 +855,40 @@
     for (var i = 0; i < parts.length; i++) { spAdd(s, parts[i]); }
     spEnd(s);
     return p;
+  }
+
+  // M21a: a line for the screen only: the mood and the words as her caption. No voice, nothing remembered.
+  function screenLine(text, mood) {
+    text = String(text == null ? '' : text).trim();
+    if (mood) { setMood(mood); }
+    if (text) { setCaption(text); }
+  }
+  // M21a: the one way the app gets her to speak about something that happened. note: an instruction to the model;
+  // shown: what the screen says when no model answers (empty: nothing). Never talks over a screen change.
+  function tell(note, shown, mood, voice) {
+    note = String(note == null ? '' : note).trim();
+    var turn = S.turn, fromEm = S.screen === 'emergency';
+    function show1() { if (shown) { screenLine(shown, mood); } }
+    if (liveOn() && greetLive('(' + note + ' Say it in your own words, in one short line.)')) {
+      if (mood) { setMood(mood); }
+      return Promise.resolve();
+    }
+    if (!S.hasKey) { show1(); return Promise.resolve(); }
+    setPhase('thinking');
+    return api('POST', '/api/mary/tell', { note: note }, { ms: 9000 }).then(function (j) {
+      return String((j && j.text) || '').trim();
+    }, function (e) { log(e); return ''; }).then(function (text) {
+      var drop = S.turn !== turn || (S.screen === 'emergency' && !fromEm);
+      if (S.phase === 'thinking') { setPhase(restPhase()); }
+      if (drop) { return undefined; }
+      if (!text) { show1(); return undefined; }
+      return speakModel(text, mood, voice, true);
+    });
+  }
+  // M21a: the steps block on the emergency screen, in big letters. Empty text: the standard steps.
+  function showSteps(text) {
+    var el = $('steps');
+    if (el) { el.textContent = String(text == null ? '' : text).trim() || MSG.emergency; }
   }
 
   // ---------------------------------------------------------------- screens
@@ -914,6 +924,7 @@
       S.lightPressed = false;
       S.helpAsked = false;
       clearTimeout(S.lightTimer);
+      showSteps('');   // M21a: never empty, even with no server; a reply's own steps replace it
       var b = $('lightBtn');
       b.textContent = 'I pressed my call light';
       b.removeAttribute('aria-pressed');
@@ -929,7 +940,7 @@
   registerScreen('nokey', {
     enter: function (o) {
       setMood('sorry');
-      if (o && o.quiet) { setCaption(MSG.nokey); } else { say(MSG.nokey, 'sorry'); }
+      setCaption(MSG.nokey);   // M21a: screen only
     }
   });
 
@@ -1145,7 +1156,8 @@
   function heardEmergency(j) {   // the same as liveHeard when Live isn't open
     newTurn();
     if (S.screen !== 'emergency') { show('emergency'); }
-    return say((j && j.say) ? String(j.say) : MSG.emergency, 'alert');
+    showSteps(j && j.steps);
+    return Promise.resolve();
   }
   // M4a: the crisis numbers digit by digit for her voice; mary.py has the same list. Captions keep the digits.
   function spokenNumbers(text) {
@@ -1272,10 +1284,11 @@
   function sayFallbackOnce() {
     if (S.fallbackSaid) { return Promise.resolve(); }
     S.fallbackSaid = true;
-    return say(MSG.fallback);
+    screenLine(MSG.fallback);
+    return Promise.resolve();
   }
   // M17: the resident's pick stays saved. When something else is really in use, forcedNow() says why: .line is what she
-  // says, once per reason, through say() so it stays in the brain's history; .note shows under the picker in My info.
+  // shows, once per reason, as a caption (never spoken); .note shows under the picker in My info.
   function modeInUse() {
     var m = nextMode(S.talkOrder, null);
     if (m === 'live' && (S.liveFailed || !liveSupported())) { m = nextMode(S.talkOrder, 'live'); }
@@ -1318,51 +1331,24 @@
     var f = forcedNow();
     if (!f || !f.line || S.forcedSaid[f.why]) { return Promise.resolve(); }
     S.forcedSaid[f.why] = true;
-    return say(f.line);
+    setCaption(f.line);   // M21a: on the screen only
+    return Promise.resolve();
   }
   function fillModeNote() {
     var box = $('modeNote'), f = forcedNow();
     if (box) { box.textContent = f ? f.note : ''; }
   }
 
-  // --- M4a: her hello, in her own words from the same brain as her talk. Thinking while it comes. On any failure, or
-  // with no key, the scripted line (say() saves that one). saved: the server has already put it in the history.
-  // Empty text: something else started meanwhile, such as an emergency, so she says nothing.
-  function openingLine(fallback) {
-    if (!S.hasKey) { return Promise.resolve({ text: fallback, saved: false }); }
-    setPhase('thinking');
-    function done(text, saved) {
-      if (S.screen !== 'everyday' && S.phase === 'thinking') { setPhase('idle'); }
-      if (S.screen !== 'everyday' || S.phase !== 'thinking') { return { text: '', saved: false }; }
-      return { text: text, saved: saved };
-    }
-    return api('POST', '/api/mary/open', { when: timeWord() }, { ms: 9000 }).then(function (j) {
-      var text = String((j && j.text) || '').trim();
-      return text ? done(text, true) : done(fallback, false);
-    }, function (e) { log(e); return done(fallback, false); });
-  }
-  function firstLine(opts) {   // what a talk opens with: opts.say as it stands, or the brain's hello with opts.say behind it
-    return opts.brainHello ? openingLine(opts.say) : Promise.resolve({ text: opts.say, saved: false });
-  }
-  // --- end M4a ---
-
   // The one way to start talking. Call it straight from a tap (Live opens the mic and sound there).
   // opts.hello: what Live is asked to say first. Resolves true when a conversation started.
-  // M4a: opts.say (with opts.mood): when she starts by herself, the words Normal and Offline say before listening;
-  // with no mic it is only said, and the typing box is not opened. opts.brainHello: opts.say is a hello, so the brain
-  // makes it and opts.say is only the fallback.
+  // M21a: a talk opens with no words (opts.say is ignored): Normal and Offline listen at once, and Live is greeted
+  // only when opts.hello is given. opts.mood sets her look.
   function startTalk(opts) {
     opts = opts || {};
     App.onActivity();
     if (S.convo || S.phase === 'thinking' || S.phase === 'listening') { return Promise.resolve(false); }
     var mode = nextMode(S.talkOrder, null);
     if (mode === 'live' && !liveSupported()) { mode = nextMode(S.talkOrder, 'live'); }
-    if (mode !== 'live' && S.typingOnly && opts.say) {   // M4a
-      sayForcedOnce().catch(log).then(function () { return firstLine(opts); }).then(function (l) {   // M17
-        if (l.text) { return say(l.text, opts.mood || 'happy', undefined, l.saved); }
-      }).catch(log);
-      return Promise.resolve(false);
-    }
     if (mode !== 'live' && S.typingOnly) { openTyping(); return Promise.resolve(false); }
     var c = { mode: mode, live: false, open: false, ending: false, paused: false, seq: 0, lastAct: Date.now(),
       heard: '', heardCheck: null, toolBusy: 0, idleTimer: null, byeTimer: null, byeDone: false, misses: 0,
@@ -1375,26 +1361,16 @@
     updateTalkButton();
     wakeHoldCheck();   // M6
     if (mode === 'live') {
-      startLive(c, opts.hello || liveHello());   // M4a: with the time of day
+      startLive(c, opts.hello || '');   // M21a: no hello unless one is given
     } else {
       lockTalkVoice(c).then(function () {   // M4a: from a fresh status, so a spent voice is never tried
         if (S.convo !== c || c.ending) { return undefined; }
         return sayForcedOnce().catch(log);   // M17: she says so first, instead of switching quietly
       }).then(function () {
         if (S.convo !== c || c.ending) { return; }
-        if (!opts.say) { convoListen(c, true); return; }
-        firstLine(opts).then(function (l) {   // M4a: her hello first, then she listens
-          if (S.convo !== c || c.ending) {
-            if (S.phase === 'thinking') { setPhase('idle'); }
-            return;
-          }
-          if (!l.text) {                      // something else started; the emergency screen goes on with the talk itself
-            if (S.screen !== 'emergency') { convoListen(c, true); }
-            return;
-          }
-          say(l.text, opts.mood || 'happy', undefined, l.saved).then(function () { convoListen(c, true); },
-            function (e) { log(e); convoListen(c, true); });
-        }, log);
+        if (opts.mood) { setMood(opts.mood); }
+        capListening();   // M21a: the listening look, no words
+        convoListen(c, true);   // M21a: straight to listening; setPhase shows the listening look
       });
     }
     return Promise.resolve(true);
@@ -1449,14 +1425,14 @@
       c.byeAudio = false;   // M4a
       clearInterval(c.idleTimer);
       // on quiet she is asked for a goodbye
-      if (why === 'idle' && !greetLive(liveBye())) { finishLive(c); return; }
+      if (why === 'idle') { finishLive(c); return; }   // M21a: no goodbye asked on quiet
       c.byeTimer = setTimeout(function () { liveByeCap(c, false); }, LIVE_BYE_MAX_MS);
       return;
     }
-    var voice = c.voice;   // M4a: her goodbye in the voice of this talk
-    closeConvo(c);
+    closeConvo(c);   // M21a: Normal and Offline close silently
     newTurn();
-    say(goodbyeLine(), 'happy', voice);
+    setPhase('idle');
+    setCaption(restLine(S.typingOnly && !liveFirst()));
   }
 
   // --- M6: the wake word ("Hey Mary" / "Hey Sam"), heard on this computer by the server ---
@@ -1470,8 +1446,6 @@
   var WAKE_HOLD_RENEW_MS = 30000;  // the server lets a hold go after 90 s
   var WAKE_STUCK_MS = 90000;     // M17: a phase left on this long with no talk and no voice goes back to resting
   var WAKE_READY_RETRY_MS = 60000;   // M17: a poll that saw ready:false stopped: look at the status again this often
-  var WAKE_SAY = "Yes? I'm here.";
-  var WAKE_HELLO = "(They just called your name to get your attention. Answer in a few warm words, like 'Yes? I'm here.', then listen.)";
   var W = { polling: false, inFlight: false, seq: 0, lastEv: 0, timer: null, abort: null, heardTimer: null,
     held: false, holdAt: 0, gone: false, gen: 0 };
 
@@ -1562,7 +1536,7 @@
       clearTimeout(W.heardTimer);
       if (menuOpen()) { closeMenu(false); }
       if (!$('typing').hidden) { closeTyping(false); }   // M17: her name beats the typing box
-      startTalk({ say: WAKE_SAY, mood: 'happy', hello: WAKE_HELLO }).then(function (ok) {
+      startTalk({ mood: 'happy' }).then(function (ok) {
         if (ok) { return; }
         if (!S.convo && S.phase === 'idle') { faceAct(); }
         wakeDeclined('talk did not start');
@@ -1661,7 +1635,7 @@
       try { window.MaryLive.setVolume(S.volume); } catch (e) { log(e); }
       setPhase('listening');
       capListening();   // M4b: no words while listening (round 6)
-      greetLive(hello);
+      if (hello) { greetLive(hello); }
       clearInterval(c.idleTimer);
       c.idleTimer = setInterval(function () { liveIdleCheck(c); }, 1000);
     }, function (err) {
@@ -1678,7 +1652,7 @@
       closeConvo(c);
       setPhase('idle');
       openTyping();
-      say("I'm sorry. " + kindMessage(err && err.message) + ' You can type to me instead.', 'sorry');
+      screenLine("I'm sorry. " + kindMessage(err && err.message) + ' You can type to me instead.', 'sorry');
       return;
     }
     log(err);
@@ -1743,7 +1717,7 @@
     if (!liveSpeaking()) { finishLive(c); }
   }
 
-  // M4a: a line of hers goes into the talk history, so the brain knows she said it (say() is the one caller)
+  // M4a: a line of hers goes into the talk history, so the brain knows she said it (speakModel() is the one caller)
   function rememberSaid(text) {
     api('POST', '/api/mary/live/said', { text: String(text || '') }, { ms: 8000 }).catch(log);
   }
@@ -1753,7 +1727,7 @@
     var text = String(c.saidText || '').trim();
     c.saidText = '';
     if (!text) { return; }
-    if (c.saidSkip) { c.saidSkip = false; return; }   // the emergency words: /api/mary/heard already saved them
+    S.lastWords = lastSentences(text);   // M21a
     Promise.resolve(c.heardCheck).then(function () {
       return api('POST', '/api/mary/live/said', { text: text }, { ms: 8000 });
     }).catch(log);
@@ -1764,7 +1738,7 @@
   function liveNumberFix(c, fix) {
     if (!fix || c.numFixed || c.ending || c.story) { return; }
     c.numFixed = true;
-    greetLive(LIVE_SAY + 'Let me say that number clearly: ' + fix + '.)');
+    greetLive('(You said a number wrong. The right number is ' + fix + '. Say it again, in your own words.)');
   }
 
   // M4d: the emergency words if her finished turn left a number out; '' if not. Empty means the hushed old turn ended,
@@ -1779,8 +1753,7 @@
   // M4d: once only, because safetyWords is already clear. It doesn't look at c.ending or c.story: nothing holds this back.
   function liveSafetyAgain(c, words) {
     c.lastAct = Date.now();
-    c.saidSkip = true;                      // /api/mary/heard saved these words; not saved twice
-    if (!greetLive(LIVE_SAY + spokenNumbers(words) + ')')) { c.saidSkip = false; say(words, 'alert'); }
+    greetLive(liveSafetyText(words));       // if it fails the steps are up on the screen already
   }
 
   // M4d: her Live turn is finished. isMine: the talk she said it in is still the open one. A retry says the number right,
@@ -1866,13 +1839,13 @@
         if (S.convo === c && c.live) { liveEmergency(c, j); return; }
         newTurn();                                                // Live closed meanwhile: never miss it anyway
         if (S.screen !== 'emergency') { show('emergency'); }
-        say((j && j.say) ? String(j.say) : MSG.emergency, 'alert');
+        showSteps(j && j.steps);
         return;
       }
-      if (j && j.send) {   // M15c: the send gate acted on these words; say() goes through her one voice
+      if (j && j.send) {   // M15c: the send gate acted on these words; tell() has her reword it
         var acts = j.send.effects || [];
         for (var ai = 0; ai < acts.length; ai++) { try { window.MarySkills.apply(acts[ai]); } catch (e) { log(e); } }
-        if (j.send.say) { say(String(j.send.say)); }
+        if (j.send.say) { tell('The app just did this: ' + String(j.send.say), String(j.send.say)); }
       }
       if (j && j.save && !j.send) { deepSaveHeard(); }   // M18 piece 4: their own plain "save it", on the server's word
       if (j && j.forget_kept) { bookKept(true); }          // M19 piece 6b: a spoken no to her forget question
@@ -1889,7 +1862,7 @@
     c.story = null;   // M4a: the emergency words, never a story over them
     clearTimeout(c.byeWait);   // M4a
     try { window.MaryLive.stopSpeaking(); } catch (e) { log(e); }
-    var words = (j && j.say) ? String(j.say) : MSG.emergency;
+    var words = (j && j.steps) ? String(j.steps) : MSG.emergency;
     if (c.ending) {                         // no goodbye now: she stays with them
       c.ending = false;
       c.byeDone = false;    // M4a
@@ -1900,12 +1873,9 @@
     }
     c.lastAct = Date.now();
     if (S.screen !== 'emergency') { show('emergency'); }
-    showCaption(words);
-    capLiveEmergency(words);   // M4b: all of it at once (whole), before her voice
-    c.saidText = '';                        // M4a: /api/mary/heard saved the emergency words; not saved twice
-    c.saidSkip = true;
+    showSteps(words);                       // M21a: the steps in big letters; her own words show as captions
     c.safetyWords = words;                  // M4d: liveTurnEnded checks her turn for the numbers
-    if (!greetLive(LIVE_SAFETY + spokenNumbers(words) + ')')) { c.saidSkip = false; say(words, 'alert'); }
+    greetLive(liveSafetyText(words));       // if it fails the steps are up on the screen already
   }
 
   // --- M4a: in Live, Live speaks everything. A story comes from the server whole; the page hands it to her in parts,
@@ -2213,7 +2183,9 @@
         if (S.listenReason === 'idle' && c.formAt && Date.now() - c.formAt < CONVO_IDLE_S * 1000) { convoNext(c); return undefined; }   // M18: hands at work on a form aren't quiet
         if (S.listenReason === 'idle' || c.misses >= 1) { endConvo(c, 'idle'); return undefined; }
         c.misses++;
-        return say(MSG.notCaught, 'talking').then(function () { convoNext(c); });
+        screenLine(MSG.notCaught, 'talking');   // M21a: on the screen only
+        convoNext(c);
+        return undefined;
       }
       c.misses = 0;
       if (isGoodbye(text) && !(S.noteBusy && noteBusyNow())) { return convoBye(c, text); }   // M17: not words for a note
@@ -2225,19 +2197,24 @@
       if (micMissGoesOn(c.misses)) {   // M4a: one failed listen is a miss, like hearing nothing: the talk goes on
         c.misses++;
         var waking = e && e.stage === 'stop' && e.name === 'AbortError';   // the first stop waits for the voice model
-        return say(waking ? MSG.waking : MSG.notCaught, waking ? 'sorry' : 'talking').then(function () { convoNext(c); });
+        screenLine(waking ? MSG.waking : MSG.notCaught, waking ? 'sorry' : 'talking');
+        convoNext(c);
+        return undefined;
       }
       closeConvo(c);
       if (e && (e.stage === 'start' || (e.stage === 'stop' && e.serverMessage))) {
         setPhase('idle');
         openTyping();
-        return say("I'm sorry. " + kindMessage(e.serverMessage) + " You can type to me instead.", 'sorry');
+        screenLine("I'm sorry. " + kindMessage(e.serverMessage) + " You can type to me instead.", 'sorry');
+        return undefined;
       }
       if (e && e.stage === 'stop' && e.name === 'AbortError') {      // the first stop waits for the voice model to load
         setPhase('idle');
-        return say(MSG.waking, 'sorry');
+        screenLine(MSG.waking, 'sorry');
+        return undefined;
       }
-      return say(MSG.notCaught, 'talking');
+      screenLine(MSG.notCaught, 'talking');
+      return undefined;
     });
   }
 
@@ -2255,19 +2232,20 @@
     convoListen(c);
   }
 
-  // A short goodbye in Normal/Offline: the emergency check first (never missed), then her fixed goodbye.
+  // A short goodbye in Normal/Offline (M21a): talkTo checks for an emergency first, like any turn, and she answers in her
+  // own words. Once her speech has ended the talk closes and the caption goes to the rest line. No answer: it closes silently.
   function convoBye(c, text) {
-    setPhase('thinking');
-    return api('POST', '/api/mary/heard', { text: text }, { ms: 8000 }).then(function (j) {
-      return j || {};
-    }, function (e) { log(e); return null; }).then(function (j) {
-      if (S.convo !== c) { return undefined; }
-      var voice = c.voice;   // M4a: her goodbye in the voice of this talk
-      closeConvo(c);
-      if (!j || j.emergency) { return talkTo(text); }   // the full talk path: the emergency screen and her words
-      setPhase('idle');
-      return say(goodbyeLine(), 'happy', voice);
-    });
+    return talkTo(text).then(function () { return closeWhenQuiet(c, 0); });
+  }
+  function closeWhenQuiet(c, n) {
+    if (S.convo !== c || S.screen === 'emergency') { return undefined; }   // an emergency: the talk goes on
+    if ((Sp.sess || S.phase === 'speaking' || S.phase === 'thinking') && n < 100) {
+      return new Promise(function (r) { setTimeout(r, 300); }).then(function () { return closeWhenQuiet(c, n + 1); });
+    }
+    closeConvo(c);
+    setPhase('idle');
+    setCaption(restLine(false));
+    return undefined;
   }
 
   function convoAfterEmergency() {
@@ -2324,7 +2302,7 @@
       if (!r || !r.response || r.response.error || !r.say) { return false; }
       newTurn();
       if (action === 'switch_companion' && S.convo && S.convo.live) { return true; }   // M4a: Live restarts and greets
-      say(r.say, mood);
+      tell('The app just did this: ' + r.say, r.say, mood);
       return true;
     } catch (e) { log(e); return false; }
   }
@@ -2418,19 +2396,20 @@
   }
 
   async function replyFailed() {
-    await say(MSG.sorry, 'sorry');
+    screenLine(MSG.sorry, 'sorry');
   }
 
   async function finishReply(d, T) {
     if (d.mood) { applyMood(String(d.mood)); }
     if (d.emergency && S.screen !== 'emergency') { show('emergency'); }
+    if (d.steps) { showSteps(String(d.steps)); }   // M21a: the steps in big letters
     // --- skills hook (M13) --- a skill's effects (when not already streamed to us)
     if (!T.effects && d.effects && d.effects.length) {
       for (var ei = 0; ei < d.effects.length; ei++) { applyEffect(d.effects[ei], T); }
     }
     // With no key, an offline voice phrase that ran a skill still gets spoken (no key screen). The server
     // sets mood "talking" for that and "sorry" for its own no-key line.
-    var skillRan = !!T.effects || (String(d.text || '').trim() && d.mood === 'talking');
+    var skillRan = !!T.effects || ((String(d.text || '').trim() || String(d.notice || '').trim()) && d.mood === 'talking');
     // --- end skills hook ---
     if (d.needs_key && !d.emergency && !skillRan) {
       spCancel();
@@ -2447,9 +2426,11 @@
       T.rest += full.slice(T.streamed.length);
     }
     var caption = (full || T.streamed).replace(/^\s+/, '');
+    if (caption.trim()) { S.lastWords = lastSentences(caption); }   // M21a: for "say that again" at a new speed
 
     if (!caption.trim()) {
-      if (d.emergency) { await say(MSG.emergency, 'alert'); return; }
+      if (d.notice) { screenLine(String(d.notice)); return; }   // M21a: screen only, no voice
+      if (d.emergency) { return; }               // the steps block shows it
       if (!d.error && !d.mood) { return; }   // M15c: a quiet turn at the send gate: no words on purpose, and no sorry
       await replyFailed();
       return;
@@ -2877,7 +2858,7 @@
   function saveTell(said) {
     if (S.screen === 'emergency') { return Promise.resolve(); }
     if (liveOn() && greetLive(said.live)) { return Promise.resolve(); }
-    return Promise.resolve(say(said.plain));
+    return tell(String(said.live).replace(/^\(|\)$/g, ''), said.plain);   // M21a: her own words; the plain line if none
   }
   // A tap: the band's caption says it too, and lets go by itself unless she has started talking.
   function bandSaved() {
@@ -3051,7 +3032,7 @@
         if (!ok) {
           newTurn();
           api('PUT', '/api/settings', { listen_wait: 4 }).then(function () { return refreshStatus(); }).catch(noop);
-          say("I'll wait longer for you.");
+          screenLine("I'll wait longer for you.");
           return;
         }
         refreshStatus().catch(noop);   // the longer wait applies from the next turn
@@ -3364,7 +3345,7 @@
     var next = Math.round(Math.max(lo, Math.min(hi, cur + delta)) * 100) / 100;
     newTurn();
     if (next === cur) {
-      say(isRate
+      screenLine(isRate
         ? (delta < 0 ? "I'm already as slow as I can go." : "I'm already as fast as I can go.")
         : (delta < 0 ? "I'm already as quiet as I can be." : "I'm already as loud as I can be. You can turn up the computer's sound too."));
       return;
@@ -3373,7 +3354,9 @@
     var body = {};
     body[isRate ? 'voice_rate' : 'voice_volume'] = next;
     api('PUT', '/api/settings', body).catch(noop);
-    say(MSG.better);
+    // M21a: her last real words again at the new setting, so the resident hears the change (not remembered twice)
+    if (S.lastWords) { speakModel(S.lastWords, undefined, undefined, true); }
+    else { screenLine(isRate ? (delta < 0 ? 'Slower.' : 'Faster.') : (delta < 0 ? 'Quieter.' : 'Louder.')); }
   }
 
   function setCompanion(c, opts) {
@@ -3394,7 +3377,7 @@
     setCompanion(c);
     if (S.convo && S.convo.live) { try { face.bounce(); } catch (e) { /* nothing */ } return; }   // M4a: Live greets
     var n = companionName(c);
-    say("Hi, I'm " + n + ". It's " + (c === 'mary' ? 'so ' : '') + 'nice to meet you.', 'happy');
+    tell('They just switched to you. Say a short hello.', '', 'happy');
     try { face.bounce(); } catch (e) { /* nothing */ }
   }
 
@@ -3427,7 +3410,7 @@
     b.textContent = '✓ Call light pressed';
     b.setAttribute('aria-pressed', 'true');
     newTurn();
-    say(MSG.light, 'concerned');
+    tell('They pressed their call light. Say help is on the way and you will stay right here with them.', MSG.light, 'concerned');
     clearTimeout(S.lightTimer);
     var seq = S.emSeq;
     function askHelp() {
@@ -3437,7 +3420,7 @@
         return;
       }
       S.helpAsked = true;
-      say(MSG.helpAsk, 'concerned');
+      tell('Ask them if someone has come to help yet.', MSG.helpAsk, 'concerned');
     }
     S.lightTimer = setTimeout(askHelp, 180000);
   }
@@ -3446,7 +3429,7 @@
     var seq = S.emSeq;
     clearTimeout(S.lightTimer);
     newTurn();
-    say(MSG.okNow, 'happy').then(function () {
+    tell('They say they are all right now. Say you are glad and you are right here if they need you.', MSG.okNow, 'happy').then(function () {
       if (S.screen === 'emergency' && S.emSeq === seq) { leaveEmergency(); }
     });
   }
@@ -3618,7 +3601,10 @@
     state: S,
     show: show,
     registerScreen: registerScreen,
-    say: say,
+    tell: tell,
+    screenLine: screenLine,
+    showSteps: showSteps,
+    lastSentences: lastSentences,
     talkTo: talkTo,
     listenOnce: listenOnce,
     setCompanion: setCompanion,
@@ -3662,7 +3648,6 @@
     showCaption: showCaption,                // her words; M4b replaces it with bubble letters
     nextMode: nextMode,                      // pure, for tests
     liveToolGate: liveToolGate,              // pure, for tests
-    openingLine: openingLine,                // M4a: firstrun.js, for her hello
     restLine: restLine,                      // M4a: the resting caption (firstrun.js); typing = true for Type
     isGoodbye: isGoodbye,                    // pure, for tests
     storyParts: storyParts,                  // M4a: pure, for tests

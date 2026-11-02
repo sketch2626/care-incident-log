@@ -130,7 +130,7 @@ class HandlerTests(unittest.TestCase):
 
     def test_the_wake_word_leaves_a_panel_open_and_still_closes_the_menu(self):
         js = read("mary/app.js")
-        wake = slice_js(js, "} else if (ev.type === 'wake') {", "startTalk({ say: WAKE_SAY")
+        wake = slice_js(js, "} else if (ev.type === 'wake') {", "startTalk({ mood: 'happy' })")
         self.assertNotIn("closePanel", wake)
         self.assertIn("closeMenu(false)", wake)
         self.assertIn("closeTyping(false)", wake)

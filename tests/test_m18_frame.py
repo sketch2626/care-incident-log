@@ -108,7 +108,7 @@ class ExitTests(unittest.TestCase):
         js = read("mary/app.js")
         self.assertIn("function uiOpen() { return menuOpen() || !!M.panel; }", js)
         self.assertNotIn("Deep", between(js, "function armIdle(ms)", "function menuItems()"))
-        wake = between(js, "} else if (ev.type === 'wake') {", "startTalk({ say: WAKE_SAY")
+        wake = between(js, "} else if (ev.type === 'wake') {", "startTalk({ mood: 'happy' })")
         self.assertNotRegex(wake, r"[Dd]eep")
         self.assertNotRegex(between(js, "function startTalk(opts)", "var c = { mode: mode"), r"[Dd]eep")
 

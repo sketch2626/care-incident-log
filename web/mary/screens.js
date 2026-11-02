@@ -227,10 +227,20 @@
     }
     return TALK;
   }
-  function findField(s, want) {
-    var w = String(want == null ? '' : want).trim().toLowerCase(), all = fieldsOf(s);
-    for (var i = 0; i < all.length; i++) {
+  var PHONE_WORDS = { 'phone': 1, 'phone number': 1, 'telephone': 1, 'number': 1 };
+  var CELL_WORDS = { 'cell': 1, 'cellphone': 1, 'cell number': 1, 'mobile': 1, 'mobile phone': 1, 'mobile number': 1 };
+  function findField(s, want, doc) {
+    var w = String(want == null ? '' : want).trim().toLowerCase(), all = fieldsOf(s), i;
+    for (i = 0; i < all.length; i++) {
       if (all[i].id.toLowerCase() === w || all[i].label.toLowerCase() === w) { return all[i]; }
+    }
+    // A person has a home phone and a cell phone. "Cell" and "mobile" mean the cell box. A plain "phone" means the home box,
+    // unless the cell box has a number and the home box doesn't, then the cell box.
+    var pick = function (key) { return all.filter(function (f) { return f.kind === 'detail' && f.key === key; })[0] || null; };
+    if (CELL_WORDS[w]) { return pick('cell'); }
+    if (PHONE_WORDS[w]) {
+      var home = pick('phone'), cell = pick('cell'), h = home && doc ? fieldEl(doc, home) : null, c = cell && doc ? fieldEl(doc, cell) : null;
+      return (c && c.value && !(h && h.value)) ? cell : home;
     }
     return null;
   }
@@ -443,7 +453,7 @@
   }
 
   function explainField(args, env) {
-    var s = here(env), doc = env.doc(), f = findField(s, args.field);
+    var s = here(env), doc = env.doc(), f = findField(s, args.field, doc);
     if (!doc) { return no(NOT_THERE_NO); }
     if (!f) { return no(unlistedNo(args.field)); }
     var el = fieldEl(doc, f);
@@ -455,8 +465,19 @@
     if (f.choices) { out.choices = f.choices.map(function (c) { return c.label; }); }
     return out;
   }
+  // D12: a person's card has no Change button, so a fill asked for on it goes to that person's form (nothing saves there either).
   function fillField(args, env) {
-    var s = here(env), doc = env.doc(), f = findField(s, args.field);
+    var s = here(env), doc = env.doc();
+    if (s.id === 'book-card' && doc && findField(s, args.field, doc)) {
+      var m = /^#book-card\/(.+)$/.exec(String(doc.defaultView && doc.defaultView.location ? doc.defaultView.location.hash : ''));
+      var form = byId('book-form');
+      if (!m || !env.openDeep('#book-form/' + m[1])) { return no(SLOW_NO); }
+      return arrive(env, form).then(function (came) { return came ? fillIn(form, args, env) : no(SLOW_NO); });
+    }
+    return fillIn(s, args, env);
+  }
+  function fillIn(s, args, env) {
+    var doc = env.doc(), f = findField(s, args.field, doc);
     if (!f) { return no(unlistedNo(args.field)); }
     if (!doc) { return no(NOT_THERE_NO); }
     var el = fieldEl(doc, f), why = refusal(f, el);
@@ -467,9 +488,15 @@
     if (c.no) { return no(c.no); }
     finishTyping();
     var win = doc.defaultView, done = function () {
-      return { ok: true, label: f.label, value: c.show, saved: false,
-        next: f.address ? 'Spell it back letter by letter and ask "Is that right?" Nothing is saved.'
-          : 'Say the value back and ask "Is that right?" Nothing is saved.' };
+      var real = c.show;   // what is really in the box now, which the page may have tidied
+      if (f.radio) {
+        var on = radios(doc, f).filter(function (r) { return r.checked; })[0];
+        var ch = on ? (f.choices || []).filter(function (x) { return x.value === on.value; })[0] : null;
+        if (ch) { real = ch.label; } else if (on && on.value) { real = on.value; }
+      } else if (el.type !== 'checkbox' && el.value) { real = el.value; }
+      return { ok: true, label: f.label, value: real, saved: false,
+        next: f.address ? 'Spell "' + real + '" letter by letter, exactly as it is, and ask "Is that right?" Nothing is saved.'
+          : 'Say "' + real + '" back and ask "Is that right?" Nothing is saved.' };
     };
     light(doc, f, el);
     if (f.radio) {
@@ -493,7 +520,7 @@
     return typeIn(win, el, c.v).then(done);
   }
   function putBack(args, env) {
-    var s = here(env), doc = env.doc(), f = findField(s, args.field);
+    var s = here(env), doc = env.doc(), f = findField(s, args.field, doc);
     if (!f) { return no(unlistedNo(args.field)); }
     if (!doc) { return no(NOT_THERE_NO); }
     var el = fieldEl(doc, f);

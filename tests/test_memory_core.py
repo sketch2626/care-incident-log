@@ -304,7 +304,7 @@ class TestOfflinePhrases(Case):
         self.assertEqual(self.store.count(), 1)
         self.assertEqual(memory.pending_forget["about"], "son's job")
         out = mary.reply("yes", memory, "")
-        self.assertEqual(out["text"], mary.FORGOT_TEXT)
+        self.assertEqual((out["text"], out["notice"]), ("", mary.FORGOT_TEXT))  # no model: the screen shows it
         self.assertEqual(self.store.count(), 0)
 
     def test_does_not_fire(self):
@@ -507,10 +507,10 @@ class TestTrulyForget(Case):
     def test_offline_ask_then_yes(self):
         memory = self.seed()
         asked = mary.reply("forget about my cat", memory, "")
-        self.assertIn("forget everything about your cat", asked["text"])
+        self.assertIn("forget everything about your cat", asked["notice"])  # no model: screen only
         self.assertIn(self.marker, json.dumps(rows()))
         done = mary.reply("yes", memory, "")
-        self.assertEqual(done["text"], mary.FORGOT_TEXT)
+        self.assertEqual((done["text"], done["notice"]), ("", mary.FORGOT_TEXT))
         self.assertNowhere()
 
     def test_split_from_an_older_install(self):
@@ -625,9 +625,10 @@ class TestForgetRules(Case):
     def test_yes_in_normal_talk_deletes(self):
         self.store.add("Has a son named Mike")
         self.tool("my son")
-        mary._gemini_stream = Fake(["unused"])
+        fake = mary._gemini_stream = Fake(["All gone."])
         out = mary.reply("yes", self.memory, "k")
-        self.assertEqual(out["text"], mary.FORGOT_TEXT)
+        self.assertEqual(out["text"], "All gone.")  # her words; the app's outcome went in her turn note
+        self.assertIn(mary.FORGOT_TEXT, fake.bodies[0]["systemInstruction"]["parts"][0]["text"])
         self.assertEqual(self.store.count(), 0)
 
     def test_emergency_never_forgets(self):

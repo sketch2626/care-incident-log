@@ -730,6 +730,40 @@ def kokoro_sample(voice, data=None):
 
 # ---------------------------------------------------------------- Live chat token
 
+def live_system(companion="mary", memory_name="", *, skills=None, memory=None, rate=None):
+    """The Live system text (pure, no network): what live_token sends as the locked systemInstruction."""
+    if memory is not None:  # M4a: Mary's own screen
+        system = mary.system_text(memory, companion, facts=True, tags=False)  # M4a: Live is spoken as it comes
+        turns = [t for t in (getattr(memory, "recent", None) or [])[-8:]
+                 if isinstance(t, dict) and str(t.get("text") or "").strip()]
+        if turns:  # M4a: so her hello can pick up where they left off
+            system += "\n\nYour last talk together (most recent last):\n" + "\n".join(
+                ("They: " if t.get("role") == "user" else "You: ") + " ".join(str(t["text"]).split())
+                for t in turns)
+    else:  # the voice tryout
+        system = mary.system_text(SimpleNamespace(name=memory_name or "", facts=[], recent=[]), companion,
+                                  facts=False, tags=False)
+    if skills and skills.get("instruction"):  # M4a: before LIVE_EXTRA
+        system += "\n\n" + skills["instruction"]
+    system += "\n\n" + LIVE_EXTRA
+    if memory is not None:  # M4a: her memory tools
+        system += " " + LIVE_TOOLS_NOTE
+        system += mary.reminder_note(memory, cards=bool(skills and skills.get("cards")))  # M15a
+    else:  # M4c: the voice tryout has no tools note, so the character note goes here
+        system += mary.CHARACTER_NOTE
+    try:  # M4a: Live can't take a speed setting, so the saved speed is asked for in words
+        r = float(rate) if rate is not None else None
+    except (TypeError, ValueError):
+        r = None
+    # M4a: a mild hint, and none at normal speed: Live has no speed setting, and this is all it gets.
+    # "Speak slowly... stay that slow" made her crawl at the start of a talk (Andy's fourth try).
+    if r is not None and r < PACE_SLOW_BELOW:
+        system += "\n\nThey like a somewhat slower pace than most people."
+    elif r is not None and r > PACE_FAST_ABOVE:
+        system += "\n\nThey like a brisker pace."
+    return system
+
+
 def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, skills=None, silence_ms=2500,
                memory=None, rate=None, plain=False):
     """A one-use token the page uses to open a Live voice chat straight to Google (the key stays here).
@@ -741,35 +775,7 @@ def live_token(voice, api_key, companion="mary", memory_name="", data=None, *, s
     try:
         name = _voice_name(voice, "live")
         event.update(id=f"live:{name}", voice=name)
-        if memory is not None:  # M4a: Mary's own screen
-            system = mary.system_text(memory, companion, facts=True, tags=False)  # M4a: Live is spoken as it comes
-            turns = [t for t in (getattr(memory, "recent", None) or [])[-8:]
-                     if isinstance(t, dict) and str(t.get("text") or "").strip()]
-            if turns:  # M4a: so her hello can pick up where they left off
-                system += "\n\nYour last talk together (most recent last):\n" + "\n".join(
-                    ("They: " if t.get("role") == "user" else "You: ") + " ".join(str(t["text"]).split())
-                    for t in turns)
-        else:  # the voice tryout
-            system = mary.system_text(SimpleNamespace(name=memory_name or "", facts=[], recent=[]), companion,
-                                      facts=False, tags=False)
-        if skills and skills.get("instruction"):  # M4a: before LIVE_EXTRA
-            system += "\n\n" + skills["instruction"]
-        system += "\n\n" + LIVE_EXTRA
-        if memory is not None:  # M4a: her memory tools
-            system += " " + LIVE_TOOLS_NOTE
-            system += mary.reminder_note(memory, cards=bool(skills and skills.get("cards")))  # M15a
-        else:  # M4c: the voice tryout has no tools note, so the character note goes here
-            system += mary.CHARACTER_NOTE
-        try:  # M4a: Live can't take a speed setting, so the saved speed is asked for in words
-            r = float(rate) if rate is not None else None
-        except (TypeError, ValueError):
-            r = None
-        # M4a: a mild hint, and none at normal speed: Live has no speed setting, and this is all it gets.
-        # "Speak slowly... stay that slow" made her crawl at the start of a talk (Andy's fourth try).
-        if r is not None and r < PACE_SLOW_BELOW:
-            system += "\n\nThey like a somewhat slower pace than most people."
-        elif r is not None and r > PACE_FAST_ABOVE:
-            system += "\n\nThey like a brisker pace."
+        system = live_system(companion=companion, memory_name=memory_name, skills=skills, memory=memory, rate=rate)
         now = datetime.now(timezone.utc)
         stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
         # The wire shape Google's own SDK sends: the locked session setup sits in bidiGenerateContentSetup.

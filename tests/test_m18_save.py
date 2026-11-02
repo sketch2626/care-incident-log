@@ -60,6 +60,7 @@ function world(over) {
   function bandUp() { return true; }
   function greetLive(t) { told.push(t); return live; }
   function say(t) { said.push(t); return Promise.resolve(); }
+  function tell(n, shown) { said.push(shown); return Promise.resolve(); } function lastSentences(t){return t;} function screenLine(){} function showSteps(){} 
   function screenNote(t) { notes.push(t); }
   function deepPost(m) { posted.push(m.what); }
   eval(BLOCK);
@@ -285,7 +286,7 @@ class Tools(unittest.TestCase):
         self.assertFalse([word for word in got["actions"] + got["tools"] if "save" in word or "submit" in word])
 
 
-REPLY = {"text": "Okay.", "mood": "talking", "effects": [], "emergency": "", "gemini_alert": False, "offer": None,
+REPLY = {"text": "Okay.", "notice": "", "steps": "", "mood": "talking", "effects": [], "emergency": "", "gemini_alert": False, "offer": None,
          "logged": False, "error": None, "first_words_s": 0, "total_s": 0}
 
 

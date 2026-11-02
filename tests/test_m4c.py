@@ -78,8 +78,7 @@ class NormalOrder(unittest.TestCase):
         self.assertTrue(kind)
         text = mary._body(FELL, mem, kind, skills=skills)["systemInstruction"]["parts"][0]["text"]
         self.assertIn(mary.CHARACTER_NOTE, text)
-        self.assertLess(text.index("already told them this out loud"), len(text))
-        self.assertLess(text.index(mary.CHARACTER_NOTE), text.index("already told them this out loud"))
+        self.assertLess(text.index(mary.CHARACTER_NOTE), text.index("This is an emergency"))
         text = mary._body("he hit me", mem, "", skills=skills)["systemInstruction"]["parts"][0]["text"]
         self.assertLess(text.index("SKILLS TEXT HERE"), text.index(mary.CHARACTER_NOTE))
         self.assertLess(text.index(mary.CHARACTER_NOTE), text.index(mary.HARM_NOTE))
@@ -103,7 +102,9 @@ class Instructions(LiveBase):
             self.assertIn(mary.CHARACTER_NOTE, self.live_prompt(new_memory(), companion))
 
 
-class EmergencyOnce(unittest.TestCase):
+class EmergencySaid(unittest.TestCase):
+    """M21a (D1): the model says the steps in its own words; the screen shows them. No fixed line is ever spoken.
+    (Replaces M4c's EmergencyOnce, whose whole point, filtering her repeat of the app's line, is gone.)"""
     def setUp(self):
         self.fake = FakeGemini()
         self._real = mary._gemini_stream
@@ -111,79 +112,63 @@ class EmergencyOnce(unittest.TestCase):
         self.addCleanup(setattr, mary, "_gemini_stream", self._real)
         self.mem = new_memory()
 
-    def say(self, text, *chunks):
+    def say(self, text, *chunks, key=KEY):
         self.fake.chunks = list(chunks)
-        return mary.reply(text, self.mem, KEY)
+        return mary.reply(text, self.mem, key)
 
-    def fell(self, *chunks):
+    def test_her_words_stream_unfiltered_and_steps_set(self):
         kind = mary.is_emergency(FELL)
-        app = mary.EMERGENCY_TEXT[kind]
-        r = self.say(FELL, *chunks)
-        self.assertEqual(r["text"].count(app), 1, r["text"])
-        self.assertTrue(r["text"].startswith(app))
-        return r, app, r["text"][len(app):]
+        r = self.say(FELL, "[mood: alert] Press your call light and call 911 now. I'm right here.")
+        self.assertEqual(r["text"], "Press your call light and call 911 now. I'm right here.")
+        self.assertEqual(r["steps"], mary.EMERGENCY_TEXT[kind])
+        self.assertNotIn(mary.EMERGENCY_TEXT[kind], r["notice"])  # at most the offer question, never the steps
+        self.assertEqual(r["mood"], "alert")
+        self.assertEqual(r["emergency"], kind)
 
-    def test_steps_once(self):
-        r, app, rest = self.fell("[mood: alert] Please press your call light right now. I'm right here.")
-        self.assertIn("I'm right here.", rest)
-        self.assertEqual(r["text"].count("call light"), app.count("call light"))
-
-    def test_all_repeats_gives_stay_text(self):
-        r, app, rest = self.fell("Press your call light and call 911.")
-        self.assertIn(mary.STAY_TEXT, rest)
-        self.assertEqual(r["error"], "")
-
-    def test_split_across_chunks(self):
-        r, app, rest = self.fell("Press your call", " light now. I'm with you.")
-        self.assertIn("I'm with you.", rest)
-        self.assertNotIn("Press your", rest)
-
-    def test_spelled_numbers(self):
-        r, app, rest = self.fell("Call nine one one.")
-        self.assertNotIn("nine one one", rest)
-        self.assertIn(mary.STAY_TEXT, rest)
-        r, app, rest = self.fell("Call or text nine, eight, eight. I'm here.")
-        self.assertNotIn("nine, eight, eight", rest)
-        self.assertIn("I'm here.", rest)
-
-    def test_veteran_line_stays(self):
-        kind = mary.is_emergency("I want to kill myself")
-        self.assertEqual(kind, "self_harm")
-        line = "Since you're a veteran, you can call nine, eight, eight and press one, or text eight three eight, two five five."
-        r = self.say("I want to kill myself", line)
-        self.assertIn("veteran", r["text"])
-        self.assertIn("nine, eight, eight", r["text"])
-
-    def test_need_a_nurse_stays(self):
-        r, app, rest = self.fell("That sounds serious, and you need a nurse.")
-        self.assertIn("you need a nurse", rest)
-
-    def test_remember_tag_saves_and_is_silent(self):
-        r, app, rest = self.fell("[mood: alert] I'm here. [remember: Likes tea.]")
-        self.assertEqual(r["remembered"], ["Likes tea."])
-        self.assertNotIn("remember", r["text"])
-        self.assertNotIn("Likes tea", r["text"])
-
-    def test_app_line_plays_when_gemini_fails(self):
+    def test_no_fixed_line_when_gemini_fails(self):
         self.fake.fail = True
         r = self.say(FELL)
-        self.assertIn(mary.EMERGENCY_TEXT[mary.is_emergency(FELL)], r["text"])
-        self.assertNotIn(mary.STAY_TEXT, r["text"])
+        self.assertEqual(r["text"], "")
+        self.assertEqual(r["steps"], mary.EMERGENCY_TEXT[mary.is_emergency(FELL)])
+        self.assertEqual(r["mood"], "alert")
 
-    def test_non_emergency_not_filtered(self):
+    def test_no_key_text_empty_steps_set(self):
+        r = self.say(FELL, key="")
+        self.assertEqual(r["text"], "")
+        self.assertEqual(r["steps"], mary.EMERGENCY_TEXT[mary.is_emergency(FELL)])
+
+    def test_turn_note_carries_the_steps(self):
+        self.say(FELL, "I'm here.")
+        system = self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"]
+        app = mary.EMERGENCY_TEXT[mary.is_emergency(FELL)]
+        self.assertIn("This is an emergency", system)
+        self.assertIn(app, system)
+        self.assertIn("with every number in them", system)
+        self.assertLess(system.index(mary.CHARACTER_NOTE), system.index("This is an emergency"))
+
+    def test_veteran_note(self):
+        self.say("I want to kill myself", "I'm here.")
+        system = self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("If they've told you they're a veteran", system)
+        mem = new_memory(facts=[{"text": "He is a veteran."}])
+        body = mary._body("I want to kill myself", mem, "self_harm", safety_line=mary.EMERGENCY_TEXT["self_harm"] + mary.VETERANS_TEXT)
+        self.assertIn("Include the Veterans Crisis Line", body["systemInstruction"]["parts"][0]["text"])
+
+    def test_remember_tag_saves_and_is_silent(self):
+        r = self.say(FELL, "[mood: alert] I'm here. [remember: Likes tea.]")
+        self.assertEqual(r["remembered"], ["Likes tea."])
+        self.assertNotIn("remember", r["text"])
+
+    def test_non_emergency_has_no_steps(self):
         r = self.say("My soup is cold.", "Press your call light if you need help.")
         self.assertIn("call light", r["text"])
+        self.assertEqual(r["steps"], "")
 
-    def test_without_steps_direct(self):
-        self.assertEqual(mary._without_steps("Press your call light and call 911. I'm here."), "I'm here.")
-        out = mary._without_steps("[mood: alert] Call 911. Stay calm.")
-        self.assertTrue(out.startswith("[mood: alert]"))
-        self.assertIn("Stay calm.", out)
-        self.assertNotIn("911", out)
-        vet = "If you're a veteran, press one."
-        self.assertEqual(mary._without_steps(vet), vet)
-        self.assertEqual(mary._without_steps("You need a nurse."), "You need a nurse.")
-        self.assertEqual(mary._without_steps("Tell the nurse."), "")
+    def test_her_words_only_go_to_history(self):
+        self.say(FELL, "I'm here.")
+        self.assertEqual([t["text"] for t in self.mem.recent if t["role"] == "model"], ["I'm here."])
+        self.say(FELL, key="")
+        self.assertEqual([t["text"] for t in self.mem.recent if t["role"] == "model"], ["I'm here."])
 
 
 class NameOnce(LiveBase):

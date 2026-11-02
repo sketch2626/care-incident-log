@@ -1,14 +1,14 @@
-/* Mary's first meeting, her daily greeting, and her sleepiness (task T4b). Plain script, loaded after app.js.
+/* Mary's first meeting, her sleepiness (task T4b). Plain script, loaded after app.js.
    It only uses what app.js hands out on window.MaryApp, and it replaces two of its hooks:
 
      MaryApp.startFirstRun   Choose your companion (board mockups/mary/round4/R4Choose.dc.html), then the
                              First hello (R4FirstHello.dc.html: waking up, hello, getting to know you).
-     MaryApp.enterMain       the normal start; now it also greets the resident by name and time of day.
+     MaryApp.enterMain       the normal start; M21a: says nothing on its own, a talk may start silently.
      MaryApp.onActivity      called by app.js when a talk starts; wakes her if she was sleepy.
 
    Idle (see IDLE below): after sleepMin minutes of nothing she gently falls asleep (sleepy face, nothing spoken); after
-   dimMin minutes her background and glow dim softly. A tap, key or talk wakes her: the light fades back, surprised, then
-   happy with a bounce, "Oh! Hello again." Power only decides the keep-awake: plugged in or unknown (GET /api/power ->
+   dimMin minutes her background and glow dim softly. A tap, key or talk wakes her: the light fades back and she is just
+   resting, nothing spoken (M21a). Power only decides the keep-awake: plugged in or unknown (GET /api/power ->
    {plugged_in: true|false|null}; a 404 or an error counts as plugged in) holds a Screen Wake Lock so the screen never
    goes black; on battery it lets go so Windows can dim as usual.
 
@@ -145,10 +145,10 @@
   });
 
   // Mary says it on her card: her face talks while the voice speaks.
-  function sayOnCard(text) {
+  function sayOnCard(note, shown) {
     var f = CH && CH.faces.mary;
     if (f) { f.setActivity('talking'); }
-    return A.say(text, 'happy').then(function () {
+    return A.tell(note, shown, 'happy').then(function () {
       if (f && CH && !CH.picked) { f.setActivity('resting'); }
     });
   }
@@ -177,7 +177,7 @@
   async function chooseByVoice(tok) {
     var sam = A.companionName('him') || SAM_FALLBACK;
     var ask = 'Would you like to talk with me, or with ' + sam + '?';
-    await sayOnCard(ask);
+    await sayOnCard('They are choosing who to talk with. Ask, in one short line, whether they would like to talk with you or with ' + sam + '.', ask);
     if (tok !== flow || !CH || CH.picked) { return; }
     if (S.typingOnly) { return; }                  // no speech here: just wait for a tap
     for (var tries = 0; tries < 2; tries++) {
@@ -187,7 +187,8 @@
       if (c) { pick(c); return; }
       if (r.failed) { break; }
       if (tries === 0) {
-        await sayOnCard("I'm sorry, I didn't catch that. Would you like to talk with me, or with " + sam + '?');
+        await sayOnCard('You did not catch their answer. Say sorry, and ask again, in one short line, whether they would like to talk with you or with ' + sam + '.',
+          "I'm sorry, I didn't catch that. Would you like to talk with me, or with " + sam + '?');
         if (tok !== flow || !CH || CH.picked) { return; }
       }
     }
@@ -315,8 +316,10 @@
 
   async function askName() {
     var asks = ['What would you like me to call you?', "I didn't quite catch that. What should I call you?"];
+    var askNotes = ['Ask what they would like you to call them.',
+      'You did not catch their name. Say so kindly and ask what you should call them.'];
     for (var i = 0; i < asks.length; i++) {
-      await A.say(asks[i], 'happy');
+      await A.tell(askNotes[i], asks[i], 'happy');
       var ans = await getAnswer(asks[i]);
       if (ans.skipped) { break; }
       if (!ans.text) { continue; }
@@ -328,11 +331,12 @@
       if (name) {
         S.name = name;
         try { A.getFace().bounce(); } catch (e2) { /* nothing */ }
-        await A.say(String((r && r.text) || ('It is lovely to meet you, ' + name + '.')), 'happy');
+        await A.tell('Their name is ' + name + '. Say you are glad to meet them.', 'Glad to meet you, ' + name + '.', 'happy');
         return true;
       }
     }
-    await A.say("That's all right. You can tell me any time.", 'happy');
+    await A.tell('They would rather not give a name yet. Say that is all right and they can tell you any time.',
+      "That's all right. You can tell me any time.", 'happy');
     return false;
   }
 
@@ -344,12 +348,9 @@
     await wait(1800);
     if (tok !== flow) { return; }
     A.setMood('surprised');                        // she wakes
-    await A.say('Oh! Hello there.', 'surprised');
-    if (tok !== flow) { return; }
-    await wait(250);
-    if (tok !== flow) { return; }
     try { A.getFace().bounce(); } catch (e) { /* nothing */ }
-    await A.say("I'm " + n + ". It's so nice to meet you.", 'happy');   // step 2
+    await A.tell('You are meeting them for the very first time, on this screen. Say hello and say your name is ' + n +
+      ', in one or two short sentences.', "Hello. I'm " + n + '.', 'happy');   // steps 1-2
     skipOn = false;
     if (tok !== flow) { return; }
     await wait(300);
@@ -358,95 +359,18 @@
     if (S.talkOnOpen && S.hasKey) {                // M4a: she carries on talking, no tap needed
       S.firstRun = false;
       enterMainQuiet();
-      if (S.screen === 'everyday') { A.startTalk({ say: FIRST_TALK, hello: FIRST_TALK_LIVE }).catch(log); }
+      if (S.screen === 'everyday') { A.startTalk({ hello: FIRST_TALK_LIVE }).catch(log); }
       return;
     }
-    await A.say(A.restLine(false), 'happy');   // M4a: no Talk button any more
+    A.setCaption(A.restLine(false));   // M4a: no Talk button any more; M21a: on the screen only
     if (tok !== flow) { return; }
     S.firstRun = false;
     enterMainQuiet();
   }
 
-  // ================================================================ greeting on later opens
-  // M4a: warm and varied, like a friend glad to see them; the night lines never remark on the hour.
-  // Grown-up and plain (Andy: no talking down): no "rise and shine", no "how are you feeling", few exclamation marks.
-  var GREET = {
-    morning: [
-      "Good morning{n}. It's good to see you.",
-      "Well, good morning{n}. Did you sleep all right?",
-      "Morning{n}. What's going on today?",
-      "Hey there{n}, good morning. What's new with you?",
-      "Good morning{n}. How's the day starting out?",
-      "Morning{n}. Good to see you. Got anything on your mind?"
-    ],
-    afternoon: [
-      "Good afternoon{n}. How's your day treating you?",
-      "Well, hey there{n}. Good to see you this afternoon.",
-      "Afternoon{n}. It's real good to see you.",
-      "Hi{n}. How's your afternoon going?",
-      "Good afternoon{n}. What's been going on?",
-      "Hey{n}. Tell me how your day's going."
-    ],
-    evening: [
-      "Good evening{n}. It's good to see you.",
-      "Well, hey there{n}. How was your day?",
-      "Evening{n}. Glad to have the company.",
-      "Hi{n}. How was supper tonight?",
-      "Good evening{n}. Sit a spell and tell me about your day.",
-      "Hey{n}, good evening. Good to see you."
-    ],
-    night: [
-      "Well, hey there{n}. Can't sleep? I'm glad for the company.",
-      "Hi{n}. It's a nice quiet night. Want to talk a little while?",
-      "Hey{n}. It's good to see you. Want some company for a bit?",
-      "Hello{n}. Nice and quiet tonight. Good time for a talk.",
-      "Hey there{n}. Want to talk a while? I'd like that.",
-      "Hi{n}. A little company is nice on a quiet night."
-    ]
-  };
-
-  function slotFor(h) {
-    if (h >= 22 || h < 5) { return 'night'; }   // M4a: was 'late'
-    if (h < 12) { return 'morning'; }
-    if (h < 17) { return 'afternoon'; }
-    return 'evening';
-  }
-
-  function greetingText() {
-    var slot = slotFor(new Date().getHours());
-    var list = GREET[slot];
-    var last = -1;
-    try { last = Number(localStorage.getItem('maryGreet.' + slot)); } catch (e) { last = -1; }
-    var i = Math.floor(Math.random() * list.length);
-    if (list.length > 1 && i === last) { i = (i + 1) % list.length; }
-    try { localStorage.setItem('maryGreet.' + slot, String(i)); } catch (e2) { /* nothing */ }
-    var nm = S.name ? ', ' + S.name : '';
-    return { text: list[i].replace('{n}', nm), slot: slot };
-  }
-
-  function greet() {
-    var g = greetingText();
-    if (g.slot !== 'night') {
-      try { A.getFace().bounce(); } catch (e) { /* nothing */ }
-    }
-    // if the webview blocks her voice before a first tap, say() still leaves the caption up and does not retry
-    A.openingLine(g.text).then(function (line) {   // M4a: her own words, with the scripted line behind them
-      if (line.text) { return A.say(line.text, g.slot === 'night' ? 'talking' : 'happy', undefined, line.saved); }
-    }).catch(log);
-  }
-
-  // M4a: "Start talking when Mary opens" (talk_on_open). She starts the talk herself: Live says its own hello
-  // (with the time of day); Normal and Offline say the brain's hello, or a scripted greeting if that fails, then
-  // listen. 15 s of quiet and she rests.
-  function talkOnOpen() {
-    var g = greetingText();
-    if (g.slot !== 'night') {
-      try { A.getFace().bounce(); } catch (e) { /* nothing */ }
-    }
-    A.startTalk({ say: g.text, brainHello: true, mood: g.slot === 'night' ? 'talking' : 'happy' }).catch(log);   // M4a
-  }
-  // M4a: after the first hello she carries on talking; she has just greeted them, so no second hello
-  var FIRST_TALK = "Now, tell me a little about yourself. I'd love to get to know you.";
+  // M21a (D1): nothing is said when the screen opens. With "Start talking when Mary opens" she begins a talk
+  // silently (the model speaks first); otherwise the resting caption just shows.
+  // After the first hello she carries on talking; the model's first-meeting prompt below is worded by the model.
   var FIRST_TALK_LIVE = "(You just met them on this screen a moment ago, so don't greet them again. In one short, " +
     "warm sentence, ask them one easy question about themselves, then listen.)";
 
@@ -460,7 +384,7 @@
   A.enterMain = function () {
     enterMainQuiet();
     if (S.screen !== 'everyday' || !S.hasKey) { return; }   // never on the emergency or no-key screens
-    if (S.talkOnOpen) { talkOnOpen(); } else { greet(); }   // M4a
+    if (S.talkOnOpen) { A.startTalk({ mood: 'happy' }).catch(log); }   // M4a, M21a: a silent start; no greeting
   };
 
   A.startFirstRun = startFirstRun;
@@ -553,28 +477,16 @@
     A.setCaption(sleepyCaption());   // M4a
   }
 
-  // quiet = true (a button, or a talk that is starting): the light comes back and she is just resting.
-  // Otherwise: surprised, then happy with a bounce and "Oh! Hello again."
-  function wake(quiet) {
+  // M21a: every wake is quiet (nothing is spoken): the light comes back and she is just resting.
+  function wake() {
     if (!asleep) { return; }
     asleep = false;
     lastAct = Date.now();
     clearTimeout(wakeTimer);
     setDim(false);
     if (S.screen !== 'everyday') { return; }
-    if (quiet) {
-      A.setMood('resting');
-      A.setCaption(restCaption());
-      return;
-    }
-    var t0 = S.turn;
-    A.setMood('surprised');
-    wakeTimer = setTimeout(function () {
-      if (S.screen !== 'everyday') { return; }
-      if (S.turn !== t0 || S.phase !== 'idle') { A.setMood('happy'); return; }   // a talk began meanwhile
-      try { A.getFace().bounce(); } catch (e) { /* nothing */ }
-      A.say('Oh! Hello again.', 'happy').catch(log);
-    }, 600);
+    A.setMood('resting');
+    A.setCaption(restCaption());
   }
 
   function tick() {
@@ -606,7 +518,7 @@
     var t = ev && ev.target;
     var onControl = false;
     try { onControl = !!(t && t.closest && t.closest('button, .overlay')); } catch (e) { onControl = false; }
-    wake(onControl);                              // a tap on her face or a key press gets "Oh! Hello again."; a button wakes her quietly
+    wake(onControl);                              // every wake is quiet (M21a)
   }
 
   A.onActivity = function () {

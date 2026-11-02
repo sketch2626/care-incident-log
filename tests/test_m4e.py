@@ -144,46 +144,6 @@ def real_case(cid):
     return next(c for c in bb.load_cases() if c["id"] == cid)
 
 
-class BenchHello(unittest.TestCase):
-    def test_ways_are_the_apps_and_marys(self):
-        ways = bb.open_ways()
-        self.assertEqual(tuple(ways), tuple(mary.OPEN_WAYS))
-        self.assertTrue(all("\\" not in way for way in ways))
-
-    def test_way_goes_inside_the_closing_bracket(self):
-        plain = bb.live_hello("evening")
-        way = bb.open_ways()[3]
-        self.assertEqual(bb.live_hello("evening", way), plain[:-1] + " " + way + ")")
-
-    def test_repeats_get_different_turns(self):
-        case = real_case("hello-evening-mary")
-        turns = [bb.new_run(case, "mary", "live", n)["turns"][0] for n in (1, 2, 3)]
-        self.assertEqual(len(set(turns)), 3)
-        for n, turn in enumerate(turns):
-            self.assertTrue(turn.endswith(bb.open_ways()[n] + ")"), turn)
-        planned = [r["turns"][0] for r in bb.plan_runs(bb.load_cases(), only="hello-evening-mary")]
-        self.assertEqual(planned, turns)
-
-    def test_every_arm_of_a_repeat_gets_the_same_turn(self):
-        case = real_case("hello-evening-mary")
-        brain = bb.new_run(case, "mary", "live", 2)["turns"]
-        self.assertEqual(bb.new_run(case, "mary", "raw", 2, "a prompt")["turns"], brain)
-        self.assertEqual(bb.new_run(case, "mary", "live", 2, "", "lean", "a variant")["turns"], brain)
-
-    def test_ways_come_round_again(self):
-        line = "{LIVE_HELLO:night}"
-        self.assertEqual(bb.expand_line(line, len(bb.open_ways()) + 1), bb.expand_line(line, 1))
-        self.assertEqual(bb.expand_line("Hey there.", 3), "Hey there.")
-
-    def test_missing_ways_stop_plainly(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "app.js"
-            path.write_text("var LIVE_HELLO = '(Say hello {when}.)';\n", encoding="utf-8")
-            with mock.patch.object(bb, "APP_JS", path):
-                with self.assertRaisesRegex(bb.BenchError, "OPEN_WAYS"):
-                    bb.expand_line("{LIVE_HELLO:evening}")
-
-
 class BenchJudge(BenchCase):
     NAMES = ["warmth", "plain_talk"]
     BARE = {"warmth": {"pass": True, "why": "kind"}, "plain_talk": {"pass": False, "why": "stiff"}}

@@ -93,13 +93,6 @@ class ReplyAndSaving(unittest.TestCase):
         self.assertNotIn("ninety", r["text"])
         self.assertIn(D988, [t["text"] for t in mem.recent if t["role"] == "model"][-1])
 
-    def test_without_steps(self):
-        for text in ("Call nine-eleven.", "Call ninety-eight-eight now.", "Call 9-1-1."):
-            self.assertEqual(mary._without_steps(text), "", text)
-        out = mary._without_steps("If you're a veteran, call ninety-eight-eight and press one.")
-        self.assertIn("veteran", out)
-        self.assertIn(D988, out)
-
     def test_live_said_saves_fixed(self):
         helpers.reset_db()
         status, _, _ = helpers.api("POST", "/api/mary/live/said", {"text": "Call ninety-eight-eight, friend."})
@@ -160,13 +153,13 @@ class PageNumbers(unittest.TestCase):
 
     def test_live_number_fix(self):
         src = read(APP)
-        code = ("var LIVE_SAY='(SAY ', greeted=[]; function greetLive(t){greeted.push(t); return true;}\n" +
+        code = ("var greeted=[]; function greetLive(t){greeted.push(t); return true;}\n" +
                 between(src, "function liveNumberFix(", "function liveSafetyMissing(") +
                 "var c={}; liveNumberFix(c,'nine, eight, eight'); liveNumberFix(c,'nine one one');"
                 "var d={ending:true}; liveNumberFix(d,'x'); var e={story:true}; liveNumberFix(e,'x');"
                 "liveNumberFix({},''); console.log(JSON.stringify([greeted,c.numFixed]));")
         greeted, fixed = node(code)
-        self.assertEqual(greeted, ["(SAY Let me say that number clearly: nine, eight, eight.)"])
+        self.assertEqual(greeted, ["(You said a number wrong. The right number is nine, eight, eight. Say it again, in your own words.)"])
         self.assertTrue(fixed)
 
 
@@ -177,7 +170,8 @@ class LiveEmergency(LiveBase):
             "text": "I'm paralyzed, and I've got a sudden pounding headache and I'm sweating all over."})
         self.assertTrue(got["emergency"])
         self.assertEqual(got["kind"], "medical")
-        self.assertIn("911", got["say"])
+        self.assertIn("911", got["steps"])
+        self.assertNotIn("say", got)
 
     def test_emergency_text_veterans(self):
         plain = mary.EMERGENCY_TEXT["self_harm"]
@@ -197,11 +191,11 @@ class LiveEmergency(LiveBase):
     def test_heard_veteran(self):
         helpers.reset_db()
         _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "I'm a veteran and I want to kill myself"})
-        self.assertIn("press 1", got["say"])
-        self.assertIn("988", got["say"])
+        self.assertIn("press 1", got["steps"])
+        self.assertIn("988", got["steps"])
 
     def reply(self, chunks, key=KEY, **kw):
-        fake = FakeGemini()
+        fake = self.fake = FakeGemini()
         fake.chunks = chunks
         mem = new_memory(facts=["served in the Navy"], **kw)
         with mock.patch.object(mary, "_gemini_stream", fake):
@@ -209,21 +203,24 @@ class LiveEmergency(LiveBase):
 
     def test_veteran_reply(self):
         full = mary.emergency_text("self_harm", new_memory(facts=["served in the Navy"]))
+        # D1: the steps go to the screen and into her turn note; her text is only her own words
         r, _ = self.reply(["Call the Veterans Crisis Line, 988 and press 1. I'm here with you."])
-        self.assertTrue(r["text"].startswith(full))
-        self.assertEqual(r["text"].count("Veterans Crisis Line"), 1)
-        self.assertIn("I'm here with you.", r["text"])
-        r, _ = self.reply(["You can call 988 and press 1 for the Veterans Crisis Line."])
-        self.assertIn(mary.STAY_TEXT, r["text"])
-        self.assertEqual(r["text"].count("Veterans Crisis Line"), 1)
+        self.assertEqual(r["steps"], full)
+        self.assertIn(mary.VETERANS_TEXT, r["steps"])
+        self.assertEqual(r["text"], "Call the Veterans Crisis Line, 988 and press 1. I'm here with you.")
+        note = self.fake.bodies[0]["systemInstruction"]["parts"][0]["text"]
+        self.assertIn(full, note)
+        self.assertIn("Include the Veterans Crisis Line", note)
         r, _ = self.reply([], key="")
-        self.assertTrue(r["text"].startswith(full))
+        self.assertEqual((r["steps"], r["text"]), (full, ""))
 
 
-SAFETY_JS = ("var LIVE_SAY='(SAY ', greeted=[], said=[], done=[], fixed=[], spoke=[], refuse=false;\n"
+SAFETY_JS = ("var greeted=[], said=[], done=[], fixed=[], spoke=[], refuse=false;\n"
              "function greetLive(t){ if (refuse) { return false; } greeted.push(t); return true; }\n"
              "function liveSaid(c){said.push(1);} function liveTurnDone(c){done.push(1);}\n"
-             "function liveNumberFix(c,f){fixed.push(f);} function say(w,m){spoke.push([w,m]);}\n")
+             "function liveNumberFix(c,f){fixed.push(f);} function say(w,m){spoke.push([w,m]);}\n"
+             "function lastSentences(t){return t;} function screenLine(){} function showSteps(){}\n" +
+             between(read(APP), "function liveSafetyText(", "// --- end M4a ---") + "\n")
 
 
 @unittest.skipUnless(NODE, "Node not found")
@@ -251,13 +248,15 @@ class PageSafety(unittest.TestCase):
         line = "Call 911 now."
         got = self.run_ended(f"var c={{saidText:'Hold on, I am here.',safetyWords:{json.dumps(line)}}};"
                              "liveTurnEnded(c,true); c.saidText='Call nine one one now.'; liveTurnEnded(c,true);")
-        self.assertEqual(got["greeted"], ["(SAY Call nine one one now.)"])  # once only
+        self.assertEqual(len(got["greeted"]), 1)  # once only: an instruction that carries every number
+        self.assertIn("Call nine one one now.", got["greeted"][0])
+        self.assertIn("own words", got["greeted"][0])
         self.assertEqual(got["done"], 1)
         self.assertEqual(got["c"]["safetyWords"], "")
         got = self.run_ended(f"var c={{saidText:'  ',safetyWords:{json.dumps(line)}}}; liveTurnEnded(c,true);")
         self.assertEqual((got["greeted"], got["c"]["safetyWords"]), ([], line))
         got = self.run_ended(f"refuse=true; var c={{saidText:'No.',safetyWords:{json.dumps(line)}}}; liveTurnEnded(c,true);")
-        self.assertEqual(got["spoke"], [[line, "alert"]])
+        self.assertEqual(got["spoke"], [])  # M21a: the steps are on the screen already; she says nothing of her own
         got = self.run_ended(f"var c={{saidText:'No.',safetyWords:{json.dumps(line)}}}; liveTurnEnded(c,false);")
         self.assertEqual((got["greeted"], got["spoke"], got["done"], got["said"]), ([], [], 0, 1))
 
@@ -290,37 +289,8 @@ class PromptText(LiveBase):
         self.assertIn("What you can do", self.TEXT)
         self.assertIn("weather", mary.CHARACTER_NOTE)
 
-    def test_item7_varied_hellos(self):
-        ways = mary.OPEN_WAYS
-        self.assertEqual(len(set(ways)), 5)
-        for way in ways:
-            self.assertNotIn("[", way)
-            self.assertNotIn("Mary", way)
-            self.assertNotIn("Sam", way)
-            bodies = []
-
-            def fake(body, key, model="", deadline_s=None):
-                bodies.append(body)
-                return iter(["Hi there."])
-            with mock.patch.object(mary, "_gemini_stream", fake), mock.patch.object(mary.random, "choice", lambda s, w=way: w):
-                mary.open_line(new_memory(), KEY)
-            self.assertIn(way, bodies[0]["systemInstruction"]["parts"][0]["text"])
+    def test_item7_no_stock_hello(self):
         self.assertNotIn("well, hey there", self.TEXT.lower())
-
-    @unittest.skipUnless(NODE, "Node not found")
-    def test_item7_page(self):
-        src = read(APP)
-        self.assertNotIn("{way}", between(src, "var LIVE_HELLO", "function timeWord"))
-        code = (between(src, "var LIVE_HELLO", "function goodbyeLine") + "function timeWordX(){}\n" +
-                between(src, "var OPEN_WAYS", "// M4a: the big Talk") +
-                "var hellos=[]; for (var i=0;i<60;i++){hellos.push(liveHello());}"
-                "console.log(JSON.stringify([OPEN_WAYS,hellos]));")
-        ways, hellos = node(code)
-        self.assertEqual(ways, list(mary.OPEN_WAYS))
-        for h in hellos:
-            self.assertTrue(h.endswith(")"))
-            self.assertNotIn("{way}", h)
-            self.assertTrue(any(w in h for w in ways))
 
 
 if __name__ == "__main__":

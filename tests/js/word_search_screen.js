@@ -44,7 +44,7 @@ global.fetch = (url, init) => {
   try { const r = script(ev); return Promise.resolve({ json: () => Promise.resolve(r) }); } catch (e) { return Promise.reject(e); }
 };
 global.MarySkills = { register(n, x) { h = x; }, apply(e) { h.effect(e.kind, e.data); } };
-global.window = { MarySkills: global.MarySkills, MaryApp: { say(t) { said.push(t); return Promise.resolve(); }, busy: () => isBusy,
+global.window = { MarySkills: global.MarySkills, MaryApp: { screenLine(t) { said.push(t); return Promise.resolve(); }, busy: () => isBusy,
   screenNote(t) { notes.push(t); }, companionName: () => 'Mary', currentScreen: () => screen, show(s) { screen = s; } } };
 const realLog = console.log; console.log = (...a) => { if (a[0] !== '[word_search]') realLog(...a); };
 vm.runInThisContext(fs.readFileSync('skills/word_search/screen.js', 'utf8'));

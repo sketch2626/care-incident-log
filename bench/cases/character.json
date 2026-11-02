@@ -18,61 +18,6 @@
       }
     },
     {
-      "id": "hello-evening-mary",
-      "group": "tone",
-      "note": "The turn is filled from LIVE_HELLO in web/mary/app.js, with OPEN_WAYS giving each repeat a different way in.",
-      "turns": [
-        "{LIVE_HELLO:evening}"
-      ],
-      "companion": "mary",
-      "mode": "live",
-      "mode_why": "The {LIVE_HELLO} line is Live's own opener; Normal never sends it.",
-      "repeat": 3,
-      "memory": {
-        "name": "Ruth"
-      },
-      "checks": {
-        "max_words": 45,
-        "must_not_contain": [
-          "still here",
-          "waiting",
-          "good night",
-          "how late"
-        ],
-        "vary": true
-      }
-    },
-    {
-      "id": "hello-night-sam",
-      "group": "tone",
-      "note": "The turn is filled from LIVE_HELLO in web/mary/app.js, with OPEN_WAYS giving each repeat a different way in. That text and mary.py allow a light good evening at any hour; only remarks on the hour are out.",
-      "turns": [
-        "{LIVE_HELLO:night}"
-      ],
-      "companion": "sam",
-      "mode": "live",
-      "mode_why": "The {LIVE_HELLO} line is Live's own opener; Normal never sends it.",
-      "repeat": 2,
-      "memory": {
-        "name": "Harold"
-      },
-      "checks": {
-        "max_words": 45,
-        "must_not_contain": [
-          "still here",
-          "waiting",
-          "good night",
-          "how late",
-          "up late",
-          "this late",
-          "so late",
-          "this hour"
-        ],
-        "vary": true,
-        "min_words": 3
-      }
-    },
-    {
       "id": "garden-no-varieties",
       "note": "Brief: no tomato varieties",
       "turns": [

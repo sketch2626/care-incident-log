@@ -120,7 +120,8 @@ class MaryCase(unittest.TestCase):
         r = self.say("Flip a coin", [call(FLIP)])  # she keeps asking for another flip
         self.assertEqual(len(self.fake.bodies), mary.MAX_TOOL_ROUNDS + 1)
         self.assertEqual(len(r["effects"]), 2 * mary.MAX_TOOL_ROUNDS)
-        self.assertTrue(r["text"].startswith("It's "))  # the skill's own lines, since she said nothing
+        self.assertEqual(r["text"], "")  # she said nothing
+        self.assertTrue(r["notice"].startswith("It's "))  # the skill's own lines, on screen only
 
     def test_not_working_skill(self):
         oops = {"functionCall": {"name": "oops__go", "args": {}}}
@@ -129,10 +130,10 @@ class MaryCase(unittest.TestCase):
         self.assertEqual(answer["response"], {"error": "not_working"})
         self.assertEqual(r["text"], "Oh dear, that didn't work.")
         r = self.say("Do the thing", [call(oops)], "fail")  # the follow-up fails too: the core's line
-        self.assertEqual(r["text"], skills_core.SAY_NOT_WORKING)
+        self.assertEqual((r["text"], r["notice"]), ("", skills_core.SAY_NOT_WORKING))
         bad = {"functionCall": {"name": "set_skill", "args": {"name": "nope"}}}
         r = self.say("Hm", [call(bad)], "fail")  # no line from the skill at all
-        self.assertEqual((r["text"], r["mood"]), (mary.NOT_WORKING_TEXT, "sorry"))
+        self.assertEqual((r["text"], r["notice"], r["mood"]), ("", mary.NOT_WORKING_TEXT, "sorry"))
 
     def test_emergency_gets_no_tools_and_runs_nothing(self):
         r = self.say("I can't breathe", [call(FLIP)], ["More."])
@@ -147,17 +148,18 @@ class MaryCase(unittest.TestCase):
     def test_offline_phrase_without_a_key(self):
         r = self.say("flip a coin", key="")
         self.assertEqual(self.fake.bodies, [])
-        self.assertIn(r["text"], ("It's heads.", "It's tails."))
+        self.assertIn(r["notice"], ("It's heads.", "It's tails."))  # no model: screen only
+        self.assertEqual(r["text"], "")
         self.assertEqual([e["kind"] for e in self.seen], ["show_screen", "coin"])
         self.assertEqual((r["error"], r["mood"]), (mary.NO_KEY, "talking"))
         r = self.say("please flip a coin", "fail")  # Gemini failed: the phrase still works
-        self.assertIn(r["text"], ("It's heads.", "It's tails."))
+        self.assertIn(r["notice"], ("It's heads.", "It's tails."))
         self.assertEqual(r["error"], mary.NO_GEMINI)
         r = self.say("turn the coin flip off", key="")
-        self.assertEqual(r["text"], "Coin flip is off now.")
+        self.assertEqual((r["text"], r["notice"]), ("", "Coin flip is off now."))
         self.assertFalse(self.host.enabled("coin_flip"))
         r = self.say("what a lovely day", key="")
-        self.assertEqual((r["text"], r["effects"]), (mary.OFFLINE_TEXT, []))
+        self.assertEqual((r["text"], r["notice"], r["effects"]), ("", mary.OFFLINE_TEXT, []))
 
 
 class ServerCase(unittest.TestCase):

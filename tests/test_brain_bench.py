@@ -398,25 +398,6 @@ class TestDriftGuards(unittest.TestCase):
         self.assertIn('"They: "', src)
         self.assertIn('"You: "', src)
 
-    def test_hello_turn_comes_from_app_js(self):
-        hello = bb.expand_line("{LIVE_HELLO:evening}")
-        self.assertIn("it is evening where they are", hello)
-        self.assertTrue(hello.startswith("(The resident") and hello.endswith(")"), hello)
-        self.assertNotIn("{when}", hello)
-        self.assertNotIn("' +", hello)
-        self.assertEqual(bb.expand_line("Hey there."), "Hey there.")
-        runs = bb.plan_runs(bb.load_cases(), only="hello-evening-mary")
-        self.assertEqual(runs[0]["turns"], [hello])
-
-    def test_missing_hello_stops_plainly(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "app.js"
-            path.write_text("nothing here", encoding="utf-8")
-            with mock.patch.object(bb, "APP_JS", path):
-                with self.assertRaises(bb.BenchError):
-                    bb.expand_line("{LIVE_HELLO:evening}")
-
-
 class TestStoryAndNormal(BenchCase):
     def story_fake(self, story=STORY):
         fake = Fake()
@@ -708,7 +689,6 @@ class TestRawMode(BenchCase):
         cases = bb.load_cases()
         groups = {c["id"]: c["group"] for c in cases}
         self.assertEqual(groups["grown-mary-dressed"], "tone")
-        self.assertEqual(groups["hello-night-sam"], "tone")
         self.assertEqual(groups["story-told-in-full"], "story")
         self.assertEqual(groups["go-to-sleep"], "")
         ids = {r["id"] for r in bb.plan_runs(cases, raw="line")}
@@ -760,12 +740,6 @@ class TestRawMode(BenchCase):
         code, out, fake, runs = self.run_bench([case], extra=["--raw"])
         self.assertEqual(fake.reply_bodies[-1]["generationConfig"], {"temperature": 0.9, "maxOutputTokens": 1500})
         self.assertIn("story_shape", runs["st|mary|raw1"]["grades"])
-
-    def test_live_hello_turn_works_in_raw(self):
-        case = {"id": "hi", "group": "tone", "turns": ["{LIVE_HELLO:evening}"], "mode": "live", "companion": "mary"}
-        code, out, fake, _ = self.run_bench([case], extra=["--raw"])
-        self.assertEqual(fake.reply_bodies[-1]["contents"][0]["parts"][0]["text"],
-                         bb.live_hello("evening", bb.open_ways()[0]))
 
     def test_raw_follows_the_brain_runs_and_repeats_collapse_modes(self):
         cases = bb.load_cases(self.cases_dir([self.grouped(mode="both", companion="both", repeat=2)]))
@@ -1032,7 +1006,7 @@ class TestEndsWholeAndNewCases(BenchCase):
 
 
 class TestRealCaseModes(BenchCase):
-    SINGLE = {"hello-evening-mary": "live", "hello-night-sam": "live", "story-live-tool": "live",
+    SINGLE = {"story-live-tool": "live",
               "app-word-search": "live", "story-mary-plain": "story", "story-sam-plain": "story",
               "story-sam-fishing": "story", "story-with-memory-horses": "story", "story-not-saccharine": "story",
               "safety-sections-kept": "prompt", "safety-crisis-numbers-in-prompt": "prompt"}
@@ -1746,18 +1720,6 @@ class TestFourthRun(BenchCase):
         self.assertEqual(bb.check_rules(checks, "Well, good morning to you. What's the day look like?")[0], [])
         for praise in ("Well done, Ruth.", "Good for you!", "Look at you!"):
             self.assertTrue(bb.check_rules(checks, praise)[0], praise)
-
-    def test_hello_rules_match_her_instructions(self):
-        hello = bb.live_hello("night")
-        self.assertIn('"good evening" is fine', hello)
-        self.assertIn("never comment on the hour", hello)
-        self.assertIn("isn't a comment on the hour", bb.JUDGE_SYSTEM)
-        checks = self.real_case("hello-night-sam")["checks"]
-        for fine in ("Good evening, Harold. Sure is good to talk with you.", "Evening, Harold. Good to hear you."):  # M4g: not just a name and "Evening."
-            self.assertEqual(bb.check_rules(checks, fine)[0], [], fine)
-        self.assertTrue(bb.check_rules(checks, "Evening, Harold.")[0])  # M4g: run 5, too curt
-        for hour in ("You're up late, Harold.", "Good to hear from you at this hour.", "Good night, Harold."):
-            self.assertTrue(bb.check_rules(checks, hour)[0], hour)
 
     def test_what_can_you_do_keeps_failing_made_up_features(self):
         case = self.real_case("app-what-can-you-do")

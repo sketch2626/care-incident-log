@@ -10,6 +10,12 @@ import time
 import unittest
 from pathlib import Path
 
+for _s in (sys.stdout, sys.stderr):   # a non-cp1252 character must not crash the printing
+    try:
+        _s.reconfigure(errors="replace")
+    except Exception:
+        pass
+
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 

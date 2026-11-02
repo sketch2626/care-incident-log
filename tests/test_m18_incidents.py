@@ -286,7 +286,7 @@ class Reading(unittest.TestCase):
           const S = { screen: 'everyday' }, TOOL_REFUSED = { ok: false, refused: true }, END_TALK_HELD = {};
           const ENV = reader([row(1)], said('read my notes'));
           function screenEnv() { return ENV; } function storyTake() { return {}; } function storyFromTool(c, r) { return r; }
-          function liveEndTalk() {} function noteBusyNow() { return false; } function refreshName() {} function log() {}
+          function liveEndTalk() {} function noteBusyNow() { return false; } function dictating() { return false; } function refreshName() {} function log() {}
         """ + slice_js(js, "function liveToolGate(heardResult", "// A short goodbye turn")
             + slice_js(js, "function liveToolCall(c, tc) {", "// Typed words while Live is open") + r"""
           const call = { functionCalls: [{ id: 1, name: 'use_screen', args: { action: 'read_incidents' } }] };

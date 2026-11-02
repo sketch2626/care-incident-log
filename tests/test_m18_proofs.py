@@ -42,7 +42,7 @@ var window = { addEventListener() { throw new Error('a handler was added'); } };
 WAKE_STUBS = r"""
 var W = { polling: true, held: false, gen: 0, heardTimer: 0, lastEv: 0, holdAt: 0 }, started = 0;
 var WAKE_SAY = 'x', WAKE_HELLO = 'x', WAKE_HEARD_MS = 1;
-function noteBusyNow() { return false; } function closeTyping() {} function faceAct() {}
+function noteBusyNow() { return false; } function dictating() { return false; } function closeTyping() {} function faceAct() {}
 var face = { setActivity() {} };
 function startTalk() { started++; return Promise.resolve(true); }
 """

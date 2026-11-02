@@ -48,11 +48,6 @@ class Prompts(unittest.TestCase):
 
 
 class Checks(unittest.TestCase):
-    def test_hello_word_check(self):
-        checks = real_case("hello-night-sam")["checks"]
-        self.assertEqual(bb.check_rules(checks, "Good evening, Harold.")[0], [])
-        self.assertTrue(bb.check_rules(checks, "Harold.")[0])
-
     def test_book_kept_line_accepts_into_your_book(self):
         checks = real_case("book-kept-line")["checks"]
         self.assertIn("into your book", checks["must_contain_any"])

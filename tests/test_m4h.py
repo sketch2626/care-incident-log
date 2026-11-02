@@ -67,14 +67,6 @@ def grade(cid, reply):
 
 
 class WordingRound(unittest.TestCase):
-    def test_open_ways(self):
-        for line in mary.OPEN_WAYS:
-            self.assertNotIn("one plain word", line)
-            self.assertFalse(line.endswith("just their name."))
-        self.assertIn("This time, open with their name and a short friendly line.", mary.OPEN_WAYS)
-        self.assertIn("This time, open with something you remember about them, if you have something; "
-                      "if not, their name and a short friendly line.", mary.OPEN_WAYS)
-
     def test_cant_do_line(self):
         text = (ROOT / "mary" / "instructions.md").read_text(encoding="utf-8")
         line = [x for x in text.splitlines() if "Some things you can't do yet" in x][0]

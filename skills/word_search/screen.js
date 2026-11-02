@@ -63,10 +63,10 @@
   // Her line for a move, unless she or the resident is in the middle of something. The screen note still tells her.
   function speak(res) {
     var a = app(), text = res && res.say;
-    if (!text || !root || !a || !a.say) { return; }
+    if (!text || !root || !a || !a.screenLine) { return; }
     try {
       if (a.busy && a.busy()) { return; }
-      var p = a.say(text);
+      var p = a.screenLine(text);   // M21a: a tap line stays on the screen, no model call, no voice
       if (p && p.catch) { p.catch(log); }
     } catch (e) { log(e); }
   }

@@ -99,7 +99,7 @@ const assert = require('assert');
 class ForcedModeTests(unittest.TestCase):
     def test_she_says_so_once_and_the_pick_stays(self):
         src = read("mary/app.js")
-        code = "\n".join([FORCED_STUBS, between(src, "function modeInUse()", "// --- M4a: her hello"), FORCED_CHECKS])
+        code = "\n".join([FORCED_STUBS, "function setCaption(t) { said.push(t); }", between(src, "function modeInUse()", "// The one way to start talking"), FORCED_CHECKS])
         run = subprocess.run([NODE, "-"], input=code, capture_output=True, text=True, encoding="utf-8",
                              timeout=30, cwd=str(ROOT))
         out = (run.stdout + run.stderr).strip()

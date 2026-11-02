@@ -70,12 +70,15 @@ var window = { MarySkills: null, MaryLive: {
   greet: function (t) { greets.push(t); return true; },
   setVolume: function () {},
   isSpeaking: function () { return T.speaking; },
-  stalled: function () { return T.stalled; }
+  stalled: function () { return T.stalled; },
+  setDeaf: function (on) { T.deaf = !!on; }
 } };
+var document = { hasFocus: function () { return T.focus !== false; }, activeElement: null };
+function bookWin() { return null; }
 function log(e) { logs.push(String((e && e.message) || e)); }
 function api(method, path, body) {
   if (path === '/api/wake/hold') { holds.push(body); }
-  if (path === '/api/mary/heard') { return Promise.resolve(T.heard); }
+  if (path === '/api/mary/heard') { T.lastHeard = body; return Promise.resolve(T.heard); }
   return Promise.resolve({});
 }
 function setPhase(p) { S.phase = p; wakeHoldCheck(); }
@@ -84,8 +87,8 @@ function spCancel() { calls.push('spCancel'); }
 function refreshStatus() { calls.push('refresh'); }
 function updateTalkButton() {} function capCut() {} function capListening() {} function capLivePiece() {}
 function capLiveAudio() {} function capLiveDone() {} function setCaption() {} function restLine() { return ''; }
-function liveFirst() { return true; } function say() { return Promise.resolve(); } function goodbyeLine() { return 'bye'; }
-function liveBye() { return '(bye)'; } function menuOpen() { return false; } function closeMenu() {} function closePanel() {}
+function liveFirst() { return true; } function say() { return Promise.resolve(); } function lastSentences(t){return t;} function screenLine(){} function showSteps(){}  function goodbyeLine() { return 'bye'; }
+function menuOpen() { return false; } function closeMenu() {} function closePanel() {}
 function faceAct() {} function closeTyping() { els.typing.hidden = true; calls.push('closeTyping'); }
 function skillScreen() { return undefined; } function asideSkill() {} function showCaption() {}
 function startTalk(o) { T.talks++; return Promise.resolve(T.talkOK); }
@@ -128,7 +131,7 @@ function out(x) { console.log(JSON.stringify(x)); }
 
 def _page():
     app = read(APP)
-    consts = ["WAKE_STUCK_MS", "WAKE_READY_RETRY_MS", "LIVE_STUCK_S", "NOTE_BUSY_MS", "LIVE_FALSE_CUT_MS", "LIVE_PICK_UP",
+    consts = ["WAKE_TAIL_MS", "WAKE_STUCK_MS", "WAKE_READY_RETRY_MS", "LIVE_STUCK_S", "NOTE_BUSY_MS", "LIVE_FALSE_CUT_MS", "LIVE_PICK_UP",
               "END_TALK_HELD"]
     cuts = [
         ("function liveSpeaking() {", "// M15c: the send count's hooks"),
@@ -167,6 +170,7 @@ class WakeAnswersAfterATalk(unittest.TestCase):
     def answers(self, steps):
         got = node(steps + r"""
 await flush();
+tick(WAKE_TAIL_MS + 100); wakeHoldCheck();   // M21a: the hold lets go 2.5 s after she stops being busy
 var was = { phase: S.phase, convo: !!S.convo, held: W.held }, before = T.talks;
 wake();
 await flush();
@@ -454,6 +458,7 @@ await flush();
 var heard = b.ending;
 var c = talk(false);
 var r = await liveToolCall(c, END_TALK);
+liveTurnDone(c);   // M21a: the turn that carries end_talk completes, and the talk closes
 out({ piece: piece, heard: heard, ended: S.convo === null, answers: r.functionResponses.length });
 """)
         self.assertEqual(got, {"piece": True, "heard": True, "ended": True, "answers": 0})
@@ -469,7 +474,7 @@ out(c.ending);
         self.assertTrue(got)
 
     def test_a_normal_talk_goodbye_is_gated_too(self):
-        self.assertIn("if (isGoodbye(text) && !(S.noteBusy && noteBusyNow())) { return convoBye(c, text); }", read(APP))
+        self.assertIn("if (isGoodbye(text) && !dictating()) { return convoBye(c, text); }", read(APP))
 
     def test_the_drawer_reports_focus_and_redraws(self):
         js = read(os.path.join(ROOT, "tools", "testlist", "drawer.js"))
@@ -481,8 +486,10 @@ out(c.ending);
         self.assertIn("ev.stopPropagation();", js)
 
     def test_nothing_in_mary_listens_for_blur(self):
-        for name in ("app.js", "talklive.js", "firstrun.js", "live.js"):
+        # M21a: the one blur listener is the window's own (dictating away from her page); no text box's blur sets anything
+        for name in ("talklive.js", "firstrun.js", "live.js"):
             self.assertNotIn("'blur'", read(os.path.join(ROOT, "web", "mary", name)))
+        self.assertEqual(read(os.path.join(ROOT, "web", "mary", "app.js")).count("'blur'"), 1)
 
 
 class ConfirmRule(unittest.TestCase):

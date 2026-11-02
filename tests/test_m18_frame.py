@@ -108,7 +108,7 @@ class ExitTests(unittest.TestCase):
         js = read("mary/app.js")
         self.assertIn("function uiOpen() { return menuOpen() || !!M.panel; }", js)
         self.assertNotIn("Deep", between(js, "function armIdle(ms)", "function menuItems()"))
-        wake = between(js, "} else if (ev.type === 'wake') {", "startTalk({ say: WAKE_SAY")
+        wake = between(js, "} else if (ev.type === 'wake') {", "startTalk({ mood: 'happy' })")
         self.assertNotRegex(wake, r"[Dd]eep")
         self.assertNotRegex(between(js, "function startTalk(opts)", "var c = { mode: mode"), r"[Dd]eep")
 
@@ -346,7 +346,7 @@ PARENT_CHECKS = r"""
 WAKE_CHECKS = r"""
 const assert = require('assert');
 var S = { screen: 'everyday', firstRun: false, micHeld: false, convo: null, phase: 'idle', noteBusy: 0, formMic: false };
-function noteBusyNow() { return false; }
+function noteBusyNow() { return false; } function dictating() { return false; }
 assert.strictEqual(wakeWhyNot({}), '');
 assert.strictEqual(wakeBusy(), false);
 S.formMic = true;

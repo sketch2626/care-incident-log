@@ -456,26 +456,6 @@ def js_strings(text):
     return [re.sub(r"\\(.)", r"\1", s) for s in re.findall(r"'((?:[^'\\]|\\.)*)'", text)]
 
 
-def open_ways():
-    """OPEN_WAYS from web/mary/app.js: the ways in that the page's liveHello() picks from."""
-    block = re.search(r"var OPEN_WAYS = \[(.*?)\];", APP_JS.read_text(encoding="utf-8"), re.S)
-    ways = js_strings(block.group(1)) if block else []
-    if not ways:
-        raise BenchError("OPEN_WAYS wasn't found in web/mary/app.js.")
-    return ways
-
-
-def live_hello(when, way=""):
-    """The hello the page really asks Live for: LIVE_HELLO from web/mary/app.js, with the time of day filled in and
-    a way in, when given, inside the closing bracket, as the page's liveHello() does it."""
-    js = APP_JS.read_text(encoding="utf-8")
-    block = re.search(r"var LIVE_HELLO = (.*?);\s*$", js, re.M | re.S)
-    if not block:
-        raise BenchError("LIVE_HELLO wasn't found in web/mary/app.js.")
-    hello = "".join(js_strings(block.group(1))).replace("{when}", when)
-    return re.sub(r"\)\Z", lambda m: f" {way})", hello) if way else hello
-
-
 def app_spoken(text):
     """What the page does to a reply before speech (cleanSpeech in web/mary/app.js), its own patterns read from there.
     mary.reply has already taken out the mood, remember and name tags, so what's left here is really said."""
@@ -487,17 +467,6 @@ def app_spoken(text):
     for pattern, repl in steps:
         text = re.sub(pattern, repl, text)
     return text.strip()
-
-
-def expand_line(line, n=1):
-    """A turn written as {LIVE_HELLO:evening} becomes the page's real hello for repeat n; any other line stays as it is.
-    The way in goes by repeat, not at random as on the page: three random picks would collide about half the time, and
-    a saved run could never be replayed. So repeats differ, and every arm of a repeat gets the same turn."""
-    hello = re.fullmatch(r"\{LIVE_HELLO:(\w+)\}", line.strip())
-    if not hello:
-        return line
-    ways = open_ways()
-    return live_hello(hello.group(1), ways[(n - 1) % len(ways)])
 
 
 def load_cases(folder=None):
@@ -541,7 +510,7 @@ def arm_ready(case, variants):
 
 def new_run(case, who, mode, n, raw_prompt="", variant="", variant_text=""):
     return {"case": case, "id": case["id"], "note": case["note"], "group": case["group"], "companion": who, "mode": mode,
-            "repeat": n, "turns": [expand_line(t, n) for t in case["turns"]], "safety_run": is_safety_case(case),
+            "repeat": n, "turns": list(case["turns"]), "safety_run": is_safety_case(case),
             "raw_prompt": raw_prompt, "variant": variant, "variant_text": variant_text, "status": "not_run",
             "not_run_why": "", "retried": False, **fresh_run()}
 

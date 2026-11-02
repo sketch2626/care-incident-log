@@ -114,10 +114,10 @@
   // M15c: sure is a line they must hear ("Sent to Mark", "Stopped"): it's never dropped, it waits for a gap and then goes.
   function speak(res, sure) {
     var a = window.MaryApp, text = res && res.say;
-    if (!text || !a || !a.say) { return Promise.resolve(); }
+    if (!text || !a || !a.tell) { return Promise.resolve(); }
     return (sure ? gap(a) : Promise.resolve()).then(function () {
       if (!sure && a.busy && a.busy()) { return undefined; }
-      return a.say(text);
+      return a.tell('The app just did this: ' + text, text);
     }).catch(log);
   }
 

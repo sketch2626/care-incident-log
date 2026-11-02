@@ -36,8 +36,9 @@ CHARACTER_NOTE_CAP = 4641
 LIVE_EXTRA_CAP = 1050
 # M21c: the lean brain (mary/lean.md), Sam's size, the larger, with these same FACTS. Mary is 11,588 and 12,040. The full
 # caps above stay until Andy approves lean as the default.
-LEAN_NORMAL_CAP = 11698
-LEAN_LIVE_CAP = 12150
+# Raised by 338 on 2026-11-02 with Andy's approval (D3): the North Carolina absentee-ballot line and the scam line.
+LEAN_NORMAL_CAP = 12036
+LEAN_LIVE_CAP = 12488
 
 
 # The app's own facts block is machine-dependent (printer, wake word), so the caps are measured with these fixed facts,

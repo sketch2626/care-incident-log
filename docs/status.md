@@ -13,14 +13,12 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
     - leaner, `mary/leaner.md`, 7,123. Its tightened safety wording waits on Andy's approval (D5); the old-to-new map is in the M21d merge commit.
   - **The whole-talk bench** `tools/talk_bench.py`. Lean halved his name against full. Both brains still say "I was just thinking about".
 - **Workers on her account (started 2026-11-02 evening; Andy: "You can also do the cleanup on the other account too"):**
-  - **M22** (`docs/handoff/M22.md`, tab "M22 her acct"): Mary does what's on screen when told (D12): the person-form path, switches, How bad and removing on the resident's own words; secrets stay locked. It rewords one line in full and lean, so **merge it only after tonight's bench finishes** (M4j too: it changes the talk judge).
+  - **M22** (`docs/handoff/M22.md`, tab "M22 her acct"): Mary does what's on screen when told (D12): the person-form path, switches, How bad and removing on the resident's own words; secrets stay locked. It rewords one line in full and lean, so merge it when it's done; no bench is waiting on it now.
   - **M4j** (`docs/handoff/M4j.md`, tab "M4j her acct"): `LIVE_SWITCHED` drops the name clause; wider write-down checks; a fairer `honest_ai` rubric; a stricter talk judge.
   - Watchers wait for `WAITING:`/`DONE:` on `other/M22` and `other/M4j`; a 20-minute check reads their tabs.
-- **Tonight at 3:10am (after Gemini's reset), in the hub's background:**
-  1. The whole-talk run, lean against leaner, resumed: `tools/talk_bench.py --key-from-app --brain lean,leaner --mode normal --resume bench/results/talks-2026-11-02-2.json` (293 of Mary's requests).
-  2. The character and story cases on the new leaner: `tools/brain_bench.py --key-from-app --cases <a folder with character.json and stories.json> --brain leaner --mode normal --judge-model gemini-3.1-flash-lite`.
-  - Together they leave Andy part of Mary's daily allowance on flash-lite. **It's used up today until 3am,** so Mary in Normal won't answer until then; Live runs on its own model.
-  - Then: triage into M21, and Andy reads the talks and `mary/leaner.md` with the M21d safety map, approves the safety wording or not (D5), and picks a brain.
+- **Testing plan (Andy, 2026-11-02 evening): Live first, by his ear, focused on what she can do.** "We're just trying to find a good enough personality… to test this. What we're really mainly worried about is functionality, what she's able to do, opening things and sending things and manipulating the environment." The full testing, safety first, waits for the new model, because only Andy uses this one. The 3:10am bench was cancelled.
+  - **Morning:** launch Mary and switch her to **lean** through the app's settings (nothing is saved, so she opens on full). Andy talks to her for a minute. If she's still wonky, switch to **leaner**.
+  - Making lean the code default broke 120 tests that read full's text through the default, so it was undone. Switching by setting is enough for now.
 - **Leaner's safety bench passed** (details in M21). Its made-up human past was traced to its first line, which was reworded with Andy's yes, at no added size.
 - **Andy's account:** 84% of its week at 12:50 (resets Wed Nov 4, 9am). The hub was compacted then (522K context).
 - **Her account (13:20):** 69% of its week, after about 45 hours (resets Sat Nov 7, 3:59pm). At that pace it runs out around Tuesday morning; Andy's resets Wednesday 9am. Her last day by the hub's count of her transcripts (rough shares):

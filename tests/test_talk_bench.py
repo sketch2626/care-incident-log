@@ -360,56 +360,114 @@ class TalkTests(BenchCase):
         self.assertEqual([r["status"] for r in runs], ["error", "not_run", "not_run", "not_run"])
 
 
+def lean_missing():
+    """The real fallback: mary.LEAN points at a file that is not there, so the lean brain is not installed."""
+    tmp = tempfile.TemporaryDirectory()
+    gone = Path(tmp.name) / "no-lean.md"
+    patch = mock.patch.object(mary, "LEAN", gone)
+
+    class Gone:
+        def __enter__(self):
+            patch.start()
+
+        def __exit__(self, *exc):
+            patch.stop()
+            tmp.cleanup()
+            return False
+
+    return Gone()
+
+
+def lean_sentence():
+    """One distinctive line from the real lean brain's Both block."""
+    return mary._lean_blocks()["both"].splitlines()[1]
+
+
 class BrainTests(BenchCase):
     def test_use_brain_restores(self):
-        self.assertFalse(hasattr(mary, "brain_setting"))
+        had = hasattr(mary, "brain_setting")
+        old = getattr(mary, "brain_setting", None)
         with tb.use_brain("lean"):
             self.assertEqual(mary.brain_setting(), "lean")
-        self.assertFalse(hasattr(mary, "brain_setting"))
+        self.assertIs(getattr(mary, "brain_setting", None), old)
         with self.assertRaises(ValueError):
             with tb.use_brain("lean"):
                 raise ValueError("x")
-        self.assertFalse(hasattr(mary, "brain_setting"))
-        old = lambda: "full"  # noqa: E731
-        mary.brain_setting = old
-        try:
+        self.assertIs(getattr(mary, "brain_setting", None), old)
+        self.assertEqual(hasattr(mary, "brain_setting"), had)
+        marker = lambda: "full"  # noqa: E731
+        with mock.patch.object(mary, "brain_setting", marker):
             with tb.use_brain("lean"):
                 self.assertEqual(mary.brain_setting(), "lean")
-            self.assertIs(mary.brain_setting, old)
-        finally:
-            del mary.brain_setting
+            self.assertIs(mary.brain_setting, marker)
+            with self.assertRaises(ValueError):
+                with tb.use_brain("lean"):
+                    raise ValueError("x")
+            self.assertIs(mary.brain_setting, marker)
 
-    def test_lean_not_installed_today(self):
-        self.assertFalse(tb.lean_installed())
-        self.assertFalse(hasattr(mary, "brain_setting"))
+    def test_use_brain_when_attribute_absent(self):
+        with mock.patch.object(mary, "brain_setting", create=True):
+            del mary.brain_setting
+            self.assertFalse(hasattr(mary, "brain_setting"))
+            with tb.use_brain("lean"):
+                self.assertEqual(mary.brain_setting(), "lean")
+            self.assertFalse(hasattr(mary, "brain_setting"))
+            with self.assertRaises(ValueError):
+                with tb.use_brain("lean"):
+                    raise ValueError("x")
+            self.assertFalse(hasattr(mary, "brain_setting"))
+            mary.brain_setting = None  # so the patch can restore cleanly
+
+    def test_lean_not_installed_is_detected(self):
+        with lean_missing():
+            self.assertFalse(tb.lean_installed())
 
     def test_lean_flags_stop_before_spending(self):
         fake = self.fake()
-        for brain in ("lean", "both"):
-            code, out = self.main("--brain", brain)
-            self.assertEqual(code, 2, brain)
+        with lean_missing():
+            for brain in ("lean", "both"):
+                code, out = self.main("--brain", brain)
+                self.assertEqual(code, 2, brain)
+                self.assertIn("lean brain not installed", out)
+                self.assertIn("--brain full", out)
+            self.assertEqual((fake.talk, fake.judged), ([], []))
+            code, out = self.main("--brain", "lean", "--list", key="")
+            self.assertEqual(code, 0)
             self.assertIn("lean brain not installed", out)
-            self.assertIn("--brain full", out)
-        self.assertEqual((fake.talk, fake.judged), ([], []))
-        code, out = self.main("--brain", "lean", "--list", key="")
-        self.assertEqual(code, 0)
-        self.assertIn("lean brain not installed", out)
-        self.assertIn("t1 (mary, 10 turns)", out)
-        self.assertIn("Gemini requests", out)
+            self.assertIn("t1 (mary, 10 turns)", out)
+            self.assertIn("Gemini requests", out)
 
     def test_fake_lean_is_detected_and_bodies_differ(self):
         self.with_fake_lean()
         self.assertTrue(tb.lean_installed())
-        self.assertFalse(hasattr(mary, "brain_setting"))
         for mode in ("normal", "live"):
             fake = self.fake()
             runs = self.first_run(modes=(mode,), brains=("full", "lean"))
             tb.execute_talks(runs, KEY, "talk-m", "judge-m", 0, no_judge=True)
             self.assertEqual([r["status"] for r in runs], ["finished", "finished"], mode)
             self.assertNotEqual(system_of(fake.talk[0]), system_of(fake.talk[10]), mode)
-        self.assertFalse(hasattr(mary, "brain_setting"))
         code, out = self.main("--brain", "both", "--mode", "normal", "--no-judge")
         self.assertEqual(code, 0, out)
+
+    def test_real_lean_brain_is_detected_and_changes_both_prompts(self):
+        self.assertTrue(tb.lean_installed())
+        for who in ("mary", "sam"):
+            normal, live = {}, {}
+            for brain in ("full", "lean"):
+                seen = []
+
+                def stub(body, api_key, model="", **extra):
+                    seen.append(body)
+                    yield "ok"
+
+                with mock.patch.object(mary, "_gemini_stream", stub), tb.use_brain(brain):
+                    mary.reply("hello", tb._probe_memory(), "probe-key", "", companion=who)
+                    live[brain] = tb.bb.live_system_text(tb._probe_memory(), who)
+                normal[brain] = system_of(seen[0])
+            self.assertNotEqual(normal["full"], normal["lean"], who)
+            self.assertNotEqual(live["full"], live["lean"], who)
+            self.assertLess(len(normal["lean"]), len(normal["full"]), who)
+            self.assertLess(len(live["lean"]), len(live["full"]), who)
 
 
 class JudgeTests(BenchCase):
@@ -799,16 +857,22 @@ class ResumeTests(BenchCase):
 class DecisionD4(BenchCase):
     def test_d4_a_lean_run_never_silently_runs_full(self):
         fake = self.fake()
-        code, out = self.main("--brain", "lean")
+        with lean_missing():
+            code, out = self.main("--brain", "lean")
         self.assertEqual(code, 2)
         self.assertIn("lean brain not installed", out)
         self.assertEqual((fake.talk, fake.judged), ([], []))
         self.assertEqual(self.results.exists(), False)
-        self.with_fake_lean()
+        mark = lean_sentence()
         code, out = self.main("--brain", "lean", "--mode", "normal", "--no-judge")
         self.assertEqual(code, 0, out)
         self.assertEqual(len(fake.talk), 20)
-        self.assertTrue(all("Be brief and plain." in system_of(b) for b in fake.talk))
+        self.assertTrue(all(mark in system_of(b) for b in fake.talk))
+        fake.talk.clear()
+        code, out = self.main("--brain", "full", "--mode", "normal", "--no-judge")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(fake.talk), 10 * 2)
+        self.assertFalse(any(mark in system_of(b) for b in fake.talk))
 
 
 if __name__ == "__main__":

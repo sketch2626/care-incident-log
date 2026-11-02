@@ -21,7 +21,8 @@ import memory_dates  # M15a
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 INSTRUCTIONS = ROOT / "mary" / "instructions.md"
 LEAN = ROOT / "mary" / "lean.md"  # M21c: the lean brain, chosen per prompt by the setting mary_brain
-BRAINS = ("full", "lean")
+LEANER = ROOT / "mary" / "leaner.md"  # M21d: the leaner brain, the third value of mary_brain
+BRAINS = ("full", "lean", "leaner")
 SAFETY_HEADINGS = ("What comes first", "Emergencies come first", "When they talk of hurting someone",
                    "You are not a doctor", "When something goes wrong with their care",
                    "On their side, and toward people")
@@ -267,9 +268,10 @@ def safety_sections():  # M21c
     return "\n\n".join(out)
 
 
-def _lean_blocks():  # M21c
-    """lean.md as {"mary", "sam", "both", "live", "live tools"} -> text, with {{safety}} replaced."""
-    text = _after_rule(LEAN.read_text(encoding="utf-8"))
+def _brain_blocks(brain="lean"):  # M21c, M21d: lean.md or leaner.md
+    """The brain's file as {"mary", "sam", "both", "live", "live tools"} -> text, with {{safety}} replaced if present."""
+    path = LEANER if brain == "leaner" else LEAN
+    text = _after_rule(path.read_text(encoding="utf-8"))
     markers = {"=== Mary ===": "mary", "=== Sam ===": "sam", "=== Both ===": "both", "=== Live ===": "live",
                "=== Live tools ===": "live tools"}
     blocks, current = {}, None
@@ -281,35 +283,43 @@ def _lean_blocks():  # M21c
             blocks[current].append(line)
     blocks = {k: "\n".join(v).strip() for k, v in blocks.items()}
     if len(blocks) < len(markers):
-        raise ValueError("lean.md is missing a marker block")
+        raise ValueError(path.name + " is missing a marker block")
     if "{{safety}}" in blocks["both"].splitlines():
         blocks["both"] = "\n".join(safety_sections() if line == "{{safety}}" else line
                                    for line in blocks["both"].splitlines())
     return blocks
 
 
-def current_brain():  # M21c
-    """"lean" only when the setting says so and lean.md and the safety sections all read; anything else is "full",
-    so a broken file or setting never stops her talking."""
+def _lean_blocks():  # M21c: kept for older callers
+    return _brain_blocks("lean")
+
+
+def current_brain():  # M21c, M21d
+    """"lean" or "leaner" only when the setting says so and that file and the safety sections all read; anything
+    else is "full", so a broken file or setting never stops her talking."""
     try:
-        if not callable(brain_setting) or brain_setting() != "lean" or not LEAN.exists():
+        if not callable(brain_setting):
             return "full"
-        _lean_blocks()
-        return "lean"
+        brain = brain_setting()
+        if brain not in ("lean", "leaner") or not (LEANER if brain == "leaner" else LEAN).exists():
+            return "full"
+        _brain_blocks(brain)
+        return brain
     except Exception:
         return "full"
 
 
 def character_note():  # M21c
-    return "" if current_brain() == "lean" else CHARACTER_NOTE
+    return CHARACTER_NOTE if current_brain() == "full" else ""
 
 
 def load_instructions(companion=None):  # M9b: one block per companion
     """The system prompt: the text after the first line that is exactly '---'.
     With no companion, all of it (markers included). With one, that companion's block plus the Both block."""
-    if current_brain() == "lean":  # M21c
+    brain = current_brain()  # M21c, M21d: read once
+    if brain != "full":
         try:
-            blocks = _lean_blocks()
+            blocks = _brain_blocks(brain)
             if companion is None:
                 return (blocks["mary"] + "\n\n" + blocks["both"]).strip()
             return (blocks["sam" if companion == "him" else "mary"] + "\n\n" + blocks["both"]).strip()

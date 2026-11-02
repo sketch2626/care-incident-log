@@ -677,11 +677,12 @@ class Reply(unittest.TestCase):
                          "effects": [{"skill": "messages", "kind": "count", "data": {}}]})
         seen = []
         out = mary.reply("send it", self.memory, skills=skills, on_effect=seen.append)
-        self.assertEqual(out["text"], "Going to Mark's email.")
+        self.assertEqual((out["text"], out["notice"]), ("", "Going to Mark's email."))  # no model: the screen shows it
         self.assertEqual(len(seen), 1)
         self.assertEqual(out["effects"], seen)
         self.assertEqual(skills.words, ["Going to Mark's email."])
-        self.assertEqual([turn["role"] for turn in self.memory.recent[-2:]], ["user", "model"])
+        self.assertEqual(self.memory.recent[-1]["role"], "user")  # a notice is never in talk history
+        self.assertNotIn("Going to Mark's email.", [turn["text"] for turn in self.memory.recent])
 
     def test_a_quiet_turn_stays_silent(self):
         skills = Skills({"action": "quiet", "say": None, "effects": [], "skip_brain": True})
@@ -698,9 +699,9 @@ class Reply(unittest.TestCase):
 
     def test_old_fakes_and_a_broken_gate_are_no_gate(self):
         plain = types.SimpleNamespace(offline_match=lambda text, is_blocked=None: None)
-        self.assertTrue(mary.reply("hello there", self.memory, skills=plain)["text"])
-        self.assertTrue(mary.reply("hello there", self.memory, skills=Skills(RuntimeError("no")))["text"])
-        self.assertTrue(mary.reply("hello there", self.memory, skills=Skills({"action": "x", "skip_brain": False}))["text"])
+        for skills in (plain, Skills(RuntimeError("no")), Skills({"action": "x", "skip_brain": False})):
+            out = mary.reply("hello there", self.memory, skills=skills)
+            self.assertTrue(out["text"] or out["notice"])
 
     def test_the_emergency_comes_first(self):
         skills = Skills({"action": "quiet", "say": None, "effects": [], "skip_brain": True})
@@ -708,8 +709,26 @@ class Reply(unittest.TestCase):
         self.assertTrue(mary.is_emergency(text))
         out = mary.reply(text, self.memory, skills=skills)
         self.assertTrue(out["emergency"])
-        self.assertTrue(out["text"])
+        self.assertTrue(out["steps"])  # the steps are for the screen; no key, so no model words
+        self.assertEqual(out["text"], "")
         self.assertEqual(skills.emergencies, 1)
+
+    def test_her_words_gets_the_apps_line_even_if_the_model_rewords_it(self):
+        line = "Going to Mark's email."
+        skills = Skills({"action": "count", "say": line, "skip_brain": True, "effects": []})
+        skills.instruction_text = lambda screen=None: ""
+        skills.gemini_tools = lambda: []
+        bodies = []
+
+        def reworded(body, api_key, model=""):
+            bodies.append(body)
+            yield "Okay, one moment."  # drops the words the gate checks for
+
+        with mock.patch.object(mary, "_gemini_stream", reworded):
+            out = mary.reply("send it", self.memory, "key", skills=skills)
+        self.assertEqual(out["text"], "Okay, one moment.")
+        self.assertIn(line, bodies[0]["systemInstruction"]["parts"][0]["text"])  # the model was told the line
+        self.assertEqual(skills.words, [line])  # the gate reads the app's line, not her rewording
 
 
 class Routes(unittest.TestCase):

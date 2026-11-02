@@ -837,7 +837,7 @@ class OneTalk(unittest.TestCase):
         return mary.REMINDER_MARK in bodies[0]["systemInstruction"]["parts"][0]["text"]
 
     def hello(self):
-        """server.mary_open with a fake Gemini. True when the note was in her prompt."""
+        """server.mary_tell with a fake Gemini. True when the note was in her prompt."""
         bodies = []
 
         def answer(body, *args, **kw):
@@ -847,7 +847,7 @@ class OneTalk(unittest.TestCase):
         real = server.mary_settings
         with clock(self.DAY), mock.patch.object(mary, "_short_answer", answer), \
                 mock.patch.object(server, "mary_settings", lambda: {**real(), "key": KEY}):
-            self.assertTrue(server.mary_open("morning")["text"])
+            self.assertTrue(server.mary_tell("The app has opened.")["text"])
         return mary.REMINDER_MARK in bodies[0]["systemInstruction"]["parts"][0]["text"]
 
     def token(self, **patch):
@@ -914,6 +914,7 @@ class OneTalk(unittest.TestCase):
 
     def test_a_new_hello_closes_the_old_talk(self):
         self.assertTrue(self.talk())
+        server.close_talk()  # M21a: a tell no longer ends the talk; the page's new talk does
         self.assertFalse(self.hello())
         self.assertEqual(self.note(), "")
 

@@ -502,7 +502,6 @@ _mary_lock = threading.Lock()
 # talking after a real delete, and what she says then could carry the very thing just forgotten.
 LIVE_FORGOT_QUIET_S = 30
 _live_forgot_at = None
-HELLO_NO_NAME = "I'm sorry, I didn't quite catch your name. Could you say it once more?"
 TALK_NO_TEXT = "I didn't catch anything. Could you say that again?"
 
 
@@ -1107,6 +1106,12 @@ def close_talk():  # M15a
             memory_store().close_talk()
         except (sqlite3.Error, OSError):
             pass
+        try:  # M21a: a waiting question lapses with the talk
+            memory = mary_memory()
+            memory.pending_forget = memory.pending_offer = None
+            memory.save()
+        except Exception:  # noqa: BLE001
+            pass
     try:  # M18: an address still waiting on a yes goes with the talk
         if _skill_host is not None:
             _skill_host.talk_over()
@@ -1114,14 +1119,15 @@ def close_talk():  # M15a
         pass
 
 
-def mary_open(when):
-    """Her hello in her own words, saved as her turn so her next answer knows she has greeted them. {"text": ""} on
-    any problem: the page then says a scripted line. The lock is held only around her memory, never while Gemini writes."""
-    close_talk()  # M15a: a hello means a new talk
+def mary_tell(note):
+    """D1 (M21a): the app has something to tell them. One reply from her own brain with the app's note as a one-off turn
+    note; her answer is saved as her turn. {"text": ""} on no key or any problem: the page then shows the note. The lock
+    is held only around her memory, never while Gemini writes."""
+    note = " ".join(str(note or "").split())[:mary.TELL_NOTE_MAX]
     s = mary_settings()
     with _mary_lock:
         memory = mary_memory()
-    text = mary.open_line(memory, s["key"], s["model"], s["companion"] or "mary", when)
+    text = mary.tell_line(memory, s["key"], s["model"], s["companion"] or "mary", note)
     if text:
         with _mary_lock:
             memory = mary_memory()
@@ -1148,7 +1154,8 @@ def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typ
         r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
                        companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident,
                        skills=skills, screen=screen, on_effect=on_effect, typed=typed)  # --- skills hook (M13) --- M9c: typed
-    return {"text": r["text"], "mood": r["mood"], "effects": r["effects"],  # effects: M13
+    return {"text": r["text"], "notice": r["notice"], "steps": r["steps"], "mood": r["mood"],
+            "effects": r["effects"],  # effects: M13
             "emergency": bool(r["emergency"] or r["gemini_alert"]),
             "emergency_kind": r["emergency"] or ("other" if r["gemini_alert"] else ""),
             "offer": r["offer"], "logged": r["logged"], "error": r["error"], "needs_key": not s["key"],
@@ -1657,7 +1664,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/mary/hello":
                 name = mary.name_from(text)
                 if not name:
-                    return self._send({"name": "", "text": HELLO_NO_NAME})
+                    return self._send({"name": ""})
                 with _mary_lock:
                     memory = mary_memory()
                     memory.name = name
@@ -1666,8 +1673,7 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass  # she still greets them; with no saved name she asks again later
-                return self._send({"name": name,
-                                   "text": f"It's lovely to meet you, {name}! I'm here whenever you'd like to talk."})
+                return self._send({"name": name})
             if not text:
                 raise ValueError(TALK_NO_TEXT)
             screen = body.get("screen") if isinstance(body.get("screen"), str) else None  # --- skills hook (M13) ---
@@ -1758,33 +1764,31 @@ class Handler(SimpleHTTPRequestHandler):
             body = self._body()
             text = str(body.get("text") or "")[:2000]
             kind = mary.is_emergency(text) or ""
-            say, book = "", {}
+            steps, book = "", {}
             # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
             send = {} if body.get("note") else gate_heard(text, kind)  # M18: the only place past here with the raw line
             save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
-                return self._send({"emergency": False, "kind": "", "say": "", "garbled": True, **send})
-            if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
+                return self._send({"emergency": False, "kind": "", "steps": "", "garbled": True, **send})
+            if (kind or text.strip()) and not (body.get("note") and not kind):  # M4a: every resident turn is remembered (once), as in Normal talk. M21a: a dictated note reaches her not at all
                 with _mary_lock:  # as in Normal talk: the emergency cancels a waiting offer and is remembered
                     memory = mary_memory()
                     if kind:
                         memory.pending_offer = None
-                        say = mary.emergency_text(kind, memory, text)  # M4d: with the Veterans line for a known veteran
+                        steps = mary.emergency_text(kind, memory, text)  # M4d: with the Veterans line for a known veteran. M21a: for the screen; she says them herself
                     else:
                         mary.learn_name(memory, text)  # M4a: "call me Andy" works even if Live skips the tool
                         mary.learn_dates(memory, text)  # M15a: and so does a date, with or without a tool
-                        book = {} if body.get("note") else book_heard(memory, text)  # M19 piece 6b
+                        book = book_heard(memory, text)  # M19 piece 6b
                     if kind or not mary.asks_no_name(text):  # M9c: this may land after forget_name ran
                         memory.add_turn("user", text.strip())
-                    if say:
-                        memory.add_turn("model", say)
                     try:
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "say": say, **send, **save, **book})
-        if method == "POST" and path == "/api/mary/open":  # M4a: her hello, from the brain
-            return self._send(mary_open(self._body().get("when")))
+            return self._send({"emergency": bool(kind), "kind": kind, "steps": steps, **send, **save, **book})
+        if method == "POST" and path == "/api/mary/tell":  # M21a: the app's note, in her own words
+            return self._send(mary_tell(self._body().get("note")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
             text = " ".join(str(self._body().get("text") or "").split())[:2000]
             text = mary.fix_numbers(text)  # M4d: what's remembered has the number right, whatever her voice said

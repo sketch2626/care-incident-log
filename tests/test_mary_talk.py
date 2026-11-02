@@ -170,7 +170,7 @@ class TestMoodTags(TalkCase):
 
     def test_tag_with_no_words_is_not_a_reply(self):
         result, pieces, events = self.say(chunks=["[mood: alert]"])
-        self.assertEqual(result["text"], mary.OFFLINE_TEXT)
+        self.assertEqual((result["text"], result["notice"]), ("", mary.OFFLINE_TEXT))
         self.assertEqual(result["mood"], "sorry")
         self.assertFalse(result["gemini_alert"])
         self.assertEqual(self.moods(events)[-1], "sorry")
@@ -182,8 +182,8 @@ class TestMoodTags(TalkCase):
         self.assertFalse(result["gemini_alert"])
         self.assertEqual(self.moods(events), ["alert"])
         self.assertEqual(events[0], ("mood", "alert"))  # before any words
-        self.assertTrue(result["text"].startswith(mary.EMERGENCY_TEXT["medical"]))
-        self.assertIn(" Okay, I'm here.", result["text"])
+        self.assertTrue(result["steps"].startswith(mary.EMERGENCY_TEXT["medical"]))  # D1: steps for the screen
+        self.assertEqual(result["text"], "Okay, I'm here.")  # only the model's words, no fixed text
         self.assertNotIn("mood", result["text"])
 
     def test_offline_emergency_without_a_key_is_alert(self):
@@ -205,7 +205,7 @@ class TestMoodTags(TalkCase):
         self.assertEqual(self.fake.bodies, [])
         self.assertEqual(result["mood"], "sorry")
         self.assertEqual(result["error"], mary.NO_KEY)
-        self.assertEqual(result["text"], mary.OFFLINE_TEXT)
+        self.assertEqual((result["text"], result["notice"]), ("", mary.OFFLINE_TEXT))
         self.assertEqual(self.moods(events), ["sorry"])
 
     def test_gemini_failure_is_sorry(self):
@@ -213,7 +213,7 @@ class TestMoodTags(TalkCase):
         result, pieces, events = self.say(chunks=[])
         self.assertEqual(result["mood"], "sorry")
         self.assertEqual(result["error"], mary.NO_GEMINI)
-        self.assertEqual(result["text"], mary.OFFLINE_TEXT)
+        self.assertEqual((result["text"], result["notice"]), ("", mary.OFFLINE_TEXT))
 
     def test_mood_rule_is_in_the_prompt(self):
         self.say()
@@ -386,7 +386,7 @@ class TestRoutes(TalkCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["needs_key"])
         self.assertEqual(body["mood"], "sorry")
-        self.assertEqual(body["text"], mary.OFFLINE_TEXT)
+        self.assertEqual((body["text"], body["notice"]), ("", mary.OFFLINE_TEXT))
         self.assertFalse(body["emergency"])
         self.assertEqual(self.fake.bodies, [])
 
@@ -401,20 +401,21 @@ class TestRoutes(TalkCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["bad_key"])
         self.assertFalse(body["needs_key"])
-        self.assertEqual((body["error"], body["text"], body["mood"]), (mary.BAD_KEY, mary.BAD_KEY_TEXT, "sorry"))
+        self.assertEqual((body["error"], body["text"], body["notice"], body["mood"]),
+                         (mary.BAD_KEY, "", mary.BAD_KEY_TEXT, "sorry"))
         self.assertFalse(body["emergency"])
         self.assertNotIn(KEY, json.dumps(body))
         status, raw, _ = self.stream()
         done = self.lines(raw)[-1]
         self.assertTrue(done["bad_key"])
-        self.assertEqual(done["text"], mary.BAD_KEY_TEXT)
+        self.assertEqual((done["text"], done["notice"]), ("", mary.BAD_KEY_TEXT))
         self.assertNotIn(KEY, raw.decode("utf-8"))
 
     def test_other_failures_are_not_a_bad_key(self):
         self.refuse(503)
         status, body, _ = self.talk()
         self.assertFalse(body["bad_key"])
-        self.assertEqual((body["error"], body["text"]), (mary.NO_GEMINI, mary.OFFLINE_TEXT))
+        self.assertEqual((body["error"], body["text"], body["notice"]), (mary.NO_GEMINI, "", mary.OFFLINE_TEXT))
         mary._gemini_stream = self.fake
         self.assertFalse(self.talk()[1]["bad_key"])
 
@@ -423,7 +424,8 @@ class TestRoutes(TalkCase):
         self.assertTrue(body["emergency"])
         self.assertEqual((body["emergency_kind"], body["mood"]), ("medical", "alert"))
         self.assertTrue(body["needs_key"])
-        self.assertTrue(body["text"].startswith(mary.EMERGENCY_TEXT["medical"]))
+        self.assertTrue(body["steps"].startswith(mary.EMERGENCY_TEXT["medical"]))
+        self.assertEqual(body["text"], "")
 
     def test_offline_emergency_overrides_the_tag(self):
         status, body, _ = self.talk(text="I fell and I'm on the floor", chunks=["[mood: happy] I'm here."])
@@ -475,13 +477,14 @@ class TestRoutes(TalkCase):
     def test_yes_to_the_offer_logs_the_incident(self):
         status, body, _ = self.talk(self.SAID, chunks=["I'm so sorry."])
         self.assertEqual(status, 200)
-        self.assertEqual(body["text"], "I'm so sorry. " + mary.OFFER_QUESTION)
+        self.assertEqual((body["text"], body["notice"]), ("I'm so sorry.", mary.OFFER_QUESTION))
         self.assertTrue(body["offer"])
         self.assertIsNone(body["logged"])
         self.assertEqual(helpers.db_rows("SELECT * FROM incidents"), [])  # asking does not save
-        status, body, _ = self.talk("Yes please", chunks=["Gemini must not be asked."])
+        status, body, _ = self.talk("Yes please", chunks=["It is written down."])
         self.assertEqual(status, 200)
-        self.assertEqual(body["text"], mary.SAVED_TEXT)
+        self.assertEqual(body["text"], "It is written down.")  # her words; the app's outcome went in her turn note
+        self.assertIn(mary.SAVED_TEXT, self.fake.system())
         self.assertEqual(body["mood"], "talking")
         rows = helpers.db_rows("SELECT * FROM incidents")
         self.assertEqual(len(rows), 1)
@@ -492,7 +495,7 @@ class TestRoutes(TalkCase):
         self.assertEqual(row["wait_minutes"], 45)
         self.assertEqual(row["never_came"], 1)
         self.assertEqual(row["occurred_date"], row["logged_at"][:10])
-        self.assertEqual(len(self.fake.bodies), 1)  # only the first turn went to Gemini
+        self.assertEqual(len(self.fake.bodies), 2)  # the offer turn and the saved-note turn
         status, rows_api, _ = helpers.api("GET", "/api/incidents")
         self.assertEqual([r["id"] for r in rows_api], [row["id"]])
         status, body, _ = self.talk("Yes", chunks=["Hello."])  # used up: nothing more is written
@@ -508,7 +511,7 @@ class TestRoutes(TalkCase):
 
     def test_stream_yes_to_the_offer_logs_the_incident(self):
         self.stream(self.SAID, chunks=["I'm so sorry."])
-        status, raw, _ = self.stream("Yes please", chunks=["Gemini must not be asked."])
+        status, raw, _ = self.stream("Yes please", chunks=["It is written down."])
         self.assertEqual(status, 200)
         lines = self.lines(raw)
         done = lines[-1]
@@ -516,9 +519,10 @@ class TestRoutes(TalkCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["source"], "mary")
         self.assertEqual(done["logged"], {"id": rows[0]["id"], "category": "call_light"})
-        self.assertEqual((done["text"], done["mood"]), (mary.SAVED_TEXT, "talking"))
+        self.assertEqual((done["text"], done["mood"]), ("It is written down.", "talking"))
         self.assertIn({"mood": "talking"}, lines)
-        self.assertEqual("".join(x["text"] for x in lines if "text" in x and "done" not in x), mary.SAVED_TEXT)
+        self.assertEqual("".join(x["text"] for x in lines if "text" in x and "done" not in x), "It is written down.")
+        self.assertIn(mary.SAVED_TEXT, self.fake.system())
 
     # streaming
 
@@ -553,7 +557,7 @@ class TestRoutes(TalkCase):
         lines = self.lines(raw)
         self.assertEqual(lines[0], {"mood": "sorry"})
         self.assertTrue(lines[-1]["needs_key"])
-        self.assertEqual(lines[-1]["text"], mary.OFFLINE_TEXT)
+        self.assertEqual((lines[-1]["text"], lines[-1]["notice"]), ("", mary.OFFLINE_TEXT))
 
     def test_stream_finishes_when_the_page_goes_away(self):
         self.save(gemini_key=KEY)
@@ -581,8 +585,7 @@ class TestRoutes(TalkCase):
     def test_hello_saves_the_name(self):
         status, body, _ = helpers.api("POST", "/api/mary/hello", {"text": "my name is dorothy"})
         self.assertEqual(status, 200)
-        self.assertEqual(body, {"name": "Dorothy",
-                                "text": "It's lovely to meet you, Dorothy! I'm here whenever you'd like to talk."})
+        self.assertEqual(body, {"name": "Dorothy"})  # M21a: the page asks her to say the welcome (tell)
         self.assertEqual(json.loads(self.memory_file.read_text(encoding="utf-8"))["name"], "Dorothy")
         status, body, _ = helpers.api("POST", "/api/mary/hello", {"text": "call me mister bill"})
         self.assertEqual(body["name"], "Mister Bill")
@@ -592,8 +595,7 @@ class TestRoutes(TalkCase):
         with mock.patch.object(mary.Memory, "save", side_effect=PermissionError(13, "locked")):
             status, body, _ = helpers.api("POST", "/api/mary/hello", {"text": "my name is dorothy"})
         self.assertEqual(status, 200)
-        self.assertEqual(body, {"name": "Dorothy",
-                                "text": "It's lovely to meet you, Dorothy! I'm here whenever you'd like to talk."})
+        self.assertEqual(body, {"name": "Dorothy"})  # M21a: the page asks her to say the welcome (tell)
 
     def test_hello_without_a_name_changes_nothing(self):
         helpers.api("POST", "/api/mary/hello", {"text": "dorothy"})
@@ -601,7 +603,7 @@ class TestRoutes(TalkCase):
             with self.subTest(said=said):
                 status, body, _ = helpers.api("POST", "/api/mary/hello", {"text": said})
                 self.assertEqual(status, 200)
-                self.assertEqual(body, {"name": "", "text": server.HELLO_NO_NAME})
+                self.assertEqual(body, {"name": ""})
         self.assertEqual(json.loads(self.memory_file.read_text(encoding="utf-8"))["name"], "Dorothy")
 
     # the key stays on this computer

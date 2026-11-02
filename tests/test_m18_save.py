@@ -285,7 +285,7 @@ class Tools(unittest.TestCase):
         self.assertFalse([word for word in got["actions"] + got["tools"] if "save" in word or "submit" in word])
 
 
-REPLY = {"text": "Okay.", "mood": "talking", "effects": [], "emergency": "", "gemini_alert": False, "offer": None,
+REPLY = {"text": "Okay.", "notice": "", "steps": "", "mood": "talking", "effects": [], "emergency": "", "gemini_alert": False, "offer": None,
          "logged": False, "error": None, "first_words_s": 0, "total_s": 0}
 
 

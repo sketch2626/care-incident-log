@@ -59,17 +59,22 @@ class BrainCase(unittest.TestCase):
         return body["systemInstruction"]["parts"][0]["text"]
 
 
+NOTE = "The note is saved."
+
+
 class HelloInHistoryTest(BrainCase):
+    """M21a: the app's note goes in as a one-off turn note; only her answer is saved, as her turn."""
+
     def hello_then_answer(self):
         self.answers = [[HELLO], ["Glad to hear it."]]
-        status, got, _ = helpers.api("POST", "/api/mary/open", {"when": "morning"})
+        status, got = helpers.api("POST", "/api/mary/tell", {"note": NOTE})[:2]
         self.assertEqual((status, got), (200, {"text": HELLO}))
         self.assertEqual(helpers.api("POST", "/api/mary/talk", {"text": ANSWER})[0], 200)
         return self.contents(self.bodies[1])
 
     def test_blank_history(self):
         self.assertEqual(self.hello_then_answer(),
-                         [("user", mary.OPEN_NUDGE), ("model", HELLO), ("user", ANSWER)])
+                         [("user", mary.OPEN_NUDGE), ("model", HELLO), ("user", ANSWER)])  # the talk body's placeholder
 
     def test_history_ending_on_her_turn_merges(self):
         self.seed(("user", "Tell me about the ducks."), ("model", "They were lovely."))
@@ -86,18 +91,19 @@ class HelloInHistoryTest(BrainCase):
         self.assertEqual(self.hello_then_answer(),
                          [("user", mary.OPEN_NUDGE), ("model", "Hello there.\n" + HELLO), ("user", ANSWER)])
 
-    def test_saved_once_and_the_instruction_never(self):
+    def test_saved_once_and_the_note_never(self):
         self.answers = [[HELLO]]
-        helpers.api("POST", "/api/mary/open", {"when": "morning"})
-        self.assertEqual(self.turns(), [("model", HELLO)])
+        helpers.api("POST", "/api/mary/tell", {"note": NOTE})
+        self.assertEqual(self.turns(), [("model", HELLO)])  # her answer, as her turn; the note is not saved
         self.answers = [["Glad to hear it."]]
         helpers.api("POST", "/api/mary/talk", {"text": ANSWER})
-        self.assertIn("Say hello in one or two short sentences", self.system(self.bodies[0]))
-        self.assertNotIn("Say hello in one or two short sentences", self.system(self.bodies[1]))
-        self.assertNotIn(mary.OPEN_NUDGE, [t[1] for t in self.turns()])
+        self.assertIn(NOTE, self.system(self.bodies[0]))
+        self.assertNotIn(NOTE, self.system(self.bodies[1]))
+        self.assertNotIn(mary.TELL_NUDGE, [t[1] for t in self.turns()])
+        self.assertNotIn(NOTE, " ".join(t[1] for t in self.turns()))
 
 
-class OpenLineTest(BrainCase):
+class TellLineTest(BrainCase):
     def test_same_brain_and_history(self):
         memory = self.memory()
         memory.name = "Andy"
@@ -106,63 +112,59 @@ class OpenLineTest(BrainCase):
         memory.add_turn("model", "I'm sorry to hear that.")
         memory.save()
         self.answers = [[HELLO]]
-        self.assertEqual(mary.open_line(self.memory(), KEY, "m", "mary", "morning"), HELLO)
+        self.assertEqual(mary.tell_line(self.memory(), KEY, "m", "mary", NOTE), HELLO)
         body = self.bodies[0]
         self.assertEqual(self.contents(body), [("user", "My knee hurts."), ("model", "I'm sorry to hear that."),
-                                               ("user", mary.OPEN_NUDGE)])
+                                               ("user", mary.TELL_NUDGE)])
         system = self.system(body)
         self.assertTrue(system.startswith(mary.system_text(self.memory(), "mary", facts=True)))
         self.assertIn("Name: Andy", system)
         self.assertIn("Andy's knee has been sore", system)
-        self.assertIn("it is morning where they are", system)
+        self.assertIn(NOTE, system)
+        self.assertIn("in your own words", system)
+        self.assertNotIn("tools", body)
         self.assertEqual(body["generationConfig"]["thinkingConfig"], {"thinkingLevel": "low"})
         self.assertEqual(self.deadlines, [mary.OPEN_DEADLINE_S])
 
-    def test_rules_of_the_hello(self):
-        prompt = mary.OPEN_PROMPT.lower()
-        for rule in ('never "good night"', "never comment on the hour", "never ask something they have already answered",
-                     "never list what you can do", "different words every time", "one or two short sentences"):
-            self.assertIn(rule, prompt)
-
-    def test_a_strange_when_is_left_out(self):
-        self.answers = [[HELLO]]
-        mary.open_line(self.memory(), KEY, "m", "mary", "<script>")
-        self.assertNotIn("<script>", self.system(self.bodies[0]))
-        self.assertNotIn("where they are", self.system(self.bodies[0]))
-
     def test_tags_and_markdown_are_stripped(self):
         self.answers = [["[mood: happy] **Good morning.** [remember: likes ducks] How's it going? [name: An"]]
-        self.assertEqual(mary.open_line(self.memory(), KEY), "Good morning. How's it going?")
+        self.assertEqual(mary.tell_line(self.memory(), KEY, note=NOTE), "Good morning. How's it going?")
 
     def test_a_line_cut_off_ends_on_a_whole_sentence(self):
         self.answers = [["Good morning, Andy. How did the doc"]]
-        self.assertEqual(mary.open_line(self.memory(), KEY), "Good morning, Andy.")
+        self.assertEqual(mary.tell_line(self.memory(), KEY, note=NOTE), "Good morning, Andy.")
 
     def test_retries_without_thinking_after_a_fast_failure(self):
         self.answers = [RuntimeError("400"), [HELLO]]
-        self.assertEqual(mary.open_line(self.memory(), KEY), HELLO)
+        self.assertEqual(mary.tell_line(self.memory(), KEY, note=NOTE), HELLO)
         self.assertIn("thinkingConfig", self.bodies[0]["generationConfig"])
         self.assertNotIn("thinkingConfig", self.bodies[1]["generationConfig"])
         self.assertLess(self.deadlines[1], mary.OPEN_DEADLINE_S + 0.01)
 
     def test_a_timeout_is_not_retried(self):
         self.answers = [TimeoutError()]
-        self.assertEqual(mary.open_line(self.memory(), KEY), "")
+        self.assertEqual(mary.tell_line(self.memory(), KEY, note=NOTE), "")
         self.assertEqual(len(self.bodies), 1)
 
     def test_any_failure_is_empty_and_saves_nothing(self):
         self.answers = [RuntimeError("down"), RuntimeError("down")]
-        status, got, _ = helpers.api("POST", "/api/mary/open", {"when": "evening"})
+        status, got, _ = helpers.api("POST", "/api/mary/tell", {"note": NOTE})
         self.assertEqual((status, got), (200, {"text": ""}))
         self.assertEqual(self.turns(), [])
 
     def test_nothing_said_is_empty(self):
         self.answers = [[]]
-        self.assertEqual(mary.open_line(self.memory(), KEY), "")
+        self.assertEqual(mary.tell_line(self.memory(), KEY, note=NOTE), "")
 
-    def test_no_key_never_asks(self):
-        self.assertEqual(mary.open_line(self.memory(), ""), "")
+    def test_no_key_or_no_note_never_asks(self):
+        self.assertEqual(mary.tell_line(self.memory(), "", note=NOTE), "")
+        self.assertEqual(mary.tell_line(self.memory(), KEY, note="  "), "")
         self.assertEqual(self.bodies, [])
+
+    def test_a_long_note_is_cut(self):
+        self.answers = [[HELLO]]
+        mary.tell_line(self.memory(), KEY, note="x" * (mary.TELL_NOTE_MAX + 200))
+        self.assertNotIn("x" * (mary.TELL_NOTE_MAX + 1), self.system(self.bodies[0]))
 
 
 class SaidDedupeTest(BrainCase):
@@ -172,8 +174,11 @@ class SaidDedupeTest(BrainCase):
     def test_emergency_words_are_not_doubled(self):
         _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "I can't breathe"})
         self.assertTrue(got["emergency"])
-        self.said(got["say"])
-        self.assertEqual(self.turns(), [("user", "I can't breathe"), ("model", got["say"])])
+        self.assertIn("steps", got)
+        self.assertNotIn("say", got)
+        self.assertEqual(self.turns(), [("user", "I can't breathe")])  # D1: the steps are not her turn; her own words are
+        self.said("I'm here, press your call light.")
+        self.assertEqual(self.turns(), [("user", "I can't breathe"), ("model", "I'm here, press your call light.")])
 
     def test_the_same_line_twice_in_a_row_is_one_turn(self):
         self.said("I didn't catch that.")

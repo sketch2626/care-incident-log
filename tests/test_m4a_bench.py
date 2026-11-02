@@ -114,7 +114,7 @@ class TurnNotes(unittest.TestCase):
     def test_emergency_gets_one_calm_line(self):
         text = self.system("I've got chest pain", "medical")
         self.assertIn(mary.EMERGENCY_TEXT["medical"], text)
-        self.assertIn("one short, calm line", text)
+        self.assertIn("This is an emergency. Their screen shows these steps", text)  # M21a: she says the steps herself
         self.assertNotIn("Veterans Crisis Line; if not", text)
         self.assertIn("Veterans Crisis Line; if not", self.system("I want to die", "self_harm"))
         self.assertNotIn(mary.HARM_NOTE, self.system("he hit me and I can't breathe", "medical"))

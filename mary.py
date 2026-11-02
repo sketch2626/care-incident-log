@@ -6,7 +6,6 @@ without Gemini. Mary only offers to write things down; she never writes to the i
 import base64  # M4a: see_image
 import json
 import os
-import random  # M4d: open_line
 import re
 import sys
 import time
@@ -79,7 +78,6 @@ EMERGENCY_TEXT = {
     "self_harm": "I'm really glad you told me. Please press your call light and tell a nurse how you're feeling, "
                  "or call or text 988 any time, day or night.",
 }
-STAY_TEXT = "I'm right here with you."  # M4c: when her emergency reply was all a repeat of EMERGENCY_TEXT
 # M4d: Live hushes her own reply, so the app's line has to carry this. "If you've served": a wrong guess tells no one
 # they're a veteran.
 VETERANS_TEXT = "If you've served, you can also call 988 and press 1 for the Veterans Crisis Line, or text 838255."
@@ -278,6 +276,9 @@ def _forget_waiting(pending):  # M9c
     return pending if about and 0 <= age <= memory_core.FORGET_YES_S else None
 
 
+_FORGET_HELD = {}  # M21a: one waiting forget per memory file, in RAM only (the app closing drops it)
+
+
 class Memory:
     """What Mary remembers: the resident's name, a few facts, and the last turns of the conversation."""
 
@@ -307,7 +308,6 @@ class Memory:
                       for t in (recent if isinstance(recent, list) else [])
                       if isinstance(t, dict) and t.get("role") in ("user", "model") and isinstance(t.get("text"), str)]
             offer = data.get("pending_offer")
-            pending_forget = data.get("pending_forget")  # M9c
         except (OSError, ValueError, TypeError, AttributeError, KeyError):
             return
         self.name = name if isinstance(name, str) else ""
@@ -317,7 +317,7 @@ class Memory:
         self.recent = recent[-MAX_RECENT:]
         held = _OFFER_WORDS.get(str(self.path))  # M18: their own words come back from RAM, not from the file
         self.pending_offer = held[1] if held and held[0] == offer else (offer if isinstance(offer, dict) else None)
-        self.pending_forget = _forget_waiting(pending_forget)  # M9c
+        self.pending_forget = _forget_waiting(_FORGET_HELD.get(str(self.path)))  # M21a: held in RAM only, between requests; never in the file
 
     def add_fact(self, fact, kind="", source="talk", heard=""):
         """Returns True if the fact was new. heard (M15a): the resident's words, which a date in the fact must match."""
@@ -392,8 +392,8 @@ class Memory:
             _OFFER_WORDS[str(self.path)] = (offer_out, self.pending_offer)
         else:
             _OFFER_WORDS.pop(str(self.path), None)
-        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": offer_out,
-                "pending_forget": _no_addresses(self.pending_forget)}  # M18
+        _FORGET_HELD[str(self.path)] = self.pending_forget  # M21a: RAM only
+        data = {"name": self.name, "name_forgotten": self.name_forgotten, "name_asked": self.name_asked, "facts": self.facts, "recent": self.recent, "pending_offer": offer_out}  # M21a: pending_forget is never saved
         tmp = self.path.with_name(self.path.name + ".tmp")
         try:
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1393,8 +1393,7 @@ def _app_facts_text(companion):  # M9b
                          "offline": "Offline, where your voice is made on this computer"}[choice]
                 out.append(f"- Talk mode in My info: {plain}. If one way isn't working you switch to the next by yourself.")
             if f.get("talk_on_open"):  # M4a
-                out.append("- When your screen opens, you start talking by yourself: you say hello and listen, so they "
-                           "don't need to tap anything.")  # M4a
+                out.append("- When your screen opens, you start listening by yourself, so they don't need to tap anything.")  # M4a
         rate, volume = f.get("voice_rate"), f.get("voice_volume")
         if rate is not None and volume is not None:
             speed = "slower than usual" if rate < 0.85 else "faster than usual" if rate > 1.1 else "about normal"
@@ -1409,7 +1408,7 @@ def _app_facts_text(companion):  # M9b
         return ""
 
 
-def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line=""):  # M4d: safety_line
+def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line="", told=""):  # M4d: safety_line
     system = system_text(memory, companion)
     # --- skills hook (M13) --- an emergency line gets no skills at all
     tools = []
@@ -1420,13 +1419,15 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety
         tools = skills.gemini_tools()
     # --- end skills hook ---
     system += CHARACTER_NOTE  # M4c: late in the prompt, where it holds; only the turn notes come after it
+    if told:  # M21a: the app did something; she tells it in her own words
+        system += ("\n\nThe app just did this; tell them in your own words, in one short line, and add nothing new: "
+                   + told)
     if kind:  # M4a: the bench heard the same instruction twice in a row
         said = safety_line or EMERGENCY_TEXT[kind]  # M4d: what emergency_text gave
-        system += (f"\n\nThe app has already told them this out loud: {said} Those words are your very "
-                   "first words, so the safety rule is already met. They heard it, so don't say any of it again, in any "
-                   "words. Add only one short, calm line of your own, to stay with them.")
+        system += (f"\n\nThis is an emergency. Their screen shows these steps in big letters: {said} Tell them these steps "
+                   "now in your own words, short and calm, with every number in them, and stay with them.")  # M21a (D1)
         if VETERANS_TEXT in said:  # M4d
-            system += " That includes the Veterans Crisis Line, so don't say that again either."
+            system += " Include the Veterans Crisis Line."
         elif kind == "self_harm":
             system += " If they've told you they're a veteran, that line gives the Veterans Crisis Line; if not, leave it out."
     else:  # M4a: the bench's "an aide hit me" got only the offer to write it down
@@ -1454,7 +1455,7 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety
     contents.append({"role": "user", "parts": [{"text": text}]})
     body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4000}}  # M4a: room for a whole story; the brain keeps chat short
-    if tools:  # --- skills hook (M13) ---
+    if tools and not told:  # --- skills hook (M13) --- a told turn has no tool rounds
         body["tools"] = tools
     return body
 
@@ -1547,37 +1548,6 @@ CHARACTER_NOTE = ("\n\nBefore you speak, every time:\n"
                   "help with that. But I'm listening. Family or the chaplain would be good folks to talk this over with, "
                   "too. What's brought you to this?\" If anyone is in danger this very minute, or "
                   "they're the one being hurt, your safety rules above come first.")
-
-# M4c: a prompt alone didn't stop her repeating the app's emergency line (bench run 2), so this checks her words too.
-# Narrow on purpose: "you need a nurse" stays out, because whether she names autonomic dysreflexia is Andy's open question.
-_STEP = re.compile(
-    r"\bcall\s+(?:light|button)\b|\bcall\s+out\b|\b911\b|\bnine[,\s-]+one[,\s-]+one\b"
-    r"|\b988\b|\bnine[,\s-]+eight[,\s-]+eight\b"
-    r"|\b(?:tell|get|find|grab|call)\s+(?:for\s+)?(?:(?:a|an|the|your|charge)\s+){0,2}(?:nurses?|staff)\b", _I)
-# Stays, unless the app's line already gave it (M4d)
-_VETERANS_LINE = re.compile(r"veteran|\bpress\s+(?:one|1)\b|838|\beight[,\s-]+three[,\s-]+eight\b", _I)
-_SENTENCE_GAP = re.compile(r"(?<=[.!?])\s+")
-_TAG_PIECE = re.compile(f"({_BRACKETS.pattern})")
-
-
-def _without_steps(text, veterans_said=False):
-    """Her emergency reply with every sentence that repeats the app's line taken out. Tags pass through untouched,
-    and a tag in front of a sentence doesn't shield that sentence. The Veterans Crisis Line stays, unless the app's
-    line already gave it (veterans_said, M4d)."""
-    def stays(sentence):
-        if _VETERANS_LINE.search(sentence):
-            return not veterans_said
-        return not _STEP.search(sentence)
-
-    out = []
-    for piece in _TAG_PIECE.split(text):
-        if piece.startswith("["):
-            out.append(piece)
-        else:
-            out.append(" ".join(s for s in _SENTENCE_GAP.split(fix_numbers(piece))  # M4d: a wrong form repeats it too
-                                if stays(s)))
-    return "".join(out)
-
 
 # M4d: an animal vet ("the vet's office") and "navy blue" don't count. A wrong yes costs nothing, because of how
 # VETERANS_TEXT is worded.
@@ -1681,21 +1651,6 @@ def tell_story(request, memory, api_key, model="", companion="mary", report=None
 OPEN_DEADLINE_S = 8
 OPEN_TIMES = ("morning", "afternoon", "evening", "night")
 OPEN_NUDGE = "(They opened the app.)"
-OPEN_PROMPT = (
-    "They have just opened your screen{clock}. Say hello in one or two short sentences, as one grown-up to another: "
-    "plain and easy, no gushing and no fuss over them. Use their name if you know it and, when it fits, something you "
-    "remember about them or from your last talk. Use different words every time, and never open the way your last "
-    "hello did. {way} A light \"good morning\", \"good "
-    "afternoon\" or \"good evening\" is fine, but never \"good night\", and never comment on the hour or how late it is. "
-    "Never ask something they have already answered, and never list what you can do. Just the words you say, with no "
-    "tags and no notes in brackets.")
-# M4d: a different way in each time, picked here because a model left alone opens the same way (bench run 3).
-# web/mary/app.js (OPEN_WAYS) has the same list. No companion names and no square brackets.
-OPEN_WAYS = ("This time, open with their name and a short friendly line.",
-             "This time, open with a light greeting for the time of day.",
-             "This time, open with a plain \"hey\".",
-             "This time, open by saying it's good to talk with them again.",
-             "This time, open with something you remember about them, if you have something; if not, their name and a short friendly line.")
 VISION_DEADLINE_S = 8
 VISION_BYTES_MAX = 700_000  # a bigger picture isn't sent: a look has to stay quick
 
@@ -1721,21 +1676,26 @@ def _short_answer(body, api_key, model, deadline_s):
         return ""
 
 
-def open_line(memory, api_key, model="", companion="mary", when=""):
-    """Her hello, from the same brain and history as her talk, with a one-off instruction that is never saved.
-    Plain spoken text, or "" on any problem: the page then says a scripted line. Never raises."""
-    if not api_key:
+TELL_NUDGE = "(The app has something to tell them.)"
+TELL_NOTE_MAX = 400
+
+
+def tell_line(memory, api_key, model="", companion="mary", note=""):
+    """The app has something to tell them (D1): one reply from the same brain and history as her talk, with the app's
+    note as a one-off turn note after CHARACTER_NOTE. The note is never saved. Plain spoken text, or "" on no key or
+    any problem. Never raises."""
+    note = " ".join(str(note or "").split())[:TELL_NOTE_MAX]
+    if not api_key or not note:
         return ""
     try:
-        body = _body(OPEN_NUDGE, memory, None, companion)
+        body = _body(TELL_NUDGE, memory, None, companion, told=note)
+        body.pop("tools", None)
     except Exception:
         return ""
-    clock = f", and it is {when} where they are" if when in OPEN_TIMES else ""
-    body["systemInstruction"]["parts"][0]["text"] += "\n\n" + OPEN_PROMPT.format(clock=clock, way=random.choice(OPEN_WAYS))
     body["generationConfig"] = {"temperature": 0.9, "maxOutputTokens": 1000}
     text = _short_answer(body, api_key, model, OPEN_DEADLINE_S)
     text = " ".join(re.sub(r"[*#]+", "", re.sub(r"\[[^\]]*\]?", "", text)).split())
-    if text:  # M15a: her hello can carry the date note too
+    if text:  # M15a: her line can carry the date note too
         note_went_out(memory, body)
     end = re.search(r"[.!?…][\"'”’)]*(?=[^.!?…]*$)", text)  # a line cut off by the deadline ends on a whole sentence
     return text[:end.end()] if end else text
@@ -1774,7 +1734,10 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     """Mary's answer to what the resident said.
 
     typed (M9c): they typed this, so a fact from it is saved with source "typed".
-    Returns {text, mood, emergency, gemini_alert, offer, logged, remembered, error, effects, first_words_s, total_s}.
+    Returns {text, notice, steps, mood, emergency, gemini_alert, offer, logged, remembered, error, effects, first_words_s,
+    total_s}. D1 (M21a): text is only ever the model's words. notice is a line the app shows on screen and never speaks
+    (no model: offline lines, a failed model, an app outcome the model could not tell); it is never in talk history. steps
+    is the emergency steps for the screen, in big letters; the model says them in its own words.
     Skills (M13): skills is a skills_core.SkillHost, screen the skill now on screen. Gemini's tool calls run
     through it (at most MAX_TOOL_ROUNDS rounds); each effect goes to on_effect as it happens and into effects.
     With no Gemini (no key, or it failed) an offline phrase can still run a skill. An emergency gets no skills.
@@ -1783,11 +1746,11 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     Mood tags are never spoken or remembered. An offline emergency always means "alert";
     gemini_alert is True when only Gemini said alert.
     A pending offer lives exactly one turn. When the resident's next words are a clear yes (is_yes) and
-    write is given, write(incident) saves it (returns the new id, raises on failure) and Mary says
-    SAVED_TEXT without calling Gemini; logged is {id, category}. If saving fails she says SAVE_FAILED_TEXT
-    and the offer stays pending for one more try. Otherwise logged is None. Without write nothing is saved.
-    A forget waiting for its yes (M9c) is answered by the very next turn. A clear yes deletes and she says FORGOT_TEXT
-    without calling Gemini; anything else drops it, so a later "yes" to something else can't delete. An emergency comes
+    write is given, write(incident) saves it (returns the new id, raises on failure) and the app tells Gemini
+    SAVED_TEXT to say in her own words (notice if there is no Gemini); logged is {id, category}. If saving fails it
+    tells SAVE_FAILED_TEXT and the offer stays pending for one more try. Otherwise logged is None. Without write nothing
+    is saved. A forget waiting for its yes (M9c) is answered by the very next turn. A clear yes deletes and the app tells
+    FORGOT_TEXT the same way; anything else drops it, so a later "yes" to something else can't delete. An emergency comes
     first, and a note offer's yes goes first; either way it waits. A turn that truly forgot goes in neither talk history
     nor a note offer.
     The send gate (M15c) hears the words right after the emergency check. When it takes the turn, Gemini, offers and
@@ -1798,6 +1761,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     first_words_s = None
     mood = None
     gemini_mood_seen = gemini_alert = streamed = False
+    notice = told = ""  # M21a: notice = on-screen words never spoken; told = what the app did, for her to say
     if companion not in COMPANIONS:
         companion = "mary"
     store = getattr(memory, "store", None)  # M9c
@@ -1822,6 +1786,14 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         if on_text:
             on_text(piece)
 
+    def show(piece):  # M21a: words for the screen only
+        nonlocal notice
+        if piece and piece.strip():
+            notice = (notice + " " + piece.strip()).strip()
+
+    def has_words():
+        return bool(spoken.strip() or notice)
+
     def set_mood(value):
         nonlocal mood
         if value != mood:
@@ -1832,7 +1804,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     def take_mood(value):
         """A mood tag from Gemini. Only the first counts, and never against an offline emergency."""
         nonlocal gemini_mood_seen, gemini_alert
-        if gemini_mood_seen or kind:
+        if gemini_mood_seen or kind or told:  # told: the app's outcome already set the mood
             return
         gemini_mood_seen = True
         value = re.sub(r"[^a-z]", "", value.lower())
@@ -1870,8 +1842,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     safety_line = ""
     if kind:
         set_mood("alert")
-        safety_line = emergency_text(kind, memory, text)  # M4d
-        emit(safety_line)
+        safety_line = emergency_text(kind, memory, text)  # M4d: goes to the screen as steps; she says them herself
         if said_yes:
             memory.pending_offer = prior  # the emergency comes first; the offer waits one more turn
     confirmed = said_yes and not kind and write is not None
@@ -1890,39 +1861,39 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     error = ""
     remembered = []
     name_dropped = False  # M9c: forget_name ran, so a [name:] in the same reply is ignored
-    if gated:  # M15c: no Gemini. A quiet turn says nothing at all
+    if gated:  # M15c: a quiet turn says nothing at all
         for effect in gated.get("effects") or []:
             add_effect(effect)
         if gated.get("say"):
             set_mood("talking")
-            emit(gated["say"])
-    elif confirmed:
+            told = gated["say"]
+    if confirmed:
         try:
             new_id = write(prior["incident"])
         except Exception:
             memory.pending_offer = prior  # so the next "yes" can try again
             set_mood("sorry")
-            emit(SAVE_FAILED_TEXT)
+            told = SAVE_FAILED_TEXT
         else:
             logged = {"id": new_id, "category": prior["incident"].get("category")}
             set_mood("talking")
-            emit(SAVED_TEXT)
-    elif forget_yes:  # M9c
+            told = SAVED_TEXT
+    if forget_yes:  # M9c
         try:
             gone = forget_fields(memory, field, fields) if field else forget_everything(memory, waiting["about"])
         except Exception:
             memory.pending_forget = waiting  # so the next "yes" can try again
             set_mood("sorry")
-            emit(FORGET_FAILED_TEXT)
+            told = FORGET_FAILED_TEXT
         else:
             set_mood("talking")
             if getattr(memory, "forget_said", ""):  # M19 piece 6b
                 add_effect({"kind": "book_out", "data": {}})
-            emit(getattr(memory, "forget_said", "") or (FORGOT_TEXT if gone else NOTHING_TO_FORGET_TEXT))
-    elif api_key:
+            told = getattr(memory, "forget_said", "") or (FORGOT_TEXT if gone else NOTHING_TO_FORGET_TEXT)
+    if api_key and (told or not (gated or confirmed or forget_yes)):  # M21a: an app outcome goes through the model too
         raw = ""
         stream = _ReplyStream(speak, take_mood)
-        body = _body(text, memory, kind, companion, skills, screen, safety_line)  # --- skills hook (M13) ---
+        body = _body(text, memory, kind, companion, skills, screen, safety_line, told)  # --- skills hook (M13) ---
         try:
             while True:  # --- skills hook (M13) --- one pass per tool round
                 calls, said = [], ""
@@ -1932,8 +1903,7 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                         continue
                     raw += chunk
                     said += chunk
-                    if not kind:  # M4c: in an emergency her words wait, to be checked below
-                        stream.feed(chunk)
+                    stream.feed(chunk)
                 # --- skills hook (M13) --- run her tool calls, then ask again with their answers
                 if not calls or (skills is None and store is None) or kind or rounds >= MAX_TOOL_ROUNDS:  # M9c: store too
                     break
@@ -1968,11 +1938,6 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             error = BAD_KEY if _key_refused(e) else NO_GEMINI
         except Exception:
             error = NO_GEMINI
-        if kind:  # M4c: the app's line played in full, so she doesn't repeat its steps; she stays with them
-            kept = _without_steps(raw, veterans_said=VETERANS_TEXT in safety_line)  # M4d: veterans_said
-            if _BRACKETS.sub("", raw).strip() and not _BRACKETS.sub("", kept).strip():
-                kept = STAY_TEXT + kept  # first, so a held-back tag can't swallow it
-            stream.feed(kept)
         for tag, value in _TAG.findall(raw):
             if tag == "remember":
                 try:  # M9c: a locked database must never stop her reply
@@ -1987,19 +1952,24 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         tail = stream.finish()
         if tail.strip():
             speak(tail)
-        if rounds and not spoken.strip():  # --- skills hook (M13) --- her follow-up failed or had no words
+        if rounds and not has_words():  # --- skills hook (M13) --- her follow-up failed or had no words
             if says:
-                emit(" ".join(says))
+                show(" ".join(says))
             else:
                 set_mood("sorry")
-                emit(NOT_WORKING_TEXT)
+                show(NOT_WORKING_TEXT)
         if not streamed and not error:
             error = NO_GEMINI
+        if told:
+            error = ""  # the app's own outcome stands, with or without her words
         if streamed:  # M15a: her own words went out (a later round's body keeps the same systemInstruction)
             note_went_out(memory, body)
 
+    if told and not spoken.strip():  # M21a: no key, or the model gave no words: the screen shows the app's line
+        show(told)
+
     # --- skills hook (M13) --- no Gemini (no key, or it failed): an offline phrase can still run a skill
-    if (skills is not None and not gated and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
+    if (skills is not None and not gated and not has_words() and not kind and not rounds and error in ("", NO_GEMINI)
             and not (prior and (said_yes or is_decline(text)))):
         hit = skills.offline_match(text, is_blocked=skill_blocked)
         if hit:
@@ -2008,26 +1978,26 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             gemini_alert = False
             failed = bool(hit["response"].get("error"))
             set_mood("sorry" if failed else "talking")
-            emit(hit["say"] or (NOT_WORKING_TEXT if failed else SKILL_DONE_TEXT))
+            show(hit["say"] or (NOT_WORKING_TEXT if failed else SKILL_DONE_TEXT))
             if not api_key:
                 error = NO_KEY
     # --- end skills hook ---
 
     # M9c: no Gemini: a few exact phrases still reach her memory
-    if (store is not None and not gated and not spoken.strip() and not kind and not rounds and error in ("", NO_GEMINI)
+    if (store is not None and not gated and not has_words() and not kind and not rounds and error in ("", NO_GEMINI)
             and not (prior and (said_yes or is_decline(text)))):
         line = offline_memory(memory, text, offer_waiting=bool(prior))
         if line:
             gemini_alert = False
             set_mood("talking")
-            emit(line)
+            show(line)
             if not api_key:
                 error = NO_KEY
 
-    if not spoken.strip() and not kind and not gated:  # M15c: gated
+    if not has_words() and not kind and not gated:  # M15c: gated
         gemini_alert = False  # a bare "alert" tag with no words is not something to act on
         set_mood("sorry")
-        emit(BAD_KEY_TEXT if error == BAD_KEY else OFFLINE_TEXT)
+        show(BAD_KEY_TEXT if error == BAD_KEY else OFFLINE_TEXT)
         if not api_key:
             error = NO_KEY
     elif mood is None and not gated:  # M15c: gated
@@ -2038,11 +2008,13 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         # Gemini offered on her own for something the word list missed: a "yes" must still save it.
         offer = memory.pending_offer = _offer(_guess(text))
     if offer and not _ASKS.search(spoken):
-        emit(offer["question"], sep=True)
+        show(offer["question"])
 
     final = spoken.strip()
-    if final:  # M15c: the gate needs to know the line really went out
-        _gate_call(skills, "her_words", final)
+    notice_text = notice.strip()
+    if final or notice_text:  # M15c: the gate needs to know the line really went out (spoken, or shown as a notice)
+        # M21a: on a gated turn the gate reads the app's own line, because her rewording may drop the words it checks for
+        _gate_call(skills, "her_words", (told if gated and told else "") or final or notice_text)
     if waiting and memory.pending_forget is waiting and not (kind or said_yes or forget_yes):  # M9c
         memory.pending_forget = None  # her question went unanswered, so a later "yes" can't be taken for it
     if not kind:  # M15a: here, so it runs with no key and when Gemini failed; an emergency line teaches nothing
@@ -2055,6 +2027,6 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         memory.save()
     except OSError:
         pass
-    return {"text": final, "mood": mood, "emergency": kind, "gemini_alert": gemini_alert, "offer": offer,
+    return {"text": final, "notice": notice_text, "steps": safety_line if kind else "", "mood": mood, "emergency": kind, "gemini_alert": gemini_alert, "offer": offer,
             "logged": logged, "remembered": remembered, "error": error, "effects": effects,  # effects: M13
             "first_words_s": first_words_s, "total_s": time.monotonic() - start}

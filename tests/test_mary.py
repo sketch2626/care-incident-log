@@ -184,8 +184,9 @@ class TestEmergency(MaryTestCase):
             with self.subTest(said):
                 r = self.say(said)
                 self.assertEqual(r["emergency"], "medical")
-                self.assertTrue(r["text"].startswith(mary.EMERGENCY_TEXT["medical"]))
-                self.assertNotIn(mary.OFFLINE_TEXT, r["text"])
+                self.assertTrue(r["steps"].startswith(mary.EMERGENCY_TEXT["medical"]))  # D1: the steps are for the screen
+                self.assertEqual(r["text"], "")  # no model words, and no fixed text in their place
+                self.assertNotIn(mary.OFFLINE_TEXT, r["text"] + r["notice"])
 
     def test_more_medical_and_self_harm_phrases(self):
         for said in ("I have trouble breathing", "I'm short of breath", "I'm bleeding", "I think it's a stroke",
@@ -246,28 +247,31 @@ class TestEmergency(MaryTestCase):
     def test_self_harm_mentions_988_and_offers_nothing(self):
         r = self.say("Some nights I wish I just wouldn't wake up.")
         self.assertEqual(r["emergency"], "self_harm")
-        self.assertIn("988", r["text"])
+        self.assertIn("988", r["steps"])
+        self.assertEqual(r["text"], "")
         self.assertIsNone(r["offer"])
 
     def test_fell_asleep_is_not_an_emergency(self):
         r = self.say("I fell asleep in my chair")
         self.assertIsNone(r["emergency"])
         self.assertIsNone(mary.is_emergency("I fell asleep in my chair"))
-        self.assertEqual(r["text"], mary.OFFLINE_TEXT)
+        self.assertEqual(r["steps"], "")
+        self.assertEqual((r["text"], r["notice"]), ("", mary.OFFLINE_TEXT))
 
     def test_non_emergency_failure_falls_back_offline(self):
         r = self.say("Good morning, Mary.")
-        self.assertEqual(r["text"], mary.OFFLINE_TEXT)
+        self.assertEqual((r["text"], r["notice"]), ("", mary.OFFLINE_TEXT))
         self.assertEqual(r["error"], mary.NO_GEMINI)
         self.assertIsNone(r["emergency"])
 
     def test_no_key_never_calls_gemini(self):
         self.fake.fail = False
         r = self.say("Good morning, Mary.", key="")
-        self.assertEqual(r["text"], mary.OFFLINE_TEXT)
+        self.assertEqual((r["text"], r["notice"]), ("", mary.OFFLINE_TEXT))
         self.assertEqual(r["error"], mary.NO_KEY)
         r = self.say("I fell this morning", key="")
-        self.assertTrue(r["text"].startswith(mary.EMERGENCY_TEXT["medical"]))
+        self.assertTrue(r["steps"].startswith(mary.EMERGENCY_TEXT["medical"]))
+        self.assertEqual(r["text"], "")
         self.assertEqual(self.fake.bodies, [])
 
     def test_failure_after_some_words_keeps_them(self):
@@ -286,8 +290,11 @@ class TestEmergency(MaryTestCase):
     def test_emergency_tells_gemini_it_was_already_said(self):
         self.fake.fail = False
         r = self.say("I fell this morning", ["I'm here with you."])
-        self.assertTrue(r["text"].startswith(mary.EMERGENCY_TEXT["medical"] + " I'm here with you."))
-        self.assertIn("already told them this out loud", self.fake.bodies[0]["systemInstruction"]["parts"][0]["text"])
+        self.assertEqual(r["text"], "I'm here with you.")  # only the model's words; no fixed text in front
+        self.assertTrue(r["steps"].startswith(mary.EMERGENCY_TEXT["medical"]))
+        note = self.fake.bodies[0]["systemInstruction"]["parts"][0]["text"]
+        self.assertIn("This is an emergency. Their screen shows these steps", note)
+        self.assertIn(mary.EMERGENCY_TEXT["medical"], note)  # the steps reach the model's turn note
 
 
 class TestOffer(MaryTestCase):
@@ -298,7 +305,8 @@ class TestOffer(MaryTestCase):
         r = self.say(self.LAPSE, ["I'm so sorry."], memory=memory)
         self.assertEqual(r["offer"]["incident"]["category"], "call_light")
         self.assertEqual(r["offer"]["incident"]["wait_minutes"], 40)
-        self.assertEqual(r["text"], "I'm so sorry. " + mary.OFFER_QUESTION)
+        self.assertEqual(r["text"], "I'm so sorry.")
+        self.assertEqual(r["notice"], mary.OFFER_QUESTION)  # the fixed question is screen-only
         self.assertEqual(memory.pending_offer, r["offer"])
 
     def test_question_not_repeated_when_gemini_already_asked(self):
@@ -401,16 +409,17 @@ class TestYesSavesIt(MaryTestCase):
     def test_yes_please_writes_the_guess_once(self):
         offer = self.offered()
         asked = len(self.fake.bodies)
-        r = self.turn("Yes please", ["should never be said"])
+        r = self.turn("Yes please", ["Done, it is written down."])
         self.assertEqual(self.written, [offer["incident"]])
         self.assertEqual(self.written[0]["description"], self.LAPSE)
-        self.assertEqual(r["text"], mary.SAVED_TEXT)
+        self.assertEqual(r["text"], "Done, it is written down.")  # her own words
+        self.assertIn(mary.SAVED_TEXT, self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"])  # the app's outcome, as a turn note
         self.assertEqual(r["mood"], "talking")
         self.assertEqual(r["logged"], {"id": 101, "category": "call_light"})
         self.assertIsNone(r["offer"])
         self.assertIsNone(self.memory.pending_offer)
-        self.assertEqual(len(self.fake.bodies), asked)  # Gemini was not asked
-        self.assertEqual(self.memory.recent[-1]["text"], mary.SAVED_TEXT)
+        self.assertEqual(len(self.fake.bodies), asked + 1)  # one model turn, carrying the app note
+        self.assertEqual(self.memory.recent[-1]["text"], "Done, it is written down.")  # her words, not the note
         r = self.turn("Yes please")  # the offer is used up
         self.assertEqual(len(self.written), 1)
         self.assertIsNone(r["logged"])
@@ -479,20 +488,20 @@ class TestYesSavesIt(MaryTestCase):
         self.offered()
         r = self.turn("Yes, and the food was cold too")
         self.assertEqual(len(self.written), 1)
-        self.assertEqual(r["text"], mary.SAVED_TEXT)
+        self.assertIn(mary.SAVED_TEXT, self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"])
 
     def test_failed_save_says_sorry_and_the_next_yes_retries(self):
         offer = self.offered()
         self.fail_next = True
         r = self.turn("Yes")
         self.assertEqual(self.written, [])
-        self.assertEqual(r["text"], mary.SAVE_FAILED_TEXT)
+        self.assertIn(mary.SAVE_FAILED_TEXT, self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"])
         self.assertEqual(r["mood"], "sorry")
         self.assertIsNone(r["logged"])
         self.assertEqual(self.memory.pending_offer, offer)
         r = self.turn("Yes please")
         self.assertEqual(self.written, [offer["incident"]])
-        self.assertEqual(r["text"], mary.SAVED_TEXT)
+        self.assertIn(mary.SAVED_TEXT, self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"])
         self.assertEqual(r["logged"]["id"], 101)
 
     def test_emergency_comes_first_and_nothing_is_saved(self):
@@ -505,7 +514,7 @@ class TestYesSavesIt(MaryTestCase):
         self.assertEqual(self.memory.pending_offer, offer)  # kept for one more turn
         r = self.turn("Yes")
         self.assertEqual(self.written, [offer["incident"]])
-        self.assertEqual(r["text"], mary.SAVED_TEXT)
+        self.assertIn(mary.SAVED_TEXT, self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"])
 
     def test_without_a_write_callable_it_is_a_normal_reply(self):
         self.offered()
@@ -542,7 +551,7 @@ class TestYesSavesIt(MaryTestCase):
         self.memory = mary.Memory(self.path)  # the app was closed and reopened
         r = self.turn("Yes please")
         self.assertEqual(len(self.written), 1)
-        self.assertEqual(r["text"], mary.SAVED_TEXT)
+        self.assertIn(mary.SAVED_TEXT, self.fake.bodies[-1]["systemInstruction"]["parts"][0]["text"])
 
 
 def http_error(code, body=b""):
@@ -563,9 +572,9 @@ class TestGeminiFailures(MaryTestCase):
                 self.failing_with(error)
                 r = self.say("Hello", memory=mary.Memory(self.dir / f"{error.code}.json"))
                 self.assertEqual(r["error"], mary.BAD_KEY)
-                self.assertEqual(r["text"], mary.BAD_KEY_TEXT)
+                self.assertEqual((r["text"], r["notice"]), ("", mary.BAD_KEY_TEXT))
                 self.assertEqual(r["mood"], "sorry")
-                self.assertNotIn(KEY, r["text"])
+                self.assertNotIn(KEY, r["notice"])
                 self.assertNotIn(KEY, r["error"])
 
     def test_other_failures_still_sound_offline(self):
@@ -576,7 +585,7 @@ class TestGeminiFailures(MaryTestCase):
                 self.failing_with(error)
                 r = self.say("Hello", memory=mary.Memory(self.dir / "other.json"))
                 self.assertEqual(r["error"], mary.NO_GEMINI)
-                self.assertEqual(r["text"], mary.OFFLINE_TEXT)
+                self.assertEqual((r["text"], r["notice"]), ("", mary.OFFLINE_TEXT))
 
     def test_an_unreadable_400_body_is_just_offline(self):
         class Broken(io.BytesIO):
@@ -584,13 +593,13 @@ class TestGeminiFailures(MaryTestCase):
                 raise OSError("reset")
         self.failing_with(urllib.error.HTTPError("https://example.invalid/", 400, "x", {}, Broken()))
         r = self.say("Hello")
-        self.assertEqual((r["error"], r["text"]), (mary.NO_GEMINI, mary.OFFLINE_TEXT))
+        self.assertEqual((r["error"], r["text"], r["notice"]), (mary.NO_GEMINI, "", mary.OFFLINE_TEXT))
 
     def test_a_bad_key_in_an_emergency_still_gives_the_emergency_words(self):
         self.failing_with(http_error(403))
         r = self.say("I fell this morning")
-        self.assertTrue(r["text"].startswith(mary.EMERGENCY_TEXT["medical"]))
-        self.assertNotIn(mary.BAD_KEY_TEXT, r["text"])
+        self.assertTrue(r["steps"].startswith(mary.EMERGENCY_TEXT["medical"]))
+        self.assertNotIn(mary.BAD_KEY_TEXT, r["text"] + r["notice"])
         self.assertEqual((r["emergency"], r["mood"], r["error"]), ("medical", "alert", mary.BAD_KEY))
 
     def test_a_slow_trickle_stops_at_the_deadline_with_what_was_said(self):

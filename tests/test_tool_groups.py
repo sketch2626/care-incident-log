@@ -355,9 +355,11 @@ class Safety(Base):
             self.memory = mary.Memory(self.dir / f"m{id(skills)}.json")
             r = self.say(self.HEART, ["I'm here."], host=skills)
             self.assertEqual(r["emergency"], "medical")
-            self.assertIn(mary.EMERGENCY_TEXT["medical"], r["text"])
+            self.assertIn(mary.EMERGENCY_TEXT["medical"], r["steps"])
+            self.assertEqual(r["text"], "I'm here.")  # only her words
         offline = mary.reply(self.HEART, mary.Memory(self.dir / "o.json"), "", skills=Broken())
-        self.assertIn(mary.EMERGENCY_TEXT["medical"], offline["text"])
+        self.assertIn(mary.EMERGENCY_TEXT["medical"], offline["steps"])
+        self.assertEqual(offline["text"], "")
 
 
 class OfflineNoGemini(Base):

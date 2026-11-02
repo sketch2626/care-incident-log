@@ -105,7 +105,8 @@ class Heard(M4aCase):
     def test_emergency_and_ordinary(self):
         _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "I fell and I can't get up"})
         self.assertTrue(got["emergency"])
-        self.assertTrue(got["say"])
+        self.assertTrue(got["steps"])  # D1: steps for the screen, not words to speak
+        self.assertNotIn("say", got)
         _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "tell me a story"})
         self.assertFalse(got["emergency"])
 
@@ -276,7 +277,7 @@ class LiveBrain(M4aCase):
 
     def test_emergency_heard_saves_each_turn_once(self):
         _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": FELL})
-        self.assertEqual([(t["role"], t["text"]) for t in self.memory().recent], [("user", FELL), ("model", got["say"])])
+        self.assertEqual([(t["role"], t["text"]) for t in self.memory().recent], [("user", FELL)])  # her own words come later, by the model
 
     def test_live_said_records_her_turn(self):
         status, got, _ = helpers.api("POST", "/api/mary/live/said", {"text": "Well hey there,  Andy!"})
@@ -397,7 +398,7 @@ class StoryAndTalkOnOpen(M4aCase):  # M4a: Live's tell_story tool, "Start talkin
         self.assertTrue(self.settings()["talk_on_open"])
 
     def test_facts_mention_talk_on_open(self):
-        self.assertIn("When your screen opens, you start talking", mary._app_facts_text("mary"))
+        self.assertIn("When your screen opens, you start listening by yourself", mary._app_facts_text("mary"))
         self.put(talk_on_open="0")
         self.assertNotIn("When your screen opens", mary._app_facts_text("mary"))
 
@@ -745,7 +746,7 @@ class GarbledLines(M4aCase):
         before = server.mary_memory().name
         status, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "my name is " + self.CHINESE})
         self.assertEqual(status, 200)
-        self.assertEqual(got, {"emergency": False, "kind": "", "say": "", "garbled": True})
+        self.assertEqual(got, {"emergency": False, "kind": "", "steps": "", "garbled": True})
         self.assertEqual(self.turns(), [])
         self.assertEqual(server.mary_memory().name, before)
 
@@ -754,9 +755,9 @@ class GarbledLines(M4aCase):
         self.assertTrue(mary.not_english(text))
         _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": text})
         self.assertTrue(got["emergency"])
-        self.assertTrue(got["say"])
+        self.assertTrue(got["steps"])
         self.assertNotIn("garbled", got)
-        self.assertEqual(self.turns(), [text, got["say"]])
+        self.assertEqual(self.turns(), [text])
 
     def test_ordinary_line_has_no_garbled_field(self):
         _, got, _ = helpers.api("POST", "/api/mary/heard", {"text": "tell me about Boone"})

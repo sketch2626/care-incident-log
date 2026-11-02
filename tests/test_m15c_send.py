@@ -306,7 +306,9 @@ class SmoothPath(Flow):
         self.ready()
         out = self.talk("now send it")
         self.assertIn("count", self.effects(out))
-        self.assertEqual(self.gemini.bodies, [])  # the count skips the brain
+        self.assertEqual(len(self.gemini.bodies), 1)  # D1: the count line goes through her, as a turn note only
+        self.assertNotIn("tools", self.gemini.bodies[0])
+        self.assertIn("The app just did this", self.gemini.bodies[0]["systemInstruction"]["parts"][0]["text"])
         self.now += 5.0
         self.assertTrue(self.done()["say"].startswith("Sent to Mark."))
         self.assertEqual(self.sent(), 1)
@@ -367,7 +369,8 @@ class EmergencyDuringTheCount(Flow):
         self.assertTrue(mary.is_emergency(self.WORDS))
         out = self.post("/api/mary/heard", {"text": self.WORDS})
         self.assertTrue(out["emergency"])
-        self.assertTrue(out["say"])  # the emergency line comes back
+        self.assertTrue(out["steps"])  # the emergency steps come back for the screen
+        self.assertNotIn("say", out)
         self.assertEqual(self.state(), "look")
         self.now += 6
         self.done()

@@ -12,11 +12,11 @@ import voices
 FACTS = {"voice_now": "builtin", "picked_voice": "", "talk_mode": "handsfree", "wake_word": False,
          "talk_choice": "live", "talk_on_open": True, "voice_rate": 0.8, "voice_volume": 0.4, "printer": False}
 
-# sha256 of the full-brain prompts at HEAD before M21c (fixed FACTS, empty memory, hello).
-PINNED = {("mary", "normal"): "42524623202de8b6694bc7327acf9def0f4e97fe1f2768fa26f25ac871e51a4b",
-          ("mary", "live"): "b268ac4b08c9bef3de5511fe8abe7ce37399537b58cbe0147b010e95daba5c4a",
-          ("him", "normal"): "baeddee5e50b367708b111d62f2f388f2850c041f9ffea2bbc553e29b38bbbab",
-          ("him", "live"): "269f680f233c377ac4b0643e81ceb4c4cfd0ea4fb5f71c56ff5e463095a66d21"}
+# sha256 of the full-brain prompts (fixed FACTS, empty memory, hello). Repinned for D12 (Andy, 2026-11-02): one line, switches, How bad and deleting go by their word.
+PINNED = {("mary", "normal"): "e9f89960a2113513165db3e4435ca38379b04144386b8683215c26cd84059246",
+          ("mary", "live"): "ff65d5568111bb3cb3c7bb674b06a0c4f479ba14a7e136362c2b467bfdbcbbe9",
+          ("him", "normal"): "62595041543681e94e7282af59ac884a9205fb106ba4247c4479e148762cc496",
+          ("him", "live"): "e932f35db3bd8dff234aaf031d17d3a7aeaf030c1c06cfe54e488bf200e98aff"}
 
 
 def _memory():

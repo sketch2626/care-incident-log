@@ -155,6 +155,7 @@ def is_plain_save(text):
 
 _ORDER_OFF_RE = re.compile(r"\b(?:(?:turn|switch|shut|put|set)\b.*\boff|disable)\b")
 _ORDER_ON_RE = re.compile(r"\b(?:(?:turn|switch|put|set)\b.*\bon|enable|connect)\b")
+_ORDER_SET_RE = re.compile(r"\b(?:use|switch to|change to|change|pick|go with|make it|set|talk to|i want)\b")
 _ORDER_SWITCH_NAME_RE = re.compile(r"\bwhen (?:mary|sam|you|she|he) opens?\b")
 _ORDER_ASK_RE = re.compile(r"\b(?:how|what|does)\b")
 _ORDER_FILLERS = r"(?:(?:mary|sam|hey|please|okay|ok|yes|yeah|alright|now|then|and|just)[\s,]+)*"
@@ -202,6 +203,8 @@ def _plain_act_order(text):
         acts.append("on")
     if _ORDER_REMOVE_RE.search(lower):
         acts.append("remove")
+    if not acts and _ORDER_SET_RE.search(lower) and not any(re.search(rf"\b{w}\b", lower) for w in _SEV_WORDS):
+        acts.append("set")  # pick one of a list ("use the deep voice"); an on/off order always wins
     return {"acts": acts, "words": " ".join(words)} if len(acts) == 1 else None
 
 

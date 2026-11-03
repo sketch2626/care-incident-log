@@ -2807,6 +2807,7 @@
         try { return (deepUp() && deepOnLog()) ? $('deepFrame').contentDocument : null; } catch (e) { return null; }
       },
       panel: function () { return panelOpen() ? M.panel : null; },
+      page: function () { return D; },   // M22: Mary's own panels live in this document
       openDeep: openDeep,
       openPanel: function (id) { if (menuOpen()) { closeMenu(false); } openPanel(id); },
       back: bandBack,

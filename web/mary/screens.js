@@ -208,11 +208,31 @@
     { id: 'games', panel: 'gamesPanel', name: 'Games',
       explain: 'The games that are switched on. They can say one or tap it.', fields: [] },
     { id: 'choose', panel: 'choosePanel', name: 'Choose Mary or Sam',
-      explain: 'Where they pick which of you they talk with.', fields: [] },
+      explain: 'Where they pick which of you they talk with.', fields: [],
+      rows: [{ id: 'companion', list: 'chooseList', panel: 'choosePanel', label: 'Mary or Sam', kind: 'radio',
+        say: ['mary', 'sam', 'talk to', 'companion', 'who i talk to', 'who i talk with'],
+        explain: 'Which of you they talk with. Switching starts a new talk.' }] },
     { id: 'info_panel', panel: 'infoPanel', name: 'My info panel',
       explain: 'How you talk, your voice, how long you wait, your name word, things you can do, and what you remember.',
       labels: ['How you talk', 'Your voice', 'How long you wait', 'Things you can do', 'What you remember', 'More settings'],
-      fields: [] }
+      fields: [],
+      rows: [
+        { id: 'talk_mode', list: 'modeList', panel: 'infoPanel', label: 'How you talk', kind: 'radio',
+          say: ['talk mode', 'mode', 'how you talk', 'how mary talks', 'how sam talks', 'how she talks', 'how he talks'],
+          explain: 'Live, Normal or Offline.' },
+        { id: 'voice', list: 'voiceList', panel: 'infoPanel', label: 'Your voice', kind: 'radio', fetch: true,
+          say: ['voice', 'your voice', 'her voice', 'his voice', "mary's voice", "sam's voice", 'my voice'],
+          explain: 'Which voice you use. Each has a Hear it button.' },
+        { id: 'wait', list: 'waitList', panel: 'infoPanel', label: 'How long you wait', kind: 'radio',
+          say: ['wait', 'how long you wait', 'how long she waits', 'how long he waits', 'listen wait', 'more time', 'time'],
+          explain: 'Usual, or More time before you answer.' },
+        { id: 'wake', list: 'wakeList', panel: 'infoPanel', label: 'Listen for Hey Mary', kind: 'onoff',
+          say: ['hey mary', 'hey sam', 'listen for hey mary', 'listen for hey sam', 'listen for her name', 'listen for his name'],
+          explain: 'On or Off.' },
+        { id: 'skills', list: 'skillList', panel: 'infoPanel', label: 'Things you can do', kind: 'toggle', fetch: true,
+          say: ['skill', 'skills', 'things you can do', 'thing you can do'],
+          explain: 'Each thing is On or Off. A locked one is set by their helper.' }
+      ] }
   ];
 
   var TOOL_NAMES = ['look_at_screen', 'explain_field', 'fill_field', 'put_back', 'open_screen', 'go_back', 'their_words', 'remove_thing'];
@@ -353,6 +373,7 @@
     var s = here(env), doc = env.doc(), card = { screen: s.name, about: s.explain };
     if (s.labels) { card.labels = s.labels; }
     if (s.groups) { card.groups = GROUPS.map(function (g) { return g.label; }); }
+    if (s.panel && s.rows && env.page && env.panel()) { return lookRows(card, s, env); }
     if (doc && !s.panel) {
       if (s.people) { lookPeople(doc, card); }
       if (s.person) { lookPerson(doc, card); }
@@ -517,7 +538,132 @@
     return out;
   }
   // D12: a person's card has no Change button, so a fill asked for on it goes to that person's form (nothing saves there either).
-  function fillField(args, env) { return reach(args, env, fillIn); }
+  function fillField(args, env) {
+    var row = env.page && !String(args.who == null ? '' : args.who).trim() ? findRow(args.field) : null;
+    if (row) {   // a field on My info wins over a row, unless that panel is the one open
+      var s = here(env), doc = env.doc();
+      if (s.panel === row.panel || !(findField(s, args.field, doc) || findField(byId('info'), args.field, doc))) { return fillRow(row, args, env); }
+    }
+    return reach(args, env, fillIn);
+  }
+
+  // M22: Mary's own panels. Their rows are made by app.js and each tap saves by itself, so a fill is that tap.
+  var HELPER_NO = 'Your helper set that one.';
+  var NOT_READY_NO = "That one isn't ready on this computer yet.";
+  var WHICH_NO = 'Tell me plainly which one you want, and I will.';
+  var ROW_STOP = { voice: 1, the: 1, a: 1, an: 1, and: 1, of: 1, to: 1, it: 1, my: 1, your: 1, her: 1, his: 1, best: 1 };
+  function findRow(want) {
+    var w = String(want == null ? '' : want).trim().toLowerCase(), i, j, rows;
+    if (!w) { return null; }
+    for (i = 0; i < LIST.length; i++) {
+      rows = LIST[i].rows || [];
+      for (j = 0; j < rows.length; j++) {
+        if (rows[j].id === w || rows[j].label.toLowerCase() === w || rows[j].say.indexOf(w) >= 0) { return rows[j]; }
+      }
+    }
+    return null;
+  }
+  function wordsOf(t) {
+    return String(t == null ? '' : t).toLowerCase().replace(/[^\w']+/g, ' ').trim().split(' ').filter(function (x) { return x; });
+  }
+  function nameOf(el) {
+    var first = el.querySelector ? el.querySelector('.txt span') : null;
+    return String((first || el).textContent || '').trim();
+  }
+  // The things to tap in one list: { name, btn, on, locked }. A list from a fetch is loading until it has rows or a plain line.
+  function itemsOf(page, r) {
+    var box = page.getElementById(r.list), out = [], lead;
+    if (!box) { return { items: out, loading: !!r.fetch, lead: '' }; }
+    var mk = function (name, btn, on) { out.push({ name: name, btn: btn, on: on, locked: btn.getAttribute('aria-disabled') === 'true' }); };
+    if (r.kind === 'toggle') {
+      Array.prototype.slice.call(box.querySelectorAll('.row')).forEach(function (row) {
+        var btn = row.querySelector('button');
+        if (btn) { mk(nameOf(row), btn, btn.getAttribute('aria-pressed') === 'true'); }
+      });
+    } else {
+      Array.prototype.slice.call(box.querySelectorAll('[role="radio"]')).forEach(function (btn) {
+        mk(nameOf(btn), btn, btn.getAttribute('aria-checked') === 'true');
+      });
+    }
+    lead = box.querySelector('.lead');
+    lead = lead ? String(lead.textContent || '') : '';
+    return { items: out, lead: lead, loading: !out.length && !!r.fetch && (!lead || /^Getting\b/.test(lead)) };
+  }
+  // Waits for a list that comes from a fetch, the way arrive polls. Resolves to the list, or null if it never came.
+  function rowsArrive(env, r) {
+    var began = Date.now();
+    return new Promise(function (resolve) {
+      function check() {
+        var page = env.page(), got = page ? itemsOf(page, r) : null;
+        if (got && !got.loading) { resolve(got); return; }
+        if (Date.now() - began >= ARRIVE_MS) { resolve(null); return; }
+        setTimeout(check, ARRIVE_POLL_MS);
+      }
+      check();
+    });
+  }
+  function panelUp(env, id) {
+    var began = Date.now();
+    return new Promise(function (resolve) {
+      function check() {
+        if (env.panel() === id) { resolve(true); return; }
+        if (Date.now() - began >= ARRIVE_MS) { resolve(false); return; }
+        setTimeout(check, ARRIVE_POLL_MS);
+      }
+      setTimeout(check, ARRIVE_POLL_MS);
+    });
+  }
+  // The visible names only. Memories are never in a row list.
+  function lookRows(card, s, env) {
+    return Promise.all(s.rows.map(function (r) { return rowsArrive(env, r); })).then(function (all) {
+      if (all.some(function (g) { return !g; })) { return no(SLOW_NO); }
+      card.rows = [];
+      s.rows.forEach(function (r, i) {
+        var items = all[i].items;
+        if (!items.length) { return; }
+        var out = { field: r.id, label: r.label, kind: r.kind, explain: r.explain,
+          choices: items.map(function (x) { return r.kind === 'toggle' ? x.name + ': ' + (x.locked ? 'Set by your helper' : x.on ? 'On' : 'Off') : x.name; }) };
+        if (r.kind !== 'toggle') { out.value = (items.filter(function (x) { return x.on; })[0] || {}).name; }
+        card.rows.push(out);
+      });
+      return card;
+    });
+  }
+  // The new check: the order's own words must hold the chosen button's name word(s), so a different voice than they said can't be picked.
+  function nameInOrder(env, item, tokens) {
+    var said = ' ' + wordsOf(env.order && env.order.words).join(' ') + ' ', have = ' ' + wordsOf(item.name).join(' ') + ' ';
+    return tokens.length > 0 && tokens.every(function (t) { return said.indexOf(' ' + t + ' ') >= 0 && have.indexOf(' ' + t + ' ') >= 0; });
+  }
+  function fillRow(row, args, env) {
+    var o = env.order, act = o && Array.isArray(o.acts) && o.acts.length === 1 ? o.acts[0] : '';
+    var radio = row.kind === 'radio';
+    if (!env.page || (radio ? act !== 'set' : (act !== 'on' && act !== 'off'))) { return no(radio ? WHICH_NO : SWITCH_NO); }
+    if (env.panel() === row.panel) { return doRow(row, args, env, act); }
+    env.openPanel(row.panel);   // hop: open the panel, wait for it, then do it
+    return panelUp(env, row.panel).then(function (came) { return came ? doRow(row, args, env, act) : no(SLOW_NO); });
+  }
+  function doRow(row, args, env, act) {
+    return rowsArrive(env, row).then(function (got) {
+      if (!got) { return no(SLOW_NO); }
+      if (!got.items.length) { return no(got.lead || NOT_THERE_NO); }
+      var said = args.value || (row.id === 'companion' ? args.field : '');
+      var want = row.kind === 'onoff' ? [act] : wordsOf(said).filter(function (t) { return !ROW_STOP[t]; });
+      var hit = got.items.filter(function (x) {
+        var have = ' ' + wordsOf(x.name).join(' ') + ' ';
+        return want.length && want.every(function (t) { return have.indexOf(' ' + t + ' ') >= 0; });
+      });
+      if (hit.length !== 1) { return no('Which one? ' + got.items.map(function (x) { return x.name; }).join(', ') + '.'); }
+      var item = hit[0], key = 'row-' + row.id + ':' + item.name.toLowerCase(), o = env.order;
+      o.used = o.used || {};
+      if (o.used[key] || (row.kind !== 'onoff' && !nameInOrder(env, item, want))) { return no(row.kind === 'radio' ? WHICH_NO : SWITCH_NO); }
+      if (item.locked) { return no(row.kind === 'toggle' ? HELPER_NO : NOT_READY_NO); }
+      o.used[key] = true;
+      var value = row.kind === 'toggle' ? act : item.name;
+      if (row.kind === 'toggle' ? item.on === (act === 'on') : item.on) { return { ok: true, label: row.label, value: value, saved: false, note: 'It was already that way.' }; }
+      item.btn.click();   // the tap's own handler saves it
+      return { ok: true, label: row.label, value: value, saved: true, next: 'It is changed now and the screen says so. Say it in a few words.' };
+    });
+  }
   // Gets to the field first (a card to its form, a named person, My info), then does act(screen, args, env) there.
   function reach(args, env, act) {
     var s = here(env), doc = env.doc(), cf;

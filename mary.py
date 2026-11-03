@@ -1224,18 +1224,20 @@ LIVE_PAGE_TOOLS = [
                      "it back and ask if it's right. put_back = undo your last fill of the box in field. their_words = "
                      "copy their own words into Your words, exactly as they said them (you can't give it any words). "
                      "go_back = go back to you, the same as tapping you. read_incidents = read back what they saved, only "
-                     "when they ask; it works on any screen, and when and category narrow it."),
+                     "when they ask; it works on any screen, and when and category narrow it. remove = on their plain word, "
+                     "clear the box in field, or with when or category remove that saved note; then say what went. "
+                     "open with name write and when or category opens that saved note to change."),
      "parameters": {"type": "object", "properties": {
-         "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents."},
+         "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents, remove."},
          "name": {"type": "string", "description": "For open: the screen, one of " + ", ".join(LIVE_SCREEN_NAMES) + "."},
-         "who": {"type": "string", "description": "For open: who in the address book, by name or relationship."},
+         "who": {"type": "string", "description": "For open and fill: who in the address book, by name or relationship."},
          "field": {"type": "string", "description": "For explain, fill, put_back: the field from look."},
          "value": {"type": "string", "description": ("For fill: what goes in it, from what they said. A date as YYYY-MM-DD, "
                                                     "a time as HH:MM, a choice by its label.")},
          "turns_back": {"type": "string", "description": ("For their_words: which thing they said. 1 is what they said "
                                                           "before asking you, 2 the time before that, up to 4. 0 is the "
                                                           "turn they asked in.")},
-         "when": {"type": "string", "description": "For read_incidents: latest, a day as YYYY-MM-DD, or a month as YYYY-MM."},
+         "when": {"type": "string", "description": "For read_incidents, remove, open write: latest, a day as YYYY-MM-DD, or a month as YYYY-MM."},
          "category": {"type": "string", "description": ("For read_incidents: one of call_light, meal, bathing, toileting, "
                                                         "medication, repositioning, staff, safety, other.")}},
          "required": ["action"]}},

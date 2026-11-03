@@ -1048,6 +1048,17 @@ def save_heard(text, kind):  # M18 piece 4
         return False
 
 
+def order_heard(text, kind):  # D12
+    """The resident's own plain "turn it on/off" for a switch on the screen, or None: no emergency, not garbled. The page
+    acts only on this word, never on the model's say-so. The server changes nothing here."""
+    try:
+        if kind or mary.not_english(text):
+            return None
+        return send_gate.plain_order(text)
+    except Exception:  # noqa: BLE001 (a failure orders nothing)
+        return None
+
+
 def gate_her_words(text):  # M15c
     """Her finished Live turn at the send gate. A gate failure acts as no gate."""
     try:
@@ -1805,6 +1816,8 @@ class Handler(SimpleHTTPRequestHandler):
             # M15c: a garbled line still reaches the gate, as a miss. M17: words dictated into the test drawer never do
             send = {} if body.get("note") else gate_heard(text, kind)  # M18: the only place past here with the raw line
             save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
+            order = order_heard(text, kind) if not body.get("note") and not send and not save else None  # D12
+            order = {"order": order} if order else {}
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "steps": "", "garbled": True, **send})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
@@ -1823,7 +1836,7 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "steps": steps, **send, **save, **book})
+            return self._send({"emergency": bool(kind), "kind": kind, "steps": steps, **send, **save, **order, **book})
         if method == "POST" and path == "/api/mary/tell":  # M21a: the app's note, in her own words
             return self._send(mary_tell(self._body().get("note")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered

@@ -11,16 +11,22 @@
    env is the page's: doc() the log's document when it's in view, else null; panel() the open panel's id, else null;
    openDeep(hash); openPanel(id); back(); turns, the turns heard in this talk; incidents() the saved log; companion() 'mary'
    or 'sam'.
+   D12: a switch turns on or off only on env.order, the server's ruling on the resident's own words this turn (send_gate
+   plain_order, through /api/mary/heard). That is the save gate's way: the page acts on the server's word only, never on
+   what the model says or on args.value. The line must name the switch or point at the lit one, and acts once per switch.
    No value here is ever logged or sent to the server. A tool's answer goes to Live and nowhere else. */
 (function () {
   'use strict';
 
   // Her plain answers when she can't do something. D1 is the board's own line.
   var SECRET_NO = "I won't read or fill that one. It's a password, so it stays out of my hands. A helper can type it in.";
-  var SWITCH_NO = "That switch is yours to turn on or off. I can tell you what it does.";
+  var SWITCH_NO = "Tell me plainly to turn it on or off, and I will.";
   var WORDS_NO = "Your words stay what you said. I can copy in what I heard you say, but I don't write them for you.";
-  var SEVERITY_NO = "That one's your call. I can tell you what each one means, and you pick.";
-  var REMOVE_NO = "Deleting or removing anything is yours to do by hand. I won't touch it.";
+  var SEVERITY_NO = "Tell me which it was, Minor, Serious or Dangerous, and I'll mark it.";   // D11: only ever what they say
+  var REMOVE_NO = "Tell me plainly what to remove, and I'll do it and say what went.";   // D12
+  var SWITCH_REMOVE_NO = "A switch isn't removed. Tell me plainly to turn it off.";
+  var WHICH_NOTE_NO = "Tell me which note: the day or the kind of problem.";
+  var DID_NOT_WORK_NO = "That didn't work just now.";
   var UNLISTED_NO = "That's not something I can do on this screen.";
   var NOT_THERE_NO = "There's nothing for me to fill on this screen.";
   var HIDDEN_NO = "That box isn't showing right now.";
@@ -34,6 +40,7 @@
   var NOT_OPEN_NO = "I can't open that one.";
   var SAVED_NO = "That one shows by itself after you save.";
   var OFF_NO = "That one isn't switched on here.";
+  var WHOSE_NO = "Tell me whose it is and I'll open their form.";
   var SLOW_NO = "That didn't open just now.";
   var READ_UNASKED = "I only read your notes when you ask me to.";
   var READ_WHEN_NO = "I can look by a day or by a month. Tell me which.";
@@ -105,9 +112,9 @@
           choices: [{ value: '15', label: '15 min' }, { value: '30', label: '30 min' }, { value: '60', label: '1 hour' },
             { value: '120', label: '2+ hours' }, { value: 'never', label: 'No one ever came' }],
           explain: 'How long they waited for someone to come.' },
-        { id: 'sev', radio: 'sev', label: 'How bad was it?', kind: 'choice', fill: false, no: SEVERITY_NO,
+        { id: 'sev', radio: 'sev', label: 'How bad was it?', kind: 'choice', fill: true,
           choices: [{ value: 'minor', label: 'Minor' }, { value: 'serious', label: 'Serious' }, { value: 'dangerous', label: 'Dangerous' }],
-          explain: 'Their own judgment. Minor means it bothered them but they are okay. Serious means it hurt them or really upset them. Dangerous means they could have been badly hurt.' },
+          explain: 'Their own judgment. You set it only to the word they say, never your own pick. Minor means it bothered them but they are okay. Serious means it hurt them or really upset them. Dangerous means they could have been badly hurt.' },
         { id: 'staff_involved', label: 'Which staff member was involved?', kind: 'text', fill: true,
           explain: 'A name, or what the person looked like and which shift it was.' },
         { id: 'reported_to', label: 'Who did you tell?', kind: 'text', fill: true,
@@ -138,14 +145,28 @@
         { id: 'i-facility', label: 'Name of the care home', kind: 'text', fill: true, explain: 'The name of the home they live in.' },
         { id: 'i-facility_address', label: 'Address of the care home', kind: 'text', fill: true, explain: 'The address of the home they live in.' },
         { id: 'i-state', label: 'State', kind: 'text', fill: true, explain: 'The state the home is in.' },
-        { id: 'i-andyflow_enabled', label: 'Connect Andy Flow', kind: 'switch', fill: false,
+        { id: 'talk_mode', radio: 'talk_mode', label: 'How Mary talks', kind: 'choice', fill: true,
+          choices: [{ value: 'live', label: 'Live (best)' }, { value: 'normal', label: 'Normal' }, { value: 'offline', label: 'Offline' }],
+          explain: 'Live is her natural voice, back and forth. Normal turns their words to text first. Offline makes her voice on this computer.' },
+        { id: 'listen_wait', radio: 'listen_wait', label: 'How long she waits', kind: 'choice', fill: true,
+          choices: [{ value: '2.5', label: 'Usual' }, { value: '4', label: 'More time' }],
+          explain: 'How long she waits in quiet before she answers: about 2 and a half seconds, or about 4.' },
+        { id: 'mary_brain', radio: 'mary_brain', label: 'How much Mary is told', kind: 'choice', fill: true,
+          choices: [{ value: 'full', label: 'Full instructions' }, { value: 'lean', label: 'Lean instructions' },
+            { value: 'leaner', label: 'Leaner instructions' }],
+          explain: 'How long the set of instructions is that she is given. Safety comes first in all of them.' },
+        { id: 'i-andyflow_enabled', label: 'Connect Andy Flow', kind: 'switch', fill: true, say: ['andy flow'],
           explain: 'Lets notes from Andy Flow that start with Incident show up here. Nothing leaves the computer.' },
-        { id: 'i-talk_on_open', label: 'Start talking when you open', kind: 'switch', fill: false,
+        { id: 'i-talk_on_open', label: 'Start talking when you open', kind: 'switch', fill: true,
+          say: ['start talking', 'talking when', 'when you open', 'when mary opens', 'when sam opens'],
           explain: 'When it is on, you listen as soon as your screen opens.' },
-        { id: 'i-wake_word', label: 'Listen for your name', kind: 'switch', fill: false,
+        { id: 'i-wake_word', label: 'Listen for your name', kind: 'switch', fill: true,
+          say: ['wake word', 'hey mary', 'hey sam', 'your name', 'listen for', 'listening for'],
           explain: 'When it is on, saying hey and your name starts a talk. Nothing leaves the laptop until you hear it.' },
-        { id: 'i-gemini_enabled', label: 'Use the smart helper', kind: 'switch', fill: false,
+        { id: 'i-gemini_enabled', label: 'Use the smart helper', kind: 'switch', fill: true, say: ['smart helper', 'helper'],
           explain: 'When it is on, what they say is sent to Google to tidy it up. Off keeps everything on this computer.' },
+        { id: 'i-gemini_model', label: 'Smart helper model', kind: 'text', fill: true,
+          explain: 'Which model the smart helper uses. They can leave it empty.' },
         { id: 'i-gemini_key', label: 'Smart helper key', kind: 'secret', fill: false,
           explain: 'A key from Google that lets the smart helper and you work. A helper types or pastes it in.' },
         { id: 'copyWords', label: 'The six words', kind: 'secret', fill: false,
@@ -160,15 +181,18 @@
           explain: 'Which company their email is with.' },
         { id: 'mailPass', label: 'App password', kind: 'secret', fill: false,
           explain: 'A special password the email company makes for this app. A helper types or pastes it in.' },
-        { id: 'mailConnect', label: 'Connect email', kind: 'switch', fill: false,
-          explain: 'Connects their email once the boxes above are filled. The tap is theirs.' }
+        { id: 'mailConnect', label: 'Connect email', kind: 'switch', fill: true, say: ['email', 'e-mail', 'my mail'],
+          explain: 'Connects their email once the boxes above are filled. Only turning it on works, on their plain word.' },
+        { id: 'mailDisconnect', label: 'Disconnect', kind: 'remove', fill: false, say: ['email', 'e-mail', 'my mail', 'disconnect'],
+          hiddenNo: "That isn't connected.",
+          explain: 'Disconnects their email, so no email goes out until it is connected again. Only on their plain word.' }
       ] },
     { id: 'book-list', frame: 'book-list', hash: '#book-list', name: 'Address book', people: true,
       opened: 'Ask "Who are you after?" and nothing more.',
       explain: 'The people they know: a list of names and relationships, kept only on this laptop.',
       labels: ['Find someone', 'Up', 'Down', 'Show everyone'], fields: [] },
     { id: 'book-card', frame: 'book-card', hash: null, name: 'Address book card', person: true, show: 'filled',
-      explain: 'One person from the address book. You can see which details are filled in, and not what they say.',
+      explain: 'One person from the address book. You can see which details are filled in, and not what they say. A fill changes it on their form.',
       fields: bookFields('bc-') },
     { id: 'book-form', frame: 'book-form', hash: '#book-form', name: 'Address book form', show: 'hers',
       opened: 'The form is open and nothing is saved. Ask who it is, in a few words.',
@@ -184,14 +208,34 @@
     { id: 'games', panel: 'gamesPanel', name: 'Games',
       explain: 'The games that are switched on. They can say one or tap it.', fields: [] },
     { id: 'choose', panel: 'choosePanel', name: 'Choose Mary or Sam',
-      explain: 'Where they pick which of you they talk with.', fields: [] },
+      explain: 'Where they pick which of you they talk with.', fields: [],
+      rows: [{ id: 'companion', list: 'chooseList', panel: 'choosePanel', label: 'Mary or Sam', kind: 'radio',
+        say: ['mary', 'sam', 'talk to', 'companion', 'who i talk to', 'who i talk with'],
+        explain: 'Which of you they talk with. Switching starts a new talk.' }] },
     { id: 'info_panel', panel: 'infoPanel', name: 'My info panel',
       explain: 'How you talk, your voice, how long you wait, your name word, things you can do, and what you remember.',
       labels: ['How you talk', 'Your voice', 'How long you wait', 'Things you can do', 'What you remember', 'More settings'],
-      fields: [] }
+      fields: [],
+      rows: [
+        { id: 'talk_mode', list: 'modeList', panel: 'infoPanel', label: 'How you talk', kind: 'radio',
+          say: ['talk mode', 'mode', 'how you talk', 'how mary talks', 'how sam talks', 'how she talks', 'how he talks'],
+          explain: 'Live, Normal or Offline.' },
+        { id: 'voice', list: 'voiceList', panel: 'infoPanel', label: 'Your voice', kind: 'radio', fetch: true,
+          say: ['voice', 'your voice', 'her voice', 'his voice', "mary's voice", "sam's voice", 'my voice'],
+          explain: 'Which voice you use. Each has a Hear it button.' },
+        { id: 'wait', list: 'waitList', panel: 'infoPanel', label: 'How long you wait', kind: 'radio',
+          say: ['wait', 'how long you wait', 'how long she waits', 'how long he waits', 'listen wait', 'more time', 'time'],
+          explain: 'Usual, or More time before you answer.' },
+        { id: 'wake', list: 'wakeList', panel: 'infoPanel', label: 'Listen for Hey Mary', kind: 'onoff',
+          say: ['hey mary', 'hey sam', 'listen for hey mary', 'listen for hey sam', 'listen for her name', 'listen for his name'],
+          explain: 'On or Off.' },
+        { id: 'skills', list: 'skillList', panel: 'infoPanel', label: 'Things you can do', kind: 'toggle', fetch: true,
+          say: ['skill', 'skills', 'things you can do', 'thing you can do'],
+          explain: 'Each thing is On or Off. A locked one is set by their helper.' }
+      ] }
   ];
 
-  var TOOL_NAMES = ['look_at_screen', 'explain_field', 'fill_field', 'put_back', 'open_screen', 'go_back', 'their_words'];
+  var TOOL_NAMES = ['look_at_screen', 'explain_field', 'fill_field', 'put_back', 'open_screen', 'go_back', 'their_words', 'remove_thing'];
   var TYPE_MS = 110, TYPE_MIN_MS = 25, TYPE_TOTAL_MS = 1800;   // 2, 21, 214; a long address never drags
   var ROOM_PX = 24;                                            // clear space around a lit field
   var ARRIVE_MS = 4000, ARRIVE_POLL_MS = 60;                   // DEEP_READY_MS in app.js
@@ -199,7 +243,7 @@
   var READ_MOST = 10;                                          // piece 5: notes read in one go
   var ASK_WORDS = /\b(?:read|reading|hear|tell|what did|saved|wrote|write|written|incidents?|notes?|last|lists?|happened)\b/i;
 
-  var Lit = { el: null };
+  var Lit = { el: null, f: null };
   var Typing = { finish: null };
   var Undo = {};   // per field, what was there before each of her fills. Held here only, never logged
   var Mine = {};   // M19: per detail field, what she filled herself. The only detail value look can ever send
@@ -227,22 +271,44 @@
     }
     return TALK;
   }
-  var PHONE_WORDS = { 'phone': 1, 'phone number': 1, 'telephone': 1, 'number': 1 };
-  var CELL_WORDS = { 'cell': 1, 'cellphone': 1, 'cell number': 1, 'mobile': 1, 'mobile phone': 1, 'mobile number': 1 };
+  var PHONE_WORDS = { 'phone': 1, 'phone number': 1, 'telephone': 1, 'telephone number': 1, 'number': 1 };
+  var CELL_WORDS = { 'cell': 1, 'cellphone': 1, 'cell phone': 1, 'cell phone number': 1, 'cell number': 1, 'mobile': 1,
+    'mobile phone': 1, 'mobile number': 1 };
+  var HOME_WORDS = { 'home number': 1, 'home phone': 1, 'home phone number': 1, 'landline': 1 };
+  // Other ways to say a detail box. These only ever match a detail field, so no other screen is touched.
+  var DETAIL_WORDS = { 'address': 'address', 'mailing': 'address', 'street address': 'address', 'home address': 'address',
+    'mail address': 'address', 'e-mail': 'email', 'email address': 'email', 'e-mail address': 'email',
+    'date of birth': 'birthday', 'birth date': 'birthday', 'bday': 'birthday', 'facebook name': 'facebook', 'note': 'notes' };
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  // "Sarah's phone" and "her cell" are "phone" and "cell".
+  function bareWord(w) {
+    return w.replace(/^.*['’]s\s+/, '').replace(/^(?:her|his|their|my)\s+/, '');
+  }
   function findField(s, want, doc) {
     var w = String(want == null ? '' : want).trim().toLowerCase(), all = fieldsOf(s), i;
     for (i = 0; i < all.length; i++) {
       if (all[i].id.toLowerCase() === w || all[i].label.toLowerCase() === w) { return all[i]; }
+      if ((all[i].say || []).indexOf(w) >= 0) { return all[i]; }   // D12: a plain name for a switch
     }
     // A person has a home phone and a cell phone. "Cell" and "mobile" mean the cell box. A plain "phone" means the home box,
     // unless the cell box has a number and the home box doesn't, then the cell box.
     var pick = function (key) { return all.filter(function (f) { return f.kind === 'detail' && f.key === key; })[0] || null; };
-    if (CELL_WORDS[w]) { return pick('cell'); }
-    if (PHONE_WORDS[w]) {
+    w = bareWord(w);
+    if (has(DETAIL_WORDS, w)) { return pick(DETAIL_WORDS[w]); }
+    if (has(HOME_WORDS, w)) { return pick('phone'); }
+    if (has(CELL_WORDS, w)) { return pick('cell'); }
+    if (has(PHONE_WORDS, w)) {
       var home = pick('phone'), cell = pick('cell'), h = home && doc ? fieldEl(doc, home) : null, c = cell && doc ? fieldEl(doc, cell) : null;
       return (c && c.value && !(h && h.value)) ? cell : home;
     }
     return null;
+  }
+  // A detail word (phone, cell, address...) on a screen that has no book boxes: she needs to know whose it is.
+  function isDetailWord(s, want) {
+    if (fieldsOf(s).some(function (f) { return f.kind === 'detail'; })) { return false; }
+    var w = bareWord(String(want == null ? '' : want).trim().toLowerCase());
+    return (has(DETAIL_WORDS, w) && w !== 'note') || has(HOME_WORDS, w) || has(CELL_WORDS, w) || has(PHONE_WORDS, w) ||
+      w === 'email' || w === 'birthday' || w === 'facebook';
   }
   function radios(doc, f) { return Array.prototype.slice.call(doc.querySelectorAll('input[name="' + f.radio + '"]')); }
   function fieldEl(doc, f) {
@@ -267,13 +333,14 @@
       return ch ? ch.label : on.value;
     }
     if (f.kind === 'switch') { return el.type === 'checkbox' ? (el.checked ? 'on' : 'off') : undefined; }
+    if (f.kind === 'remove') { return undefined; }
     return el.value;
   }
   function cardField(doc, f, s) {
     var el = fieldEl(doc, f);
     if (isSecret(f, el)) { return { field: f.id, label: f.label, kind: 'secret' }; }   // label and kind, and nothing that could hint
     if (!shown(el)) { return null; }
-    var out = { field: f.id, label: f.label, kind: f.kind, explain: f.explain, can_fill: !!f.fill };
+    var out = { field: f.id, label: f.label, kind: f.kind, explain: f.explain, can_fill: !!f.fill || !!s.person };   // D12: a card's fill goes to that person's form
     if (f.kind === 'detail') {   // no path below this line for a detail
       if (s.show === 'filled') { out.filled = !!String(el.textContent || '').trim(); }
       else if (Mine.hasOwnProperty(f.id) && el.value === Mine[f.id]) { out.value = Mine[f.id]; }
@@ -306,6 +373,7 @@
     var s = here(env), doc = env.doc(), card = { screen: s.name, about: s.explain };
     if (s.labels) { card.labels = s.labels; }
     if (s.groups) { card.groups = GROUPS.map(function (g) { return g.label; }); }
+    if (s.panel && s.rows && env.page && env.panel()) { return lookRows(card, s, env); }
     if (doc && !s.panel) {
       if (s.people) { lookPeople(doc, card); }
       if (s.person) { lookPerson(doc, card); }
@@ -341,6 +409,7 @@
   function unlight() {
     if (Lit.el) { Lit.el.classList.remove('m9-lit'); }
     Lit.el = null;
+    Lit.f = null;
   }
   // The light stays until the next field or a save (web/app.js clears it on Save).
   function light(doc, f, el) {
@@ -350,6 +419,7 @@
     unlight();
     t.classList.add('m9-lit');
     Lit.el = t;
+    Lit.f = f;
     scrollClear(doc, t);
   }
   function finishTyping() { if (Typing.finish) { Typing.finish(); } }
@@ -406,7 +476,6 @@
   }
   function refusal(f, el) {
     if (isSecret(f, el)) { return SECRET_NO; }
-    if (f.kind === 'switch') { return SWITCH_NO; }
     if (f.kind === 'words') { return WORDS_NO; }
     return f.fill ? '' : (f.no || UNLISTED_NO);
   }
@@ -444,6 +513,9 @@
       var low = raw.toLowerCase();
       var ch = f.choices.filter(function (c) { return c.value === low || c.label.toLowerCase() === low; })[0];
       if (ch) { return { v: ch.value, show: ch.label }; }
+      var part = low.replace(/[^\w']+/g, ' ').trim();   // "live" finds "Live (best)", when only one choice has that word
+      var near = part ? f.choices.filter(function (c) { return (' ' + c.label.toLowerCase().replace(/[^\w']+/g, ' ').trim() + ' ').indexOf(' ' + part + ' ') >= 0; }) : [];
+      if (near.length === 1) { return { v: near[0].value, show: near[0].label }; }
       return { no: "That isn't one of the choices. They are: " + f.choices.map(function (c) { return c.label; }).join(', ') + '.' };
     }
     if (f.address && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {   // M18: what goes in the box is the written address
@@ -467,24 +539,212 @@
   }
   // D12: a person's card has no Change button, so a fill asked for on it goes to that person's form (nothing saves there either).
   function fillField(args, env) {
-    var s = here(env), doc = env.doc();
-    if (s.id === 'book-card' && doc && findField(s, args.field, doc)) {
-      var m = /^#book-card\/(.+)$/.exec(String(doc.defaultView && doc.defaultView.location ? doc.defaultView.location.hash : ''));
-      var form = byId('book-form');
-      if (!m || !env.openDeep('#book-form/' + m[1])) { return no(SLOW_NO); }
-      return arrive(env, form).then(function (came) { return came ? fillIn(form, args, env) : no(SLOW_NO); });
+    var row = env.page && !String(args.who == null ? '' : args.who).trim() ? findRow(args.field) : null;
+    if (row) {   // a field on My info wins over a row, unless that panel is the one open
+      var s = here(env), doc = env.doc();
+      if (s.panel === row.panel || !(findField(s, args.field, doc) || findField(byId('info'), args.field, doc))) { return fillRow(row, args, env); }
     }
-    return fillIn(s, args, env);
+    return reach(args, env, fillIn);
+  }
+
+  // M22: Mary's own panels. Their rows are made by app.js and each tap saves by itself, so a fill is that tap.
+  var HELPER_NO = 'Your helper set that one.';
+  var NOT_READY_NO = "That one isn't ready on this computer yet.";
+  var WHICH_NO = 'Tell me plainly which one you want, and I will.';
+  var ROW_STOP = { voice: 1, the: 1, a: 1, an: 1, and: 1, of: 1, to: 1, it: 1, my: 1, your: 1, her: 1, his: 1, best: 1 };
+  function findRow(want) {
+    var w = String(want == null ? '' : want).trim().toLowerCase(), i, j, rows;
+    if (!w) { return null; }
+    for (i = 0; i < LIST.length; i++) {
+      rows = LIST[i].rows || [];
+      for (j = 0; j < rows.length; j++) {
+        if (rows[j].id === w || rows[j].label.toLowerCase() === w || rows[j].say.indexOf(w) >= 0) { return rows[j]; }
+      }
+    }
+    return null;
+  }
+  function wordsOf(t) {
+    return String(t == null ? '' : t).toLowerCase().replace(/[^\w']+/g, ' ').trim().split(' ').filter(function (x) { return x; });
+  }
+  function nameOf(el) {
+    var first = el.querySelector ? el.querySelector('.txt span') : null;
+    return String((first || el).textContent || '').trim();
+  }
+  // The things to tap in one list: { name, btn, on, locked }. A list from a fetch is loading until it has rows or a plain line.
+  function itemsOf(page, r) {
+    var box = page.getElementById(r.list), out = [], lead;
+    if (!box) { return { items: out, loading: !!r.fetch, lead: '' }; }
+    var mk = function (name, btn, on) { out.push({ name: name, btn: btn, on: on, locked: btn.getAttribute('aria-disabled') === 'true' }); };
+    if (r.kind === 'toggle') {
+      Array.prototype.slice.call(box.querySelectorAll('.row')).forEach(function (row) {
+        var btn = row.querySelector('button');
+        if (btn) { mk(nameOf(row), btn, btn.getAttribute('aria-pressed') === 'true'); }
+      });
+    } else {
+      Array.prototype.slice.call(box.querySelectorAll('[role="radio"]')).forEach(function (btn) {
+        mk(nameOf(btn), btn, btn.getAttribute('aria-checked') === 'true');
+      });
+    }
+    lead = box.querySelector('.lead');
+    lead = lead ? String(lead.textContent || '') : '';
+    return { items: out, lead: lead, loading: !out.length && !!r.fetch && (!lead || /^Getting\b/.test(lead)) };
+  }
+  // Waits for a list that comes from a fetch, the way arrive polls. Resolves to the list, or null if it never came.
+  function rowsArrive(env, r) {
+    var began = Date.now();
+    return new Promise(function (resolve) {
+      function check() {
+        var page = env.page(), got = page ? itemsOf(page, r) : null;
+        if (got && !got.loading) { resolve(got); return; }
+        if (Date.now() - began >= ARRIVE_MS) { resolve(null); return; }
+        setTimeout(check, ARRIVE_POLL_MS);
+      }
+      check();
+    });
+  }
+  function panelUp(env, id) {
+    var began = Date.now();
+    return new Promise(function (resolve) {
+      function check() {
+        if (env.panel() === id) { resolve(true); return; }
+        if (Date.now() - began >= ARRIVE_MS) { resolve(false); return; }
+        setTimeout(check, ARRIVE_POLL_MS);
+      }
+      setTimeout(check, ARRIVE_POLL_MS);
+    });
+  }
+  // The visible names only. Memories are never in a row list.
+  function lookRows(card, s, env) {
+    return Promise.all(s.rows.map(function (r) { return rowsArrive(env, r); })).then(function (all) {
+      if (all.some(function (g) { return !g; })) { return no(SLOW_NO); }
+      card.rows = [];
+      s.rows.forEach(function (r, i) {
+        var items = all[i].items;
+        if (!items.length) { return; }
+        var out = { field: r.id, label: r.label, kind: r.kind, explain: r.explain,
+          choices: items.map(function (x) { return r.kind === 'toggle' ? x.name + ': ' + (x.locked ? 'Set by your helper' : x.on ? 'On' : 'Off') : x.name; }) };
+        if (r.kind !== 'toggle') { out.value = (items.filter(function (x) { return x.on; })[0] || {}).name; }
+        card.rows.push(out);
+      });
+      return card;
+    });
+  }
+  // The new check: the order's own words must hold the chosen button's name word(s), so a different voice than they said can't be picked.
+  function nameInOrder(env, item, tokens) {
+    var said = ' ' + wordsOf(env.order && env.order.words).join(' ') + ' ', have = ' ' + wordsOf(item.name).join(' ') + ' ';
+    return tokens.length > 0 && tokens.every(function (t) { return said.indexOf(' ' + t + ' ') >= 0 && have.indexOf(' ' + t + ' ') >= 0; });
+  }
+  function fillRow(row, args, env) {
+    var o = env.order, act = o && Array.isArray(o.acts) && o.acts.length === 1 ? o.acts[0] : '';
+    var radio = row.kind === 'radio';
+    if (!env.page || (radio ? act !== 'set' : (act !== 'on' && act !== 'off'))) { return no(radio ? WHICH_NO : SWITCH_NO); }
+    if (env.panel() === row.panel) { return doRow(row, args, env, act); }
+    env.openPanel(row.panel);   // hop: open the panel, wait for it, then do it
+    return panelUp(env, row.panel).then(function (came) { return came ? doRow(row, args, env, act) : no(SLOW_NO); });
+  }
+  function doRow(row, args, env, act) {
+    return rowsArrive(env, row).then(function (got) {
+      if (!got) { return no(SLOW_NO); }
+      if (!got.items.length) { return no(got.lead || NOT_THERE_NO); }
+      var said = args.value || (row.id === 'companion' ? args.field : '');
+      var want = row.kind === 'onoff' ? [act] : wordsOf(said).filter(function (t) { return !ROW_STOP[t]; });
+      var hit = got.items.filter(function (x) {
+        var have = ' ' + wordsOf(x.name).join(' ') + ' ';
+        return want.length && want.every(function (t) { return have.indexOf(' ' + t + ' ') >= 0; });
+      });
+      if (hit.length !== 1) { return no('Which one? ' + got.items.map(function (x) { return x.name; }).join(', ') + '.'); }
+      var item = hit[0], key = 'row-' + row.id + ':' + item.name.toLowerCase(), o = env.order;
+      o.used = o.used || {};
+      if (o.used[key] || (row.kind !== 'onoff' && !nameInOrder(env, item, want))) { return no(row.kind === 'radio' ? WHICH_NO : SWITCH_NO); }
+      if (item.locked) { return no(row.kind === 'toggle' ? HELPER_NO : NOT_READY_NO); }
+      o.used[key] = true;
+      var value = row.kind === 'toggle' ? act : item.name;
+      if (row.kind === 'toggle' ? item.on === (act === 'on') : item.on) { return { ok: true, label: row.label, value: value, saved: false, note: 'It was already that way.' }; }
+      item.btn.click();   // the tap's own handler saves it
+      return { ok: true, label: row.label, value: value, saved: true, next: 'It is changed now and the screen says so. Say it in a few words.' };
+    });
+  }
+  // Gets to the field first (a card to its form, a named person, My info), then does act(screen, args, env) there.
+  function reach(args, env, act) {
+    var s = here(env), doc = env.doc(), cf;
+    var said = String(args.who == null ? '' : args.who).trim();
+    if (said) {   // told whose it is: open their form first. Two of them narrow the list and nothing is filled.
+      return Promise.resolve(openScreen({ name: 'book-form', who: said }, env)).then(function (got) {
+        if (!got || got.ok !== true || here(env).id !== 'book-form') { return got; }
+        return act(byId('book-form'), { field: String(args.field == null ? '' : args.field).replace(/^bc-/, 'bf-'), value: args.value }, env);
+      });
+    }
+    cf = s.id === 'book-card' && doc ? findField(s, args.field, doc) : null;
+    if (cf) {
+      var m = /^#book-card\/(.+)$/.exec(String(doc.defaultView && doc.defaultView.location ? doc.defaultView.location.hash : ''));
+      var form = byId('book-form'), onForm = { field: 'bf-' + cf.key, value: args.value };
+      if (!m || !env.openDeep('#book-form/' + m[1])) { return no(SLOW_NO); }
+      return arrive(env, form).then(function (came) { return came ? act(form, onForm, env) : no(SLOW_NO); });
+    }
+    // D12: not on this screen, but on My info or Connect email: open My info and fill it there (a secret still gets its no)
+    var info = byId('info'), there = !findField(s, args.field, doc) && doc ? findField(info, args.field, doc) : null;
+    if (there && !isSecret(there, null) && s.id !== 'info') {
+      return Promise.resolve(openScreen({ name: 'info' }, env)).then(function (got) {
+        if (!got || got.ok !== true || here(env).id !== 'info') { return got; }
+        return act(info, args, env);
+      });
+    }
+    return act(s, args, env);
+  }
+  // D12: true only when the server ruled this line a plain order for this act, and the words name this switch or point at
+  // the lit one ("turn it off"). One line acts once per switch. Nothing she says can pass this.
+  function ordered(env, act, f) {
+    var o = env && env.order;
+    if (!o || !Array.isArray(o.acts) || o.acts.indexOf(act) < 0) { return false; }
+    o.used = o.used || {};
+    if (o.used[f.id]) { return false; }
+    var plain = function (t) { return ' ' + String(t).toLowerCase().replace(/[^\w']+/g, ' ').trim() + ' '; };
+    var words = plain(o.words || '');
+    var names = (f.say || []).concat([f.label, String(f.label).replace(/^your /i, '')], f.key ? [f.key] : []);
+    var named = names.some(function (n) { return words.indexOf(plain(n)) >= 0; });
+    var points = /\s(?:it|that|this|one)\s/.test(words) && Lit.f === f;
+    if (!named && !points) { return false; }
+    o.used[f.id] = true;
+    return true;
+  }
+  function fillSwitch(f, el, env) {
+    var act = env.order && Array.isArray(env.order.acts) && env.order.acts.length === 1 ? env.order.acts[0] : '';
+    var box = el.type === 'checkbox';
+    if ((act !== 'on' && act !== 'off') || (!box && act !== 'on') || !ordered(env, act, f)) { return no(SWITCH_NO); }
+    var doc = env.doc(), win = doc.defaultView;
+    finishTyping();
+    light(doc, f, el);
+    if (!box) {   // a button (Connect email): the page's own handler runs, with what a helper typed. She never sees it.
+      el.click();
+      return { ok: true, label: f.label, saved: false, next: 'Connecting now. The screen says how it went.' };
+    }
+    var was = el.checked;
+    remember(f, was, was !== (act === 'on'), env);
+    el.checked = act === 'on';
+    fire(win, el, 'input');
+    fire(win, el, 'change');
+    return { ok: true, label: f.label, value: act, saved: false,
+      next: "Say it's " + act + " now, in a few words. It takes hold when they say save it." };
   }
   function fillIn(s, args, env) {
     var doc = env.doc(), f = findField(s, args.field, doc);
-    if (!f) { return no(unlistedNo(args.field)); }
+    if (!f) { return no(isDetailWord(s, args.field) ? WHOSE_NO : unlistedNo(args.field)); }
     if (!doc) { return no(NOT_THERE_NO); }
+    if (f.kind === 'remove') { return removeIn(s, args, env); }   // D12: a fill of a remove button is a remove, on an order
     var el = fieldEl(doc, f), why = refusal(f, el);
     if (why) { return no(why); }
     if (!el) { return no(UNLISTED_NO); }
     if (!shown(el)) { return no(f.hiddenNo || HIDDEN_NO); }
-    var c = cleanValue(f, args.value);
+    if (f.kind === 'switch') { return fillSwitch(f, el, env); }   // D12: the direction is the order's, never args.value
+    var asked = args.value;
+    if (f.id === 'sev') {   // D11: only the word the resident said, from the server's ruling. A model value is never used.
+      var o = env.order, said = o && Array.isArray(o.acts) && o.acts.indexOf('sev') >= 0 ? String(o.sev || '').toLowerCase() : '';
+      if (!said || (o.used && o.used.sev)) { return no(SEVERITY_NO); }
+      o.used = o.used || {};
+      o.used.sev = true;
+      asked = said;
+    }
+    var c = cleanValue(f, asked);
     if (c.no) { return no(c.no); }
     finishTyping();
     var win = doc.defaultView, done = function () {
@@ -519,6 +779,46 @@
     }
     return typeIn(win, el, c.v).then(done);
   }
+  // D12: clears a box on the resident's plain word, or presses Disconnect. Never a switch or a secret. Put back undoes a box.
+  function removeIn(s, args, env) {
+    var doc = env.doc(), f = findField(s, args.field, doc);
+    if (!f) { return no(isDetailWord(s, args.field) ? WHOSE_NO : unlistedNo(args.field)); }
+    if (!doc) { return no(NOT_THERE_NO); }
+    var el = fieldEl(doc, f);
+    if (isSecret(f, el)) { return no(SECRET_NO); }
+    if (f.kind === 'switch') { return no(SWITCH_REMOVE_NO); }
+    if (!ordered(env, 'remove', f)) { return no(REMOVE_NO); }
+    if (!el) { return no(UNLISTED_NO); }
+    if (!shown(el)) { return no(f.hiddenNo || HIDDEN_NO); }
+    var win = doc.defaultView;
+    finishTyping();
+    light(doc, f, el);
+    if (f.kind === 'remove') {   // the page's own work, without its confirm: the resident's order stands for it
+      var acts = win.maryActs;
+      if (!acts || typeof acts.disconnectMail !== 'function') { return no(SLOW_NO); }
+      return Promise.resolve(acts.disconnectMail()).then(function (st) {
+        if (!st || st.connected) { return no(DID_NOT_WORK_NO); }
+        return { ok: true, label: f.label, removed: true, saved: false, note: 'Say their email is disconnected.' };
+      }, function () { return no(DID_NOT_WORK_NO); });
+    }
+    if (f.radio) {
+      var was = radios(doc, f).filter(function (r) { return r.checked; })[0];
+      remember(f, was ? was.value : '', !!was, env);
+      setChoice(doc, f, '');
+    } else {
+      remember(f, el.value, el.value !== '', env);
+      if (f.kind === 'detail') {
+        delete Mine[f.id];
+        var book = bookOf(doc);
+        if (book && book.filled) { book.filled(f.key); }
+      }
+      setVal(win, el, '');
+      fire(win, el, 'input');
+      fire(win, el, 'change');
+    }
+    return { ok: true, label: f.label, removed: true, saved: false,
+      next: 'Say you cleared ' + f.label + '. Nothing is saved until they say save it.' };
+  }
   function putBack(args, env) {
     var s = here(env), doc = env.doc(), f = findField(s, args.field, doc);
     if (!f) { return no(unlistedNo(args.field)); }
@@ -535,7 +835,11 @@
     if (help && last.counted) { help.step(-1); }
     light(doc, f, el);
     if (f.radio) { setChoice(doc, f, old); }
-    else {
+    else if (el.type === 'checkbox') {   // D12: a switch goes back to its old state, not a value
+      el.checked = !!old;
+      fire(win, el, 'input');
+      fire(win, el, 'change');
+    } else {
       setVal(win, el, old);
       fire(win, el, 'input');
       fire(win, el, 'change');
@@ -620,6 +924,9 @@
     var hit = findOpen(args.name), s = hit && hit.s;
     if (!s) { return no(NOT_OPEN_NO); }
     if (s.id === 'saved') { return no(SAVED_NO); }
+    if (s.id === 'write' && !hit.group && (String(args.when == null ? '' : args.when).trim() || String(args.category == null ? '' : args.category).trim())) {
+      return editNote(args, env);
+    }
     var said = String(args.who == null ? '' : args.who).trim();
     var who = said.replace(/^(?:my|the)\s+/i, '').replace(/['\u2019]s$/i, '');
     if (who && (s.people || s.person || s.id === 'book-form')) {
@@ -700,22 +1007,84 @@
     });
     return out.slice(0, 12);
   }
+  // The day or month and the kind of problem, checked once for reading, removing and opening a note.
+  function noteFilter(args) {
+    var when = String(args.when == null ? '' : args.when).trim().toLowerCase();
+    var cat = String(args.category == null ? '' : args.category).trim();
+    var group = cat ? findGroup(cat) : null;
+    if (cat && !group) { return { no: READ_GROUP_NO }; }
+    if (when && when !== 'latest' && !/^\d{4}-\d{2}(?:-\d{2})?$/.test(when)) { return { no: READ_WHEN_NO }; }
+    return { when: when, group: group };
+  }
+  function noteRows(rows, q) {
+    var hit = (Array.isArray(rows) ? rows : []).filter(function (r) {
+      if (r.deleted_at || (q.group && r.category !== q.group.key)) { return false; }
+      return !q.when || q.when === 'latest' || String(r.occurred_date || '').indexOf(q.when) === 0;
+    });
+    return q.when === 'latest' ? hit.slice(0, 1) : hit;
+  }
+  function manyNotes(n) { return 'There are ' + n + ' for that. Tell me the day or the kind of problem.'; }
+  // D12: true only on a server-ruled remove order that talks about a note. It buys one removal.
+  function noteOrdered(env) {
+    var o = env && env.order;
+    if (!o || !Array.isArray(o.acts) || o.acts.indexOf('remove') < 0) { return false; }
+    o.used = o.used || {};
+    if (o.used.note || !/\b(?:note|notes|incident|report|entry|record|complaint|one|that|it)\b/.test(String(o.words || ''))) { return false; }
+    o.used.note = true;
+    return true;
+  }
+  function removeNote(args, env) {
+    var q = noteFilter(args);
+    if (q.no) { return no(q.no); }
+    if (!q.when && !q.group) { return no(WHICH_NOTE_NO); }
+    if (!noteOrdered(env)) { return no(REMOVE_NO); }
+    return Promise.resolve().then(env.incidents).then(function (rows) {
+      var hit = noteRows(rows, q);
+      if (!hit.length) { return no(READ_NONE); }
+      if (hit.length > 1) { return no(manyNotes(hit.length)); }
+      var row = readRow(hit[0]);
+      return Promise.resolve(env.removeIncident(hit[0].id)).then(function () {
+        var d = env.doc(), acts = d && d.defaultView ? d.defaultView.maryActs : null;
+        return acts && acts.notesChanged ? Promise.resolve(acts.notesChanged()).catch(function () {}) : null;
+      }).then(function () {
+        return { ok: true, removed: { date: row.date, category: row.category, words: row.words },
+          note: 'Say plainly which note went, by its day and kind. It is gone from their list.' };
+      });
+    }).catch(function () { return no(DID_NOT_WORK_NO); });
+  }
+  // The list's Edit button, on their word: the saved note opens on the add screen. It only opens, so no order is needed.
+  function editNote(args, env) {
+    var q = noteFilter(args);
+    if (q.no) { return no(q.no); }
+    return Promise.resolve().then(env.incidents).then(function (rows) {
+      var hit = noteRows(rows, q);
+      if (!hit.length) { return no(READ_NONE); }
+      if (hit.length > 1) { return no(manyNotes(hit.length)); }
+      var write = byId('write'), list = byId('list');
+      var up = env.doc() ? Promise.resolve(true) : (env.openDeep(list.hash) ? arrive(env, list) : Promise.resolve(false));
+      return up.then(function (came) {
+        var d = came ? env.doc() : null, acts = d && d.defaultView ? d.defaultView.maryActs : null;
+        if (!acts || !acts.editNote || !acts.editNote(hit[0].id)) { return no(SLOW_NO); }
+        return arrive(env, write).then(function (there) {
+          return there ? { ok: true, screen: write.name,
+            note: 'Their saved note is open. Fill what they tell you. Nothing changes until they say save it.' } : no(SLOW_NO);
+        });
+      });
+    }).catch(function () { return no(READ_FAIL_NO); });
+  }
+  // One tool for taking something away: a box (field), or a saved note (when or category).
+  function removeThing(args, env) {
+    return String(args.field == null ? '' : args.field).trim() ? reach(args, env, removeIn) : removeNote(args, env);
+  }
   // The rows come newest first from the server. What she gets goes to Live and nowhere else.
   function readIncidents(args, env) {
     if (!askedToRead(env)) { return no(READ_UNASKED); }
     var t = env.turns, heard = t[t.length - 1];
-    var when = String(args.when == null ? '' : args.when).trim().toLowerCase();
-    var cat = String(args.category == null ? '' : args.category).trim();
-    var group = cat ? findGroup(cat) : null;
-    if (cat && !group) { return no(READ_GROUP_NO); }
-    if (when && when !== 'latest' && !/^\d{4}-\d{2}(?:-\d{2})?$/.test(when)) { return no(READ_WHEN_NO); }
+    var q = noteFilter(args);
+    if (q.no) { return no(q.no); }
     Months.after = null;
     return Promise.resolve().then(env.incidents).then(function (rows) {
-      var hit = (Array.isArray(rows) ? rows : []).filter(function (r) {
-        if (r.deleted_at || (group && r.category !== group.key)) { return false; }
-        return !when || when === 'latest' || String(r.occurred_date || '').indexOf(when) === 0;
-      });
-      if (when === 'latest') { hit = hit.slice(0, 1); }
+      var hit = noteRows(rows, q);
       if (!hit.length) { return { ok: true, count: 0, incidents: [], say: READ_NONE }; }
       var out = { ok: true, count: hit.length, incidents: hit.slice(0, READ_MOST).map(readRow),
         note: "Read what's there and add nothing to it. It stays out of your memories." };
@@ -736,13 +1105,14 @@
     open_screen: openScreen,
     go_back: goBack,
     their_words: theirWords,
-    read_incidents: readIncidents
+    read_incidents: readIncidents,
+    remove_thing: removeThing
   };
 
   // M18: Live gets ONE declared tool, use_screen, with an action. It goes to the same functions, in order.
   var USE_NAME = 'use_screen';
   var ACTIONS = { look: 'look_at_screen', explain: 'explain_field', fill: 'fill_field', put_back: 'put_back',
-                  open: 'open_screen', go_back: 'go_back', their_words: 'their_words', read_incidents: 'read_incidents' };
+                  open: 'open_screen', go_back: 'go_back', their_words: 'their_words', read_incidents: 'read_incidents', remove: 'remove_thing' };
   function useScreen(args, env) {
     var a = args || {}, tool = ACTIONS.hasOwnProperty(String(a.action)) ? ACTIONS[a.action] : null;
     if (!tool) { return no(UNLISTED_NO); }
@@ -779,6 +1149,7 @@
       Mine = {};
       Months.after = null;
       Lit.el = null;
+      Lit.f = null;
     }
   };
 })();

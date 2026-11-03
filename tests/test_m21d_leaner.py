@@ -10,13 +10,13 @@ import voices
 from tests.test_m21c_lean import FACTS, PINNED, _memory, live, normal, sha
 
 # sha256 of mary/lean.md with \r\n turned into \n (Windows may check the file out with CRLF; the bytes in git are LF).
-# The raw CRLF working-tree bytes start with ce30043069ea2767; the LF form is what git holds.
-LEAN_FILE_PREFIX = "0301bab778b3f814"
+# Repinned for D12 (Andy, 2026-11-02): one line reworded. The lean-v1 tag stays as the old revert point.
+LEAN_FILE_PREFIX = "346133d795ef65e2"
 # sha256 of the lean-brain prompts before M21d (fixed FACTS, empty memory, hello).
-LEAN_PINNED = {("mary", "normal"): "9dcefecad66b7d536d7c9caa2bfcf2c64336ff9987432d917861d02e97ab4b7f",
-               ("mary", "live"): "b3acfcf4af1d15cbfa2a76593603d02ef404865653fdb90b8d856846f5d97c6b",
-               ("him", "normal"): "36747cf400d15041ba65bfe95e4e16cd43f6dd5eceb367dc8553d0a7cd4fed83",
-               ("him", "live"): "3e0599bc2f14ae345e4c1b24eacf5a88555e111d8159ad2f7a2d8948cce26c80"}
+LEAN_PINNED = {("mary", "normal"): "b5030699fe96612ba16663b616ef7acd3cbedc2d7206c0ed760c22c968c2f9bf",
+               ("mary", "live"): "f3e78d7851c35672865485dcd68921224966b7fcdd014ad294fab5469569152b",
+               ("him", "normal"): "15ff0d79ff73098c08a3ed08b501a36525615db24bc4dc5cbfac200beec3cb52",
+               ("him", "live"): "ebb7579b5d318c3f9c352bf61dc350dcf55f7a4f3b5412bc5f196ce23d6fd5af"}
 
 
 class Base(unittest.TestCase):

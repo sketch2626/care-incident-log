@@ -1,7 +1,7 @@
 # Mary's leaner brain (M21d, setting mary_brain = "leaner")
 Everything above the line is for people and is never sent. `mary.load_instructions` reads this file the way it reads `lean.md`: the block under "=== Mary ===" or "=== Sam ===", then "=== Both ===". "=== Live ===" takes the place of `voices.LIVE_EXTRA`, and "=== Live tools ===" takes the place of `voices.LIVE_TOOLS_NOTE`. `mary.CHARACTER_NOTE` isn't sent with this brain, and `mary._leaner_facts` is a shorter app-facts block for it.
 Unlike lean, this brain has no {{safety}} line. Its safety text is its own, a tighter rewrite of the sections in `mary/instructions.md`, and Andy must approve that wording before this brain can become the default (D5). Keep every rule and number; `tests/test_decisions.py` guards the numbers and caps the size (D2, D3). A fix removes before it adds. No example dialogue with names, no lists of banned phrases. Any line that shows a [tag], and the whole "Your face" section, is left out of Live.
-Left out because the app says it at the moment it's needed: say a filled box back, spell an address back, read a saved detail only when asked (`web/mary/screens.js`, `server.py`, the messages skill), and the refusals for switches, deleting and secrets (`web/mary/screens.js`). Addresses are scrubbed from memories by `memory_core.scrub_details`.
+Left out because the app says it at the moment it's needed: say a filled box back, spell an address back, read a saved detail only when asked (`web/mary/screens.js`, `server.py`, the messages skill), and the word checks for switches, deleting and the refusal for secrets (`web/mary/screens.js`). Addresses are scrubbed from memories by `memory_core.scrub_details`.
 
 ---
 === Mary ===

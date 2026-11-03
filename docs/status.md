@@ -12,10 +12,10 @@ Read `docs/mission.md` first. This file holds the facts: what's running, what's 
     - lean, `mary/lean.md`, 11,926, git tag `lean-v1`;
     - leaner, `mary/leaner.md`, 7,123. Its tightened safety wording waits on Andy's approval (D5); the old-to-new map is in the M21d merge commit.
   - **The whole-talk bench** `tools/talk_bench.py`. Lean halved his name against full. Both brains still say "I was just thinking about".
-- **Workers on her account (started 2026-11-02 evening; Andy: "You can also do the cleanup on the other account too"):**
-  - **M22** (`docs/handoff/M22.md`, tab "M22 her acct"): Mary does what's on screen when told (D12): the person-form path, switches, How bad and removing on the resident's own words; secrets stay locked. It rewords one line in full and lean, so merge it when it's done; no bench is waiting on it now.
-  - **M4j** (`docs/handoff/M4j.md`, tab "M4j her acct"): `LIVE_SWITCHED` drops the name clause; wider write-down checks; a fairer `honest_ai` rubric; a stricter talk judge.
-  - Watchers wait for `WAITING:`/`DONE:` on `other/M22` and `other/M4j`; a 20-minute check reads their tabs.
+- **Merged 2026-11-02 evening (2579 tests OK, published):**
+  - **M22:** Mary does what's on screen when told (D12): "change Sarah's phone" works (the card's box name didn't match the form's); switches, How bad, clearing a box, removing a note and her own settings, each on the resident's plain words through `send_gate.plain_order`; secrets stay locked (D9). Guard: `test_d12_every_field_the_resident_can_change_has_a_voice_path`.
+    - **For Andy to weigh:** removing a note by voice has no "are you sure?" (the tap does), and no voice way to bring one back; and after "which one?", the answer must carry the verb ("remove the one from Tuesday").
+  - **M4j:** Live's hello drops the name; wider write-down checks; a fairer `honest_ai`; a stricter talk judge with `--rejudge` (unproven until a run).
 - **Testing plan (Andy, 2026-11-02 evening): Live first, by his ear, focused on what she can do.** "We're just trying to find a good enough personality… to test this. What we're really mainly worried about is functionality, what she's able to do, opening things and sending things and manipulating the environment." The full testing, safety first, waits for the new model, because only Andy uses this one. The 3:10am bench was cancelled.
   - **Morning:** launch Mary and switch her to **lean** through the app's settings (nothing is saved, so she opens on full). Andy talks to her for a minute. If she's still wonky, switch to **leaner**.
   - **After Andy picks (D19):** that brain is built in, and the My info switch and the other brains come out. The switch exists only for this testing.

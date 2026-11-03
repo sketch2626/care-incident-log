@@ -329,5 +329,134 @@ class ServerSaysNothingOfItsOwn(unittest.TestCase):
         self.assertNotEqual(status, 200, _broke("/api/mary/open (a hello on open) is back."))
 
 
+
+# ---------------------------------------------------------------- D12: if she can change it by hand, she can tell Mary to
+D12_SECRETS = {"i-gemini_key", "mailPass", "copyWords"}   # D9: the wall. Never grows quietly.
+D12_ACT_BUTTONS = {"mailDisconnect": "remove", "mailConnect": "switch"}   # buttons that change a setting: need a field of this kind
+D12_NOT_FIELDS = {
+    "mailTest": "sends a test, a button not a field, D8 keeps sending to the gate",
+    "copyMake": "makes a helper's copy, a button not a field; the six words are the secret (D9)",
+    "copyBring": "opens the box for a helper's copy, a button not a field (D9)",
+    "copyGo": "brings a helper's copy in, a button not a field; it goes with the six words (D9)",
+}
+D12_EXEMPT = {
+    "copyFile": "a helper's copy: it goes with the six words (D9)",
+    "bookFind": "she finds people with open and who",
+    "typeText": "the resident typing to her",
+}
+D12_DYNAMIC = {"web/mary/firstrun.js": 1}   # createElement of input/textarea/select: the type-your-name box (nameText)
+D12_MEM_LIST = "memList"   # forget_memory reaches it, not a row
+
+
+def _d12_screens():
+    import json
+    from tests.test_m18_frame import read, run_node
+    from tests.test_m18_screens import HARNESS
+    rc, out, err = run_node(HARNESS + read("mary/screens.js") + "\nconsole.log(JSON.stringify(MaryScreens.LIST));")
+    assert rc == 0, err
+    return json.loads(out)
+
+
+def _d12_controls(index_html, mary_html):
+    """Every control on the real pages that changes something: name -> 'field', 'act' or 'list'."""
+    index_html = re.sub(r"<!--.*?-->", "", index_html, flags=re.S)
+    mary_html = re.sub(r"<!--.*?-->", "", mary_html, flags=re.S)
+    found = {}
+    for m in re.finditer(r"<(input|textarea|select)\b[^>]*>", index_html):
+        tag = m.group(0)
+        ident, name = re.search(r'\bid="([^"]*)"', tag), re.search(r'\bname="([^"]*)"', tag)
+        if 'type="radio"' in tag:
+            key = name.group(1) if name else (ident.group(1) if ident else None)
+        else:
+            key = ident.group(1) if ident else (name.group(1) if name else None)
+        found[key or tag] = "field"
+    for ident in list(D12_ACT_BUTTONS) + list(D12_NOT_FIELDS):
+        found[ident] = "act"
+    for m in re.finditer(r"<(input|textarea|select)\b[^>]*>", mary_html):
+        ident = re.search(r'\bid="([^"]*)"', m.group(0))
+        found[ident.group(1) if ident else m.group(0)] = "field"
+    start, end = mary_html.find('id="infoPanel"'), mary_html.find('id="typeForm"')
+    for ident in re.findall(r'id="(\w+List)"', mary_html[start:end]):
+        if ident != D12_MEM_LIST:
+            found[ident] = "list"
+    return found
+
+
+def _d12_unreached(index_html, mary_html, screens):
+    """Names of controls with no voice path and no entry in EXEMPT or NOT_FIELDS."""
+    fields = {f["id"]: f for s in screens for f in s.get("fields", [])}
+    lists = {r["list"] for s in screens for r in s.get("rows", [])}
+    bad = []
+    for name, kind in sorted(_d12_controls(index_html, mary_html).items()):
+        if name in D12_EXEMPT or name in D12_NOT_FIELDS:
+            continue
+        f = fields.get(name)
+        if kind == "list":
+            ok = name in lists
+        elif kind == "act":
+            ok = bool(f) and f["kind"] == D12_ACT_BUTTONS[name]
+        else:
+            ok = bool(f) and (f["kind"] in ("secret", "words", "remove") or f["fill"])
+        if not ok:
+            bad.append(name)
+    return bad
+
+
+def _d12_pages():
+    return ((ROOT / "web" / "index.html").read_text(encoding="utf-8"),
+            (ROOT / "web" / "mary.html").read_text(encoding="utf-8"))
+
+
+class EverythingOnScreenHasAVoicePath(unittest.TestCase):
+    def test_d12_every_field_the_resident_can_change_has_a_voice_path(self):
+        index_html, mary_html = _d12_pages()
+        screens = _d12_screens()
+        bad = _d12_unreached(index_html, mary_html, screens)
+        self.assertEqual(bad, [], f"D12 broke: {bad} can be changed by hand but Mary can't do it by voice. "
+                                  "Give it a field or row in web/mary/screens.js. Read docs/decisions.md.")
+        fields = [f for s in screens for f in s.get("fields", [])]
+        controls = _d12_controls(index_html, mary_html)
+        self.assertEqual({f["id"] for f in fields if f["kind"] == "secret"}, D12_SECRETS, "D12/D9: the secrets changed.")
+        for f in fields:   # a lock can't come back by a flag
+            if not f["fill"]:
+                self.assertTrue(f["kind"] in ("secret", "words", "remove") or f["id"].startswith("bc-"),
+                                f"D12 broke: {f['id']} is a field with fill false.")
+        for name in list(D12_EXEMPT) + list(D12_NOT_FIELDS):
+            self.assertIn(name, controls, f"D12: {name} is no longer on the pages; drop it from the list.")
+        from tests.test_book_screens import screens_node
+        from tests.test_m22_orders import SETUP
+        rc, _, err = screens_node(SETUP + r"""
+          const w = world(ORDER('on', 'turn on the smart helper key please'));
+          for (const field of ['i-gemini_key', 'mailPass', 'copyWords']) {
+            const r = await fill(w, field, 'x');
+            assert.strictEqual(r.ok, false, field);
+            assert(r.say.startsWith("I won't read or fill that one."), field + ': ' + r.say);
+          }
+          const r2 = await fill(world(null, 'add'), 'words', 'x');
+          assert.strictEqual(r2.ok, false);
+          assert(r2.say.startsWith('Your words stay what you said.'), r2.say);
+        """)
+        self.assertEqual(rc, 0, err)
+
+    def test_d12_no_control_is_made_by_script_unnoticed(self):
+        found = {}
+        paths = sorted((ROOT / "web").rglob("*.js")) + sorted((ROOT / "skills").glob("*/screen.js"))
+        for p in paths:
+            src = _strip_comments(p.read_text(encoding="utf-8"))
+            n = len(re.findall(r"createElement\(\s*['\"](?:input|textarea|select)['\"]\s*\)", src))
+            if n:
+                found[p.relative_to(ROOT).as_posix()] = n
+        self.assertEqual(found, D12_DYNAMIC, "D12: a control is made by script. Give it a voice path, then list it here.")
+
+    def test_d12_guard_trips_on_a_new_control(self):
+        index_html, mary_html = _d12_pages()
+        screens = _d12_screens()
+        self.assertEqual(_d12_unreached(index_html, mary_html, screens), [])
+        added = index_html.replace("</body>", '<input type="text" id="newThing"><input type="radio" name="newPick"></body>')
+        self.assertEqual(_d12_unreached(added, mary_html, screens), ["newPick", "newThing"])
+        sheet = mary_html.replace('id="memList"', 'id="newList" class="rows"></div><div id="memList"', 1)
+        self.assertEqual(_d12_unreached(index_html, sheet, screens), ["newList"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -509,10 +509,17 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
 - **Why now:** the brain waits on Andy's choice of a paid model (Gemini or the Claude API), so personality work on today's cheap model stops (2026-11-04).
 - **Andy, minutes later:** "I want it to be three-dimensional… visually appealing. Otherwise, nobody's going to want it… getting people to help on the project and stuff it needs to be appealing… I don't want it to be a woman with normal hands either. And not just like a cartoon woman. It needs to be a character of some sort. It don't need to be a childish little character, but it needs to be a character." So round 11 became real-time 3D (three.js, built from shapes in code, bundled offline later) with three character concepts: a Southern animal, an honest AI being, and a creature of the worker's own. A non-human character also fits her being an AI with no human past.
 - **Round 11 boards (M24-boards), as first briefed:** three cartoon styles of Mary on a porch swing; the same porch in morning, rain, dusk and night; Sam's spot; the scene moved left with a screen open; gentle motion. Andy picks a look by eye.
+- **The critic's review (2026-11-04, `docs/handoff/done/M24-critique.md`), accepted by the hub:**
+  - Grown-up, hand-made finishes, not clay or vinyl toy (that reads as a kids' product): carved-wood folk art first, then matte ceramic or a painted diorama. Adult proportions; no gloss, big eyes, blush or hops.
+  - **Round 11a** is the three characters on the swing, with talking, listening and asleep stills and a 2D twin of each. **Round 11b**, after Andy picks, is weather and time, Sam, and the screen states.
 - **For the build, later:**
-  - **Real weather** needs the internet and a town. Only the town would go to a free weather service, with no key; offline, the sky follows the clock and the season. Andy decides.
-  - **"Tell her to change it":** the scene is something on screen she can change when told (D12).
-  - It must run offline as SVG and CSS on an old laptop with little memory.
+  - **First, a probe on Andy's laptop:** one tiny 3D scene in the real Mary window, measuring memory, CPU and frame time while she talks. The budget is set from it. If 3D can't meet it, the plan stops there.
+  - It runs offline, with three.js bundled in the app (never the CDN) and built from shapes in code. It plugs in behind the `MaryFace` interface, so the sleep loop, the corner, Back to Mary and the emergency path don't change. A 2D twin of the same character takes over when 3D can't run or runs slowly; the code chooses, never the resident.
+  - Render on demand (30 fps at most, slower when idle, stopped when minimized), and handle a lost WebGL context.
+  - **The weather:** by default, the sky follows the clock and the season, offline. Real weather is later and optional, off by default, as a skill using the National Weather Service (no key, with the town turned into coordinates offline). Andy decides. No lightning flashes, and an emergency freezes the sky to plain and calm.
+  - **Her brain:** the picked character gets one identity line in each brain ("on screen you look like [X]; that's a picture, not a body"), swapped at no net growth. It's tested together with the paid model, not after it.
+  - **"Tell her to change it":** the scene is something on screen she can change when told (D12), through the existing screen tool, not a new one.
+  - Captions keep a solid backing, and reduced motion still means stills only.
 
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."

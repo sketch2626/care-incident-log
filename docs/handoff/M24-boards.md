@@ -1,49 +1,56 @@
-# Handoff: M24 boards, Mary on her porch (second account, branch `other/M24-boards`)
+# Handoff: M24 boards, round 11a: Mary as a 3D character on her porch (second account, branch `other/M24-boards`)
 
-Read `docs/handoff/_common.md` first, then `docs/decisions.md` (**D7, D12, D13, D16**), then the **M24** section of `docs/mary-roadmap.md`, which has Andy's words. Then look at:
-- how Mary is drawn today: `web/mary/face.js`, `face.css`, `mary.css`, and her moods;
+Rewritten 2026-11-04 to match Andy's redirect and the critic's review (`docs/handoff/done/M24-critique.md`). The worker received both by message; this file is the record.
+
+Read `docs/handoff/_common.md` first, then `docs/decisions.md` (**D7, D12, D13, D16, D18**), then the **M24** section of `docs/mary-roadmap.md`, which has Andy's words. Then look at:
+- how Mary is drawn today: `web/mary/face.js` (the `MaryFace` interface), `face.css` and `mary.css`;
 - how round 10 was made: `mockups/mary/round10-src/`, and `mockups/mary/round10/canvas.json`.
 
 Read only what you need.
 
-**Why:** Andy, 2026-11-04: "Let's make this look really cool… she's sitting on a porch swing and the weather in the background… matches the actual weather of the day… she needs more of a body then instead of just floating eyes… some kind of cartoony thing." The app's name is Mary's Porch.
+**Why:** Andy, 2026-11-04: "I want it to be three-dimensional. I want it to be visually appealing. Otherwise, nobody's going to want it… I don't want it to be a woman with normal hands either. And not just like a cartoon woman. It needs to be a character of some sort. It don't need to be a childish little character."
 
-**This round is for Andy to pick a look by eye, so make it few and good.** He judges by looking. How good the drawing is matters far more than how many boards there are.
+**Round 11a is for Andy to pick a character by eye. At most four boards,** in `mockups/mary/round11/`, with `canvas.json` and a README, made the way round 10 was:
+1. **Three character concepts for Mary,** each on the same 3D porch swing on a sunny afternoon, with idle motion (sway, blink, breathe):
+   - (a) a Southern animal grown folks respect;
+   - (b) an honest AI being, warm and hand-made, never a glowing-eyed machine;
+   - (c) a creature of your own invention.
+   
+   All are grown-up characters, not human women.
+2. **Talking and listening** on the strongest one.
+3. **A 2D still twin of each character:** the SVG fallback for laptops that can't run 3D.
+4. **A strip of stills for each character:** listening and asleep. Asleep must look unmistakably different from being awake at night.
 
-**Boards** in `mockups/mary/round11/`, with `canvas.json` and a README, made the way round 10 was:
-1. **Three styles of one scene,** one board each: Mary on a porch swing, centered, with a sunny afternoon behind her and the porch around her. For example:
-   - (a) clean flat shapes with soft shading;
-   - (b) a warm storybook look;
-   - (c) soft and rounded, almost like clay.
+**Later, in round 11b, after Andy picks:** weather and time, Sam as a matching character, and the screen states (menu open, side by side with a skill, and a deeper screen with her in the corner as M18 approved).
 
-   All three are grown-up, never a kids' show (D7). She's a warm woman who seems 60 to 65, with a whole body, hands, and a face that clearly talks and listens. Not floating eyes.
-2. **Weather and time in each style:** a strip under each scene, or a second board per style. Show the same porch in the morning, in rain, at dusk with the porch light on, and at night. Add snow and fall leaves if there's room.
-3. **Sam,** in the style you think is strongest, with a spot of his own. That could be a rocking chair on the same porch, or a place of his own, like a truck tailgate by a pond. Show both if they're cheap.
-4. **She moves left:** one board with a screen open (round 10's address book). The porch scene sits on the left, and Mary is still alive on her swing. "Back to Mary" stays in view (D13).
-5. **Gentle motion** in each board: the swing's slow sway, blinking and breathing, plus a talking mouth on one board. Keep it calm, never flashing.
+**How it's made:**
+- **Real-time 3D with three.js.** For the boards, load one pinned version from cdnjs. The app will bundle it offline later and never load the CDN.
+- **Everything built from shapes in code.** No downloaded models or textures.
+- **Grown-up, hand-made finishes:** Southern carved-wood folk art first (whittled, faceted, matte, milk-paint colors), then matte glazed ceramic or a soft painted diorama.
+- **Adult proportions,** with the head about a quarter to a fifth of the body. No gloss, big eyes, sparkle catchlights, blush or bouncing.
+- **Light enough for an old laptop:** low poly, one light rig, pixel ratio 1, no shadow maps or post-processing, 30 fps at most. Render only while the board is in view, and draw one still frame for thumbnails.
+- **Porch details real porches have:** a swing on chains, a haint-blue ceiling, a screen door, ferns, a glass of tea.
+- **Original characters only.** No real people or places, and nothing private about Andy (D16).
 
-**Rules for the drawing:**
-- **Original art only.** Don't copy any existing character, mascot or brand look.
-- **It has to run in the app later:** SVG and CSS, offline, and light enough for an old laptop short on memory. No images from the internet and no heavy libraries.
-- **Big and clear for residents 65 to 95:** strong shapes, good contrast, and nothing busy behind her face.
-- **The porch details real porches have,** not a theme park: a swing on chains, a haint-blue ceiling, a screen door, ferns, a glass of tea. Plain, not cutesy.
-- **No real people or places,** and nothing private about Andy (D16).
-
-**Write `docs/handoff/done/M24-design.md`.** For each style, cover:
-- how it would be built: its SVG parts, how she talks and listens, and how the weather changes;
-- what it costs to run;
+**Write `docs/handoff/done/M24-design.md`.** For each concept, cover:
+- how it's built: its parts, how it talks and listens, and how it looks asleep;
+- a frame-rate and memory budget;
+- the fallback rule: WebGL with `failIfMajorPerformanceCaveat`, then the 2D twin;
+- that it plugs in behind the existing `MaryFace` interface;
+- one line on how its identity line in her brain would read;
 - which one you'd pick, and why.
 
 **Rules:**
 - Touch nothing outside `mockups/mary/round11/`, `mockups/mary/round11-src/` and that design note.
-- No app changes, no Gemini calls, no browser.
+- No app changes, no Gemini calls.
+- You can't see renders. The hub checks every board in its built-in browser and sends you fixes before Andy sees them.
 - If your context passes about 200K, commit `WAITING: context full`.
 
-**Models (D14):** you draw the three main scenes yourself, because the look is the judgment. Sonnet `coder` does the canvas plumbing and the repeat work, like the weather versions once a scene is drawn. Use one fresh helper per piece.
+**Models (D14):** you draw the characters yourself, because the look is the judgment. Sonnet `coder` does the canvas plumbing and the 2D twins once a character is drawn. Use one fresh helper per piece.
 
 **Finish:** commit `DONE: M24 boards`. The message carries:
 - three plain lines for Andy;
-- the list of boards;
+- the list of boards and what each should show;
 - your pick and why;
 - what isn't shown.
 

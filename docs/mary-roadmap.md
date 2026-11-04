@@ -530,7 +530,7 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - It runs offline, with three.js bundled in the app (never the CDN) and built from shapes in code. It plugs in behind the `MaryFace` interface, so the sleep loop, the corner, Back to Mary and the emergency path don't change. A 2D twin of the same character takes over when 3D can't run or runs slowly; the code chooses, never the resident.
   - Render on demand (30 fps at most, slower when idle, stopped when minimized), and handle a lost WebGL context.
   - **The weather:** by default, the sky follows the clock and the season, offline. Real weather is later and optional, off by default, as a skill using the National Weather Service (no key, with the town turned into coordinates offline). Andy decides. No lightning flashes, and an emergency freezes the sky to plain and calm.
-  - **Her brain:** the picked character gets one identity line in each brain ("on screen you look like [X]; that's a picture, not a body"), swapped at no net growth. It's tested together with the paid model, not after it.
+  - **Her brain:** the picked character gets one identity line in each brain, swapped at no net growth, and they call themselves robots, not AI (D20). For example: "You're Mary, a robot on a porch swing; that's how you look on screen". It's tested together with the paid model, not after it.
   - **"Tell her to change it":** the scene is something on screen she can change when told (D12), through the existing screen tool, not a new one.
   - Captions keep a solid backing, and reduced motion still means stills only.
 

@@ -512,6 +512,12 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
 - **The critic's review (2026-11-04, `docs/handoff/done/M24-critique.md`), accepted by the hub:**
   - Grown-up, hand-made finishes, not clay or vinyl toy (that reads as a kids' product): carved-wood folk art first, then matte ceramic or a painted diorama. Adult proportions; no gloss, big eyes, blush or hops.
   - **Round 11a** is the three characters on the swing, with talking, listening and asleep stills and a 2D twin of each. **Round 11b**, after Andy picks, is weather and time, Sam, and the screen states.
+- **Andy, after the critique (2026-11-04):**
+  - **The character:** "we could do something like a robot character carved out of wood… it needs to be a cute robot, but not a kid's robot. I'm just trying to make sure that it captures the hearts of the elderly people and the older guys… I want them to also think Sam's cool too." And: "if I really want this to work and take off, we're gonna have to nail the character."
+  - **Weather from the start:** "this is an old people app, so the weather needs to be included from the get-go." Lightning is fine: "if there's a thunderstorm going on outside, then there's no reason why there can't be a thunderstorm going on behind Mary's porch," but no very loud thunder.
+  - **Memory:** his laptop is short on memory because he runs two Claude accounts and more at once. Residents' laptops will mostly be locked down to Mary, so the laptop risk is smaller than the critic thought.
+  - **Her personality, for later:** "it can't be nothing like what it is now… they get talked to by the staff here like how Mary talks to them, and nobody wants that. People just want a normal person." The brain rules aim at plain normalcy.
+  - The boards worker was paused while Andy and the hub settle the character.
 - **For the build, later:**
   - **First, a probe on Andy's laptop:** one tiny 3D scene in the real Mary window, measuring memory, CPU and frame time while she talks. The budget is set from it. If 3D can't meet it, the plan stops there.
   - It runs offline, with three.js bundled in the app (never the CDN) and built from shapes in code. It plugs in behind the `MaryFace` interface, so the sleep loop, the corner, Back to Mary and the emergency path don't change. A 2D twin of the same character takes over when 3D can't run or runs slowly; the code chooses, never the resident.

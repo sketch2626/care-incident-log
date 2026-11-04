@@ -5,7 +5,7 @@ Skills are reviewed and live in this repo. Switches are in My info and by voice.
 
 | Skill | What it does |
 |---|---|
-| [messages](messages/) | Makes greeting cards and short letters in the resident's own words, ready to print and saved on their laptop. Their address book is here too. |
+| [messages](messages/) | Makes greeting cards and short letters in the resident's own words, saved on their laptop, printed, or sent by email after their plain "send it". It reaches the address book (a core module, `address_book.py`, M19) through `ctx.people`. |
 | [pictures](pictures/) | Shows a picture from Wikipedia of what the resident asks to see, so Mary can talk about it. |
 | [voice_comfort](voice_comfort/) | Makes Mary's voice slower, faster, quieter or louder, switches between Mary and Sam, and turns listening for their name on or off. |
 | [word_search](word_search/) | A big-print word search on a topic they like, played by voice or by touch, with hints when they ask. |

@@ -33,7 +33,6 @@ It's a companion first on purpose. A pure reporting tool scares residents and ma
 ### Beta, or not built yet
 
 - **Opening and filling screens by voice works only in Live** ([M18b](docs/mary-roadmap.md)). Normal and Offline can't do it yet.
-- **She can't change a person's phone number by voice yet** ([M22](docs/mary-roadmap.md)). That form is locked to her, and fixing it is planned.
 - **Email has only been tested against a fake server.** A real Gmail or Yahoo send with a helper is still to do.
 - **Facebook Messenger is planned, not built** ([docs/messaging-plan.md](docs/messaging-plan.md)). There is no Messenger code in `skills/messages`.
 - **Speak-up steps are planned, not built** ([docs/speakup-plan.md](docs/speakup-plan.md)). Mary can offer to write a problem down, and the resident can make a report. She doesn't yet walk them through the facility, the ombudsman and the state.
@@ -43,7 +42,8 @@ It's a companion first on purpose. A pure reporting tool scares residents and ma
 ## Status
 
 - **Beta, v0.5.0.** The builder is user #1 and tries every change himself. No other resident uses it yet; the first pilot is planned for one North Carolina facility.
-- **Her conversation is being rebuilt** ([roadmap M21](docs/mary-roadmap.md)). Testing v0.5.0 found her talking down to people, repeating herself and saying canned lines. Scoring well on single scripted replies hid it. The rebuild takes out all built-in speech, cuts her instructions back to mostly safety, and judges her on whole conversations.
+- **Her conversation is being rebuilt** ([roadmap M26](docs/mary-roadmap.md)). Testing v0.5.0 found her talking down to people, repeating herself and saying canned lines. Scoring well on single scripted replies hid it. Built-in speech is gone and shorter brains are built; the rebuild finishes on a paid model (Gemini's paid tier or the Claude API), judged on whole conversations.
+- **A new look is being made** ([roadmap M24](docs/mary-roadmap.md)): Mary and Sam as two 1950s robots on a porch swing, with the day's weather behind them.
 - **Windows only.** The installer isn't code-signed yet.
 
 ## Privacy and safety, in plain words
@@ -80,7 +80,7 @@ Offline means her *speech* is on the laptop. Her thinking is still Gemini. With 
 
 **How the safety rules are kept.** The builder's standing decisions are written down in [docs/decisions.md](docs/decisions.md), most with a test that fails if one is broken. The safety sections of her instructions stay word for word unless he approves new wording, and tests pin them. An emergency check runs before any tool or skill, and points to the call light, staff, 911 and 988, with the Veterans Crisis Line for veterans.
 
-**What Mary isn't.** She's an AI, and says so. She isn't a nurse, a doctor or an emergency service, and this app isn't legal advice. The regulation references are for information only; the state survey agency decides what rules were broken. In an emergency, press the call light or call 911.
+**What Mary isn't.** On screen she's a robot, and she never pretends to be a person; asked straight out, she says she's what folks call AI. She isn't a nurse, a doctor or an emergency service, and this app isn't legal advice. The regulation references are for information only; the state survey agency decides what rules were broken. In an emergency, press the call light or call 911.
 
 ## Install
 
@@ -105,7 +105,7 @@ Much of the code was written by Claude models under the builder's direction.
 | Path | What it is |
 |---|---|
 | `server.py` | Stdlib-only local server and API; the incident log (SQLite) |
-| `desktop.py` | The app window (pywebview); `--mary` opens her full screen |
+| `desktop.py` | The app window (pywebview); `--mary` opens her window, maximized |
 | `mary.py` | Her brain: what she knows, when to get help, the Gemini talk loop |
 | `mary/instructions.md` | Her instructions |
 | `voices.py` | Voice choices and samples |
@@ -140,10 +140,11 @@ Much of the code was written by Claude models under the builder's direction.
 
 Everything here is a plan unless it says done.
 
-- **Next: rebuild her conversation** ([M21](docs/mary-roadmap.md)). Take out built-in speech, cut her instructions back to mostly safety, and judge her on whole conversations.
-- **Let her fill the forms** ([M22](docs/mary-roadmap.md)), and make opening and filling screens by voice work in Normal and Offline too ([M18b](docs/mary-roadmap.md)).
+- **Next: Mary on her porch** ([M24](docs/mary-roadmap.md)). Two 1950s robots on a porch swing, with the real weather behind them.
+- **Her brain on a paid model** ([M26](docs/mary-roadmap.md)), judged on whole conversations, with full testing, safety first.
+- **Opening and filling screens by voice in Normal and Offline** ([M18b](docs/mary-roadmap.md)), not only Live.
 - **A pilot at one North Carolina facility, with five residents.** The checklist is [docs/pilot-checklist.md](docs/pilot-checklist.md).
-- **More to do together.** More games as skills, and a more natural voice ([roadmap](docs/mary-roadmap.md), [companion plan](docs/companion-plan.md)).
+- **More to do together.** More games as skills, and a more natural voice ([roadmap](docs/mary-roadmap.md)).
 - **Speak-up steps.** Help the resident work through the facility, the ombudsman and the state ([docs/speakup-plan.md](docs/speakup-plan.md)).
 - **Messenger.** Mary writes the message and opens the chat, and the resident taps Send ([docs/messaging-plan.md](docs/messaging-plan.md)).
 - **A code-signed installer**, so Windows stops warning.

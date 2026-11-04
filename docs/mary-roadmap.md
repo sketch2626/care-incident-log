@@ -527,6 +527,12 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - **A hanging porch lantern for each,** with a gentle face. It shows when they're listening and when they're asleep, "and two just because it's cool."
   - **The radio** from the first lineup sits on the porch table. Andy: "if they ask to listen to music… Mary can reach over and turn the radio on and ask what they want to listen to. And then act like she's dialing it right into what they want." That's a new feature with its own item (M25).
   - Robot to hound was "a jarring stretch", so the companions share one world: robots on the porch, with animals as their pets.
+- **Round 11 in code (2026-11-04, branch `other/M24-boards`, kept, not merged):** three.js scenes built from shapes, by an Opus worker at medium effort with Sonnet helpers. The hub checked them live. The first pass stood the robots in front of the swing, with flat, low-poly light; that came partly from the brief's speed rules. Fix round 1 sat them down and made them smooth, bigger and warmer lit. Andy, on seeing the first pass: "It is so far away from what I'm imagining. And it's super low poly. Like, it needs to be smooth… We've got a long way to go on the render."
+  - **The hub's read:** building a character in code without seeing it tops out at "neat toy". Better ways to reach the concept pictures:
+    1. turn the picture into a real 3D model with an image-to-3D tool (Meshy, Tripo), give it a skeleton and moves with Mixamo, then load it in three.js;
+    2. short looping videos made from the picture (Grok Imagine, Veo), one per state and weather, which is the fastest route for the fundraising demo;
+    3. keep coding it, smoother.
+  - The hub recommends 2 for the demo and 1 for the app. Andy decides.
 - **For the build, later:**
   - **First, a probe on Andy's laptop:** one tiny 3D scene in the real Mary window, measuring memory, CPU and frame time while she talks. The budget is set from it. If 3D can't meet it, the plan stops there.
   - It runs offline, with three.js bundled in the app (never the CDN) and built from shapes in code. It plugs in behind the `MaryFace` interface, so the sleep loop, the corner, Back to Mary and the emergency path don't change. A 2D twin of the same character takes over when 3D can't run or runs slowly; the code chooses, never the resident.

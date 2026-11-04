@@ -31,8 +31,5 @@ Every Claude session on this project reads this first: every hub, every worker a
 - **Evidence-grade.** The care log is formal and dated, with verified citations.
 - **Open source** (GPL-3.0), so other facilities and states can use it.
 
-## How we work (details in `CLAUDE.md` and the `token-saving` skill)
-- **The hub** is Andy's one conversation. It plans with him, asks with one-click buttons, starts workers, merges, and keeps `docs/status.md` current.
-- **Workers** hand the code to helpers, then review, test and commit. The two-account worktree method and the shared brief are in `docs/handoff/_common.md`.
-- **Roadmaps for everything**, and checkpoint commits after each helper's piece.
-- **Andy works by voice on a tight budget.** Keep his manual steps few and short, and name the model of every helper.
+## How we work
+The process (the hub, workers on the second account, helpers and models, testing, publishing and boards) lives in one place: `docs/how-we-work.md`. Andy's standing decisions are in `docs/decisions.md`.

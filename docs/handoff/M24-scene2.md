@@ -7,15 +7,17 @@ You continue the scene a first worker built. Its context filled up, but the work
 
 **Andy, on seeing the first round (2026-11-04):** "Camera needs to be more in the center, the swing up against the house that's not going to work. Obviously her face needs to be completely overhauled. That doesn't look nothing like the picture. And it's just kind of weird looking. And we need to be able to see off… more in the middle, and you can see a little bit of the yard out that way."
 
+**Andy, correcting that a minute later:** "the chain of the swing is up against the house. So that's not going to work. And maybe we should put the little table in the radio on the left-hand side up against the house. That way her left hand controls the radio and her right hand can point at stuff that's going to be on the screen on the other side. And still, I feel like it needs to be closer in too still." He means the hand on the left of the screen tunes the radio (her own right hand, since she faces us), and the hand on the right of the screen points toward where screens open.
+
 **What works and stays:** the film lighting (sun, fills, GTAO, bloom, the grade), the painted textures, the haint-blue ceiling, the chains, the walnut radio with its glowing dial, and the crochet shawl and brooch.
 
 **Do, in this order:**
 1. **The layout.**
-   - **Center the camera on the swing,** and move the swing out to the middle of the porch, away from the house wall.
+   - **Center the camera on the swing,** and move the swing out to the middle of the porch, so no chain comes near the house wall.
+   - **Closer in than round 1,** so she fills more of the frame.
    - **Open the middle of the view:** beyond the railing, the yard shows through the center and off to the viewer's right. Show some of it, not a vast landscape.
-   - **Keep a slice of the house** at the viewer's left edge, with the radio table in front of it.
+   - **Keep a slice of the house** at the viewer's left edge, with the radio table up against it.
    - **Her right hand** reaches over to tune the radio, and **her left arm** points loosely toward the viewer's right, where screens will open. Andy: screens open on the same side as always, and the porch scene just takes the face's place.
-   - Still framed a little close on her.
 2. **Her face, fully redone to look like the picture.** Today it's a human mask in a helmet: a sculpted nose, colored lips, and a wide stare. That's the "weird" part. Match concept 04's Mary instead:
    - a smooth, calm, gentle face inside her robin's-egg-blue bob;
    - soft almond eyes with lids, relaxed and warm, never staring;

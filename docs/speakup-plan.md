@@ -68,7 +68,7 @@ Port these by hand onto today's main. Don't merge.
 - **Offline:** phrases such as "who do I call", "ombudsman number" and "my rights" work with no internet. Each runs after the emergency check. Phrases must not clash with the yes/no words.
 - **Instructions** stay under 400 characters, and within the 4,000-character budget.
 
-**The screen** (boards first, Design canvas on Andy's account, per the usual rule): one big call sheet with the number, the hours and "what to say"; a letter view; "My rights" in big plain text. Text 20px or larger, targets 64px or larger, everything by voice or one tap, no key combos.
+**The screen** (boards first; how Andy sees them is in `docs/how-we-work.md`, "Boards"): one big call sheet with the number, the hours and "what to say"; a letter view; "My rights" in big plain text. Text 20px or larger, targets 64px or larger, everything by voice or one tap, no key combos.
 
 ## 4. The evidence package
 A resident picks what goes in, by voice ("just the call light ones from October") or by tapping. Built offline on the laptop by `reports.py`, with no Gemini.

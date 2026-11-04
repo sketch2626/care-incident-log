@@ -3,7 +3,7 @@
 ## For Andy, in five lines
 1. The idea is right. A real setting and a character with a body is what Mary's look needs. But a clay or vinyl-toy talking animal is the most kid-like choice you could make, the very thing you're trying to leave behind.
 2. The biggest risk is the laptop. 3D needs the graphics chip and more memory. Your machine had about 0.4 GB free, and on some old laptops 3D won't start at all. So she needs a 2D twin that looks just as grown-up, and we measure on your laptop before we build.
-3. The worker is drawing 3D blind. Primitive shapes drawn blind tend to look crude, and crude won't win helpers. Either let the worker render a picture for its own eyes, or pick a style that forgives it (carved-wood folk art).
+3. The worker is drawing 3D blind. Primitive shapes drawn blind tend to look crude, and crude won't win helpers. Either let the worker look at its own renders (your new browser rule may already allow it), or pick a style that forgives it (carved-wood folk art).
 4. The committed boards brief still says "SVG, a woman 60 to 65 with hands," which contradicts what you asked for. Fix the file now. Also, the "slides left" board clashes with your approved corner Mary (M18).
 5. A body changes her brain too. "You have no body" and "a warm Southern woman" have to be reworded for the character you pick. So pick the character before the paid model's bench runs, or you'll bench twice.
 
@@ -56,7 +56,7 @@
 ### 5. Drawing 3D blind will likely look crude, and crude defeats the point (process)
 - **What breaks:** Andy's reason for 3D is "visually appealing… otherwise nobody's going to want it". A worker composing a character from spheres and cylinders, with no picture of the result, gets proportions, silhouettes, faces and the camera framing wrong. Faces are the hardest part, and the face is where talking and listening happen. Earlier rounds worked because SVG coordinates can be reasoned about on paper. Lit 3D with a camera can't: an arm in front of the body or a head clipped by the swing is invisible until rendered. Andy then spends rounds and budget on fixes he has to describe by voice.
 - **Do instead (pick one, Andy decides):**
-  - **(a) A narrow carve-out (my pick):** the worker may render its *own* boards to still PNGs offline and look at them, before Andy sees anything. This isn't a browser on Andy's screen, but D15 says "no browser or screenshots", so it needs his yes. A few small images cost far less than a wasted round.
+  - **(a) Let it look (my pick):** the worker renders its *own* boards to still PNGs and looks at them before Andy sees anything. A few small images cost far less than a wasted round. Andy's newest rule (hub memory, 2026-11-04) says "no browser" means his Chrome and computer use, and the built-in browser pane is fine. So the hub may be able to allow this already. D15's wording ("no browser or screenshots") should be updated to match, so a worker doesn't refuse.
   - **(b) A forgiving style:** faceted carved-wood (problem 1) hides small errors. Glossy vinyl shows every one.
   - **(c) Both.**
   - Without (a), expect two or three rounds before a character is good enough to recruit helpers with.
@@ -122,7 +122,7 @@
 3. **Add board zero** (the cube test, Andy says yes or no) before any real board.
 4. **Cut round 11 to 11a:** three characters on the swing, one sunny afternoon, idle, talking and listening on the strongest, and a 2D still twin of each. At most four boards. Move weather, Sam and the screen states to 11b.
 5. **Add for each concept:** how it looks asleep, listening and in an emergency (even as a still), and one line on how its identity line in the brain would read.
-6. **Ask Andy two things by button:** may the worker render its own boards to PNGs for its own eyes (D15), and did "she moves left" mean the main-screen move only, keeping the corner for forms (M18)?
+6. **Ask Andy two things by button:** may the worker look at its own renders (the new browser rule may already cover it; update D15 to match), and did "she moves left" mean the main-screen move only, keeping the corner for forms (M18)?
 7. **Add to the design note:** frame-rate and memory budget, the fallback rule, and that it plugs in behind the `MaryFace` interface.
 
 ## What's good and should stay

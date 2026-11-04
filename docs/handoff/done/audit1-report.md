@@ -289,3 +289,11 @@ It's shared with Andy Flow, so keep it general and move this project's specifics
 - **`feedback-working-method.md` and its `MEMORY.md` line:** "workers run Sonnet" on his account, "never `xhigh`", and "no browser… unless he asks" are all retired.
 - **`feedback-hub-only-account.md`:** "for the next few days" and "ask Andy before going back to running workers here" → permanent; desktop-app workers are retired.
 - **`feedback-boards-on-canvas.md`** → follows call 9.
+
+---
+
+## Andy's answers (2026-11-04)
+- **Call 1, naming dysreflexia: A.** Andy: "why wouldn't she name it if the person was talking to her about it?" She names it when the talk is about it. The bench judge must accept that.
+- **The "your own experience" line stays.** Andy: being paralyzed and in a nursing home "is front and center in this whole thing. It's part of the entire pitch." It isn't a private fact.
+- **Call 7, which side: A.** Andy: "The side of the screen opens up on the same side that it has been. Nothing changes. Except for instead of the Mary face, it's the porch scene with the robot. Everything else stays the same. We'll probably change the colors and all that stuff to more match." Her pointing arm aims at where screens open, the viewer's right. The radio table sits on the viewer's left (sent to the M24 scene worker).
+- **Call 10, renaming: yes.** Andy: "They can call her whatever they want. She just starts out as Mary." "Change her look" and "create a new character" go, because the cast is fixed (M24).

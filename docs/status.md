@@ -5,12 +5,12 @@ Facts only: what's happening now, what's waiting on Andy, and what's next. The s
 ## Right now (2026-11-04)
 - **Mary today:** v0.5.0 (installer 336 MB, zip 401 MB), on the free Gemini tier for Andy's own testing (D21). Three brains sit behind the `mary_brain` test switch: full (the default), lean (`mary/lean.md`, tag `lean-v1`) and leaner (`mary/leaner.md`). Andy picks one with the paid model (D19).
 - **Her brain waits on the paid model,** Gemini's paid tier or the Claude API, which Andy is choosing. Personality work on today's cheap model stopped on 2026-11-04. Testing until then follows D26.
-- **M24, the porch scene:** round 2 is running on the second account (`other/M24-scene`, brief `docs/handoff/M24-scene2.md`). How it's made is decided (Andy, 2026-11-04): a code-built three.js studio renders short looping videos, and the app plays them (roadmap M24).
+- **M24, the porch scene:** round 2 is done on `other/M24-scene` (not merged): Andy's layout, a new cartoon face from concept 04, a painted style and film lighting. The hub's read: she's still too small in the frame, and her body and shawl look stiff. It's waiting on Andy's read. How it's made is decided (Andy, 2026-11-04): a code-built three.js studio renders short looping videos, and the app plays them (roadmap M24).
 - **`other/M24-boards`** (round 11 in code) is kept and not merged. The hub settles it after the scene.
-- **cleanup1:** the audit's fixes (`docs/handoff/done/audit1-report.md`), giving each kind of thing one home.
+- **cleanup1 is merged and published** (2579 tests OK): rules live only in `docs/decisions.md` (D1-D27) and `docs/how-we-work.md`. The hub's memory matches. The proposed changes to Andy's global instructions and the token-saving skill wait on his OK (`docs/handoff/done/cleanup1-global-proposals.md`).
 - **Repo:** Mary's Porch (github.com/sketch2626/marys-porch); `main` is published after every merge (D17).
 - **Fundraising** is handed to Claude Cowork (`private/fundraising/handoff.md`).
-- **Loose ends for the hub:** remove the leftover folder `.worktrees/M9d3` and the merged branches `other/M13b`, `other/M15`, `other/M15b`, `other/M4c`, `other/M4d`, `other/M9d3` and `other/M9d4`. `wip/report-to-state` stays (roadmap M27).
+- **Loose ends for the hub:** the merged branches are pruned. The leftover plain folder `.worktrees/M9d3` remains (a safety check blocks deleting it). `wip/report-to-state` stays (roadmap M27).
 
 ## Waiting on Andy (asked one at a time)
 1. **Her brain:** Gemini's paid tier or the Claude API (roadmap M26).
@@ -22,7 +22,7 @@ Facts only: what's happening now, what's waiting on Andy, and what's next. The s
 7. **The voice on a slow laptop:** keep Kokoro with gaps between sentences, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)? (Roadmap M8.)
 8. **The open-source voice** Andy found that works like ElevenLabs: its name or link (roadmap M14).
 9. **The five-minute Facebook sign-in test** (`docs/messaging-plan.md`, test 9), before the Messenger step.
-10. **The ballot and scam lines** in her brain (roadmap M26).
+10. **The global-file changes:** apply `docs/handoff/done/cleanup1-global-proposals.md` to Andy's global instructions and the token-saving skill?
 
 ## Next, in order
 1. **M24:** finish the porch scene, then build the loop studio and the player into the app.

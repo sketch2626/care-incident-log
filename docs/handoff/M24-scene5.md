@@ -19,6 +19,11 @@ You continue the porch scene. Run `git merge main` first, then read:
    - the lantern's face should be readable at a glance;
    - re-check the radio and point poses with the lantern in its new place.
 
+5. **She can turn the lantern up or down.** Andy: "the whole scene needs to be that she can adjust the brightness of that light, that Mary has the ability to do that if you ask her to as well, just for shits and giggles."
+   - Add a `?lamp=` level, from about 0.2 (low) through 1 (as now) to about 1.6 (bright). The whole porch's light follows the lantern: its flame, its glow, the pool on Mary and the swing, and the shadows. It matters most at night.
+   - Add a `?pose=lamp` pose: she reaches up to the lantern's wick knob and turns it. Use the hand nearest the lantern, and check that the reach looks natural.
+   - Render night shots at low, normal and bright, plus the reach.
+
 **Memory:** the laptop ran low last round. Render one shot at a time with a fresh Edge profile, delete each profile after its shot, and keep no more than one server running.
 
 **Rules:**

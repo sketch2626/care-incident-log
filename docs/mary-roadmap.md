@@ -50,6 +50,7 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
   - Her identity line goes in with the brain on the paid model (M26, D20).
   - The deeper screens' colors move toward the porch's (Andy, above; M11).
 
+- **The lantern's brightness** (Andy, 2026-11-04): "she can adjust the brightness of that light… if you ask her to… just for shits and giggles." In the scene, the porch's light follows the lantern, and she reaches up and turns its wick knob. In the app, it's something on screen she changes when told (D12).
 ### M25. The porch radio: music when they ask (Andy, 2026-11-04)
 - **Andy's words:** "if they ask to listen to music or something, then Mary can reach over and turn the radio on and ask what they want to listen to. And then act like she's dialing it right into what they want to listen to."
 - **Today** she can't play music, and her app facts say so. This would be a skill: the radio on the porch table, her reach for the dial (a scene clip, M24) and the music.

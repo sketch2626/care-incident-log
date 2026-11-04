@@ -51,6 +51,7 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
   - The deeper screens' colors move toward the porch's (Andy, above; M11).
 
 - **The lantern's brightness** (Andy, 2026-11-04): "she can adjust the brightness of that light… if you ask her to… just for shits and giggles." In the scene, the porch's light follows the lantern, and she reaches up and turns its wick knob. In the app, it's something on screen she changes when told (D12).
+- **How she's shown in the app (Andy, 2026-11-04, replacing the video-loop plan):** a live, rigged Mary in three.js, with the swing, chains, pillow, lantern and radio live beside her, in front of painted background plates that the studio renders once ("I trust you on this"). Glows, the lantern's light on the background, and any rain or fireflies are cheap live layers on top. The camera stays fixed, and "it turns and moves over" is the whole scene sliding and shrinking on screen. Andy's reasons: far fewer recordings, and much less CPU with just one live figure. She stays truly live: her mouth follows her real voice, and she reacts at once.
 ### M25. The porch radio: music when they ask (Andy, 2026-11-04)
 - **Andy's words:** "if they ask to listen to music or something, then Mary can reach over and turn the radio on and ask what they want to listen to. And then act like she's dialing it right into what they want to listen to."
 - **Today** she can't play music, and her app facts say so. This would be a skill: the radio on the porch table, her reach for the dial (a scene clip, M24) and the music.

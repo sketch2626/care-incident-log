@@ -34,3 +34,5 @@ Plans, decisions and reference for Mary's Porch. Start at the top and read down.
 | [handoff/](handoff/) | `_common.md` is the shared worker brief. Open briefs sit here, and finished ones move to `done/`. |
 | [handoff/done/](handoff/done/) | Finished briefs and design notes. A record of how each piece was built. |
 | [archive/](archive/) | Superseded docs and old logs: the companion plan, the roadmap's done items, status through 2026-11-04. Each says why at its top. |
+
+- `ideas.md`: Andy's ideas for later (notes, not plans).

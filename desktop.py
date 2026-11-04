@@ -173,12 +173,17 @@ def bring_up(window, user32=None):
         return False
 
 
+# Andy, 2026-11-04: Mary opens maximized with a title bar, not full screen, so she can be minimized
+# and keep running while he does other things.
+MARY_WINDOW = {"width": 1280, "height": 860, "min_size": (720, 540), "maximized": True}
+
+
 def window_options(mary, voices=False):
     """Title, page path and create_window arguments. No GUI needed."""
     if voices:
-        return {"title": "Mary voices", "path": "/mary/voices.html", "kwargs": {"fullscreen": True}}
+        return {"title": "Mary voices", "path": "/mary/voices.html", "kwargs": dict(MARY_WINDOW)}
     if mary:
-        return {"title": "Mary", "path": "/mary.html", "kwargs": {"fullscreen": True}}
+        return {"title": "Mary", "path": "/mary.html", "kwargs": dict(MARY_WINDOW)}
     return {"title": server.PAGE_TITLE, "path": "",
             "kwargs": {"width": 1280, "height": 860, "min_size": (720, 540), "maximized": True}}
 

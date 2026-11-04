@@ -133,11 +133,12 @@ class PowerRouteTests(unittest.TestCase):
 
 
 class WindowOptionsTests(unittest.TestCase):
-    def test_mary_is_full_screen(self):
+    def test_mary_is_maximized_and_can_be_minimized(self):  # Andy, 2026-11-04
         opts = desktop.window_options(True)
         self.assertEqual(opts["title"], "Mary")
         self.assertEqual(opts["path"], "/mary.html")
-        self.assertIs(opts["kwargs"]["fullscreen"], True)
+        self.assertNotIn("fullscreen", opts["kwargs"])
+        self.assertTrue(opts["kwargs"]["maximized"])
 
     def test_normal_window_is_unchanged(self):
         opts = desktop.window_options(False)

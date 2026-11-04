@@ -267,7 +267,7 @@ class OpenWindowTests(LogCase):
         self.assertEqual(made["title"], "Mary voices")
         self.assertTrue(made["url"].endswith("/mary/voices.html"))
         self.assertTrue(made["url"].startswith(self.URL))
-        self.assertIs(made["kwargs"].get("fullscreen"), True)
+        self.assertTrue(made["kwargs"].get("maximized"))  # Andy, 2026-11-04: not full screen, so it can be minimized
         self.assertIsInstance(made["js_api"], desktop.MaryApi)
         self.assertIs(made["js_api"]._window, fake.window)
         self.assertEqual(len(fake.started), 1)

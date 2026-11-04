@@ -787,11 +787,11 @@ class LogTests(VoicesCase):
 
 
 class WindowTests(unittest.TestCase):
-    def test_voices_window_is_full_screen_like_mary(self):
+    def test_voices_window_is_maximized_like_mary(self):  # Andy, 2026-11-04: both can be minimized
         opts = desktop.window_options(True, True)
         self.assertEqual(opts["title"], "Mary voices")
         self.assertEqual(opts["path"], "/mary/voices.html")
-        self.assertIs(opts["kwargs"]["fullscreen"], True)
+        self.assertEqual(opts["kwargs"], desktop.window_options(True)["kwargs"])
         self.assertEqual(desktop.window_options(True)["path"], "/mary.html")  # --mary is unchanged
         self.assertEqual(desktop.window_options(False)["path"], "")
 

@@ -504,6 +504,15 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
 - **Today:** Gemini is called from about a dozen app files (most in `server.py`, `mary.py` and `voices.py`), so this means gathering it behind one connection that every module fills in.
 - **When:** the job that builds in Andy's pick (D19) shapes it as the first module, Gemini. A second company's model is then a new module and its bench run, without touching the rest of the app.
 
+### M24. Mary on her porch: the graphics overhaul (Andy, 2026-11-04)
+- **Andy's words:** "let's go ahead and overhaul the graphics… Let's make this look really cool… we keep the same setup where we've got her in the middle and then she moves over to the left, but maybe there's like she's sitting on a porch swing and the weather in the background and stuff matches the actual weather of the day… or you can tell her to change it if you want. But she needs more of a body then instead of just floating eyes… It needs to be some kind of cartoony thing."
+- **Why now:** the brain waits on Andy's choice of a paid model (Gemini or the Claude API), so personality work on today's cheap model stops (2026-11-04).
+- **Round 11 boards (M24-boards):** three cartoon styles of Mary on a porch swing; the same porch in morning, rain, dusk and night; Sam's spot; the scene moved left with a screen open; gentle motion. Andy picks a look by eye.
+- **For the build, later:**
+  - **Real weather** needs the internet and a town. Only the town would go to a free weather service, with no key; offline, the sky follows the clock and the season. Andy decides.
+  - **"Tell her to change it":** the scene is something on screen she can change when told (D12).
+  - It must run offline as SVG and CSS on an old laptop with little memory.
+
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."
 - Two places to watch: the designs (no "Make a card" buttons scattered everywhere) and Mary herself (she shouldn't steer talks toward the newest skill). Add a bench case: in an ordinary chat she offers no card unless a birthday, a holiday or the resident brings it up. Check her prompt for lines that push cards (`REMINDER_CARDS_LINE` belongs only with a birthday reminder).

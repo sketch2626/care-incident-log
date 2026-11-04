@@ -258,7 +258,7 @@ class OpenWindowTests(LogCase):
             result = desktop.open_window(self.URL, mary=True, voices=True, startup=startup)
         return result, startup
 
-    def test_voices_window_is_full_screen_and_ready_once_it_shows(self):
+    def test_voices_window_is_maximized_and_ready_once_it_shows(self):
         fake = self.fake()
         result, startup = self.open_voices(fake, True)
         self.assertTrue(result)

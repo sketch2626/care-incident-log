@@ -7,17 +7,17 @@ Plans, decisions and reference for Mary's Porch. Start at the top and read down.
 |---|---|
 | [mission.md](mission.md) | The spirit of the project. Read first. |
 | [decisions.md](decisions.md) | Standing decisions, most with a test that guards them. |
-| [status.md](status.md) | What is running now and what is next. |
+| [status.md](status.md) | What is running now, what waits on Andy, and what is next. |
+| [how-we-work.md](how-we-work.md) | How the work is run: the hub, workers, helpers, testing, publishing and boards. With decisions.md, the only place rules live. |
 
 ## Plans
 | File | What it is |
 |---|---|
-| [mary-roadmap.md](mary-roadmap.md) | Numbered items (M1, M2...) from the first try of Mary. |
-| [companion-plan.md](companion-plan.md) | The companion-first direction (2026-10-24). |
+| [mary-roadmap.md](mary-roadmap.md) | What's ahead: numbered items (M7, M24...) in Andy's own words. |
 | [speakup-plan.md](speakup-plan.md) | Mary's speak-up skill. |
 | [messaging-plan.md](messaging-plan.md) | Cards and messages to family (M15). |
 | [backend-plan.md](backend-plan.md) | Plan only, nothing built. Says so in its first lines. |
-| [pilot-checklist.md](pilot-checklist.md) | Needs revising for companion first. Says so in its first lines. |
+| [pilot-checklist.md](pilot-checklist.md) | The pilot at one NC facility: the app, the relay, the legal side, people, setup day and the companion side. |
 
 ## Reference
 | File | What it is |
@@ -31,6 +31,6 @@ Plans, decisions and reference for Mary's Porch. Start at the top and read down.
 ## History
 | Folder | What is in it |
 |---|---|
-| [handoff/](handoff/) | `_common.md` is the shared worker brief. Open briefs sit here. |
+| [handoff/](handoff/) | `_common.md` is the shared worker brief. Open briefs sit here, and finished ones move to `done/`. |
 | [handoff/done/](handoff/done/) | Finished briefs and design notes. A record of how each piece was built. |
-| [archive/](archive/) | Superseded docs. Each says why at its top. |
+| [archive/](archive/) | Superseded docs and old logs: the companion plan, the roadmap's done items, status through 2026-11-04. Each says why at its top. |

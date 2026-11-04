@@ -1,9 +1,9 @@
 # Backend plan: secure accounts, sending and research data
 
-Status: plan only, nothing built. Written 2026-10-24. Today the app keeps everything on the resident's laptop. Later on 2026-10-24 the direction changed to companion first (see [companion-plan.md](companion-plan.md)). This plan still applies, but conversations with the companion now go to Gemini, and mood check-ins can come from conversation.
+Status: plan only, nothing built. Written 2026-10-24. Today the app keeps everything on the resident's laptop. Later on 2026-10-24 the direction changed to companion first (`docs/mission.md`). This plan still applies, but conversations with the companion go to the brain's company (Gemini today), and mood check-ins can come from conversation.
 
 ## Goal
-Build the online side of Care Incident Log to the standard of medical software. Residents can sign in, send complaints with their name or anonymously, and record how they feel. If they choose, they can also share de-identified data that universities can study. Security comes first at every layer: the laptop, the network, the server and the research data.
+Build the online side of Mary's Porch to the standard of medical software. Residents can sign in, send complaints with their name or anonymously, and record how they feel. If they choose, they can also share de-identified data that universities can study. Security comes first at every layer: the laptop, the network, the server and the research data.
 
 ## Ground rules
 1. **Local first.** The full log stays on the resident's laptop. Each kind of sharing has its own switch, and every switch starts off.

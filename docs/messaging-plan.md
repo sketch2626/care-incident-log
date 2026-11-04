@@ -1,6 +1,6 @@
 # Cards and messages to family: the plan (M15)
 
-Status: **Andy read the plan and boards on 2026-10-31.** His answers are folded in, section 9 is fully settled, and his notes on round 8 are in the flows below (redrawn as M15b). Written 2026-10-31 on the second account. No app code yet. Boards: `mockups/mary/round8/`. Andy's words: M15 in `docs/mary-roadmap.md`.
+Status (2026-11-04): **M15a-d are built and merged:** dates and reminders, the cards, sending with the hard-wired yes and the five-second Undo, and the mail core (`skills/messages/`, `send_gate.py`, `mail_core.py`). Contacts now live in the address book (M19, D10). What's ahead is M15e-j (section 8) and a first real Gmail or Yahoo send; only a fake mail server has been used so far. Andy read the plan and boards on 2026-10-31; his answers are folded in, and section 9 is fully settled. Written 2026-10-31 on the second account. Boards: `mockups/mary/round8/`. Andy's words: M15 in `docs/mary-roadmap.md`, and its history in `docs/archive/roadmap-done.md`.
 
 ## The short version
 - **Why:** "I see that it's your son's birthday coming up next week. Would you like for me to help you make him a card that we can send to him?" And: "will you please help me send a message to my grandson?" This ties residents to their people outside.
@@ -234,10 +234,10 @@ The occasions: birthdays first, then holidays, get-well, sympathy and thank-you 
 - The care log stays separate: no incident goes out through this feature unless the resident dictates it into a message.
 
 ## 5. Contacts
-- **Kept only if they want.** After the first send she asks once, "Keep his address for next time?" (board F). No is fine, and it's never asked about that person again.
-- **What's kept:** name, relationship, email, and Facebook username or phone number. Kept on the laptop, in the skill's own store, apart from the care log and in no report.
-- **Never sent to Gemini wholesale.** Her brain gets the names only. The address is used by the core when sending.
-- **"Forget Mark's address" really removes it.** "Forget Mark" removes the contact and his dates too, and a test proves it. Memory's `forget` must reach these two new stores, which it doesn't do today.
+- **The address book holds them** (M19, D10): `address_book.py`, a core module, sealed on the laptop, apart from the care log, and in no report or backup. This plan first put a contact list in the skill's own store; M19 replaced it, and M15c's contacts moved into the book once (`book_move.py`).
+- **Kept after the first send, without a question:** she says "It's in your book now" (Andy's M19 answer).
+- **Never sent to Gemini wholesale.** Her brain works from names. It gets a detail only when the resident says one, or when `read_detail` gives a saved one because their own words asked. The core uses the address when sending.
+- **"Forget Mark"** reaches his card, his reminders, her memories of him and the logs. "Forget everything" leaves the book.
 - **Facebook names are the hard part.** Residents rarely know a username. A helper sets it up, or Mary opens the messages page and they find the person themselves.
 
 ## 6. Privacy: what goes where
@@ -249,9 +249,7 @@ The occasions: birthdays first, then holidays, get-well, sympathy and thank-you 
 | **Meta** | Whatever they paste and send, from their own account | Their own tap |
 | **Nobody** | Contacts, dates, saved cards, the mail secret | Stay on the laptop, apart from a detail they ask to hear or say aloud (see Google above) |
 
-Say it plainly in My info: on the paid tier Google keeps what's sent for 55 days for abuse checks. That goes further than the mission's line "their words stay on their laptop, except in the packet for one reply", so **the mission wording deserves a look** whatever Andy decides here.
-
-Separate find, not part of M15: the Gemini key is in the app's settings store (`server.py:70`). A worker should check if it's plain text, and move it to Credential Manager along with the mail secret.
+Say it plainly in My info: on the paid tier Google keeps what's sent for 55 days for abuse checks. `docs/mission.md` says the same (decision 10 in section 9, applied 2026-11-04).
 
 ## 7. Costs
 | Item | Cost |
@@ -268,19 +266,19 @@ Wording help runs on the normal talk model, so a card adds pennies at most.
 ## 8. Build list
 Two core gaps come first. **`ctx.fetch` is GET-only, with no request body, and no SMTP,** so neither mail nor pictures can go through it. Rather than loosen it, add two narrow core services: `ctx.send_mail` (the skill never sees the secret) and `ctx.make_picture`. Both are logged and listed on the skill's card. The skill waits for M13b's tool groups.
 
-| Item | What | Done when | Who |
-|---|---|---|---|
-| **M15a** Dates | Save birthdays as dates; reminder once, 8 to 5 days ahead; none for the dead; forget clears them | Tests with a fake clock: once only, across restarts and a missed week; "forget" removes it; Andy hears it in a talk | Opus coder on the second account |
-| **M15b** Cards | The `messages` skill, the screen, 12 drawn designs, a folded card with verse and handwriting in two bundled fonts, the opening animation, front and inside saved as pictures, print | Boards A to C matched; offline works; long words fit; Andy approves | Opus for code; Sonnet for tests |
-| **M15c** Contacts and last look | The contact store, the hard-wired yes, the Undo countdown, real forget | A test proves nothing sends without the yes, and a chatty "okay" doesn't count | Opus, `xhigh` |
-| **M15d** Mail | Credential Manager, `ctx.send_mail`, Gmail and Yahoo, helper setup in My info | Sends to a scratch mailbox; the secret isn't in the database, backups, logs or the page | Opus, `xhigh` |
-| **M15e** Messenger | Answers to the tests in section 2, Facebook in its own walled-off pane over the panel, clipboard, open the chat, the Paste button, "Did it go?"; fallback to their browser | Andy sends a real card to a friend in under a minute, with no key combo. No script touches Facebook's page. | Opus, after Andy's five-minute test |
-| **M15f** Picture making | `ctx.make_picture`, a set painted card style, plain lines for refusals, a cost line in My info | A picture lands in a card; a refusal fails politely; no names in the prompt | Opus for code; Sonnet for tests |
-| **M15g** Outlook | Register the app, device-code sign-in, Graph send | A helper connects a test Outlook.com account | Opus, once test 7 is settled |
-| **M15h** WhatsApp | The `wa.me` link, phone numbers in contacts | The chat opens with the words ready | Sonnet |
-| **M15i** Google sign-in | Google verification, replace the Gmail app password | Verified, with no warning screen | Opus, plus Andy's review steps |
-| **M15j** Replies, if Andy says yes | Check mail from saved family, only when asked; nothing in it can instruct her | A test proves unknown senders are never read, and text in a message can't trigger a tool | Opus, `xhigh` |
-| **Backend items** | Mary's address and number, in `docs/backend-plan.md` | After the backend's security review | Later |
+| Item | What | Done when |
+|---|---|---|
+| **M15a** Dates | Save birthdays as dates; reminder once, 8 to 5 days ahead; none for the dead; forget clears them | **Done, merged** (3050c0b). Tests with a fake clock: once only, across restarts and a missed week; "forget" removes it; Andy hears it in a talk |
+| **M15b** Cards | The `messages` skill, the screen, 12 drawn designs, a folded card with verse and handwriting in two bundled fonts, the opening animation, front and inside saved as pictures, print | **Done, merged** (441377b). Boards A to C matched; offline works; long words fit; Andy approves |
+| **M15c** Contacts and last look | The contact store, the hard-wired yes, the Undo countdown, real forget | **Done, merged** (e28c482). A test proves nothing sends without the yes, and a chatty "okay" doesn't count |
+| **M15d** Mail | Credential Manager, `ctx.send_mail`, Gmail and Yahoo, helper setup in My info | **Done, merged** (30431ed). Sends to a scratch mailbox; the secret isn't in the database, backups, logs or the page |
+| **M15e** Messenger | Answers to the tests in section 2, Facebook in its own walled-off pane over the panel, clipboard, open the chat, the Paste button, "Did it go?"; fallback to their browser | After Andy's five-minute test. Andy sends a real card to a friend in under a minute, with no key combo. No script touches Facebook's page. |
+| **M15f** Picture making | `ctx.make_picture`, a set painted card style, plain lines for refusals, a cost line in My info | A picture lands in a card; a refusal fails politely; no names in the prompt |
+| **M15g** Outlook | Register the app, device-code sign-in, Graph send | Once test 7 is settled. A helper connects a test Outlook.com account |
+| **M15h** WhatsApp | The `wa.me` link, phone numbers in contacts | The chat opens with the words ready |
+| **M15i** Google sign-in | Google verification, replace the Gmail app password | With Andy's review steps. Verified, with no warning screen |
+| **M15j** Replies, if Andy says yes | Check mail from saved family, only when asked; nothing in it can instruct her | A test proves unknown senders are never read, and text in a message can't trigger a tool |
+| **Backend items** | Mary's address and number, in `docs/backend-plan.md` | After the backend's security review (later) |
 
 **Later, once there's funding (Andy, 2026-10-31):** write to Meta, Google and others about the mission, and ask for access.
 
@@ -299,7 +297,7 @@ All settled. Andy took all 12 open recommendations on 2026-10-31 ("yes, on the o
 | 12 | Messenger inside Mary, or their browser? | **Route 4:** Facebook opens in the panel beside Mary, and the resident taps to send. Their browser stays only as the fallback if test 9 fails. |
 | 2 (part) | What leads? | **Email leads,** and send directly wherever we can. |
 | 5 | Print as a third way? | **Yes,** marked as needing facility help for the mailing. |
-| 13 | Meta's Muse? | **Watch it.** It does handle Messenger, from Andy's own use. Whether an app can hand it a task is still open. The pilot-brain idea is roadmap M16. |
+| 13 | Meta's Muse? | **Watch it.** It does handle Messenger, from Andy's own use. Whether an app can hand it a task is still open. As a brain for Mary it's dropped (audit1 call 5, roadmap M26); watching it here is only about Messenger. |
 
 ### Settled when he took the recommendations (2026-10-31)
 | # | Question | Settled |

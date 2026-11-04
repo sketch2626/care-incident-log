@@ -1,3 +1,5 @@
+> **Archived 2026-11-04 (cleanup1):** the first companion plan (2026-10-24), kept word for word as the record of the companion-first direction. It was split up: its principles went to `docs/mission.md`; games, Mary and the computer, and lid to Mary to `docs/mary-roadmap.md` (M7, M29, M28); family messages to M15 and `docs/messaging-plan.md`; the laptop, rollout, pitch, costs and open questions to `docs/pilot-checklist.md`. Parts of it were overtaken: Mary is no longer a face filling the screen but a robot on a porch swing (M24, D20); the cast is fixed, and residents choose Mary or Sam and can rename her (M30); the wake word is built on Vosk; her window opens maximized (D25); phone calls from the computer are out (M15). Rules live only in `docs/decisions.md` and `docs/how-we-work.md`.
+
 # Companion plan
 
 Status: direction set 2026-10-24 with Andy. Everything here is open to debate as we learn. [backend-plan.md](backend-plan.md) and [pilot-checklist.md](pilot-checklist.md) still apply, but they need revising for this.

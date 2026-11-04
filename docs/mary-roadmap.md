@@ -518,6 +518,13 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - **Memory:** his laptop is short on memory because he runs two Claude accounts and more at once. Residents' laptops will mostly be locked down to Mary, so the laptop risk is smaller than the critic thought.
   - **Her personality, for later:** "it can't be nothing like what it is now… they get talked to by the staff here like how Mary talks to them, and nobody wants that. People just want a normal person." The brain rules aim at plain normalcy.
   - The boards worker was paused while Andy and the hub settle the character.
+- **The cast, picked by Andy from concept lineups (2026-11-04, `mockups/mary/concepts/`):**
+  - **Sam** is the tall 1950s robot in faded, chipped tractor-red enamel, with an olive feed-store cap. Andy: "that's Sam. Perfect for him."
+  - **Mary** isn't picked yet. She comes from the same world as Sam, a 1950s robot from the same factory, and is visibly female without a doll face or a curvy figure. Andy didn't like the first cream robot's look for her ("male-looking"), and a hinged mouth is a concern, so her voice comes from a glowing grille or a soft shape-changing mouth.
+  - **Their pets:** a gray cat for Mary and the old hound for Sam.
+  - **A hanging porch lantern for each,** with a gentle face. It shows when they're listening and when they're asleep, "and two just because it's cool."
+  - **The radio** from the first lineup sits on the porch table. Andy: "if they ask to listen to music… Mary can reach over and turn the radio on and ask what they want to listen to. And then act like she's dialing it right into what they want." That's a new feature with its own item (M25).
+  - Robot to hound was "a jarring stretch", so the companions share one world: robots on the porch, with animals as their pets.
 - **For the build, later:**
   - **First, a probe on Andy's laptop:** one tiny 3D scene in the real Mary window, measuring memory, CPU and frame time while she talks. The budget is set from it. If 3D can't meet it, the plan stops there.
   - It runs offline, with three.js bundled in the app (never the CDN) and built from shapes in code. It plugs in behind the `MaryFace` interface, so the sleep loop, the corner, Back to Mary and the emergency path don't change. A 2D twin of the same character takes over when 3D can't run or runs slowly; the code chooses, never the resident.
@@ -526,6 +533,11 @@ Andy's words: "maybe when we do the pilot we can do like half and half with Gemi
   - **Her brain:** the picked character gets one identity line in each brain ("on screen you look like [X]; that's a picture, not a body"), swapped at no net growth. It's tested together with the paid model, not after it.
   - **"Tell her to change it":** the scene is something on screen she can change when told (D12), through the existing screen tool, not a new one.
   - Captions keep a solid backing, and reduced motion still means stills only.
+
+### M25. The porch radio: music when they ask (Andy, 2026-11-04)
+- **Andy's words:** "if they ask to listen to music or something, then Mary can reach over and turn the radio on and ask what they want to listen to. And then act like she's dialing it right into what they want to listen to."
+- **Today** she can't play music, and her app facts say so. This would be a skill: the radio on the porch table, her hand on the dial, and the music.
+- **To work out:** where the music comes from and that it's legal. Options are old public-domain recordings or internet radio streams by kind of music. It must be easy to stop by voice ("turn it off"), and quiet under her voice when they talk.
 
 ### M20. The newest feature isn't her whole act (Andy, 2026-11-01)
 - **Andy's words:** "especially the 'make a card' down there, that's really arbitrary… it'll try to say 'make a card' all the time now. Like that's the one thing it can do, because it's the last thing that we added to it. So, we need to try to keep an eye on that."

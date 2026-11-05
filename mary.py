@@ -1225,7 +1225,8 @@ LIVE_PAGE_TOOLS = [
                      "copy their own words into Your words, exactly as they said them (you can't give it any words). "
                      "go_back = go back to you, the same as tapping you. read_incidents = read back what they saved, only "
                      "when they ask; it works on any screen, and when and category narrow it. remove = on their plain word, "
-                     "clear the box in field, or with when or category remove that saved note; then say what went. "
+                     "clear the box in field; a saved note (when or category) or their email account first asks them "
+                     "'are you sure?' naming what would go, and only their yes removes it. "
                      "open with name write and when or category opens that saved note to change."),
      "parameters": {"type": "object", "properties": {
          "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents, remove."},
@@ -1960,8 +1961,11 @@ def offline_screen(text, page):  # M18b
 
 
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
-          skills=None, screen=None, on_effect=None, typed=False, page=None):
+          skills=None, screen=None, on_effect=None, typed=False, page=None, app_told=""):
     """Mary's answer to what the resident said.
+
+    app_told (M18b piece 5): what the app just did on the resident's own yes (a removal), for her to say in her own words
+    like any app outcome (notice if no model). Ignored in an emergency; it also stands in for an offer's or a forget's yes.
 
     page (M18b): a blocking callable page(name, args) -> dict, the page's screen tool in Normal talk. Given, and not an
     emergency, she gets use_screen; its answer goes to the model only, never to memory, history or a log.
@@ -1994,7 +1998,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     first_words_s = None
     mood = None
     gemini_mood_seen = gemini_alert = streamed = False
-    notice = told = ""  # M21a: notice = on-screen words never spoken; told = what the app did, for her to say
+    notice = ""  # M21a: notice = on-screen words never spoken
+    told = str(app_told or "").strip()  # M21a: told = what the app did, for her to say
     if companion not in COMPANIONS:
         companion = "mary"
     store = getattr(memory, "store", None)  # M9c
@@ -2061,12 +2066,15 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     kind = is_emergency(text)
     gated = None  # M15c: the send gate's answer when it takes this turn. The emergency check stays first
     if kind:
+        told = ""  # M18b: nothing but the emergency
         _gate_call(skills, "send_emergency")
     else:
         gated = _gate_call(skills, "resident_said", text)
         gated = gated if isinstance(gated, dict) and gated.get("skip_brain") else None
-    said_yes = bool(prior) and is_yes(text) and not gated
+    said_yes = bool(prior) and is_yes(text) and not gated and not told  # M18b: told = that yes went to a removal
     waiting = _forget_waiting(memory.pending_forget) if store is not None else None  # M9c
+    if told and waiting:
+        memory.pending_forget = waiting = None  # the yes was not for this: it drops, as any other answer does
     field = waiting.get("field", "") if waiting else ""  # M19: their answer to "the email or the mailing address?"
     fields = _fields_said(text) if field else []
     forget_yes = bool(waiting) and not kind and not said_yes and not gated and (bool(fields) if field else _forget_yes(text))
@@ -2078,7 +2086,9 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         safety_line = emergency_text(kind, memory, text)  # M4d: goes to the screen as steps; she says them herself
         if said_yes:
             memory.pending_offer = prior  # the emergency comes first; the offer waits one more turn
-    confirmed = said_yes and not kind and write is not None
+    elif told:
+        set_mood("talking")  # M18b: the app's outcome (a removal) sets the mood, as the other outcomes do
+    confirmed =said_yes and not kind and write is not None
     logged = None
     offer = None
     if confirmed or forget_yes or gated or (kind and said_yes):  # M9c: forget_yes  # M15c: gated

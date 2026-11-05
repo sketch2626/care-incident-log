@@ -27,6 +27,7 @@
   var SWITCH_REMOVE_NO = "A switch isn't removed. Tell me plainly to turn it off.";
   var WHICH_NOTE_NO = "Tell me which note: the day or the kind of problem.";
   var DID_NOT_WORK_NO = "That didn't work just now.";
+  var NOTHING_WAITING_NO = "Nothing is waiting for a yes.";
   var UNLISTED_NO = "That's not something I can do on this screen.";
   var NOT_THERE_NO = "There's nothing for me to fill on this screen.";
   var HIDDEN_NO = "That box isn't showing right now.";
@@ -246,6 +247,8 @@
 
   var Lit = { el: null, f: null };
   var Typing = { finish: null };
+  var Pending = null;   // M18b piece 5: a removal waiting for their yes: { run, at, screen }. Held here only
+  var PENDING_MS = 60000;
   var Undo = {};   // per field, what was there before each of her fills. Held here only, never logged
   var Mine = {};   // M19: per detail field, what she filled herself. The only detail value look can ever send
   var Months = { after: null };   // piece 5: the heard turn behind her offer to go by month
@@ -786,7 +789,29 @@
     }
     return typeIn(win, el, c.v).then(done);
   }
-  // D12: clears a box on the resident's plain word, or presses Disconnect. Never a switch or a secret. Put back undoes a box.
+  // M18b piece 5 (D12): removing a saved note or the email account asks "are you sure?" first. The order only stores what would
+  // go (Pending). Only MaryScreens.confirmPending removes it, and the page calls that only on the server's ruling that the
+  // resident's own words were a plain yes (send_gate.is_plain_yes). It is not a use_screen action, so no model call reaches it.
+  // Another line, 60 seconds, a screen change or a reset drops it, and a new ask replaces it.
+  function ask(would, run, env) {
+    var s = '';
+    try { s = here(env).id; } catch (e) { s = ''; }
+    Pending = { run: run, at: Date.now(), screen: s, env: env };
+    return { ok: true, asked: true, would_remove: would,
+      note: 'Nothing is removed yet. Ask in your own words, naming what you would remove, and wait for their yes.' };
+  }
+  function pendingFresh(env) {
+    if (!Pending || Date.now() - Pending.at >= PENDING_MS) { return false; }
+    try { return !env || Pending.screen === here(env).id; } catch (e) { return false; }
+  }
+  function cancelPending() { Pending = null; }
+  function confirmPending(env) {
+    var p = pendingFresh(env) ? Pending : null;
+    Pending = null;
+    if (!p) { return Promise.resolve(no(NOTHING_WAITING_NO)); }
+    return new Promise(function (resolve) { resolve(p.run(env || p.env)); }).catch(function () { return no(DID_NOT_WORK_NO); });
+  }
+  // D12: clears a box on the resident's plain word, or asks before pressing Disconnect. Never a switch or a secret. Put back undoes a box.
   function removeIn(s, args, env) {
     var doc = env.doc(), f = findField(s, args.field, doc);
     if (!f) { return no(isDetailWord(s, args.field) ? WHOSE_NO : unlistedNo(args.field)); }
@@ -800,13 +825,16 @@
     var win = doc.defaultView;
     finishTyping();
     light(doc, f, el);
-    if (f.kind === 'remove') {   // the page's own work, without its confirm: the resident's order stands for it
-      var acts = win.maryActs;
-      if (!acts || typeof acts.disconnectMail !== 'function') { return no(SLOW_NO); }
-      return Promise.resolve(acts.disconnectMail()).then(function (st) {
-        if (!st || st.connected) { return no(DID_NOT_WORK_NO); }
-        return { ok: true, label: f.label, removed: true, saved: false, note: 'Say their email is disconnected.' };
-      }, function () { return no(DID_NOT_WORK_NO); });
+    if (f.kind === 'remove') {   // M18b piece 5: the order only asks "are you sure?". Their own yes does the work (confirmPending)
+      if (!win.maryActs || typeof win.maryActs.disconnectMail !== 'function') { return no(SLOW_NO); }
+      return ask({ what: 'email account' }, function (e2) {
+        var acts = e2.doc() && e2.doc().defaultView ? e2.doc().defaultView.maryActs : null;
+        if (!acts || typeof acts.disconnectMail !== 'function') { return no(SLOW_NO); }
+        return Promise.resolve(acts.disconnectMail()).then(function (st) {
+          if (!st || st.connected) { return no(DID_NOT_WORK_NO); }
+          return { ok: true, label: f.label, removed: true, saved: false, note: 'Say their email is disconnected.' };
+        }, function () { return no(DID_NOT_WORK_NO); });
+      }, env);
     }
     if (f.radio) {
       var was = radios(doc, f).filter(function (r) { return r.checked; })[0];
@@ -854,6 +882,7 @@
     return { ok: true, label: f.label, done: 'It is back the way it was. Nothing is saved.' };
   }
   function goBack(args, env) {
+    Pending = null;   // M18b piece 5: a screen change drops a removal waiting for a yes
     env.back();
     return { ok: true, screen: here(env).name };
   }
@@ -931,6 +960,7 @@
     var hit = findOpen(args.name), s = hit && hit.s;
     if (!s) { return no(NOT_OPEN_NO); }
     if (s.id === 'saved') { return no(SAVED_NO); }
+    Pending = null;   // M18b piece 5: opening another screen drops a removal waiting for a yes
     if (s.id === 'write' && !hit.group && (String(args.when == null ? '' : args.when).trim() || String(args.category == null ? '' : args.category).trim())) {
       return editNote(args, env);
     }
@@ -1049,14 +1079,16 @@
       var hit = noteRows(rows, q);
       if (!hit.length) { return no(READ_NONE); }
       if (hit.length > 1) { return no(manyNotes(hit.length)); }
-      var row = readRow(hit[0]);
-      return Promise.resolve(env.removeIncident(hit[0].id)).then(function () {
-        var d = env.doc(), acts = d && d.defaultView ? d.defaultView.maryActs : null;
-        return acts && acts.notesChanged ? Promise.resolve(acts.notesChanged()).catch(function () {}) : null;
-      }).then(function () {
-        return { ok: true, removed: { date: row.date, category: row.category, words: row.words },
-          note: 'Say plainly which note went, by its day and kind. It is gone from their list.' };
-      });
+      var row = readRow(hit[0]), id = hit[0].id;
+      return ask({ date: row.date, category: row.category }, function (e2) {   // M18b piece 5: nothing goes until their own yes
+        return Promise.resolve(e2.removeIncident(id)).then(function () {
+          var d = e2.doc(), acts = d && d.defaultView ? d.defaultView.maryActs : null;
+          return acts && acts.notesChanged ? Promise.resolve(acts.notesChanged()).catch(function () {}) : null;
+        }).then(function () {
+          return { ok: true, removed: { date: row.date, category: row.category, words: row.words },
+            note: 'Say plainly which note went, by its day and kind. It is gone from their list.' };
+        }).catch(function () { return no(DID_NOT_WORK_NO); });
+      }, env);
     }).catch(function () { return no(DID_NOT_WORK_NO); });
   }
   // The list's Edit button, on their word: the saved note opens on the add screen. It only opens, so no order is needed.
@@ -1150,7 +1182,12 @@
     noContent: noContent,
     pickHeard: pickHeard,
     finishTyping: finishTyping,   // piece 4: a plain "save it" lets her fill land first
+    // M18b piece 5: the page calls these on the server's word only. They are not use_screen actions.
+    hasPending: function (env) { return pendingFresh(env); },
+    confirmPending: confirmPending,
+    cancelPending: cancelPending,
     reset: function () {
+      Pending = null;
       finishTyping();
       Undo = {};
       Mine = {};

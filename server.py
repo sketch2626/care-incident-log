@@ -1048,6 +1048,15 @@ def save_heard(text, kind):  # M18 piece 4
         return False
 
 
+def yes_heard(text, kind):  # M18b piece 5
+    """True when this finished line is the resident's own plain yes (send_gate.is_plain_yes): no emergency, not garbled.
+    The page confirms a waiting 'are you sure?' only on this, never on the model's say-so."""
+    try:
+        return not kind and not mary.not_english(text) and send_gate.is_plain_yes(text)
+    except Exception:  # noqa: BLE001 (a failure confirms nothing)
+        return False
+
+
 def order_heard(text, kind):  # D12
     """The resident's own plain "turn it on/off" for a switch on the screen, or None: no emergency, not garbled. The page
     acts only on this word, never on the model's say-so. The server changes nothing here."""
@@ -1199,23 +1208,68 @@ _screen_lock = threading.Lock()
 _screen_pending = {}  # id -> {"event": threading.Event, "response": dict or None}
 
 
-def screen_ask(line, name, args, order):
-    """Sends one screen call down the talk stream (line is the stream's writer, False once the page is gone) and waits for
-    the page's answer: the response, or SCREEN_FAILED on a timeout or a closed stream. order is D12's ruling on this turn's
-    own words; the page acts on it, never on the model's say-so."""
+def _screen_round_trip(line, kind, data):
     call_id = token_hex(8)
     entry = {"event": threading.Event(), "response": None}
     with _screen_lock:
         _screen_pending[call_id] = entry
     try:
-        sent = line({"effect": {"kind": "screen_call", "data": {"id": call_id, "name": name, "args": args,
-                                                                "order": order}}})
+        sent = line({"effect": {"kind": kind, "data": dict(data, id=call_id)}})
         if sent and entry["event"].wait(SCREEN_WAIT_S) and isinstance(entry["response"], dict):
             return entry["response"]
         return dict(SCREEN_FAILED)
     finally:
         with _screen_lock:
             _screen_pending.pop(call_id, None)
+
+
+def screen_ask(line, name, args, order):
+    """Sends one screen call down the talk stream (line is the stream's writer, False once the page is gone) and waits for
+    the page's answer: the response, or SCREEN_FAILED on a timeout or a closed stream. order is D12's ruling on this turn's
+    own words; the page acts on it, never on the model's say-so."""
+    return _screen_round_trip(line, "screen_call", {"name": name, "args": args, "order": order})
+
+
+# M18b piece 5 (D12): a removal by voice asks "are you sure?" first. The page holds what would go; only the resident's own
+# plain yes (send_gate.is_plain_yes, on the raw line) tells it to remove. Any other line, or the clock, drops it.
+REMOVE_ASK_S = 60
+_remove_asked = None  # time.monotonic() of the last use_screen answer that asked, or None
+
+
+def remove_waiting():
+    return _remove_asked is not None and time.monotonic() - _remove_asked < REMOVE_ASK_S
+
+
+def remove_drop():
+    global _remove_asked
+    _remove_asked = None
+
+
+def screen_page(line, order):
+    """The page callable for mary.reply: screen_ask, noting when the page's answer asked 'are you sure?' (asked: true)."""
+    def page(name, args):
+        global _remove_asked
+        answer = screen_ask(line, name, args, order)
+        if name == "use_screen" and isinstance(answer, dict) and answer.get("asked") is True:
+            _remove_asked = time.monotonic()
+        return answer
+    return page
+
+
+def remove_outcome(response):
+    """What went, in plain words, from the page's answer to a confirm: built from the date and the kind of note, never the
+    note's own words (they stay on the page), or the page's own plain line when it did not work."""
+    if isinstance(response, dict) and response.get("ok") is True and response.get("removed"):
+        gone = response["removed"]
+        if isinstance(gone, dict):
+            date = str(gone.get("date") or "")[:10]
+            kind = " ".join(str(gone.get("category") or "").split())[:80]
+            date = date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date) else ""
+            return ("The saved note" + (f" from {date}" if date else "") + (f" about {kind}" if kind else "")
+                    + " was removed.")
+        return "Their email account was disconnected."
+    say = response.get("say") if isinstance(response, dict) else ""
+    return " ".join(str(say).split())[:200] if isinstance(say, str) and say.strip() else SCREEN_FAILED["say"]
 
 
 def screen_result(call_id, response):
@@ -1234,7 +1288,8 @@ def screen_result(call_id, response):
     return True
 
 
-def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typed=False, page=None):  # M9c: typed; M18b: page
+def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typed=False, page=None,
+              app_told=""):  # M9c: typed; M18b: page, app_told
     """Mary's answer to text, for the page. Never contains the key."""
     s = mary_settings()
     skills = skill_host()  # --- skills hook (M13) ---
@@ -1242,7 +1297,7 @@ def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typ
         r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
                        companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident,
                        skills=skills, screen=screen, on_effect=on_effect, typed=typed,
-                       page=page)  # --- skills hook (M13) --- M9c: typed
+                       page=page, app_told=app_told)  # --- skills hook (M13) --- M9c: typed
     note_her_words(r["text"])  # M21a
     return {"text": r["text"], "notice": r["notice"], "steps": r["steps"], "mood": r["mood"],
             "effects": r["effects"],  # effects: M13
@@ -1867,6 +1922,7 @@ class Handler(SimpleHTTPRequestHandler):
             save = {"save": True} if not body.get("note") and not send and save_heard(text, kind) else {}  # M18 piece 4
             order = order_heard(text, kind) if not body.get("note") and not send and not save else None  # D12
             order = {"order": order} if order else {}
+            yes = {"yes": True} if not body.get("note") and not send and yes_heard(text, kind) else {}  # M18b piece 5
             if not kind and mary.not_english(text):  # M4a: a garbled transcript teaches her nothing; an emergency stands
                 return self._send({"emergency": False, "kind": "", "steps": "", "garbled": True, **send})
             if kind or text.strip():  # M4a: every resident turn is remembered (once), as in Normal talk
@@ -1885,7 +1941,7 @@ class Handler(SimpleHTTPRequestHandler):
                         memory.save()
                     except OSError:
                         pass
-            return self._send({"emergency": bool(kind), "kind": kind, "steps": steps, **send, **save, **order, **book})
+            return self._send({"emergency": bool(kind), "kind": kind, "steps": steps, **send, **save, **order, **yes, **book})
         if method == "POST" and path == "/api/mary/tell":  # M21a: the app's note, in her own words
             return self._send(mary_tell(self._body().get("note")))
         if method == "POST" and path == "/api/mary/live/said":  # M4a: her finished Live turn, remembered
@@ -2102,14 +2158,28 @@ class Handler(SimpleHTTPRequestHandler):
             return True
 
         # M18b: the page's screen tool. order is read once from this turn's own words, and the model can't change it (D12)
-        order = order_heard(text, mary.is_emergency(text) or "")
+        emergency = mary.is_emergency(text) or ""
+        order = order_heard(text, emergency)
+        told = ""
+
+        # M18b piece 5: a removal waits for the resident's own plain yes. This line is that yes, or anything else drops it
+        if not emergency and remove_waiting():
+            remove_drop()
+            try:
+                if yes_heard(text, emergency):
+                    order = None  # the yes is the answer; "yes remove it" must not order a second removal
+                    told = remove_outcome(_screen_round_trip(line, "screen_confirm", {}))
+                else:
+                    line({"effect": {"kind": "screen_cancel", "data": {}}})
+            except Exception:  # noqa: BLE001 (a failure removes nothing)
+                told = ""
 
         try:
             done = mary_talk(text, on_text=lambda piece: line({"text": piece}),
                              on_mood=lambda mood: line({"mood": mood}),
                              screen=screen, on_effect=lambda effect: line({"effect": effect}),  # skills hook (M13)
                              typed=typed,  # M9c
-                             page=lambda name, args: screen_ask(line, name, args, order))
+                             page=screen_page(line, order), app_told=told)
         except Exception:
             line({"error": "Something went wrong. Please try again."})
             return True

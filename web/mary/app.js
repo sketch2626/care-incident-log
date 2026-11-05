@@ -1844,6 +1844,7 @@
     c.heardCheck = p;
     p.then(function (j) {
       if (j && j.garbled) { turn.bad = true; }   // M18: first, so a tool waiting on heardCheck sees it
+      liveRemoveAnswer(c, j);   // M18b piece 5: first too, so a removal the tool asks for next isn't dropped by this very line
       if (j && j.emergency) {
         if (S.convo === c && c.live) { liveEmergency(c, j); return; }
         newTurn();                                                // Live closed meanwhile: never miss it anyway
@@ -1865,6 +1866,32 @@
       if (isGoodbye(tail)) { endConvo(c, 'bye'); }
     });
     return p;
+  }
+
+  // M18b piece 5 (D12): a removal waiting for "are you sure?" is done only on the server's ruling that their own words were a
+  // plain yes (j.yes). Any other line, an emergency or a failed check drops it, so a note is kept unless they plainly say yes.
+  // "yes remove it" is the answer, not a second order, so its order is cleared for the tool call that follows this line.
+  function removeOutcome(res) {
+    var gone = res && res.ok === true && res.removed;
+    if (gone && typeof gone === 'object') {
+      return 'The saved note' + (gone.date ? ' from ' + gone.date : '') + (gone.category ? ' about ' + gone.category : '') + ' was removed.';
+    }
+    if (gone) { return 'Their email account was disconnected.'; }
+    return (res && typeof res.say === 'string' && res.say) || "That didn't work just now.";
+  }
+  function liveRemoveAnswer(c, j) {
+    var M = window.MaryScreens;
+    if (!M) { return; }
+    try {
+      if (j && j.yes && !j.emergency && !j.garbled && S.screen !== 'emergency' && S.convo === c && c.live && M.hasPending(screenEnv(c))) {
+        j.order = null;
+        M.confirmPending(screenEnv(c)).then(function (res) {
+          screenNote('(' + removeOutcome(res) + ' Say plainly what went, in a few words.)');
+        }, log);
+      } else {
+        M.cancelPending();
+      }
+    } catch (e) { log(e); }
   }
 
   function liveEmergency(c, j) {
@@ -2289,6 +2316,14 @@
       screenCall(effect.data).catch(log);
       return;
     }
+    if (effect && effect.kind === 'screen_confirm') {   // M18b piece 5: their own plain yes to "are you sure?", ruled by the server
+      screenConfirm(effect.data).catch(log);
+      return;
+    }
+    if (effect && effect.kind === 'screen_cancel') {   // any other line: the removal waiting for a yes is dropped
+      try { if (window.MaryScreens) { window.MaryScreens.cancelPending(); } } catch (e) { log(e); }
+      return;
+    }
     if (T) { T.effects = (T.effects || 0) + 1; }
     try { if (window.MarySkills) { window.MarySkills.apply(effect); } } catch (e) { log(e); }
   }
@@ -2314,6 +2349,22 @@
     return Promise.resolve().then(function () {
       return window.MaryScreens.run(String(data.name == null ? '' : data.name), data.args, env);
     }).then(answer, function (e) { log(e); return answer({ ok: false }); }).then(awake);
+  }
+  // M18b piece 5: does the removal their yes confirmed, and answers the server with how it went (always, even on a failure).
+  // Never during an emergency screen. The answer goes to the server's one line for her, and is never kept or logged here.
+  function screenConfirm(data) {
+    var id = (data && typeof data === 'object') ? data.id : null;
+    if (id == null || id === '') { return Promise.resolve(); }
+    function answer(res) {
+      return api('POST', '/api/mary/screen/result', { id: id, response: (res && typeof res === 'object') ? res : { ok: false } }, { ms: 8000 }).catch(log);
+    }
+    if (S.screen === 'emergency' || !window.MaryScreens) {
+      try { if (window.MaryScreens) { window.MaryScreens.cancelPending(); } } catch (e) { log(e); }
+      return answer({ ok: false });
+    }
+    return Promise.resolve().then(function () {
+      return window.MaryScreens.confirmPending(screenEnv(S.convo));
+    }).then(answer, function (e) { log(e); return answer({ ok: false }); });
   }
   // M18b: their_words needs the turns Normal heard, as Live keeps them in c.turns. The last 12, and none older than ten minutes
   // (a typed ask may have no talk to end).

@@ -1873,6 +1873,92 @@ def _page_answer(page, call):  # M18b
     return got if isinstance(got, dict) else {"ok": False}
 
 
+# M18b piece 3: with no model answer (no key, or it failed) a few plain phrases still open and fill screens through the
+# page. Whole line and strict, like the recall phrase above; anything else is not guessed. The answer is a screen notice,
+# never speech (D1), and it names the screen or the box and never what was typed in it.
+SCREEN_OPENED_TEXT = "Opened {}."
+SCREEN_BACK_TEXT = "Back to your own screen."
+SCREEN_FILLED_TEXT = 'Typed it into "{}". Nothing is saved yet.'
+_SCREEN_LEAD = r"(?:(?:hey|please|mary|sam|(?:can|could|would|will)\s+you)[\s,.!]+)*"
+_NAME_WORD = r"[^\W\d_][\w'’-]*"
+_BOOK_TAIL = r"\s+to\s+(?:my|the|our|your)\s+(?:address\s+)?book"
+_OFFLINE_BACK = re.compile(rf"{_SCREEN_LEAD}(?:go back(?:\s+to\s+(?:you|mary|sam))?|back to (?:you|mary|sam)){_ONLY_TAIL}", _I)
+_OFFLINE_OPEN = re.compile(rf"{_SCREEN_LEAD}(?:open(?:\s+up)?|show(?:\s+me)?|go to|take me to)\s+(?P<what>[^,.!?]+){_ONLY_TAIL}", _I)
+_OFFLINE_ADD_ONE = re.compile(rf"{_SCREEN_LEAD}add\s+(?:a\s+(?:new\s+)?(?:person|contact|friend)|someone|somebody)"
+                              rf"(?:{_BOOK_TAIL})?{_ONLY_TAIL}", _I)
+_OFFLINE_ADD = re.compile(rf"{_SCREEN_LEAD}add\s+(?P<who>{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,3}}){_BOOK_TAIL}{_ONLY_TAIL}", _I)
+_OFFLINE_FILL = re.compile(rf"{_SCREEN_LEAD}(?:put|type|enter|write)\s+(?P<value>.{{1,300}})\s+(?:in|into)\s+"
+                           rf"(?:her|his|their|the|my)\s+(?P<field>[^,.!?]+?){_ONLY_TAIL}", _I)
+_NOT_A_NAME = {"my", "the", "our", "her", "his", "their", "a", "an", "some", "and", "or"}
+# what a resident calls a screen (after "my" or "the") -> the name in LIVE_SCREEN_NAMES and its plain name. Only words
+# that mean one screen; a word that could mean two is left out.
+_OFFLINE_SCREEN_WORDS = (
+    ("book-list", "Address book", ("address book", "contacts")),
+    ("notes", "My notes", ("notes",)),
+    ("list", "What I've written down", ("saved notes", "written notes", "what ive written down", "what i wrote down")),
+    ("info", "My info", ("info", "information")),
+    ("write", "Write something down", ("write something down", "a note", "a new note", "new note")),
+    ("report", "Make a report", ("report", "reports", "a report", "make a report")),
+    ("email", "Connect email", ("email", "e-mail", "connect email", "email settings", "email setup", "set up email")),
+    ("games", "Games", ("games",)),
+    ("things", "Things I can do", ("things i can do", "things you can do", "what you can do", "what i can do")),
+    ("choose", "Choose Mary or Sam", ("mary or sam", "choose mary or sam")),
+    ("inbox", "From Andy Flow", ("andy flow", "from andy flow", "andy flow inbox")),
+)
+_OFFLINE_SCREENS = {word: (name, label) for name, label, words in _OFFLINE_SCREEN_WORDS for word in words}
+
+
+def offline_screen(text, page):  # M18b
+    """None when the line is not one of the plain screen phrases (so ordinary offline talk is untouched). Otherwise it
+    runs the phrase through page(name, args) and returns the page's last answer dict plus "notice", the plain screen
+    line to show: the screen or box named, never the value, or the page's own refusal. Never speech (D1)."""
+    line = " ".join(str(text or "").split())
+    if page is None or not line:
+        return None
+    steps = None  # (kind, args, fallback name)
+    if _OFFLINE_BACK.fullmatch(line):
+        steps = [("back", {"action": "go_back"}, "")]
+    else:
+        add = _OFFLINE_ADD_ONE.fullmatch(line)
+        who = _OFFLINE_ADD.fullmatch(line) if not add else None
+        if add or who:  # add a person: the blank form, and a name only when one was said
+            steps = [("open", {"action": "open", "name": "book-form"}, "Address book form")]
+            name = who.group("who").strip() if who else ""
+            if name and not any(w.lower() in _NOT_A_NAME for w in name.split()):
+                steps.append(("fill", {"action": "fill", "field": "name", "value": name}, "Name"))
+    if steps is None:
+        opened = _OFFLINE_OPEN.fullmatch(line)
+        word = " ".join(re.sub(r"[’']", "", opened.group("what").lower()).split()) if opened else ""
+        word = re.sub(r"^(?:the|my|our|your)\s+", "", word)  # "the address book", "my notes"
+        while word not in _OFFLINE_SCREENS:  # "...address book screen", "...notes please": whole phrase first
+            shorter = re.sub(r"\s+(?:please|mary|sam|screen|page)$", "", word)
+            if shorter == word:
+                break
+            word = shorter
+        if word in _OFFLINE_SCREENS:
+            name, label = _OFFLINE_SCREENS[word]
+            steps = [("open", {"action": "open", "name": name}, label)]
+    if steps is None:
+        fill = _OFFLINE_FILL.fullmatch(line)
+        field = re.sub(r"\s+(?:box|field)$", "", fill.group("field").strip(), flags=_I) if fill else ""
+        if field:
+            steps = [("fill", {"action": "fill", "field": field, "value": fill.group("value").strip(), "offline": True}, field)]
+    if steps is None:
+        return None
+    notices, answer = [], {"ok": False}
+    for kind, args, fallback in steps:
+        answer = _page_answer(page, {"name": "use_screen", "args": args})
+        if answer.get("ok") is not True:  # the page's own plain refusal, as it said it
+            say = answer.get("say")
+            notices.append(say.strip() if isinstance(say, str) and say.strip() else NOT_WORKING_TEXT)
+            break
+        name = answer.get("screen" if kind == "open" else "label")
+        name = " ".join(name.split())[:60].rstrip("?") if isinstance(name, str) and name.strip() else fallback
+        notices.append(SCREEN_BACK_TEXT if kind == "back" else
+                       (SCREEN_OPENED_TEXT if kind == "open" else SCREEN_FILLED_TEXT).format(name))
+    return dict(answer, notice=" ".join(notices))
+
+
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
           skills=None, screen=None, on_effect=None, typed=False, page=None):
     """Mary's answer to what the resident said.
@@ -2133,6 +2219,17 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             if not api_key:
                 error = NO_KEY
     # --- end skills hook ---
+
+    # M18b: no Gemini: a plain phrase can still open or fill a screen through the page. A screen notice, never speech (D1)
+    if (page is not None and not gated and not has_words() and not kind and not rounds and error in ("", NO_GEMINI)
+            and not (prior and (said_yes or is_decline(text)))):
+        shown = offline_screen(text, page)
+        if shown is not None:
+            gemini_alert = False
+            set_mood("talking")  # also keeps the no-key screen from replacing the notice (web/mary/app.js finishReply)
+            show(shown["notice"])
+            if not api_key:
+                error = NO_KEY
 
     # M9c: no Gemini: a few exact phrases still reach her memory
     if (store is not None and not gated and not has_words() and not kind and not rounds and error in ("", NO_GEMINI)

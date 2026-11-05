@@ -48,6 +48,7 @@
   var READ_FAIL_NO = "I couldn't get to your notes just now.";
   var READ_NONE = "There's nothing saved for that.";
   var BOOK_LOCKED_NO = "Your address book is locked. A helper's copy can open it.";
+  var OFFLINE_FILL_NO = "I can't do that one here without my model. You can tap it yourself.";   // M18b: offline she fills plain text and phone boxes only
   var COUNT_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'];
 
   var GROUPS = [
@@ -542,7 +543,9 @@
     var row = env.page && !String(args.who == null ? '' : args.who).trim() ? findRow(args.field) : null;
     if (row) {   // a field on My info wins over a row, unless that panel is the one open
       var s = here(env), doc = env.doc();
-      if (s.panel === row.panel || !(findField(s, args.field, doc) || findField(byId('info'), args.field, doc))) { return fillRow(row, args, env); }
+      if (s.panel === row.panel || !(findField(s, args.field, doc) || findField(byId('info'), args.field, doc))) {
+        return args.offline ? no(OFFLINE_FILL_NO) : fillRow(row, args, env);   // M18b: a row is a choice or a switch
+      }
     }
     return reach(args, env, fillIn);
   }
@@ -671,13 +674,13 @@
     if (said) {   // told whose it is: open their form first. Two of them narrow the list and nothing is filled.
       return Promise.resolve(openScreen({ name: 'book-form', who: said }, env)).then(function (got) {
         if (!got || got.ok !== true || here(env).id !== 'book-form') { return got; }
-        return act(byId('book-form'), { field: String(args.field == null ? '' : args.field).replace(/^bc-/, 'bf-'), value: args.value }, env);
+        return act(byId('book-form'), { field: String(args.field == null ? '' : args.field).replace(/^bc-/, 'bf-'), value: args.value, offline: args.offline }, env);
       });
     }
     cf = s.id === 'book-card' && doc ? findField(s, args.field, doc) : null;
     if (cf) {
       var m = /^#book-card\/(.+)$/.exec(String(doc.defaultView && doc.defaultView.location ? doc.defaultView.location.hash : ''));
-      var form = byId('book-form'), onForm = { field: 'bf-' + cf.key, value: args.value };
+      var form = byId('book-form'), onForm = { field: 'bf-' + cf.key, value: args.value, offline: args.offline };
       if (!m || !env.openDeep('#book-form/' + m[1])) { return no(SLOW_NO); }
       return arrive(env, form).then(function (came) { return came ? act(form, onForm, env) : no(SLOW_NO); });
     }
@@ -730,6 +733,10 @@
     var doc = env.doc(), f = findField(s, args.field, doc);
     if (!f) { return no(isDetailWord(s, args.field) ? WHOSE_NO : unlistedNo(args.field)); }
     if (!doc) { return no(NOT_THERE_NO); }
+    if (args.offline) {   // M18b: no model, so only a plain text or detail box (never a birthday, a choice, a switch...). The secret wall is first.
+      if (isSecret(f, fieldEl(doc, f))) { return no(SECRET_NO); }
+      if (!(f.kind === 'text' || (f.kind === 'detail' && f.key !== 'birthday'))) { return no(OFFLINE_FILL_NO); }
+    }
     if (f.kind === 'remove') { return removeIn(s, args, env); }   // D12: a fill of a remove button is a remove, on an order
     var el = fieldEl(doc, f), why = refusal(f, el);
     if (why) { return no(why); }
@@ -1116,7 +1123,7 @@
   function useScreen(args, env) {
     var a = args || {}, tool = ACTIONS.hasOwnProperty(String(a.action)) ? ACTIONS[a.action] : null;
     if (!tool) { return no(UNLISTED_NO); }
-    var inner = { field: a.field, value: a.value, name: a.name, who: a.who, when: a.when, category: a.category };
+    var inner = { field: a.field, value: a.value, name: a.name, who: a.who, when: a.when, category: a.category, offline: a.offline === true };   // M18b: offline only narrows fill
     if (tool === 'their_words') {
       var t = typeof a.turns_back === 'string' ? a.turns_back.trim() : a.turns_back;
       if (!/^[0-4]$/.test(String(t))) { return no("I couldn't tell which of your words you meant."); }

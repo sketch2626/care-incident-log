@@ -1189,14 +1189,60 @@ def mary_see_image(image_bytes, mime, question):
 # --- end M4a ---
 
 
-def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typed=False):  # M9c: typed
+# M18b: a screen call in Normal talk. The model asks for the screen, the page does it and answers by POST. This has its
+# own lock, never _mary_lock: mary_talk holds that for the whole reply, and the answer must get in while it waits. An
+# answer lives here only for the wait, and is never logged or stored.
+SCREEN_WAIT_S = 20
+SCREEN_ANSWER_MAX = 20000  # bytes of JSON
+SCREEN_FAILED = {"ok": False, "say": "That didn't work just now."}
+_screen_lock = threading.Lock()
+_screen_pending = {}  # id -> {"event": threading.Event, "response": dict or None}
+
+
+def screen_ask(line, name, args, order):
+    """Sends one screen call down the talk stream (line is the stream's writer, False once the page is gone) and waits for
+    the page's answer: the response, or SCREEN_FAILED on a timeout or a closed stream. order is D12's ruling on this turn's
+    own words; the page acts on it, never on the model's say-so."""
+    call_id = token_hex(8)
+    entry = {"event": threading.Event(), "response": None}
+    with _screen_lock:
+        _screen_pending[call_id] = entry
+    try:
+        sent = line({"effect": {"kind": "screen_call", "data": {"id": call_id, "name": name, "args": args,
+                                                                "order": order}}})
+        if sent and entry["event"].wait(SCREEN_WAIT_S) and isinstance(entry["response"], dict):
+            return entry["response"]
+        return dict(SCREEN_FAILED)
+    finally:
+        with _screen_lock:
+            _screen_pending.pop(call_id, None)
+
+
+def screen_result(call_id, response):
+    """The page's answer to a screen call, for POST /api/mary/screen/result. An unknown or old id is ignored (False). An
+    answer that isn't an object, or is over SCREEN_ANSWER_MAX bytes, becomes {"ok": False}."""
+    try:
+        big = not isinstance(response, dict) or len(json.dumps(response, ensure_ascii=False).encode("utf-8")) > SCREEN_ANSWER_MAX
+    except (TypeError, ValueError):
+        big = True
+    with _screen_lock:
+        entry = _screen_pending.get(call_id) if isinstance(call_id, str) else None
+        if entry is None or entry["event"].is_set():
+            return False
+        entry["response"] = {"ok": False} if big else response
+        entry["event"].set()
+    return True
+
+
+def mary_talk(text, on_text=None, on_mood=None, screen=None, on_effect=None, typed=False, page=None):  # M9c: typed; M18b: page
     """Mary's answer to text, for the page. Never contains the key."""
     s = mary_settings()
     skills = skill_host()  # --- skills hook (M13) ---
     with _mary_lock:
         r = mary.reply(text, mary_memory(), s["key"], s["model"], on_text=on_text,
                        companion=s["companion"] or "mary", on_mood=on_mood, write=mary_write_incident,
-                       skills=skills, screen=screen, on_effect=on_effect, typed=typed)  # --- skills hook (M13) --- M9c: typed
+                       skills=skills, screen=screen, on_effect=on_effect, typed=typed,
+                       page=page)  # --- skills hook (M13) --- M9c: typed
     note_her_words(r["text"])  # M21a
     return {"text": r["text"], "notice": r["notice"], "steps": r["steps"], "mood": r["mood"],
             "effects": r["effects"],  # effects: M13
@@ -1803,6 +1849,9 @@ class Handler(SimpleHTTPRequestHandler):
         if method == "POST" and path == "/api/mary/talk/end":  # M15a: the page's word that a talk is over
             close_talk()
             return self._send({"ok": True})
+        if method == "POST" and path == "/api/mary/screen/result":  # M18b: no _mary_lock (the talk holds it, waiting here)
+            body = self._body()
+            return self._send({"ok": screen_result(body.get("id"), body.get("response"))})
         if method == "POST" and path == "/api/mary/book/find":  # M19 piece 6b: ids for her page, never a detail
             return self._send(book_lookup(self._body().get("words")))
         if method == "POST" and path == "/api/mary/book/keep":  # M19 piece 6b: the stop button under her forget question
@@ -2040,21 +2089,27 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         gone = False
 
-        def line(event):
+        def line(event):  # True when it went out
             nonlocal gone
             if gone:
-                return
+                return False
             try:
                 self.wfile.write(json.dumps(event).encode("utf-8") + b"\n")
                 self.wfile.flush()
             except (OSError, ValueError):
                 gone = True  # the page went away; Mary still finishes, so the talk is remembered
+                return False
+            return True
+
+        # M18b: the page's screen tool. order is read once from this turn's own words, and the model can't change it (D12)
+        order = order_heard(text, mary.is_emergency(text) or "")
 
         try:
             done = mary_talk(text, on_text=lambda piece: line({"text": piece}),
                              on_mood=lambda mood: line({"mood": mood}),
                              screen=screen, on_effect=lambda effect: line({"effect": effect}),  # skills hook (M13)
-                             typed=typed)  # M9c
+                             typed=typed,  # M9c
+                             page=lambda name, args: screen_ask(line, name, args, order))
         except Exception:
             line({"error": "Something went wrong. Please try again."})
             return True

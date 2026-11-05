@@ -13,10 +13,11 @@ FACTS = {"voice_now": "builtin", "picked_voice": "", "talk_mode": "handsfree", "
          "talk_choice": "live", "talk_on_open": True, "voice_rate": 0.8, "voice_volume": 0.4, "printer": False}
 
 # sha256 of the full-brain prompts (fixed FACTS, empty memory, hello). Repinned for D12 (Andy, 2026-11-02): one line, switches, How bad and deleting go by their word.
-PINNED = {("mary", "normal"): "e9f89960a2113513165db3e4435ca38379b04144386b8683215c26cd84059246",
-          ("mary", "live"): "ff65d5568111bb3cb3c7bb674b06a0c4f479ba14a7e136362c2b467bfdbcbbe9",
-          ("him", "normal"): "62595041543681e94e7282af59ac884a9205fb106ba4247c4479e148762cc496",
-          ("him", "live"): "e932f35db3bd8dff234aaf031d17d3a7aeaf030c1c06cfe54e488bf200e98aff"}
+# Repinned for M18b: one app-fact line in "Working on their screens" now reads "You may have one screen tool" (true in Normal too), shorter than before.
+PINNED = {("mary", "normal"): "b8c32db16d009d888da43da7cd2ab6b709c2e6f07fe4a1f9a7c938c9e445d042",
+          ("mary", "live"): "785dcfb8f28caec50c9b733ff752c02fc9ed93d3274988927f33eca897b3bd09",
+          ("him", "normal"): "cc8c86b47f3c972abf04627a2673da5a217bca17e4457fb7ca553103f334f368",
+          ("him", "live"): "760c3da170462b4d886bff907f4922f4e46a3fd787d7de801e841b145b16eecd"}
 
 
 def _memory():

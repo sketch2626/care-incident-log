@@ -1529,7 +1529,7 @@ def _app_facts_text(companion):  # M9b
         return ""
 
 
-def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line="", told=""):  # M4d: safety_line
+def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line="", told="", page_tool=False):  # M4d: safety_line; M18b: page_tool
     system = system_text(memory, companion)
     # --- skills hook (M13) --- an emergency line gets no skills at all
     tools = []
@@ -1564,6 +1564,9 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety
             system += reminder_note(memory, can_make_cards(skills))
     if not kind and getattr(memory, "store", None) is not None:  # M9c: one functionDeclarations entry, shared with the skills
         tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + MEMORY_TOOLS}]
+    if page_tool and not kind:  # M18b: the page is connected, so Normal gets Live's one screen tool (the same dict)
+        screen_tool = next(d for d in LIVE_PAGE_TOOLS if d["name"] == "use_screen")
+        tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + [screen_tool]}]
     # M4a: her scripted hello is her turn too, so a talk may start with hers, or follow her last line of the talk before
     contents = []
     for t in memory.recent:
@@ -1850,9 +1853,32 @@ def _gate_call(skills, name, *args):  # M15c
         return None
 
 
+def _is_page_call(call):  # M18b
+    """A tool call the page answers: use_screen, or add-a-person in either spelling (as web/mary/app.js does in Live)."""
+    name, args = call.get("name"), call.get("args")
+    return name in ("use_screen", "messages__add_to_book") or (
+        name == "use_skill" and isinstance(args, dict) and args.get("action") == "add_to_book")
+
+
+def _page_answer(page, call):  # M18b
+    """The page's answer to one call, or {"ok": False} when the page raises or answers with anything but a dict. It goes
+    to the model only: never to memory, history or a log."""
+    name, args = call.get("name"), call.get("args")
+    if name != "use_screen":  # add a person: a blank person form opens
+        name, args = "open_screen", {"name": "book-form"}
+    try:
+        got = page(name, args if isinstance(args, dict) else {})
+    except Exception:  # noqa: BLE001 (a page that fails fails the call, never the talk)
+        return {"ok": False}
+    return got if isinstance(got, dict) else {"ok": False}
+
+
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
-          skills=None, screen=None, on_effect=None, typed=False):
+          skills=None, screen=None, on_effect=None, typed=False, page=None):
     """Mary's answer to what the resident said.
+
+    page (M18b): a blocking callable page(name, args) -> dict, the page's screen tool in Normal talk. Given, and not an
+    emergency, she gets use_screen; its answer goes to the model only, never to memory, history or a log.
 
     typed (M9c): they typed this, so a fact from it is saved with source "typed".
     Returns {text, notice, steps, mood, emergency, gemini_alert, offer, logged, remembered, error, effects, first_words_s,
@@ -2014,7 +2040,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     if api_key and (told or not (gated or confirmed or forget_yes)):  # M21a: an app outcome goes through the model too
         raw = ""
         stream = _ReplyStream(speak, take_mood)
-        body = _body(text, memory, kind, companion, skills, screen, safety_line, told)  # --- skills hook (M13) ---
+        body = _body(text, memory, kind, companion, skills, screen, safety_line, told,
+                     page_tool=page is not None)  # --- skills hook (M13) --- M18b: page_tool
         try:
             while True:  # --- skills hook (M13) --- one pass per tool round
                 calls, said = [], ""
@@ -2026,14 +2053,17 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                     said += chunk
                     stream.feed(chunk)
                 # --- skills hook (M13) --- run her tool calls, then ask again with their answers
-                if not calls or (skills is None and store is None) or kind or rounds >= MAX_TOOL_ROUNDS:  # M9c: store too
+                if (not calls or (skills is None and store is None and page is None) or kind
+                        or rounds >= MAX_TOOL_ROUNDS):  # M9c: store too; M18b: page too
                     break
                 rounds += 1
                 answers = []
                 for part in calls:
                     call = part.get("functionCall") or {}
                     name_dropped = name_dropped or call.get("name") == "forget_name"  # M9c
-                    if store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
+                    if page is not None and _is_page_call(call):  # M18b: the page answers; mirrors web/mary/app.js (Live)
+                        result = {"response": _page_answer(page, call), "effects": [], "say": None}
+                    elif store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
                         result = memory_tool(memory, call.get("name"), call.get("args"), offer_waiting=bool(prior))
                     elif skills is not None:
                         result = skills.call(call.get("name"), call.get("args"), heard=text, screen=screen)  # M13b: screen  # M4c: heard

@@ -7,11 +7,11 @@ Every hub, worker and brief follows this file. It holds the process: who runs wh
 ## Who runs what (D14)
 | Who | Where | Model | Does | Never |
 |---|---|---|---|---|
-| **Hub** | Andy's own account, in the Claude desktop app | Opus | Talks with Andy, plans, asks with one-click buttons, writes briefs, starts one worker at a time, watches, merges, publishes, keeps `docs/status.md` current | Writes app code (only a fix under about 40 lines in a file it already read), runs helpers, starts workers on Andy's account |
+| **Hub** | Andy's own account, in the Claude desktop app | Opus | Talks with Andy, plans, asks with one-click buttons, writes briefs, starts one worker at a time, watches, merges, publishes, keeps `docs/status.md` current | Writes app code (only a fix under about 40 lines in a file it already read), runs helpers, starts more than one worker at a time on Andy's account |
 | **Worker** | The second account, Claude Code in a terminal, in its own worktree | Opus (`--model opus`) | Reads targeted lines, briefs helpers, reviews each diff, tests, commits on its branch, reports | Explores the whole codebase, writes big code itself, runs helpers in parallel, pushes or merges |
 | **Helper** | Inside a worker, from `.claude/agents/` | Sonnet `coder`, or Haiku `quick-coder` | One piece from an exact brief, within its call budget | Anything outside its piece |
 
-- **Andy's account is the hub only.** Every worker runs on the second account. There is one hub, kept for good and compacted by hand (at about 250-300K, after `docs/status.md` is up to date), never replaced for being long.
+- **The hub lives on Andy's account; workers run on whichever account has room** (D14). Both are Pro plans. When one runs low, work moves to the other. There is one hub, kept for good and compacted by hand (at about 250-300K, after `docs/status.md` is up to date), never replaced for being long.
 - **Sonnet `coder` (40 calls) writes all code,** new or changed.
 - **Opus `coder`** (`model: "opus"`, default effort) is only for one truly hard piece that the brief names, such as encryption or a tricky concurrency fix, or one that Sonnet tried and failed. The worker says why in its report.
 - **Haiku `quick-coder` (20 calls) only edits text:** wording, a doc page or a one-line style change. Haiku stays **under 100,000 tokens of context**, because its price changes sharply above that. Give it exact line ranges, at most about 150 lines a read, at most about 8 reads, one or two files, and a brief under about 2,000 characters. Anything bigger goes to Sonnet.

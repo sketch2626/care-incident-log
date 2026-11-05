@@ -61,6 +61,12 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
   - **What matters most:** "as long as we can get that stuff right and we can get it pushed in on her right and we get her face a little better, as long as her conversations are good, then everything else can be overlooked… a lot of these older people… won't really even notice it." Framing, her face and how she talks come first. Scenery polish stops there.
   - **Her side fades into the screens' side,** and the panels for games, pictures and weather take their colors from the scene (dusky blue, cream, warm amber, walnut, a touch of haint blue). The old app colors go, and big, high-contrast text stays.
 
+- **Andy's calls (2026-11-05):**
+  - **Sam's place:** by a fire at night, whittling on a stump, not on the porch. The fire can do the lantern's job: it flares a little when he's listening and dies to embers when he's asleep.
+  - **The sky:** "it moves from evening to night and never really changes from evening or night… if it don't work out, we'll change it." It's evening through the day and night after dark, never a daytime sky.
+  - **The weather** comes by talking it over, with the real radar or satellite picture on the side screen (the National Weather Service, free, no key). No live weather in the sky.
+  - **Round 6 order:** the layout and light first (the lantern off the wall, the table beside the swing, closer in, the gentle moving camera, no glint), then a round of three faces side by side.
+
 ### M25. The porch radio: music when they ask (Andy, 2026-11-04)
 - **Andy's words:** "if they ask to listen to music or something, then Mary can reach over and turn the radio on and ask what they want to listen to. And then act like she's dialing it right into what they want to listen to."
 - **Today** she can't play music, and her app facts say so. This would be a skill: the radio on the porch table, her reach for the dial (a scene clip, M24) and the music.
@@ -155,6 +161,7 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
 - **Andy's call:** on a slow laptop, Kokoro makes speech at about half real time, so there are gaps between sentences. Keep Kokoro with the gaps, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)?
 - **Not checked yet:** a real slow laptop and a frozen build. The speed check skips itself when under 0.8 GB of RAM is free, as it was on Andy's 5.7 GB laptop, so the tier stays at the default; worth a look before the pilot.
 
+- **Andy, 2026-11-05:** on a slow laptop the voice stays Kokoro, unless the better open-source voice (M14) beats it.
 ### M14. A better voice (Andy, 2026-10-30)
 - The free Gemini voices sound patronizing, with uptick and emphasis on word endings.
 - Look into the open-source, free voice Andy found, which reproduces how ElevenLabs works. Ask Andy for its name or link first. Check whether it runs on the laptop (privacy, offline) and what it needs, then audition it for Andy by ear. Andy's laptop is new (Ryzen 5 7520U, integrated Radeon), but some residents get refurbished ones, so also check the speed on weaker hardware, or a CPU limit that imitates it.

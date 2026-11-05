@@ -39,7 +39,7 @@ Rules live only in `docs/decisions.md` and `docs/how-we-work.md`. Notes (status,
 - **Build:** double-click `packaging\build.bat`. It makes `packaging\.venv`, installs the pinned `packaging\requirements.txt` and runs `packaging\build.py`. Output in `dist\`: `CareIncidentLog-Setup-<ver>.exe` (Inno Setup, per-user, no admin, Start-menu and desktop shortcuts) and `CareIncidentLog-<ver>-portable.zip`. The version is `VERSION` in `version.py`.
   - It bundles `web/` (with `web/mary/fonts/`), the three brain files and the speed check's clip from `mary/`, `skills/`, vosk, and three models under `_internal\models\`: faster-whisper base.en, Kokoro and the Vosk small English model. When `models/` is missing, `build.py` downloads each one with `tools/get_*_model.py` and a SHA-256 check.
   - v0.5.0 (2026-11-02): installer 336 MB, zip 401 MB.
-  - The shortcuts are "Mary" (`--mary`; the name is still for Andy to confirm) and "Care Incident Log".
+  - The shortcuts are "Mary" (`--mary`, confirmed by Andy 2026-11-05) and "Care Incident Log".
   - Never bundled: `mcp_server.py`, `.mcp.json`, `mockups/`, `docs/handoff/`, `bench/`.
   - The installer needs Inno Setup 6; the zip is built without it.
 - `packaging\installer.iss` is the installer script, and `packaging\make_icon.py` makes `icon.ico`. Uninstalling leaves the data folder alone.

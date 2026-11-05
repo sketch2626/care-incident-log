@@ -13,16 +13,12 @@ Facts only: what's happening now, what's waiting on Andy, and what's next. The s
 - **Loose ends for the hub:** the merged branches are pruned. The leftover plain folder `.worktrees/M9d3` remains (a safety check blocks deleting it). `wip/report-to-state` stays (roadmap M27).
 
 ## Waiting on Andy (asked one at a time)
+- Answered 2026-11-05: Sam's "Pal" is fine; the shortcut stays "Mary"; removing by voice asks "are you sure?" (D12); the slow-laptop voice is Kokoro (M8); the global-file changes are approved; Sam by a fire, the sky evening-to-night, and the round 6 order (M24).
 1. **Her brain:** Gemini's paid tier or the Claude API (roadmap M26).
 2. **Leaner's tighter safety wording** (D5), which comes with the brain pick. The old-to-new map is in the M21d merge commit.
-3. **Sam's pet name "Pal":** D7 makes pet names fine. Keep "Pal" among Sam's (`docs/characters/sam.md`)?
-4. **The "Mary" shortcut name** in the installer (the second shortcut is "Care Incident Log").
-5. **The speak-up decisions SD1-SD10** (`docs/speakup-plan.md`, "Decisions for Andy").
-6. **Removing a note by voice** has no "are you sure?" (the tap has one) and no voice way to bring it back. Also, after "which one?", the answer must carry the verb ("remove the one from Tuesday"). Keep it that way?
-7. **The voice on a slow laptop:** keep Kokoro with gaps between sentences, use the Windows voice there, or add the lighter Piper voice (plainer, a bigger installer)? (Roadmap M8.)
-8. **The open-source voice** Andy found that works like ElevenLabs: its name or link (roadmap M14).
-9. **The five-minute Facebook sign-in test** (`docs/messaging-plan.md`, test 9), before the Messenger step.
-10. **The global-file changes:** apply `docs/handoff/done/cleanup1-global-proposals.md` to Andy's global instructions and the token-saving skill?
+3. **The speak-up decisions SD1-SD10** (`docs/speakup-plan.md`, "Decisions for Andy").
+4. **The open-source voice** Andy found that works like ElevenLabs: its name or link (roadmap M14).
+5. **The five-minute Facebook sign-in test** (`docs/messaging-plan.md`, test 9), before the Messenger step.
 
 ## Next, in order
 1. **M24:** finish the porch scene, then build the loop studio and the player into the app.

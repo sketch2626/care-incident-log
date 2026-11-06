@@ -407,6 +407,42 @@ def _d12_pages():
             (ROOT / "web" / "mary.html").read_text(encoding="utf-8"))
 
 
+def _slice(src, start, end):
+    """The text from `start` up to the next `end`, or "" when `start` is not there."""
+    _, found, rest = src.partition(start)
+    return rest.partition(end)[0] if found else ""
+
+
+def _d12_voice_gaps(server_src, app_js, screens_js):
+    """M18b: the page and server side of the voice paths that are missing from the real code (Normal's round trip, Offline's
+    plain-box rule, add a person in Live, and the resident's own yes before a removal)."""
+    server_src, app_js, screens_js = re.sub(r"(?m)#.*$", "", server_src), _strip_comments(app_js), _strip_comments(screens_js)
+    stream = _slice(server_src, "def _mary_stream", "\n    def ")
+    effects = _slice(app_js, "function applyEffect", "function skillScreen")
+    actions = _slice(screens_js, "var ACTIONS = {", "};")
+    offline = _slice(screens_js, "if (args.offline) {", "if (f.kind === 'remove')")
+    checks = {
+        "normal: the server hands the page to Mary": "page=screen_page(" in stream,
+        "normal: the server sends screen_call": '"screen_call"' in _slice(server_src, "def screen_ask", "\ndef "),
+        "normal: the page handles screen_call": "'screen_call'" in effects and "screenCall(" in effects,
+        "offline: only plain text boxes are filled": all(x in offline for x in (
+            "isSecret(", "OFFLINE_FILL_NO", "f.kind === 'text'", "f.key !== 'birthday'")),
+        "add a person: Live's page intercepts it": bool(re.search(r"messages__add_to_book.{0,300}'book-form'", app_js, re.S)),
+        "removal: the server rules on their yes": all(x in server_src for x in ('"yes": True', "yes_heard(", "send_gate.is_plain_yes(")),
+        "removal: the server sends screen_confirm": '"screen_confirm"' in stream,
+        "removal: the page handles screen_confirm": "'screen_confirm'" in effects and "screenConfirm(" in effects,
+        "removal: Live waits for the heard yes": "j.yes" in app_js and "confirmPending(" in app_js,
+        "removal: confirmPending is exported": "confirmPending: confirmPending" in screens_js,
+        "removal: confirmPending is not a use_screen action": bool(actions) and "confirm" not in actions.lower(),
+    }
+    return [name for name, ok in checks.items() if not ok]
+
+
+def _d12_voice_sources():
+    return ((ROOT / "server.py").read_text(encoding="utf-8"), (WEB / "app.js").read_text(encoding="utf-8"),
+            (WEB / "screens.js").read_text(encoding="utf-8"))
+
+
 class EverythingOnScreenHasAVoicePath(unittest.TestCase):
     def test_d12_every_field_the_resident_can_change_has_a_voice_path(self):
         index_html, mary_html = _d12_pages()
@@ -456,6 +492,68 @@ class EverythingOnScreenHasAVoicePath(unittest.TestCase):
         self.assertEqual(_d12_unreached(added, mary_html, screens), ["newPick", "newThing"])
         sheet = mary_html.replace('id="memList"', 'id="newList" class="rows"></div><div id="memList"', 1)
         self.assertEqual(_d12_unreached(index_html, sheet, screens), ["newList"])
+
+    def test_d12_the_voice_paths_exist_in_normal_and_offline_not_only_live(self):
+        import send_gate
+        from tests import test_tool_groups as groups
+        self.assertEqual(_d12_voice_gaps(*_d12_voice_sources()), [], "D12/M18b: a voice path is gone. Read docs/decisions.md.")
+        self.dir, self.settings = Path(tempfile.mkdtemp(dir=helpers.TMP)), {}
+        # (a) Normal: the page's one screen tool is in her body (the same dict as Live's), and the page answers its calls
+        memory = mary.Memory(self.dir / "memory.json")
+        tools = mary._body("Hello", memory, None, page_tool=True)["tools"][0]["functionDeclarations"]
+        self.assertIn(next(d for d in mary.LIVE_PAGE_TOOLS if d["name"] == "use_screen"), tools)
+        bare = mary._body("Hello", memory, None).get("tools", [])
+        self.assertNotIn("use_screen", [d["name"] for t in bare for d in t["functionDeclarations"]])
+        spellings = ({"name": "use_screen", "args": {}}, {"name": "messages__add_to_book", "args": {}},
+                     {"name": "use_skill", "args": {"action": "add_to_book"}})
+        self.assertTrue(all(mary._is_page_call(c) for c in spellings))
+        self.assertFalse(mary._is_page_call({"name": "use_skill", "args": {"action": "start"}}))
+        reply = inspect.getsource(mary.reply)
+        self.assertTrue("_is_page_call(call)" in reply and "_page_answer(page, call)" in reply, "reply doesn't route to the page")
+        # (c) add a person in Normal, and (b) Offline's plain phrases, through a page that records what it is asked
+        asked = []
+        page = lambda name, args: asked.append((name, args)) or {"ok": True, "screen": "S", "label": "L"}  # noqa: E731
+        mary._page_answer(page, spellings[1])
+        self.assertEqual(asked, [("open_screen", {"name": "book-form"})])
+        for line, steps in (
+                ("open my address book", [{"action": "open", "name": "book-list"}]),
+                ("open my notes", [{"action": "open", "name": "notes"}]),
+                ("open my info", [{"action": "open", "name": "info"}]),
+                ("add a person", [{"action": "open", "name": "book-form"}]),
+                ("add Sarah to my address book", [{"action": "open", "name": "book-form"},
+                                                  {"action": "fill", "field": "name", "value": "Sarah"}]),
+                ("put hello into the name box", [{"action": "fill", "field": "name", "value": "hello", "offline": True}])):
+            asked.clear()
+            self.assertTrue(mary.offline_screen(line, page), line)
+            self.assertEqual([a for _, a in asked], steps, line)
+        # (d) removal by voice: their own plain yes is a real gate
+        self.assertTrue(send_gate.is_plain_yes("yes"))
+        self.assertFalse(any(send_gate.is_plain_yes(t) for t in ("remove it", "yes?", "no")))
+        # (e) Live's tool count did not grow with all this
+        host = groups.Base.build(self, fakes=[("fake0", 9)])
+        self.assertLessEqual(len(host.gemini_tools()[0]["functionDeclarations"]) + len(mary.LIVE_CORE_TOOLS), 13)
+        self.assertEqual([t["name"] for t in mary.LIVE_PAGE_TOOLS], ["story_more", "end_talk", "use_screen"])
+
+    def test_d12_voice_paths_guard_trips_when_one_is_removed(self):
+        server_src, app_js, screens_js = _d12_voice_sources()
+        self.assertEqual(_d12_voice_gaps(server_src, app_js, screens_js), [])
+
+        def gaps(server=(), app=(), screens=()):
+            texts = [src for src in (server_src, app_js, screens_js)]
+            for i, pairs in enumerate((server, app, screens)):
+                for old, new in pairs:
+                    self.assertIn(old, texts[i])
+                    texts[i] = texts[i].replace(old, new)
+            return _d12_voice_gaps(*texts)
+        self.assertEqual(gaps(server=[("page=screen_page(", "page=None, spare=(")]), ["normal: the server hands the page to Mary"])
+        self.assertEqual(gaps(app=[("'screen_call'", "'screen_cal'")]), ["normal: the page handles screen_call"])
+        self.assertEqual(gaps(app=[("messages__add_to_book", "messages__add")]), ["add a person: Live's page intercepts it"])
+        self.assertEqual(gaps(screens=[("confirmPending: confirmPending", "confirm: confirmPending")]),
+                         ["removal: confirmPending is exported"])
+        self.assertEqual(gaps(screens=[("remove: 'remove_thing' };", "remove: 'remove_thing', confirm: 'confirmPending' };")]),
+                         ["removal: confirmPending is not a use_screen action"])
+        self.assertEqual(gaps(screens=[("(f.kind === 'text' || (f.kind === 'detail' && f.key !== 'birthday'))", "true")]),
+                         ["offline: only plain text boxes are filled"])
 
 
 if __name__ == "__main__":

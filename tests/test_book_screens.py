@@ -242,7 +242,7 @@ class BuiltPageTests(unittest.TestCase):
 BOOK_HARNESS = r"""
 globalThis.window = globalThis;
 const assert = require('assert');
-window.innerHeight = 644;
+window.innerHeight = 682;   // M18b piece 4: 644 plus the 38px the way-in line takes, so a page is still 5 rows
 window.addEventListener = function () {};
 const els = {};
 function el(sel) {

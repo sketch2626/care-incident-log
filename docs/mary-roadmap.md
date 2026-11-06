@@ -6,7 +6,7 @@ Every item still ahead, with Andy's own words kept beside it. Done and dropped i
 1. **M24,** the porch scene, then its build.
 2. **M26,** her brain on the paid model.
 3. **M25,** the porch radio.
-4. **M18b,** opening and filling screens by voice in Normal and Offline.
+4. **M18b,** opening and filling screens by voice in Normal and Offline: done (what still holds is in its section below).
 5. **M15,** messages: M15e-j and a first real email send.
 6. **M27,** speaking up: speak-up S1 onward.
 7. **The pilot** (`docs/pilot-checklist.md`), with M28 (lid to Mary and setup).
@@ -108,9 +108,9 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
 
 ### M18b. Opening and filling screens by voice in Normal and Offline (from M18)
 - **Andy's words** (2026-11-01): "She should definitely be able to open anything by voice, period, anything. And also, there's no reason why Mary can't fill in your email address, too, or read it. She just doesn't need to save it anywhere that it can be picked up and published somehow. But emails are one of the harder things for an older person to type."
-- **Today** opening and filling work in Live only. Normal needs them as server effects, with a page round trip to look at the screen and copy their words. Offline matches exact phrases, so it could open screens but not fill them. Until then, D12 holds fully only in Live.
-- **The address book has no Add button** (Andy's round 10 call), so people can be added only in a Live talk. M18b opens that to Normal and Offline, and a typing helper needs a way in too.
-- **To watch:** Live carries 13 tools, one over Andy's M13b limit of about 12 (all screen actions share one tool). Check that her tool picks hold on real Live.
+- **Done:** Normal opens screens and fills them through the page (Live's one `use_screen` tool and a page round trip). Offline opens screens and fills plain text boxes by plain phrases, never a choice, switch, birthday or secret. A person is added by voice in every mode (the book has no Add button, Andy's round 10 call), and a typing helper has a way in from the book list. Removing by voice asks "are you sure?" first, and only the resident's own plain yes removes it. D12 holds in every mode, guarded by `test_d12_the_voice_paths_exist_in_normal_and_offline_not_only_live`.
+- **Still holds:** Live carries 13 tools, one over Andy's M13b limit of about 12 (all screen actions share one tool).
+- **To watch:** check her tool picks on real Live and real Normal. Untested with a real model.
 
 ### M15. Messages and cards for family: what's left (Andy, 2026-10-31)
 - **Andy's words:** "Mary says, I see that it's your son's birthday coming up next week. Would you like for me to help you make him a card that we can send to him? On his phone…" And: "will you please help me send a message to my grandson?"

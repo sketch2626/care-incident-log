@@ -1225,7 +1225,8 @@ LIVE_PAGE_TOOLS = [
                      "copy their own words into Your words, exactly as they said them (you can't give it any words). "
                      "go_back = go back to you, the same as tapping you. read_incidents = read back what they saved, only "
                      "when they ask; it works on any screen, and when and category narrow it. remove = on their plain word, "
-                     "clear the box in field, or with when or category remove that saved note; then say what went. "
+                     "clear the box in field; a saved note (when or category) or their email account first asks them "
+                     "'are you sure?' naming what would go, and only their yes removes it. "
                      "open with name write and when or category opens that saved note to change."),
      "parameters": {"type": "object", "properties": {
          "action": {"type": "string", "description": "One of: look, open, explain, fill, put_back, their_words, go_back, read_incidents, remove."},
@@ -1529,7 +1530,7 @@ def _app_facts_text(companion):  # M9b
         return ""
 
 
-def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line="", told=""):  # M4d: safety_line
+def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety_line="", told="", page_tool=False):  # M4d: safety_line; M18b: page_tool
     system = system_text(memory, companion)
     # --- skills hook (M13) --- an emergency line gets no skills at all
     tools = []
@@ -1564,6 +1565,9 @@ def _body(text, memory, kind, companion="mary", skills=None, screen=None, safety
             system += reminder_note(memory, can_make_cards(skills))
     if not kind and getattr(memory, "store", None) is not None:  # M9c: one functionDeclarations entry, shared with the skills
         tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + MEMORY_TOOLS}]
+    if page_tool and not kind:  # M18b: the page is connected, so Normal gets Live's one screen tool (the same dict)
+        screen_tool = next(d for d in LIVE_PAGE_TOOLS if d["name"] == "use_screen")
+        tools = [{"functionDeclarations": [d for t in tools for d in t["functionDeclarations"]] + [screen_tool]}]
     # M4a: her scripted hello is her turn too, so a talk may start with hers, or follow her last line of the talk before
     contents = []
     for t in memory.recent:
@@ -1850,9 +1854,121 @@ def _gate_call(skills, name, *args):  # M15c
         return None
 
 
+def _is_page_call(call):  # M18b
+    """A tool call the page answers: use_screen, or add-a-person in either spelling (as web/mary/app.js does in Live)."""
+    name, args = call.get("name"), call.get("args")
+    return name in ("use_screen", "messages__add_to_book") or (
+        name == "use_skill" and isinstance(args, dict) and args.get("action") == "add_to_book")
+
+
+def _page_answer(page, call):  # M18b
+    """The page's answer to one call, or {"ok": False} when the page raises or answers with anything but a dict. It goes
+    to the model only: never to memory, history or a log."""
+    name, args = call.get("name"), call.get("args")
+    if name != "use_screen":  # add a person: a blank person form opens
+        name, args = "open_screen", {"name": "book-form"}
+    try:
+        got = page(name, args if isinstance(args, dict) else {})
+    except Exception:  # noqa: BLE001 (a page that fails fails the call, never the talk)
+        return {"ok": False}
+    return got if isinstance(got, dict) else {"ok": False}
+
+
+# M18b piece 3: with no model answer (no key, or it failed) a few plain phrases still open and fill screens through the
+# page. Whole line and strict, like the recall phrase above; anything else is not guessed. The answer is a screen notice,
+# never speech (D1), and it names the screen or the box and never what was typed in it.
+SCREEN_OPENED_TEXT = "Opened {}."
+SCREEN_BACK_TEXT = "Back to your own screen."
+SCREEN_FILLED_TEXT = 'Typed it into "{}". Nothing is saved yet.'
+_SCREEN_LEAD = r"(?:(?:hey|please|mary|sam|(?:can|could|would|will)\s+you)[\s,.!]+)*"
+_NAME_WORD = r"[^\W\d_][\w'’-]*"
+_BOOK_TAIL = r"\s+to\s+(?:my|the|our|your)\s+(?:address\s+)?book"
+_OFFLINE_BACK = re.compile(rf"{_SCREEN_LEAD}(?:go back(?:\s+to\s+(?:you|mary|sam))?|back to (?:you|mary|sam)){_ONLY_TAIL}", _I)
+_OFFLINE_OPEN = re.compile(rf"{_SCREEN_LEAD}(?:open(?:\s+up)?|show(?:\s+me)?|go to|take me to)\s+(?P<what>[^,.!?]+){_ONLY_TAIL}", _I)
+_OFFLINE_ADD_ONE = re.compile(rf"{_SCREEN_LEAD}add\s+(?:a\s+(?:new\s+)?(?:person|contact|friend)|someone|somebody)"
+                              rf"(?:{_BOOK_TAIL})?{_ONLY_TAIL}", _I)
+_OFFLINE_ADD = re.compile(rf"{_SCREEN_LEAD}add\s+(?P<who>{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,3}}){_BOOK_TAIL}{_ONLY_TAIL}", _I)
+_OFFLINE_FILL = re.compile(rf"{_SCREEN_LEAD}(?:put|type|enter|write)\s+(?P<value>.{{1,300}})\s+(?:in|into)\s+"
+                           rf"(?:her|his|their|the|my)\s+(?P<field>[^,.!?]+?){_ONLY_TAIL}", _I)
+_NOT_A_NAME = {"my", "the", "our", "her", "his", "their", "a", "an", "some", "and", "or"}
+# what a resident calls a screen (after "my" or "the") -> the name in LIVE_SCREEN_NAMES and its plain name. Only words
+# that mean one screen; a word that could mean two is left out.
+_OFFLINE_SCREEN_WORDS = (
+    ("book-list", "Address book", ("address book", "contacts")),
+    ("notes", "My notes", ("notes",)),
+    ("list", "What I've written down", ("saved notes", "written notes", "what ive written down", "what i wrote down")),
+    ("info", "My info", ("info", "information")),
+    ("write", "Write something down", ("write something down", "a note", "a new note", "new note")),
+    ("report", "Make a report", ("report", "reports", "a report", "make a report")),
+    ("email", "Connect email", ("email", "e-mail", "connect email", "email settings", "email setup", "set up email")),
+    ("games", "Games", ("games",)),
+    ("things", "Things I can do", ("things i can do", "things you can do", "what you can do", "what i can do")),
+    ("choose", "Choose Mary or Sam", ("mary or sam", "choose mary or sam")),
+    ("inbox", "From Andy Flow", ("andy flow", "from andy flow", "andy flow inbox")),
+)
+_OFFLINE_SCREENS = {word: (name, label) for name, label, words in _OFFLINE_SCREEN_WORDS for word in words}
+
+
+def offline_screen(text, page):  # M18b
+    """None when the line is not one of the plain screen phrases (so ordinary offline talk is untouched). Otherwise it
+    runs the phrase through page(name, args) and returns the page's last answer dict plus "notice", the plain screen
+    line to show: the screen or box named, never the value, or the page's own refusal. Never speech (D1)."""
+    line = " ".join(str(text or "").split())
+    if page is None or not line:
+        return None
+    steps = None  # (kind, args, fallback name)
+    if _OFFLINE_BACK.fullmatch(line):
+        steps = [("back", {"action": "go_back"}, "")]
+    else:
+        add = _OFFLINE_ADD_ONE.fullmatch(line)
+        who = _OFFLINE_ADD.fullmatch(line) if not add else None
+        if add or who:  # add a person: the blank form, and a name only when one was said
+            steps = [("open", {"action": "open", "name": "book-form"}, "Address book form")]
+            name = who.group("who").strip() if who else ""
+            if name and not any(w.lower() in _NOT_A_NAME for w in name.split()):
+                steps.append(("fill", {"action": "fill", "field": "name", "value": name}, "Name"))
+    if steps is None:
+        opened = _OFFLINE_OPEN.fullmatch(line)
+        word = " ".join(re.sub(r"[’']", "", opened.group("what").lower()).split()) if opened else ""
+        word = re.sub(r"^(?:the|my|our|your)\s+", "", word)  # "the address book", "my notes"
+        while word not in _OFFLINE_SCREENS:  # "...address book screen", "...notes please": whole phrase first
+            shorter = re.sub(r"\s+(?:please|mary|sam|screen|page)$", "", word)
+            if shorter == word:
+                break
+            word = shorter
+        if word in _OFFLINE_SCREENS:
+            name, label = _OFFLINE_SCREENS[word]
+            steps = [("open", {"action": "open", "name": name}, label)]
+    if steps is None:
+        fill = _OFFLINE_FILL.fullmatch(line)
+        field = re.sub(r"\s+(?:box|field)$", "", fill.group("field").strip(), flags=_I) if fill else ""
+        if field:
+            steps = [("fill", {"action": "fill", "field": field, "value": fill.group("value").strip(), "offline": True}, field)]
+    if steps is None:
+        return None
+    notices, answer = [], {"ok": False}
+    for kind, args, fallback in steps:
+        answer = _page_answer(page, {"name": "use_screen", "args": args})
+        if answer.get("ok") is not True:  # the page's own plain refusal, as it said it
+            say = answer.get("say")
+            notices.append(say.strip() if isinstance(say, str) and say.strip() else NOT_WORKING_TEXT)
+            break
+        name = answer.get("screen" if kind == "open" else "label")
+        name = " ".join(name.split())[:60].rstrip("?") if isinstance(name, str) and name.strip() else fallback
+        notices.append(SCREEN_BACK_TEXT if kind == "back" else
+                       (SCREEN_OPENED_TEXT if kind == "open" else SCREEN_FILLED_TEXT).format(name))
+    return dict(answer, notice=" ".join(notices))
+
+
 def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on_mood=None, write=None,
-          skills=None, screen=None, on_effect=None, typed=False):
+          skills=None, screen=None, on_effect=None, typed=False, page=None, app_told=""):
     """Mary's answer to what the resident said.
+
+    app_told (M18b piece 5): what the app just did on the resident's own yes (a removal), for her to say in her own words
+    like any app outcome (notice if no model). Ignored in an emergency; it also stands in for an offer's or a forget's yes.
+
+    page (M18b): a blocking callable page(name, args) -> dict, the page's screen tool in Normal talk. Given, and not an
+    emergency, she gets use_screen; its answer goes to the model only, never to memory, history or a log.
 
     typed (M9c): they typed this, so a fact from it is saved with source "typed".
     Returns {text, notice, steps, mood, emergency, gemini_alert, offer, logged, remembered, error, effects, first_words_s,
@@ -1882,7 +1998,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     first_words_s = None
     mood = None
     gemini_mood_seen = gemini_alert = streamed = False
-    notice = told = ""  # M21a: notice = on-screen words never spoken; told = what the app did, for her to say
+    notice = ""  # M21a: notice = on-screen words never spoken
+    told = str(app_told or "").strip()  # M21a: told = what the app did, for her to say
     if companion not in COMPANIONS:
         companion = "mary"
     store = getattr(memory, "store", None)  # M9c
@@ -1949,12 +2066,15 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     kind = is_emergency(text)
     gated = None  # M15c: the send gate's answer when it takes this turn. The emergency check stays first
     if kind:
+        told = ""  # M18b: nothing but the emergency
         _gate_call(skills, "send_emergency")
     else:
         gated = _gate_call(skills, "resident_said", text)
         gated = gated if isinstance(gated, dict) and gated.get("skip_brain") else None
-    said_yes = bool(prior) and is_yes(text) and not gated
+    said_yes = bool(prior) and is_yes(text) and not gated and not told  # M18b: told = that yes went to a removal
     waiting = _forget_waiting(memory.pending_forget) if store is not None else None  # M9c
+    if told and waiting:
+        memory.pending_forget = waiting = None  # the yes was not for this: it drops, as any other answer does
     field = waiting.get("field", "") if waiting else ""  # M19: their answer to "the email or the mailing address?"
     fields = _fields_said(text) if field else []
     forget_yes = bool(waiting) and not kind and not said_yes and not gated and (bool(fields) if field else _forget_yes(text))
@@ -1966,7 +2086,9 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
         safety_line = emergency_text(kind, memory, text)  # M4d: goes to the screen as steps; she says them herself
         if said_yes:
             memory.pending_offer = prior  # the emergency comes first; the offer waits one more turn
-    confirmed = said_yes and not kind and write is not None
+    elif told:
+        set_mood("talking")  # M18b: the app's outcome (a removal) sets the mood, as the other outcomes do
+    confirmed =said_yes and not kind and write is not None
     logged = None
     offer = None
     if confirmed or forget_yes or gated or (kind and said_yes):  # M9c: forget_yes  # M15c: gated
@@ -2014,7 +2136,8 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
     if api_key and (told or not (gated or confirmed or forget_yes)):  # M21a: an app outcome goes through the model too
         raw = ""
         stream = _ReplyStream(speak, take_mood)
-        body = _body(text, memory, kind, companion, skills, screen, safety_line, told)  # --- skills hook (M13) ---
+        body = _body(text, memory, kind, companion, skills, screen, safety_line, told,
+                     page_tool=page is not None)  # --- skills hook (M13) --- M18b: page_tool
         try:
             while True:  # --- skills hook (M13) --- one pass per tool round
                 calls, said = [], ""
@@ -2026,14 +2149,17 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
                     said += chunk
                     stream.feed(chunk)
                 # --- skills hook (M13) --- run her tool calls, then ask again with their answers
-                if not calls or (skills is None and store is None) or kind or rounds >= MAX_TOOL_ROUNDS:  # M9c: store too
+                if (not calls or (skills is None and store is None and page is None) or kind
+                        or rounds >= MAX_TOOL_ROUNDS):  # M9c: store too; M18b: page too
                     break
                 rounds += 1
                 answers = []
                 for part in calls:
                     call = part.get("functionCall") or {}
                     name_dropped = name_dropped or call.get("name") == "forget_name"  # M9c
-                    if store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
+                    if page is not None and _is_page_call(call):  # M18b: the page answers; mirrors web/mary/app.js (Live)
+                        result = {"response": _page_answer(page, call), "effects": [], "say": None}
+                    elif store is not None and call.get("name") in MEMORY_TOOL_NAMES:  # M9c
                         result = memory_tool(memory, call.get("name"), call.get("args"), offer_waiting=bool(prior))
                     elif skills is not None:
                         result = skills.call(call.get("name"), call.get("args"), heard=text, screen=screen)  # M13b: screen  # M4c: heard
@@ -2103,6 +2229,17 @@ def reply(text, memory, api_key="", model="", on_text=None, companion="mary", on
             if not api_key:
                 error = NO_KEY
     # --- end skills hook ---
+
+    # M18b: no Gemini: a plain phrase can still open or fill a screen through the page. A screen notice, never speech (D1)
+    if (page is not None and not gated and not has_words() and not kind and not rounds and error in ("", NO_GEMINI)
+            and not (prior and (said_yes or is_decline(text)))):
+        shown = offline_screen(text, page)
+        if shown is not None:
+            gemini_alert = False
+            set_mood("talking")  # also keeps the no-key screen from replacing the notice (web/mary/app.js finishReply)
+            show(shown["notice"])
+            if not api_key:
+                error = NO_KEY
 
     # M9c: no Gemini: a few exact phrases still reach her memory
     if (store is not None and not gated and not has_words() and not kind and not rounds and error in ("", NO_GEMINI)

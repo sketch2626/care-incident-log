@@ -153,6 +153,28 @@ def is_plain_save(text):
     return ("?" not in mark or asked) and re.fullmatch(rf"(?:{_SAVE_BEFORE} )*save {_SAVE_WHAT}(?: {after})?", words) is not None
 
 
+_YES_S = r"(?:yes|yeah|yep|yup|sure)"
+_YES_F = r"(?:please|now|then|and|just|thanks|thank you|mary|sam|okay|ok|alright)"
+_YES_GO = r"(?:go ahead and do it|go ahead|do it)"
+_YES_REMOVE = r"(?:remove|delete|disconnect) (?:it|that|this)"
+_YES_SF = rf"(?:{_YES_S}|{_YES_F})"
+_YES_RE = re.compile(
+    rf"(?:{_YES_F} )*{_YES_S}(?: {_YES_SF})*"                                # yes, yes please, yeah Mary
+    rf"|(?:{_YES_SF} )*{_YES_GO}(?: {_YES_SF})*"                             # go ahead, okay do it
+    rf"|(?:{_YES_F} )*{_YES_S}(?: {_YES_SF})* {_YES_REMOVE}(?: {_YES_SF})*")  # yes remove it (a plain "remove it" is an order, not a yes)
+
+
+def is_plain_yes(text):  # D12, M18b piece 5
+    """True when the words are the resident's own plain yes to "are you sure?" before a removal, and nothing less. Built
+    like is_plain_save: any negative, delay or question mark anywhere refuses the whole line, and every word must fit.
+    "okay" alone, "remove it" alone and anything with more in it are not a yes. Only the server's ruling on the
+    resident's own words reaches the page; the model can never make one."""
+    lower = _lower(text)
+    if "?" in lower or _NOT_PLAIN_RE.search(lower) or len(_words(lower)) > PLAIN_WORDS_MAX:
+        return False
+    return _YES_RE.fullmatch(" ".join(_words(lower))) is not None
+
+
 _ORDER_OFF_RE = re.compile(r"\b(?:(?:turn|switch|shut|put|set)\b.*\boff|disable)\b")
 _ORDER_ON_RE = re.compile(r"\b(?:(?:turn|switch|put|set)\b.*\bon|enable|connect)\b")
 _ORDER_SET_RE = re.compile(r"\b(?:use|switch to|change to|change|pick|go with|make it|set|talk to|i want)\b")

@@ -428,11 +428,14 @@ class RemoveBoxTests(unittest.TestCase):
           const mk2 = (order, st) => { const w = world(order); w.calls = 0;
             w.page.defaultView.maryActs = { disconnectMail() { w.calls++; return Promise.resolve(st || { connected: false }); } }; return w; };
           const a = mk2(ORDER('remove', 'disconnect my email'));
-          const r = await MaryScreens.run('remove_thing', { field: 'mailDisconnect' }, a.env);
+          const asked = await MaryScreens.run('remove_thing', { field: 'mailDisconnect' }, a.env);   // M18b piece 5: the order only asks
+          assert.strictEqual(asked.ok, true, JSON.stringify(asked)); assert.strictEqual(asked.asked, true); assert.strictEqual(a.calls, 0);
+          const r = await MaryScreens.confirmPending(a.env);   // their own yes does it
           assert.strictEqual(r.ok, true, JSON.stringify(r)); assert.strictEqual(r.removed, true); assert.strictEqual(a.calls, 1);
           assert(/disconnected/.test(r.note));
           const f = mk2(ORDER('remove', 'disconnect my email'));   // a fill of the button is the same path
-          assert.strictEqual((await fill(f, 'mailDisconnect', 'x')).ok, true); assert.strictEqual(f.calls, 1);
+          assert.strictEqual((await fill(f, 'mailDisconnect', 'x')).asked, true); assert.strictEqual(f.calls, 0);
+          assert.strictEqual((await MaryScreens.confirmPending(f.env)).ok, true); assert.strictEqual(f.calls, 1);
           const n = mk2(null);
           const none = await fill(n, 'mailDisconnect', 'x');
           assert.strictEqual(none.ok, false); assert(none.say.startsWith('Tell me plainly what to remove'), none.say); assert.strictEqual(n.calls, 0);
@@ -464,7 +467,10 @@ class RemoveNoteTests(unittest.TestCase):
     def test_one_match_goes_and_the_answer_holds_no_id(self):
         self.check(r"""
           const w = notes(ORDER('remove', 'remove that note'));
-          const r = await rm(w, { when: '2026-10-05' });
+          const asked = await rm(w, { when: '2026-10-05' });   // M18b piece 5: the order only asks "are you sure?"
+          assert.strictEqual(asked.ok, true, JSON.stringify(asked)); assert.strictEqual(asked.asked, true);
+          assert.deepStrictEqual(w.removed, []); assert.strictEqual(w.changed, 0);
+          const r = await MaryScreens.confirmPending(w.env);   // their own yes does it
           assert.strictEqual(r.ok, true, JSON.stringify(r));
           assert.deepStrictEqual(w.removed, [12]); assert.strictEqual(w.changed, 1);
           assert.deepStrictEqual(r.removed, { date: '2026-10-05', category: 'No one answered my call light', words: 'no one came' });

@@ -8,7 +8,7 @@ const BOOK_SHUT = {
   locked: "Your address book is locked. A helper's copy can open it.",
   failed: "Your address book didn't open just now.",
 };
-const BOOK_ROW = 92, BOOK_ROW_ROOM = 168, BOOK_ROWS_LEAST = 3;   // 84 tall and 8 between; the room above and below them
+const BOOK_ROW = 92, BOOK_ROW_ROOM = 206, BOOK_ROWS_LEAST = 3;   // 84 tall and 8 between; the room above and below them (and the way-in line, 30 and 8)
 
 // state: '' while loading, 'open', 'locked' or 'failed'. mode: 'add', 'change' or 'helper'.
 const Bk = { state: '', people: [], count: 0, top: 0, end: false, ticket: 0, forget: '', mode: 'add', id: '', clean: '', busy: false,

@@ -1,0 +1,145 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mary mock-up 2</title>
+<style>
+  html,body{margin:0;width:1920px;height:1080px;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;color:#F6F1E7;
+    background:
+      radial-gradient(ellipse 900px 700px at 74% 50%, rgba(227,165,72,.13), rgba(227,165,72,0) 70%),
+      radial-gradient(ellipse 1400px 1000px at 35% 45%, #1A2440 0%, #101729 55%, #0A0F1C 100%)}
+  /* the porch, pushed back and turned a little toward the new screen */
+  .porch-wrap{position:absolute;left:-30px;top:0;width:1320px;height:1080px;perspective:1700px;perspective-origin:20% 50%}
+  .porch{position:absolute;left:0;top:124px;width:1320px;height:825px;object-fit:cover;
+    transform:rotateY(11deg) scale(.9);transform-origin:left center;
+    -webkit-mask-image:linear-gradient(to right,#000 0%,#000 58%,rgba(0,0,0,.55) 78%,transparent 97%),
+                       linear-gradient(to bottom,transparent 0%,#000 9%,#000 88%,transparent 100%);
+    -webkit-mask-composite:source-in;mask-composite:intersect;filter:saturate(1.05)}
+  .cap{position:absolute;left:64px;bottom:64px;width:980px;box-sizing:border-box;padding:22px 32px;border-radius:20px;
+    background:rgba(10,15,28,.86);border-left:6px solid #E3A548;color:#F6F1E7;font-size:35px;line-height:1.35;font-weight:600;
+    box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .side{position:absolute;left:1070px;top:40px;width:800px;height:1000px;display:flex;flex-direction:column;justify-content:center;gap:26px}
+  .top{display:flex;align-items:center;justify-content:space-between;height:84px}
+  .title{font-size:54px;font-weight:700;color:#F6F1E7;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+  .back{background:#F6F1E7;color:#1F1B16;font-size:28px;font-weight:700;padding:0 28px;height:76px;line-height:76px;border-radius:18px;
+    box-shadow:0 6px 18px rgba(0,0,0,.4)}
+  .sheet{background:#FBF6EA;color:#1F1B16;border-radius:22px;box-shadow:0 30px 70px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06),0 0 90px rgba(227,165,72,.18)}
+  .btns{display:flex;gap:18px;margin-top:auto}
+  .btn{flex:1;height:80px;line-height:80px;text-align:center;border-radius:18px;background:#E3A548;color:#1F1B16;font-size:30px;font-weight:700}
+  .btn.alt{background:transparent;color:#F6F1E7;border:3px solid rgba(246,241,231,.75);line-height:74px}
+  .say{font-size:28px;color:#D8D1C2}
+  .say b{color:#F3C969;font-weight:700}
+  /* word search */
+  .row{display:flex;gap:30px;align-items:flex-start}
+  .grid{position:relative;display:grid;padding:16px;border-radius:22px}
+  .grid div{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:36px;color:#1F1B16;position:relative}
+  .grid svg{position:absolute;left:16px;top:16px}
+  .words{display:flex;flex-direction:column;gap:14px;font-size:32px;font-weight:700;padding-top:10px}
+  .words .got{color:rgba(246,241,231,.45);text-decoration:line-through;text-decoration-thickness:3px}
+  /* checkers */
+  .board{align-self:flex-start;display:grid;grid-template-columns:repeat(8,74px);grid-template-rows:repeat(8,74px);border:10px solid #4A2E1B;border-radius:12px;
+    box-shadow:0 30px 70px rgba(0,0,0,.6),0 0 90px rgba(227,165,72,.16)}
+  .sq{display:flex;align-items:center;justify-content:center}
+  .lt{background:#EAD9B5}.dk{background:#7A4A2B}
+  .pc{width:58px;height:58px;border-radius:50%;box-shadow:inset 0 -6px 0 rgba(0,0,0,.35),0 4px 8px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;color:#F3C969;font-size:28px}
+  .red{background:radial-gradient(circle at 40% 35%,#D9564A,#A2281F)}
+  .blk{background:radial-gradient(circle at 40% 35%,#4A433E,#1C1816)}
+  .last{box-shadow:inset 0 0 0 6px #F3C969}
+  /* card */
+  .cardrow{display:flex;gap:34px;align-items:flex-start}
+  .card{width:400px;height:560px;border-radius:8px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.6),0 0 90px rgba(227,165,72,.18)}
+  .card img{width:400px;height:560px;display:block}
+  .inside{flex:1;font-family:Georgia,serif;font-style:italic;font-size:32px;line-height:1.45;color:#F6F1E7}
+  .inside .lab{font-style:normal;font-family:"Segoe UI",sans-serif;font-size:26px;font-weight:700;color:#F3C969;display:block;margin-bottom:10px}
+  /* care notes */
+  .warn{display:flex;gap:22px;align-items:flex-start;background:rgba(227,165,72,.16);border:3px solid #E3A548;border-radius:20px;padding:22px 26px}
+  .warn .dot{flex:none;width:52px;height:52px;border-radius:50%;background:#E3A548;color:#1F1B16;font-size:36px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .warn p{margin:0;font-size:27px;line-height:1.35;color:#F6F1E7}
+  .warn p b{color:#F3C969}
+  .notes{padding:14px 30px;display:flex;flex-direction:column}
+  .cat{display:grid;grid-template-columns:30px 1fr 170px 44px;align-items:center;gap:14px;height:56px;border-bottom:2px solid #E7DCC6;font-size:28px;font-weight:700}
+  .cat:last-child{border-bottom:none}
+  .cat .chev{font-size:24px;color:#7A7062}
+  .bar{height:18px;border-radius:9px;background:#EFE5D2;overflow:hidden}
+  .bar i{display:block;height:100%;background:#C9822A;border-radius:9px}
+  .cat .n{text-align:right;font-size:32px}
+  .ent{display:grid;grid-template-columns:30px 200px 1fr;gap:12px;padding:8px 0;border-bottom:2px solid #E7DCC6;font-size:24px;line-height:1.3}
+  .ent .d{color:#7A7062;font-weight:600}
+  .ent .w{font-family:Georgia,serif;font-style:italic;color:#2A251F}
+</style></head>
+<body>
+<div class="porch-wrap"><img class="porch" src="porch-point.png" alt=""></div>
+<div class="cap" id="cap"></div>
+<div class="side"><div class="top"><div class="title" id="title"></div><div class="back">Back to Mary</div></div>
+<div id="body" style="display:flex;flex-direction:column;gap:26px"></div></div>
+<script>
+const PUZZLE = {"grid": ["PMCPMTVJY", "BTUUIAGCR", "TECKNCICE", "UXAWNKJRE", "TSTEOLAEL", "PLFBWEPEI", "VUIDWGVKP", "JRSWQBASS", "JEHBOBBER"], "placed": [{"word": "CATFISH", "cells": [[2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [8, 2]]}, {"word": "BOBBER", "cells": [[8, 3], [8, 4], [8, 5], [8, 6], [8, 7], [8, 8]]}, {"word": "CREEK", "cells": [[2, 7], [3, 7], [4, 7], [5, 7], [6, 7]]}, {"word": "TACKLE", "cells": [[0, 5], [1, 5], [2, 5], [3, 5], [4, 5], [5, 5]]}, {"word": "MINNOW", "cells": [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4], [5, 4]]}, {"word": "BASS", "cells": [[7, 5], [7, 6], [7, 7], [7, 8]]}, {"word": "REEL", "cells": [[1, 8], [2, 8], [3, 8], [4, 8]]}, {"word": "LURE", "cells": [[5, 1], [6, 1], [7, 1], [8, 1]]}], "size": 9, "diagonal": false, "backward": false};
+const scene = new URLSearchParams(location.search).get('scene') || 'search';
+const $ = id => document.getElementById(id);
+const S = {
+  search() {
+    $('title').textContent = 'Fishing';
+    $('cap').textContent = 'That’s three. The next one’s hiding along the bottom row.';
+    const n = PUZZLE.size, cell = 66, got = ['CATFISH', 'CREEK', 'TACKLE'];
+    const g = document.createElement('div'); g.className = 'grid sheet';
+    g.style.gridTemplateColumns = `repeat(${n},${cell}px)`; g.style.gridTemplateRows = `repeat(${n},${cell}px)`;
+    const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', n * cell); svg.setAttribute('height', n * cell);
+    for (const p of PUZZLE.placed.filter(p => got.includes(p.word))) {
+      const a = p.cells[0], b = p.cells[p.cells.length - 1], l = document.createElementNS(ns, 'line');
+      l.setAttribute('x1', a[1] * cell + cell / 2); l.setAttribute('y1', a[0] * cell + cell / 2);
+      l.setAttribute('x2', b[1] * cell + cell / 2); l.setAttribute('y2', b[0] * cell + cell / 2);
+      l.setAttribute('stroke', 'rgba(227,165,72,.55)'); l.setAttribute('stroke-width', cell * .8); l.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(l);
+    }
+    g.appendChild(svg);
+    PUZZLE.grid.forEach(r => [...r].forEach(ch => { const d = document.createElement('div'); d.textContent = ch; g.appendChild(d); }));
+    const w = document.createElement('div'); w.className = 'words';
+    PUZZLE.placed.forEach(p => { const s = document.createElement('div'); s.textContent = p.word; if (got.includes(p.word)) s.className = 'got'; w.appendChild(s); });
+    const row = document.createElement('div'); row.className = 'row'; row.append(g, w);
+    const say = document.createElement('div'); say.className = 'say'; say.innerHTML = 'Say <b>“give me a hint”</b> or <b>“bigger letters.”</b>';
+    $('body').append(row, say);
+  },
+  checkers() {
+    $('title').textContent = 'Checkers';
+    $('cap').textContent = 'Your move. I’d keep an eye on that back corner if I were you.';
+    const pos = {'0,1':'b','0,5':'b','0,7':'b','1,0':'b','1,4':'b','2,3':'b','2,5':'B',
+      '3,2':'r','4,5':'r','5,0':'r','5,4':'r','5,6':'r','6,1':'r','6,7':'r','7,2':'R','7,6':'r'};
+    const b = document.createElement('div'); b.className = 'board';
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const sq = document.createElement('div'); sq.className = 'sq ' + ((r + c) % 2 ? 'dk' : 'lt');
+      if (r === 2 && c === 5) sq.classList.add('last');
+      const k = pos[`${r},${c}`];
+      if (k) { const pc = document.createElement('div'); pc.className = 'pc ' + (k.toLowerCase() === 'r' ? 'red' : 'blk');
+        if (k === 'R' || k === 'B') pc.textContent = '♛'; sq.appendChild(pc); }
+      b.appendChild(sq);
+    }
+    const say = document.createElement('div'); say.className = 'say';
+    say.innerHTML = 'You’re red. Say <b>“jump her king”</b> or just tap a piece.';
+    $('body').append(b, say);
+  },
+  card() {
+    $('title').textContent = 'For Tyler’s birthday';
+    $('cap').textContent = 'Here’s the lake one, with your words inside. Want me to read it back to you?';
+    $('body').innerHTML = '<div class="cardrow"><div class="card"><img src="../../../skills/messages/assets/fronts/lake.svg" alt=""></div>' +
+      '<div class="inside"><span class="lab">Inside, in your words</span>Tyler, happy 12th birthday. This summer we’re going fishing, just you and me.<br><br>Love, Grandpa</div></div>' +
+      '<div class="say">Say <b>“print it”</b> or <b>“change the words.”</b></div>';
+  },
+  notes() {
+    $('title').textContent = 'My care notes';
+    $('cap').textContent = 'That’s four times now with the call light. If you want, I can help you take it to the ombudsman and the state.';
+    const cats = [['No one answered my call light', 4, true], ['I wasn’t turned or moved', 1], ['My medicine was late', 1],
+                  ['My meal was late or missed', 1], ['I didn’t get my bath', 1], ['I fell or wasn’t safe', 1]];
+    const ents = [['Nov 3, 8:10 pm', 'Waited 70 minutes. One aide on the hall.'],
+                  ['Oct 24, 6:50 pm', 'Ignored for over an hour at shift change.'],
+                  ['Oct 13, 3:10 am', 'Needed a brief change. Help came at 4:05.'],
+                  ['Oct 6, 9:40 pm', 'Nobody came for 55 minutes.']];
+    let h = '<div class="warn"><div class="dot">!</div><p><b>Still happening.</b> We’ve already raised this with the director of nursing, and then the administrator, and it’s still happening. It may be time to raise it with the ombudsman and the state.</p></div>';
+    h += '<div class="notes sheet">';
+    cats.forEach(([name, n, open], i) => {
+      h += `<div class="cat"><span class="chev">${open ? '▼' : '▶'}</span><span>${name}</span><span class="bar"><i style="width:${n / 4 * 100}%"></i></span><span class="n">${n}</span></div>`;
+      if (open) ents.forEach(([d, w]) => { h += `<div class="ent"><span></span><span class="d">${d}</span><span class="w">“${w}”</span></div>`; });
+    });
+    h += '</div><div class="say">Say <b>“read me the call light ones”</b> to hear them all.</div>';
+    $('body').innerHTML = h;
+  },
+};
+S[scene]();
+</script></body></html>

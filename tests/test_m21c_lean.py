@@ -14,10 +14,11 @@ FACTS = {"voice_now": "builtin", "picked_voice": "", "talk_mode": "handsfree", "
 
 # sha256 of the full-brain prompts (fixed FACTS, empty memory, hello). Repinned for D12 (Andy, 2026-11-02): one line, switches, How bad and deleting go by their word.
 # Repinned for M18b: one app-fact line in "Working on their screens" now reads "You may have one screen tool" (true in Normal too), shorter than before.
-PINNED = {("mary", "normal"): "b8c32db16d009d888da43da7cd2ab6b709c2e6f07fe4a1f9a7c938c9e445d042",
-          ("mary", "live"): "785dcfb8f28caec50c9b733ff752c02fc9ed93d3274988927f33eca897b3bd09",
-          ("him", "normal"): "cc8c86b47f3c972abf04627a2673da5a217bca17e4457fb7ca553103f334f368",
-          ("him", "live"): "760c3da170462b4d886bff907f4922f4e46a3fd787d7de801e841b145b16eecd"}
+# Repinned 2026-11-06: tic-tac-toe is dropped (Andy), so the games line reads "Cards and crosswords are coming soon", shorter than before.
+PINNED = {("mary", "normal"): "128e228b81b1ba46f8676383573fc63912930e57becf0bfb8b0869a1ee2c6473",
+          ("mary", "live"): "6d32ed630ba05da312c89320e321dcde079fee8064a931e631c0c1fc587aa5e2",
+          ("him", "normal"): "8a1b7a85649045218aebf2d2723c9758da8d2143e2913925675fab2a2681ca76",
+          ("him", "live"): "699179d764a18670b097fba929163488ed955eee4a545f304c400a5fd8c40850"}
 
 
 def _memory():

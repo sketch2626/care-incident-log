@@ -80,10 +80,10 @@
       }
     },
     {
-      "id": "app-tic-tac-toe",
-      "note": "Tic-tac-toe isn't built: coming soon, offers a talking game",
+      "id": "app-solitaire",
+      "note": "Solitaire isn't built: coming soon, offers a talking game",
       "turns": [
-        "Let's play tic-tac-toe."
+        "Let's play solitaire."
       ],
       "companion": "mary",
       "checks": {

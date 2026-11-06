@@ -60,7 +60,7 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
   - **Her face:** "I'm still pretty sure we're going to redo her entire face." The hub suggests its own round, with three faces shown side by side on the same body and light.
   - **What matters most:** "as long as we can get that stuff right and we can get it pushed in on her right and we get her face a little better, as long as her conversations are good, then everything else can be overlooked… a lot of these older people… won't really even notice it." Framing, her face and how she talks come first. Scenery polish stops there.
   - **Her side fades into the screens' side,** and the panels for games, pictures and weather take their colors from the scene (dusky blue, cream, warm amber, walnut, a touch of haint blue). The old app colors go, and big, high-contrast text stays.
-  - **When a screen opens, the porch slides back** (Andy, 2026-11-06): "I want it to just kind of slide back a little to give room for the new screen to pop up." The right side of the porch fades into the rest, "or the inside kind of moves to the back in a 3D way, and that comes up." Screens open on the right side as you look at the screen, and she points to them. A first still mock-up of this exists (word search, card, checkers and care notes, 2026-11-06).
+  - **When a screen opens, the porch slides back** (Andy, 2026-11-06): "I want it to just kind of slide back a little to give room for the new screen to pop up." The right side of the porch fades into the rest, "or the inside kind of moves to the back in a 3D way, and that comes up." Screens open on the right side as you look at the screen, and she points to them. Mock-up: `mockups/mary/porch-screens/word-search.png`.
 
 - **Andy's calls (2026-11-05):**
   - **Sam's place:** by a fire at night, whittling on a stump, not on the porch. The fire can do the lantern's job: it flares a little when he's listening and dies to embers when he's asleep.
@@ -151,8 +151,8 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
 
 ### M7. Games with Mary: the next games
 - **Built:** word search (M7a), with the resident's choice of three sizes, and "one thing beside her at a time" (a picture sets a game aside, kept just as it was).
-- **Andy, 2026-11-06:** tic-tac-toe "is so simple"; lead with the better games when showing what's coming.
-- **Next:** tic-tac-toe, then solitaire, and a **crossword** (Andy, 2026-10-29): she plays along live. "This hint is too hard, give me an easier one," and she rewrites the clue on screen on the spot. She can also give a letter, explain a word or check an answer. Later maybe checkers, trivia and memory games.
+- **Tic-tac-toe is dropped** (Andy, 2026-11-06: it "is so simple").
+- **Next:** solitaire and a **crossword** (Andy, 2026-10-29): she plays along live. "This hint is too hard, give me an easier one," and she rewrites the clue on screen on the spot. She can also give a letter, explain a word or check an answer. Later maybe checkers, trivia and memory games.
 - **She helps them play:** hints when asked, moves by voice ("put the red seven on the black eight"), and she never takes over. Huge letters and cards, high contrast, tap or voice, no timers or pressure, and gentle wins.
 - Each game opens beside her, on the side where screens always open (M24). Each screen tells her what's on it and offers general actions she can improvise with (`docs/skills-design.md`).
 - Boards first, then the build.
@@ -171,7 +171,7 @@ The rest (M7's other games, M8, M11, M14, M29 and M30) fit in when Andy picks th
 
 ### M11. The reporting screens overhaul
 - The incident log screens (`web/`): a complete visual redo, with boards first, and colors that match the porch (Andy, M24).
-- **Voice first, not tiles** (Andy, 2026-11-06): "I have been hell bent on making sure this is a voice first app. So I'm thinking that we don't do all those buttons." Instead, one simple, easy-to-read screen, not the official form: the kinds of problems, each opening to everything that happened in the resident's own words, how often each has happened, and a warning when something keeps happening that "it might be time to take this to the state or to the ombudsman." The official record stays as it is. A first mock-up exists (2026-11-06).
+- **Voice first, not tiles** (Andy, 2026-11-06): "I have been hell bent on making sure this is a voice first app. So I'm thinking that we don't do all those buttons." Instead, one simple, easy-to-read screen, not the official form: the kinds of problems, each opening to everything that happened in the resident's own words, how often each has happened, and a warning when something keeps happening that "it might be time to take this to the state or to the ombudsman." The official record stays as it is. The design Andy picked is `mockups/mary/porch-screens/care-notes.png` (Andy: "You captured it the way that it was in my head, but even better"). Its warning, in Andy's words: "We've already raised this issue with the director of nursing, and then the administrator, and it's still happening." It may be time to raise it with the ombudsman and the state.
 - Also decide **how much of it each resident sees:** whether they get the full portal at all, which parts make sense for them, and what stays behind Mary. Decide this with Andy when we get there.
 
 ### Beyond the app
